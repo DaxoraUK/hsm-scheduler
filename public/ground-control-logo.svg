@@ -1,0 +1,20 @@
+<svg width="320" height="80" viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ground Control">
+  <!-- Target / radar ring mark -->
+  <g transform="translate(40,40)">
+    <!-- outer ring -->
+    <circle cx="0" cy="0" r="30" fill="none" stroke="#C0392B" stroke-width="4"/>
+    <!-- middle ring -->
+    <circle cx="0" cy="0" r="20" fill="none" stroke="#1A2740" stroke-width="3"/>
+    <!-- crosshair ticks -->
+    <line x1="0" y1="-34" x2="0" y2="-26" stroke="#1A2740" stroke-width="3" stroke-linecap="round"/>
+    <line x1="0" y1="26" x2="0" y2="34" stroke="#1A2740" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-34" y1="0" x2="-26" y2="0" stroke="#1A2740" stroke-width="3" stroke-linecap="round"/>
+    <line x1="26" y1="0" x2="34" y2="0" stroke="#1A2740" stroke-width="3" stroke-linecap="round"/>
+    <!-- centre dot -->
+    <circle cx="0" cy="0" r="7" fill="#C0392B"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="84" y="38" font-family="'Barlow Condensed', system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="1" fill="#1A2740">GROUND</text>
+  <text x="84" y="64" font-family="'Barlow Condensed', system-ui, sans-serif" font-size="26" font-weight="700" letter-spacing="1" fill="#C0392B">CONTROL</text>
+</svg>
