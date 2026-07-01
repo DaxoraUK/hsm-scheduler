@@ -24,7 +24,7 @@ export default function ProductShell({
   readiness,
 }) {
   const navItems = [
-    ["dashboard", "Dashboard", LayoutDashboard],
+    ["dashboard", "Mission Control", LayoutDashboard],
     ["operations", "Operations", CalendarDays],
     ["communications", "Communications", MessageSquareText],
     ["analytics", "Analytics", ChartNoAxesCombined],

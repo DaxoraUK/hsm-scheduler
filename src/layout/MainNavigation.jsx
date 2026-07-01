@@ -1,6 +1,6 @@
 export default function MainNavigation({ mainPage, setMainPage, setDayTab, club }) {
   const items = [
-    ["dashboard", "Dashboard"],
+    ["dashboard", "Mission Control"],
     ["operations", "Operations"],
     ["reports", "Reports"],
     ["settings", "Settings"],
