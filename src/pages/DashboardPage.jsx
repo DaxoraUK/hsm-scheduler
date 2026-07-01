@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import PageContainer from "../components/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
@@ -7,10 +7,12 @@ import DashboardWeatherCard from "../components/dashboard/DashboardWeatherCard.j
 import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
 import WeekendTimelineCard from "../components/dashboard/WeekendTimelineCard.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
-import ClubDigitalTwinCard from "../components/dashboard/ClubDigitalTwinCard.jsx";
 import FixtureDrawer from "../components/Operations/shared/FixtureDrawer.jsx";
 import { getRefereeStats, getParkingStats } from "../lib/dashboardStats.js";
-import { buildClubDigitalTwin } from "../lib/engines/clubDigitalTwinEngine.js";
+import { buildMissionControlWorkflow, getMissionState, WORKFLOW_ACTIONS } from "../lib/engines/workflowEngine.js";
+import { createNavigationController } from "../lib/navigation/index.js";
+import { useMatchdayScope } from "../lib/context/MatchdayScopeContext.jsx";
+import { getDayTabFromScope, getMatchdayScopeLabel, getScopedMatchdayData, MATCHDAY_SCOPES, normaliseMatchdayScope } from "../lib/domain/matchdayScope.js";
 
 import {
   CalendarDays,
@@ -26,6 +28,9 @@ import {
 export default function DashboardPage({
   setMainPage,
   setDayTab,
+  setNavigationTarget,
+  matchdayScope: matchdayScopeProp,
+  setMatchdayScope: setMatchdayScopeProp,
   saveWeek,
   club,
   history = [],
@@ -43,7 +48,12 @@ export default function DashboardPage({
   sunUnresolved = [],
   closedPitches = [],
 }) {
+  const matchdayScopeContext = useMatchdayScope();
+  const matchdayScope = normaliseMatchdayScope(matchdayScopeProp || matchdayScopeContext.scope);
+  const setMatchdayScope = setMatchdayScopeProp || matchdayScopeContext.setScope;
+  const navigationDay = getDayTabFromScope(matchdayScope);
   const [selectedFixture, setSelectedFixture] = useState(null);
+  const nav = createNavigationController({ setMainPage, setDayTab, setNavigationTarget });
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef(null);
 
@@ -74,54 +84,36 @@ export default function DashboardPage({
   const satActive = satFinal.filter((game) => game.status !== "postponed");
   const sunActive = sunFinal.filter((game) => game.status !== "postponed");
 
-  const totalFixtures =
-    (satHasRun ? satActive.length : 0) + (sunHasRun ? sunActive.length : 0);
-
-  const scheduleBuilt = Boolean(satHasRun || sunHasRun);
-
-  const refereeStats = getRefereeStats({
+  const scopedMatchday = getScopedMatchdayData({
+    scope: matchdayScope,
     satFinal,
     sunFinal,
     satHasRun,
     sunHasRun,
   });
 
-  const parkingDayGroups = useMemo(
-    () => [
-      { key: "saturday", label: "Saturday", fixtures: satHasRun ? satActive : [] },
-      { key: "sunday", label: "Sunday", fixtures: sunHasRun ? sunActive : [] },
-    ],
-    [satHasRun, sunHasRun, satActive, sunActive]
-  );
+  const totalFixtures = scopedMatchday.activeFixtures.length;
+  const scheduleBuilt = scopedMatchday.scheduleBuilt;
 
-  const parkingFixtures = parkingDayGroups.flatMap((group) => group.fixtures);
+  const refereeStats = getRefereeStats({
+    satFinal: scopedMatchday.satFinal,
+    sunFinal: scopedMatchday.sunFinal,
+    satHasRun: scopedMatchday.satHasRun,
+    sunHasRun: scopedMatchday.sunHasRun,
+  });
 
   const parkingStats = getParkingStats({
-    fixturesByDay: parkingDayGroups,
+    fixtures: scopedMatchday.activeFixtures,
     club,
     pitchCfg,
     peakCars,
     carCap,
+    scope: matchdayScope,
   });
 
-  const clubTwin = useMemo(
-    () =>
-      buildClubDigitalTwin({
-        club,
-        pitchCfg,
-        closedPitches,
-        satFinal,
-        sunFinal,
-        satHasRun,
-        sunHasRun,
-        fixturesByDay: parkingDayGroups,
-        refWarnings,
-      }),
-    [club, pitchCfg, closedPitches, satFinal, sunFinal, satHasRun, sunHasRun, parkingDayGroups, refWarnings]
-  );
-
   const fixtureIssues =
-    satConflicts.length + satUnresolved.length + sunUnresolved.length;
+    (scopedMatchday.includeSaturday ? satConflicts.length + satUnresolved.length : 0) +
+    (scopedMatchday.includeSunday ? sunUnresolved.length : 0);
 
   const communicationsReady = scheduleBuilt && totalFixtures > 0;
   const weatherLocation = getWeatherLocation(club);
@@ -131,10 +123,10 @@ export default function DashboardPage({
       ? {
           key: "schedule",
           title: "Build schedule",
-          detail: "Create Saturday or Sunday schedules before final readiness checks.",
+          detail: "Build the selected matchday schedule before final readiness checks.",
           area: "Fixtures",
           severity: "warning",
-          onClick: () => openOperations(setMainPage, setDayTab),
+          onClick: () => nav.goToFixtures({ day: navigationDay }),
         }
       : null,
     fixtureIssues > 0
@@ -144,7 +136,7 @@ export default function DashboardPage({
           detail: `${fixtureIssues} fixture ${fixtureIssues === 1 ? "issue needs" : "issues need"} attention.`,
           area: "Fixtures",
           severity: "danger",
-          onClick: () => openOperations(setMainPage, setDayTab),
+          onClick: () => nav.goToFixtures({ day: navigationDay }),
         }
       : null,
     refereeStats.outstanding > 0
@@ -154,17 +146,17 @@ export default function DashboardPage({
           detail: `${refereeStats.outstanding} referee ${refereeStats.outstanding === 1 ? "confirmation is" : "confirmations are"} outstanding.`,
           area: "Officials",
           severity: "warning",
-          onClick: () => openOperations(setMainPage, setDayTab),
+          onClick: () => nav.goToOfficials({ day: navigationDay }),
         }
       : null,
     parkingStats.overCapacity
       ? {
           key: "parking",
           title: "Review parking pressure",
-          detail: `${parkingStats.peakDayLabel || "Weekend"} parking peak is projected at ${parkingStats.pct}% of capacity.`,
+          detail: `Parking peak is projected at ${parkingStats.pct}% of capacity.`,
           area: "Parking",
           severity: "danger",
-          onClick: () => setMainPage("analytics"),
+          onClick: () => nav.goToParking({ day: navigationDay }),
         }
       : null,
     !communicationsReady
@@ -174,7 +166,7 @@ export default function DashboardPage({
           detail: "Coach communications can be generated after the schedule is built.",
           area: "Messages",
           severity: "muted",
-          onClick: () => setMainPage("communications"),
+          onClick: () => nav.goToCommunications(),
         }
       : null,
   ].filter(Boolean);
@@ -183,77 +175,44 @@ export default function DashboardPage({
   const missionState = getMissionState({
     scheduleBuilt,
     fixtureIssues,
-    refereeStats,
-    parkingStats,
+    refereeOutstanding: refereeStats.outstanding,
+    parkingOverCapacity: parkingStats.overCapacity,
     communicationsReady,
   });
 
-  const workflowSteps = [
-    {
-      key: "fixtures",
-      title: "Build schedule",
-      detail: scheduleBuilt
-        ? `${totalFixtures} fixture${totalFixtures === 1 ? "" : "s"} scheduled this weekend.`
-        : "Build Saturday or Sunday before final readiness checks.",
-      status: scheduleBuilt ? "complete" : "current",
-      required: true,
-      onClick: () => openOperations(setMainPage, setDayTab),
-    },
-    {
-      key: "ground",
-      title: "Review ground status",
-      detail: closedPitches.length
-        ? `${closedPitches.length} pitch ${closedPitches.length === 1 ? "closure is" : "closures are"} active.`
-        : `${pitchCfg.length} pitches available and no closures active.`,
-      status: closedPitches.length ? "warning" : "complete",
-      required: true,
-      onClick: () => openOperations(setMainPage, setDayTab),
-    },
-    {
-      key: "officials",
-      title: "Confirm officials",
-      detail: refereeStats.outstanding
-        ? `${refereeStats.outstanding} official ${refereeStats.outstanding === 1 ? "needs" : "need"} confirmation.`
-        : "Officials look healthy for scheduled fixtures.",
-      status: refereeStats.outstanding ? "warning" : "complete",
-      required: true,
-      onClick: () => openOperations(setMainPage, setDayTab),
-    },
-    {
-      key: "parking",
-      title: "Review parking pressure",
-      detail: scheduleBuilt
-        ? parkingStats.peakDayLabel
-          ? `${parkingStats.pct}% weekend peak on ${parkingStats.peakDayLabel} against ${parkingStats.carCap} spaces.`
-          : `${parkingStats.pct}% projected peak against ${parkingStats.carCap} spaces.`
-        : "Parking forecast will update after schedule build.",
-      status: !scheduleBuilt ? "pending" : parkingStats.overCapacity ? "warning" : "complete",
-      onClick: () => setMainPage("analytics"),
-    },
-    {
-      key: "messages",
-      title: "Prepare coach messages",
-      detail: communicationsReady
-        ? "Coach messages are ready for review and copy-out."
-        : "Coach messages are waiting for the built schedule.",
-      status: communicationsReady ? "complete" : "pending",
-      required: true,
-      onClick: () => setMainPage("communications"),
-    },
-    {
-      key: "publish",
-      title: "Publish weekend",
-      detail: blockerCount
-        ? "Resolve review items before publishing."
-        : "Weekend is ready to publish.",
-      status: blockerCount ? "pending" : "complete",
-      required: true,
-      onClick: blockerCount ? () => openOperations(setMainPage, setDayTab) : saveWeek,
-    },
-  ];
+  const workflowModel = buildMissionControlWorkflow({
+    scope: matchdayScope,
+    scheduleBuilt,
+    totalFixtures,
+    pitchCount: pitchCfg.length,
+    closedPitchCount: closedPitches.length,
+    refereeOutstanding: refereeStats.outstanding,
+    parkingPercent: parkingStats.pct,
+    parkingCapacity: parkingStats.carCap,
+    parkingOverCapacity: parkingStats.overCapacity,
+    communicationsReady,
+    blockerCount,
+  });
 
-  const nextAction = workflowSteps.find((step) => step.status !== "complete") || workflowSteps[workflowSteps.length - 1];
-  const completedSteps = workflowSteps.filter((step) => step.status === "complete").length;
+  const workflowActionMap = {
+    [WORKFLOW_ACTIONS.FIXTURES]: () => nav.goToFixtures({ day: navigationDay }),
+    [WORKFLOW_ACTIONS.GROUND]: () => nav.goToResources({ day: navigationDay, card: "pitchClosures" }),
+    [WORKFLOW_ACTIONS.OFFICIALS]: () => nav.goToOfficials({ day: navigationDay }),
+    [WORKFLOW_ACTIONS.PARKING]: () => nav.goToParking({ day: navigationDay }),
+    [WORKFLOW_ACTIONS.COMMUNICATIONS]: () => nav.goToCommunications(),
+    [WORKFLOW_ACTIONS.OPERATIONS]: () => nav.goToOperations({ day: navigationDay }),
+    [WORKFLOW_ACTIONS.PUBLISH]: saveWeek,
+  };
+
+  const workflowSteps = workflowModel.steps.map((step) => ({
+    ...step,
+    onClick: workflowActionMap[step.action],
+  }));
+  const nextAction = {
+    ...workflowModel.nextAction,
+    onClick: workflowActionMap[workflowModel.nextAction?.action],
+  };
+  const completedSteps = workflowModel.completedSteps;
 
   const commandMenu = (
     <div className="relative" ref={actionsRef}>
@@ -293,7 +252,7 @@ export default function DashboardPage({
               subtitle="Fixtures, resources and matchday control"
               onClick={() => {
                 setActionsOpen(false);
-                openOperations(setMainPage, setDayTab);
+                nav.goToOperations({ day: navigationDay });
               }}
             />
             <CommandMenuItem
@@ -302,7 +261,7 @@ export default function DashboardPage({
               subtitle="Coach messages and publishing"
               onClick={() => {
                 setActionsOpen(false);
-                setMainPage("communications");
+                nav.goToCommunications();
               }}
             />
             <CommandMenuItem
@@ -311,7 +270,7 @@ export default function DashboardPage({
               subtitle="Usage, trends and pressure points"
               onClick={() => {
                 setActionsOpen(false);
-                setMainPage("analytics");
+                nav.goToAnalytics();
               }}
             />
             <CommandMenuItem
@@ -320,7 +279,7 @@ export default function DashboardPage({
               subtitle="Prints, exports and saved packs"
               onClick={() => {
                 setActionsOpen(false);
-                setMainPage("reports");
+                nav.goToReports();
               }}
             />
             <CommandMenuItem
@@ -329,7 +288,7 @@ export default function DashboardPage({
               subtitle="Club, venue and integration setup"
               onClick={() => {
                 setActionsOpen(false);
-                setMainPage("settings");
+                nav.goToSettings();
               }}
             />
           </div>
@@ -350,60 +309,54 @@ export default function DashboardPage({
         totalSteps={workflowSteps.length}
         nextAction={nextAction}
         weatherLocation={weatherLocation}
-        onContinue={nextAction?.onClick || (() => openOperations(setMainPage, setDayTab))}
+        scopeLabel={getMatchdayScopeLabel(matchdayScope)}
+        onContinue={nextAction?.onClick || (() => nav.goToOperations({ day: navigationDay }))}
 />
 
       <DashboardStatusStrip
         actionsMenu={commandMenu}
+        scope={matchdayScope}
+        onScopeChange={setMatchdayScope}
         items={[
           {
             label: "Ground",
             status: closedPitches.length ? "warning" : "success",
             detail: closedPitches.length ? `${closedPitches.length} closed` : "Open",
-            onClick: () => openOperations(setMainPage, setDayTab),
+            onClick: () => nav.goToResources({ day: navigationDay, card: "pitchClosures" }),
           },
           {
             label: "Fixtures",
             status: scheduleBuilt && fixtureIssues === 0 ? "success" : "warning",
             detail: scheduleBuilt ? `${totalFixtures} scheduled` : "Build needed",
-            onClick: () => openOperations(setMainPage, setDayTab),
+            onClick: () => nav.goToFixtures({ day: navigationDay }),
           },
           {
             label: "Officials",
             status: refereeStats.outstanding ? "warning" : "success",
             detail: refereeStats.outstanding ? `${refereeStats.outstanding} required` : "Clear",
-            onClick: () => openOperations(setMainPage, setDayTab),
+            onClick: () => nav.goToOfficials({ day: navigationDay }),
           },
           {
             label: "Parking",
-            status: parkingStats.overCapacity ? "danger" : parkingStats.isHighPressure ? "warning" : "success",
-            detail: scheduleBuilt
-              ? parkingStats.peakDayLabel
-                ? `${parkingStats.peakDayLabel} ${parkingStats.pct}%`
-                : `${parkingStats.pct}% peak`
-              : "Pending",
-            onClick: () => setMainPage("analytics"),
+            status: parkingStats.overCapacity ? "danger" : "success",
+            detail: scheduleBuilt ? `${parkingStats.pct}% peak` : "Pending",
+            onClick: () => nav.goToParking({ day: navigationDay }),
           },
           {
             label: "Weather",
             status: weatherLocation ? "success" : "warning",
             detail: weatherLocation || "Set postcode",
-            onClick: () => setMainPage("settings"),
+            onClick: () => nav.goToWeather({ day: navigationDay }),
           },
           {
             label: "Messages",
             status: communicationsReady ? "success" : "muted",
             detail: communicationsReady ? "Ready" : "Waiting",
-            onClick: () => setMainPage("communications"),
+            onClick: () => nav.goToCommunications(),
           },
         ]}
       />
 
-      <ClubDigitalTwinCard
-        twin={clubTwin}
-        onOpenOperations={() => openOperations(setMainPage, setDayTab)}
-        onOpenSettings={() => setMainPage("settings")}
-      />
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <div className="flex min-w-0 flex-col gap-6">
@@ -444,10 +397,12 @@ export default function DashboardPage({
         club={club}
         onFixtureClick={(fixture) => {
           const isSunday = sunFinal.includes(fixture);
+          const fixtureDay = isSunday ? MATCHDAY_SCOPES.SUNDAY : MATCHDAY_SCOPES.SATURDAY;
+          setMatchdayScope(fixtureDay);
 
           setSelectedFixture({
             ...fixture,
-            __day: isSunday ? "sunday" : "saturday",
+            __day: fixtureDay,
           });
         }}
       />
@@ -482,52 +437,6 @@ function CommandMenuItem({ icon: Icon, title, subtitle, onClick }) {
   );
 }
 
-function openOperations(setMainPage, setDayTab) {
-  setMainPage("operations");
-  setDayTab("saturday");
-}
-
-function getMissionState({
-  scheduleBuilt,
-  fixtureIssues,
-  refereeStats,
-  parkingStats,
-  communicationsReady,
-}) {
-  if (!scheduleBuilt) {
-    return {
-      tone: "warning",
-      label: "Review Required",
-      title: "Build schedule",
-      detail: "Your weekend is close, but the schedule needs building before final readiness checks.",
-    };
-  }
-
-  if (fixtureIssues > 0 || parkingStats.overCapacity || refereeStats.outstanding > 0) {
-    return {
-      tone: "warning",
-      label: "Action Required",
-      title: "Review weekend",
-      detail: "Ground Control has found items to check before publishing.",
-    };
-  }
-
-  if (!communicationsReady) {
-    return {
-      tone: "warning",
-      label: "Almost Ready",
-      title: "Prepare messages",
-      detail: "Your operations are ready. Prepare communications before publishing.",
-    };
-  }
-
-  return {
-    tone: "success",
-    label: "Weekend Ready",
-    title: "Ready to publish",
-    detail: "Fixtures, ground status, officials, parking and communications are ready.",
-  };
-}
 
 function getWeatherLocation(club) {
   return (

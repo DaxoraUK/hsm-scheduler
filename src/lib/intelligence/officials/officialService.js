@@ -3,6 +3,7 @@ import {
   isFixtureActive,
   timeToMinutes,
 } from "../../engines/validationEngine.js";
+import { shouldEnforceOfficialClashes } from "../../engines/officialsEngine.js";
 
 export function normaliseOfficialName(value = "") {
   return String(value || "")
@@ -12,10 +13,12 @@ export function normaliseOfficialName(value = "") {
     .replace(/\s+/g, " ");
 }
 
-export function hasNamedOfficial(fixture = {}) {
-  const official = normaliseOfficialName(fixture.referee);
+export function hasNamedOfficial(fixture = {}, refs = []) {
+  const official = normaliseOfficialName(fixture.referee || fixture.official || fixture.ref);
 
-  return Boolean(official) && official !== "parent ref" && official !== "tbc";
+  if (!official || official === "tbc" || official === "none" || official === "unassigned") return false;
+
+  return shouldEnforceOfficialClashes(fixture, refs);
 }
 
 export function fixturesOverlap(fixtureA = {}, fixtureB = {}) {
@@ -40,19 +43,20 @@ export function findOfficialClash({
   fixtures = [],
   fixtureIndex,
   next = {},
+  refs = [],
 } = {}) {
   if (!isFixtureActive(next)) return null;
-  if (!hasNamedOfficial(next)) return null;
+  if (!hasNamedOfficial(next, refs)) return null;
 
-  const nextOfficial = normaliseOfficialName(next.referee);
+  const nextOfficial = normaliseOfficialName(next.referee || next.official || next.ref);
 
   return (
     fixtures.find((fixture, index) => {
       if (index === fixtureIndex) return false;
       if (!isFixtureActive(fixture)) return false;
-      if (!hasNamedOfficial(fixture)) return false;
+      if (!hasNamedOfficial(fixture, refs)) return false;
 
-      const fixtureOfficial = normaliseOfficialName(fixture.referee);
+      const fixtureOfficial = normaliseOfficialName(fixture.referee || fixture.official || fixture.ref);
 
       if (fixtureOfficial !== nextOfficial) return false;
 

@@ -1,6 +1,7 @@
 import { Toaster } from "sonner";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
+import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 
 import {
   LayoutDashboard,
@@ -16,6 +17,7 @@ export default function ProductShell({
   mainPage,
   setMainPage,
   setDayTab,
+  matchdayScope = MATCHDAY_SCOPES.WEEKEND,
   club,
   satFinal = [],
   sunFinal = [],
@@ -86,7 +88,7 @@ export default function ProductShell({
                       type="button"
                       onClick={() => {
                         setMainPage(key);
-                        if (key === "operations") setDayTab("saturday");
+                        if (key === "operations") setDayTab(getDayTabFromScope(matchdayScope));
                       }}
                       className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${
                         active
@@ -122,7 +124,7 @@ export default function ProductShell({
                 </div>
 
                 <div className="mt-1 text-xs font-bold text-slate-500">
-                  Club Administrator
+                  {getMatchdayScopeLabel(matchdayScope)} view
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2">

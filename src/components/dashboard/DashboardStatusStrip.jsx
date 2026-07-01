@@ -24,7 +24,7 @@ const toneMap = {
   },
 };
 
-export default function DashboardStatusStrip({ items = [], actionsMenu = null }) {
+export default function DashboardStatusStrip({ items = [], actionsMenu = null, scope = "weekend", onScopeChange }) {
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
       <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -37,7 +37,32 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null })
           </div>
         </div>
 
-        {actionsMenu ? <div className="shrink-0 self-start sm:self-auto">{actionsMenu}</div> : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onScopeChange ? (
+            <div className="flex rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200" aria-label="Mission Control scope">
+              {[
+                { key: "weekend", label: "Weekend" },
+                { key: "saturday", label: "Sat" },
+                { key: "sunday", label: "Sun" },
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => onScopeChange(option.key)}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${
+                    scope === option.key
+                      ? "bg-slate-950 text-white shadow-sm"
+                      : "text-slate-500 hover:bg-white hover:text-slate-950"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {actionsMenu ? <div>{actionsMenu}</div> : null}
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">

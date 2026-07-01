@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -32,12 +32,15 @@ import OperationsHealthCard from "../components/Operations/shared/OperationsHeal
 import CompetitionRulesCard from "../components/Operations/shared/CompetitionRulesCard.jsx";
 import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.jsx";
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
+import RecommendationCentreCard from "../components/Operations/shared/RecommendationCentreCard.jsx";
 import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
 import StatusChip from "../components/ui/StatusChip.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
+import { buildRecommendationCentre } from "../lib/engines/recommendationCentreEngine.js";
+import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
 
 const WORKSPACES = [
@@ -73,39 +76,6 @@ const FILTERS = [
   { id: "warnings", label: "Warnings" },
   { id: "ready", label: "Ready" },
 ];
-
-function findOfficialConflicts(games = []) {
-  const active = games.filter(
-    (fixture) =>
-      fixture?.status !== "postponed" &&
-      fixture?.referee &&
-      fixture?.koMins != null &&
-      fixture?.endMins != null
-  );
-
-  const conflicts = [];
-
-  for (let a = 0; a < active.length; a += 1) {
-    for (let b = a + 1; b < active.length; b += 1) {
-      const first = active[a];
-      const second = active[b];
-
-      if (String(first.referee).trim() !== String(second.referee).trim()) continue;
-
-      const overlaps = first.koMins < second.endMins && second.koMins < first.endMins;
-
-      if (overlaps) {
-        conflicts.push({
-          referee: first.referee,
-          a: first,
-          b: second,
-        });
-      }
-    }
-  }
-
-  return conflicts;
-}
 
 function getFixtureLabel(fixture = {}) {
   return [
@@ -262,12 +232,16 @@ export default function MatchdayPage({
   SummaryBar = MatchdaySummaryBar,
   UnresolvedCard = MatchdayUnresolvedCard,
   ScheduleCard = MatchdayScheduleCard,
+  navigationTarget = null,
+  clearNavigationTarget,
 }) {
   const [selectedFixtureIndex, setSelectedFixtureIndex] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("fixtures");
   const [sectionQuery, setSectionQuery] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
   const [openSections, setOpenSections] = useState({});
+  const [highlightedSection, setHighlightedSection] = useState(null);
+  const targetAppliedRef = useRef(null);
 
   const isSunday = day === "Sunday";
 
@@ -313,7 +287,7 @@ export default function MatchdayPage({
     [final]
   );
 
-  const officialConflicts = useMemo(() => findOfficialConflicts(final), [final]);
+  const officialConflicts = useMemo(() => findOfficialConflicts(final, props.refs || []), [final, props.refs]);
 
   const fixtureSearchResults = useMemo(() => {
     const query = sectionQuery.trim().toLowerCase();
@@ -360,6 +334,22 @@ export default function MatchdayPage({
     fixtures: final,
     dateLabel,
   }), [clubWithTiming, dateLabel, final]);
+
+  const recommendationCentre = useMemo(() => buildRecommendationCentre({
+    fixtures: final,
+    active,
+    unresolved,
+    conflicts,
+    officialConflicts,
+    refWarnings,
+    hasRun,
+    club: clubWithTiming,
+    pitchCfg: props.pitchCfg || [],
+    closedPitches: props.closedPitches || [],
+    competitionRules,
+    weatherIntelligence,
+    dayOptimisation,
+  }), [active, clubWithTiming, competitionRules, conflicts, dayOptimisation, final, hasRun, officialConflicts, props.closedPitches, props.pitchCfg, refWarnings, unresolved, weatherIntelligence]);
 
   const matchdayProps = {
     ...props,
@@ -548,6 +538,20 @@ export default function MatchdayPage({
         render: () => <ParkingCapacityCard active={active} club={clubWithTiming} pitchCfg={props.pitchCfg} />,
       },
       {
+        id: "recommendationCentre",
+        workspace: "intelligence",
+        title: "Recommendation Centre",
+        subtitle: "One shared action queue for parking, officials, weather, rules and resources.",
+        icon: Sparkles,
+        badge: recommendationCentre.metrics?.total
+          ? `${recommendationCentre.metrics.total} actions`
+          : "Action queue",
+        status: recommendationCentre.status,
+        label: recommendationCentre.label,
+        filter: recommendationCentre.status === "danger" ? "issues" : recommendationCentre.status === "warning" ? "warnings" : "ready",
+        render: () => <RecommendationCentreCard centre={recommendationCentre} />,
+      },
+      {
         id: "dayOptimiser",
         workspace: "intelligence",
         title: "Day Optimiser",
@@ -649,7 +653,74 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, operationsHealth, overrides, postponed.length, props, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, operationsHealth, overrides, postponed.length, props, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+
+
+  const navigationSection = useMemo(() => {
+    if (!navigationTarget) return null;
+    const targetDay = String(navigationTarget.day || "").toLowerCase();
+    if (targetDay && targetDay !== day.toLowerCase()) return null;
+
+    const requestedCard = navigationTarget.card;
+    const aliases = {
+      parking: "parkingIntelligence",
+      parkingCapacity: "parkingCapacity",
+      parkingIntelligence: "parkingIntelligence",
+      weather: "weatherIntelligence",
+      weatherIntelligence: "weatherIntelligence",
+      recommendations: "recommendationCentre",
+      recommendationCentre: "recommendationCentre",
+      actionQueue: "recommendationCentre",
+      dayOptimiser: "dayOptimiser",
+      officials: "operationsHealth",
+      operationsHealth: "operationsHealth",
+      fixtures: "schedule",
+      schedule: "schedule",
+      resources: "pitchClosures",
+      ground: "pitchClosures",
+      pitchClosures: "pitchClosures",
+      coachMessages: "coachMessages",
+      communications: "coachMessages",
+    };
+
+    const sectionId = aliases[requestedCard] || requestedCard;
+    const byCard = sectionId ? sections.find((section) => section.id === sectionId) : null;
+    if (byCard) return byCard;
+
+    if (navigationTarget.workspace) {
+      return sections.find((section) => section.workspace === navigationTarget.workspace) || null;
+    }
+
+    return null;
+  }, [day, navigationTarget, sections]);
+
+  useEffect(() => {
+    if (!navigationTarget || !navigationSection) return;
+
+    const targetKey = `${navigationTarget.target || "target"}-${navigationTarget.createdAt || ""}-${day}`;
+    if (targetAppliedRef.current === targetKey) return;
+    targetAppliedRef.current = targetKey;
+
+    setSectionQuery("");
+    setSectionFilter("all");
+    setActiveWorkspace(navigationSection.workspace);
+    setOpenSections((current) => ({ ...current, [navigationSection.id]: true }));
+    setHighlightedSection(navigationSection.id);
+
+    window.setTimeout(() => {
+      const element = document.getElementById(`matchday-section-${navigationSection.id}`);
+      if (element && navigationTarget.scroll !== false) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 120);
+
+    window.setTimeout(() => setHighlightedSection(null), 2200);
+    window.setTimeout(() => {
+      if (typeof clearNavigationTarget === "function") {
+        clearNavigationTarget();
+      }
+    }, 300);
+  }, [clearNavigationTarget, day, navigationSection, navigationTarget]);
 
   const workspaceCounts = useMemo(() => {
     return WORKSPACES.reduce((acc, workspace) => {
@@ -738,7 +809,10 @@ export default function MatchdayPage({
               workspace={workspace}
               active={workspace.id === activeWorkspace}
               count={workspaceCounts[workspace.id] || 0}
-              onClick={() => setActiveWorkspace(workspace.id)}
+              onClick={() => {
+                if (typeof clearNavigationTarget === "function") clearNavigationTarget();
+                setActiveWorkspace(workspace.id);
+              }}
             />
           ))}
         </div>
@@ -807,6 +881,7 @@ export default function MatchdayPage({
               status={section.status}
               statusLabel={section.label}
               open={isSectionOpen(section)}
+              highlighted={highlightedSection === section.id}
               onToggle={() => toggleSection(section.id)}
             >
               {section.render()}

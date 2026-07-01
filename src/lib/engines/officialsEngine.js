@@ -11,17 +11,73 @@ function clean(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalise(value) {
+  return clean(value).replace(/\./g, "").replace(/\s+/g, " ");
+}
+
 function isPostponed(fixture = {}) {
   return clean(fixture.status) === "postponed";
 }
 
-function getOfficialName(fixture = {}) {
+export function getOfficialName(fixture = {}) {
   return fixture.referee || fixture.ref || fixture.official || fixture.matchOfficial || fixture.assignedOfficial || "";
 }
 
+function getOfficialStatus(fixture = {}) {
+  return clean(fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || fixture.matchOfficialStatus);
+}
+
+export function getOfficialRoleFromName(name = "") {
+  const official = normalise(name);
+
+  if (!official || ["tbc", "none", "unassigned", "missing"].includes(official)) return "unassigned";
+  if (official.includes("parent")) return "parent_referee";
+  if (official.includes("volunteer")) return "volunteer";
+  if (official.includes("manager")) return "manager_referee";
+  if (official.includes("assistant")) return "assistant_referee";
+  if (official.includes("mentor") || official.includes("observer")) return "observer";
+  if (official.includes("league")) return "league_referee";
+  if (official.includes("club")) return "club_referee";
+
+  return "club_referee";
+}
+
+export function getOfficialRole(fixture = {}, refs = []) {
+  const explicitRole = fixture.officialRole || fixture.refereeRole || fixture.refRole || fixture.role;
+  if (explicitRole) return normalise(explicitRole).replace(/\s+/g, "_");
+
+  const officialName = normalise(getOfficialName(fixture));
+  const refRecord = asArray(refs).find((ref) => normalise(ref?.name) === officialName);
+
+  if (refRecord?.role) return normalise(refRecord.role).replace(/\s+/g, "_");
+  if (refRecord?.type) return normalise(refRecord.type).replace(/\s+/g, "_");
+
+  return getOfficialRoleFromName(officialName);
+}
+
+export function shouldEnforceOfficialClashes(fixture = {}, refs = []) {
+  const officialName = normalise(getOfficialName(fixture));
+  if (!officialName || ["tbc", "none", "unassigned", "missing"].includes(officialName)) return false;
+
+  const refRecord = asArray(refs).find((ref) => normalise(ref?.name) === officialName);
+  if (typeof refRecord?.enforceClashes === "boolean") return refRecord.enforceClashes;
+  if (typeof refRecord?.ignoreClashes === "boolean") return !refRecord.ignoreClashes;
+
+  const role = getOfficialRole(fixture, refs);
+
+  return ![
+    "parent_referee",
+    "parent_ref",
+    "parent",
+    "volunteer",
+    "observer",
+    "mentor",
+  ].includes(role);
+}
+
 export function isFixtureOfficialConfirmed(fixture = {}) {
-  const status = clean(fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || fixture.matchOfficialStatus);
-  const official = clean(getOfficialName(fixture));
+  const status = getOfficialStatus(fixture);
+  const official = normalise(getOfficialName(fixture));
 
   if (["confirmed", "accepted", "assigned", "yes", "ok", "ready"].includes(status)) return true;
   if (["tbc", "unassigned", "missing", "none", "no", "pending", "declined"].includes(status)) return false;
@@ -36,38 +92,73 @@ function fixtureLabel(fixture = {}) {
   return away ? `${home} vs ${away}` : home;
 }
 
+function getKickOffMinutes(fixture = {}) {
+  if (fixture.koMins != null) return toNumber(fixture.koMins, null);
+  const value = fixture.koTime || fixture.ko || fixture.kickOff || fixture.time || "";
+  const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function getEndMinutes(fixture = {}) {
+  if (fixture.endMins != null) return toNumber(fixture.endMins, null);
+  const koMins = getKickOffMinutes(fixture);
+  if (koMins == null) return null;
+  const duration = toNumber(fixture.durationMins || fixture.duration || fixture.matchDuration, 60);
+  return koMins + duration;
+}
+
 function timeKey(fixture = {}) {
-  return fixture.ko || fixture.kickOff || fixture.time || fixture.koLabel || String(fixture.koMins || "unscheduled");
+  return fixture.ko || fixture.kickOff || fixture.time || fixture.koTime || fixture.koLabel || String(fixture.koMins || "unscheduled");
 }
 
 function getFixtureId(fixture = {}, index = 0) {
   return fixture.id || fixture.fixtureId || `${fixtureLabel(fixture)}-${timeKey(fixture)}-${index}`;
 }
 
-function buildConflictMap(fixtures = []) {
-  const assigned = new Map();
+export function fixturesOverlap(fixtureA = {}, fixtureB = {}) {
+  const aStart = getKickOffMinutes(fixtureA);
+  const bStart = getKickOffMinutes(fixtureB);
+  const aEnd = getEndMinutes(fixtureA);
+  const bEnd = getEndMinutes(fixtureB);
 
-  fixtures.forEach((fixture, index) => {
-    if (isPostponed(fixture) || !isFixtureOfficialConfirmed(fixture)) return;
-    const official = clean(getOfficialName(fixture));
-    if (!official) return;
-    const key = `${official}-${timeKey(fixture)}`;
-    const current = assigned.get(key) || [];
-    current.push({ fixture, index });
-    assigned.set(key, current);
-  });
+  if (aStart == null || bStart == null || aEnd == null || bEnd == null) return false;
+
+  return aStart < bEnd && bStart < aEnd;
+}
+
+export function findOfficialConflicts(fixtures = [], refs = []) {
+  const activeFixtures = asArray(fixtures).filter(
+    (fixture) =>
+      !isPostponed(fixture) &&
+      isFixtureOfficialConfirmed(fixture) &&
+      shouldEnforceOfficialClashes(fixture, refs)
+  );
 
   const conflicts = [];
-  assigned.forEach((items, key) => {
-    if (items.length < 2) return;
-    const [official] = key.split("-");
-    conflicts.push({
-      official,
-      fixtures: items.map((item) => item.fixture),
-      count: items.length,
-      message: `${items.length} fixtures appear to share ${getOfficialName(items[0].fixture) || "the same official"} at ${timeKey(items[0].fixture)}.`,
-    });
-  });
+
+  for (let a = 0; a < activeFixtures.length; a += 1) {
+    for (let b = a + 1; b < activeFixtures.length; b += 1) {
+      const first = activeFixtures[a];
+      const second = activeFixtures[b];
+      const firstOfficial = normalise(getOfficialName(first));
+      const secondOfficial = normalise(getOfficialName(second));
+
+      if (!firstOfficial || firstOfficial !== secondOfficial) continue;
+      if (!shouldEnforceOfficialClashes(first, refs) || !shouldEnforceOfficialClashes(second, refs)) continue;
+      if (!fixturesOverlap(first, second)) continue;
+
+      conflicts.push({
+        referee: getOfficialName(first),
+        official: getOfficialName(first),
+        role: getOfficialRole(first, refs),
+        a: first,
+        b: second,
+        fixtures: [first, second],
+        message: `${getOfficialName(first)} is assigned to overlapping fixtures: ${fixtureLabel(first)} and ${fixtureLabel(second)}.`,
+      });
+    }
+  }
 
   return conflicts;
 }
@@ -84,8 +175,11 @@ export function calculateOfficialsReadiness({ fixtures = [], active = [], offici
 
   const missingFixtures = activeFixtures.filter((fixture) => !isFixtureOfficialConfirmed(fixture));
   const confirmedFixtures = activeFixtures.filter(isFixtureOfficialConfirmed);
-  const inferredConflicts = buildConflictMap(activeFixtures);
-  const suppliedConflicts = asArray(officialConflicts);
+  const inferredConflicts = findOfficialConflicts(activeFixtures, refs);
+  const suppliedConflicts = asArray(officialConflicts).filter((conflict) => {
+    const sample = conflict?.a || conflict?.fixtures?.[0] || null;
+    return sample ? shouldEnforceOfficialClashes(sample, refs) : true;
+  });
 
   const missingCount = refWarnings === null || refWarnings === undefined
     ? missingFixtures.length

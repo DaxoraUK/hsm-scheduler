@@ -3,6 +3,7 @@ import Card from "../../ui/Card.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { cleanName } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
+import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";
 
 export default function MatchdayTimelineCard({
   title = "Operations Timeline",
@@ -100,7 +101,7 @@ export default function MatchdayTimelineCard({
                           {pitch.label}
                         </div>
                         <div className="text-xs font-bold text-slate-400">
-                          {pitch.desc || pitch.format || "Pitch"}
+                          {getPitchDisplayFormat(pitch)}
                         </div>
                       </div>
 

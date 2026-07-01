@@ -40,12 +40,6 @@ export function getCompatiblePitchFormats(fixture = {}) {
 export function isPitchSuitableForFixture(pitch = {}, fixture = {}) {
   if (!pitch?.id) return false;
 
-  const preferredPitchIds = getPreferredPitchIds(fixture);
-
-  if (preferredPitchIds.includes(pitch.id)) {
-    return true;
-  }
-
   const pitchFormat = getPitchFormat(pitch);
   const compatibleFormats = getCompatiblePitchFormats(fixture);
 
@@ -55,6 +49,18 @@ export function isPitchSuitableForFixture(pitch = {}, fixture = {}) {
 
   return compatibleFormats.includes(pitchFormat);
 }
+
+export function getPitchDisplayFormat(pitch = {}) {
+  return (
+    pitch.displayFormat ||
+    pitch.formatLabel ||
+    pitch.format ||
+    pitch.desc ||
+    pitch.type ||
+    "Unconfigured"
+  );
+}
+
 
 export function getPitchSuitabilityScore(pitch = {}, fixture = {}, currentPitchId) {
   const preferredPitchIds = getPreferredPitchIds(fixture);

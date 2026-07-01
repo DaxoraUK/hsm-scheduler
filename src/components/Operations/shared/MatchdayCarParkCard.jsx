@@ -9,14 +9,13 @@ function clamp(value, min = 0, max = 100) {
 }
 
 function getStatusVariant(analysis) {
-  if (analysis.isOverCapacity || analysis.isOverConcurrentLimit) return "danger";
+  if (analysis.isOverCapacity) return "danger";
   if (analysis.isHighPressure || (analysis.peakSlot?.occupancyPct || 0) >= 85) return "warning";
   return "success";
 }
 
 function getStatusLabel(analysis) {
   if (analysis.isOverCapacity) return "Over capacity";
-  if (analysis.isOverConcurrentLimit) return "Concurrency risk";
   if (analysis.isHighPressure || (analysis.peakSlot?.occupancyPct || 0) >= 85) return "High pressure";
   return "Healthy";
 }
@@ -33,7 +32,6 @@ function getHealthScore(analysis) {
 
   if (!analysis.peakSlot) return 100;
   if (analysis.isOverCapacity) return clamp(100 - (occupancy - 100) * 2, 20, 55);
-  if (analysis.isOverConcurrentLimit) return clamp(82 - (analysis.overConcurrentSlots.length * 4), 55, 82);
   if (occupancy >= 85) return clamp(100 - (occupancy - 80), 70, 84);
 
   return clamp(100 - Math.max(0, occupancy - 65) * 0.4, 86, 100);
@@ -249,14 +247,6 @@ function ParkingMessage({ analysis }) {
     );
   }
 
-  if (analysis.isOverConcurrentLimit) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
-        Concurrent games exceed the current control limit, but estimated vehicle demand remains within physical capacity. Review before increasing the limit.
-      </div>
-    );
-  }
-
   if (analysis.isHighPressure) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
@@ -462,7 +452,6 @@ export default function MatchdayCarParkCard({
   }, [analysis, club, closedPitches, endHour, endMin, pitchCfg, satFinal, startHour, startMin, youthEndTime]);
 
   const peak = analysis.peakSlot;
-  const busiest = analysis.busiestByGames;
   const healthScore = getHealthScore(analysis);
 
   return (
@@ -476,25 +465,17 @@ export default function MatchdayCarParkCard({
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <ParkingHealthBar score={healthScore} />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
-          <ParkingMetric label="Capacity" value={capacity} hint="available spaces" variant={getStatusVariant(analysis)} />
+        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-3">
+          <ParkingMetric label="Capacity" value={capacity} hint="available spaces" />
           <ParkingMetric
             label="Peak demand"
             value={peak?.estimatedCars || 0}
             hint={peak ? `${peak.occupancyPct}% at ${peak.label}` : "No fixtures"}
-            variant={getStatusVariant(analysis)}
           />
           <ParkingMetric
-            label="Max games"
-            value={busiest?.fixtureCount || 0}
-            hint={`limit ${analysis.settings.maxConcurrent}`}
-            variant={analysis.isOverConcurrentLimit ? "danger" : getStatusVariant(analysis)}
-          />
-          <ParkingMetric
-            label="Pressure window"
+            label="Peak window"
             value={peak?.label || "—"}
-            hint={peak ? `${peak.fixtureCount} parking-impact games` : "No peak found"}
-            variant={getStatusVariant(analysis)}
+            hint={peak ? `${peak.fixtureCount} parking-impact fixtures` : "No peak found"}
           />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
+import { createPlatformAction, buildActionSummary } from "./actionFramework.js";
 
 function getFixturesFromArgs(args = {}) {
   return (
@@ -26,22 +27,6 @@ function hasCoachMessages(args = {}) {
   return false;
 }
 
-function makeAction({ type, title, message, severity = "review", workspace = "intelligence", ctaLabel = "Open review", priority = 50 }) {
-  return {
-    id: type,
-    type,
-    title,
-    label: title,
-    message,
-    description: message,
-    severity,
-    variant: severity === "urgent" ? "danger" : severity === "ready" ? "success" : "warning",
-    workspace,
-    ctaLabel,
-    priority,
-  };
-}
-
 export function getOperationsAssistant({
   clubTwin = null,
   fixtures,
@@ -58,11 +43,13 @@ export function getOperationsAssistant({
   messagesReady,
   coachMessagesReady,
   coachMessages,
+  recommendationCentre = null,
   ...rest
 } = {}) {
   if (clubTwin?.assistant) return clubTwin.assistant;
 
-  const activeFixtures = getFixturesFromArgs({ fixtures, final, games, scheduledFixtures, matchdayFixtures });
+  const activeFixtures = getFixturesFromArgs({ fixtures, final, games, scheduledFixtures, matchdayFixtures })
+    .filter((fixture) => fixture?.status !== "postponed");
   const built = typeof scheduleBuilt === "boolean" ? scheduleBuilt : Boolean(hasRun || activeFixtures.length);
   const missingOfficials = refWarnings ?? countMissingOfficials(activeFixtures);
   const parking = getParkingSnapshot({ fixtures: activeFixtures, club, pitchCfg });
@@ -71,131 +58,140 @@ export function getOperationsAssistant({
   const actions = [];
 
   if (!built) {
-    actions.push(
-      makeAction({
-        type: "build_schedule",
-        title: "Build schedule",
-        message: "Build Saturday or Sunday before final readiness checks.",
-        severity: "urgent",
-        workspace: "fixtures",
-        ctaLabel: "Open fixtures",
-        priority: 100,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "fixtures",
+      type: "build_schedule",
+      title: "Build schedule",
+      detail: "Build Saturday or Sunday before final readiness checks.",
+      severity: "critical",
+      priority: 100,
+      workspace: "fixtures",
+      card: "schedule",
+      cta: "Open fixtures",
+    }));
   }
 
   if (unresolvedCount > 0) {
-    actions.push(
-      makeAction({
-        type: "unresolved_fixtures",
-        title: "Resolve fixtures",
-        message: `${unresolvedCount} fixture${unresolvedCount === 1 ? "" : "s"} still need manual review.`,
-        severity: "urgent",
-        workspace: "fixtures",
-        ctaLabel: "Open fixtures",
-        priority: 95,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "fixtures",
+      type: "unresolved_fixtures",
+      title: "Resolve fixtures",
+      detail: `${unresolvedCount} fixture${unresolvedCount === 1 ? "" : "s"} still need manual review.`,
+      severity: "critical",
+      priority: 95,
+      workspace: "fixtures",
+      card: "unresolved",
+      cta: "Open fixtures",
+    }));
   }
 
   if (parking.isOverCapacity) {
-    actions.push(
-      makeAction({
-        type: "parking",
-        title: "Review parking",
-        message: `${parking.utilisation}% peak use at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
-        severity: "urgent",
-        workspace: "intelligence",
-        ctaLabel: "Open parking",
-        priority: 90,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "parking",
+      type: "parking_over_capacity",
+      title: "Review parking",
+      detail: `${parking.utilisation}% peak use at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
+      severity: "critical",
+      priority: 90,
+      workspace: "intelligence",
+      card: "parkingIntelligence",
+      cta: "Open parking",
+    }));
   } else if (parking.isHighPressure || parking.isOverConcurrentLimit) {
-    actions.push(
-      makeAction({
-        type: "parking",
-        title: "Watch parking",
-        message: `${parking.utilisation}% peak use at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
-        severity: "review",
-        workspace: "intelligence",
-        ctaLabel: "Open parking",
-        priority: 70,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "parking",
+      type: "parking_watch",
+      title: "Watch parking",
+      detail: `${parking.utilisation}% peak use at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
+      severity: "watch",
+      priority: 70,
+      workspace: "intelligence",
+      card: "parkingIntelligence",
+      cta: "Open parking",
+    }));
   }
 
   if (missingOfficials > 0) {
-    actions.push(
-      makeAction({
-        type: "officials",
-        title: "Confirm officials",
-        message: `${missingOfficials} fixture${missingOfficials === 1 ? "" : "s"} need official confirmation.`,
-        severity: built ? "review" : "ready",
-        workspace: "resources",
-        ctaLabel: "Open resources",
-        priority: 65,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "officials",
+      type: "officials_missing",
+      title: "Confirm officials",
+      detail: `${missingOfficials} fixture${missingOfficials === 1 ? "" : "s"} need official confirmation.`,
+      severity: built ? "attention" : "watch",
+      priority: 65,
+      workspace: "intelligence",
+      card: "operationsHealth",
+      cta: "Open officials",
+    }));
   }
 
   if (built && !messagesAreReady) {
-    actions.push(
-      makeAction({
-        type: "communications",
-        title: "Prepare coach messages",
-        message: "Generate coach messages once the schedule has been reviewed.",
-        severity: "review",
-        workspace: "communications",
-        ctaLabel: "Open messages",
-        priority: 55,
-      })
-    );
+    actions.push(createPlatformAction({
+      domain: "communications",
+      type: "communications_prepare",
+      title: "Prepare coach messages",
+      detail: "Generate coach messages once the schedule has been reviewed.",
+      severity: "watch",
+      priority: 55,
+      workspace: "communications",
+      card: "coachMessages",
+      cta: "Open messages",
+    }));
   }
 
-  if (built && !actions.some((action) => action.severity === "urgent" || action.severity === "review")) {
-    actions.push(
-      makeAction({
-        type: "publish",
-        title: "Publish weekend",
-        message: "The core checks look ready. Review and publish the weekend schedule.",
-        severity: "ready",
-        workspace: "communications",
-        ctaLabel: "Publish",
-        priority: 10,
-      })
-    );
+  const centreActions = (recommendationCentre?.actions || []).slice(0, 4);
+  const summary = buildActionSummary([...actions, ...centreActions]);
+
+  if (built && !summary.actions.some((action) => ["critical", "attention", "watch"].includes(action.platformStatus))) {
+    summary.actions.push(createPlatformAction({
+      domain: "communications",
+      type: "publish",
+      title: "Publish weekend",
+      detail: "The core checks look ready. Review and publish the weekend schedule.",
+      severity: "healthy",
+      priority: 10,
+      workspace: "communications",
+      cta: "Publish",
+    }));
   }
 
-  const sortedActions = [...actions].sort((a, b) => b.priority - a.priority);
-  const urgentCount = sortedActions.filter((action) => action.severity === "urgent").length;
-  const reviewCount = sortedActions.filter((action) => action.severity === "review").length;
-  const nextBestAction = sortedActions[0] || null;
-  const status = urgentCount > 0 ? "Action required" : reviewCount > 0 ? "Review required" : "Ready";
+  const actionSummary = buildActionSummary(summary.actions);
+  const criticalCount = actionSummary.critical;
+  const attentionCount = actionSummary.attention;
+  const watchCount = actionSummary.watch;
+  const status = criticalCount > 0 ? "danger" : attentionCount > 0 || watchCount > 0 ? "warning" : "success";
+  const label = criticalCount > 0 ? "Action required" : attentionCount > 0 || watchCount > 0 ? "Review required" : "Ready";
 
   return {
-    title: status,
-    headline: status,
+    title: label,
+    headline: label,
+    label,
     summary:
-      urgentCount > 0
-        ? `${urgentCount} urgent action${urgentCount === 1 ? "" : "s"} found.`
-        : reviewCount > 0
-          ? `${reviewCount} item${reviewCount === 1 ? "" : "s"} need review.`
+      criticalCount > 0
+        ? `${criticalCount} urgent action${criticalCount === 1 ? "" : "s"} found.`
+        : attentionCount > 0 || watchCount > 0
+          ? `${attentionCount + watchCount} item${attentionCount + watchCount === 1 ? "" : "s"} need review.`
           : "No urgent actions found.",
     status,
-    statusKey: urgentCount > 0 ? "urgent" : reviewCount > 0 ? "review" : "ready",
-    urgentCount,
-    urgentActionCount: urgentCount,
-    reviewCount,
-    totalActions: sortedActions.length,
-    actionCount: sortedActions.length,
-    actions: sortedActions,
-    items: sortedActions,
-    nextBestAction,
-    nextAction: nextBestAction,
+    platformStatus: criticalCount > 0 ? "critical" : attentionCount > 0 ? "attention" : watchCount > 0 ? "watch" : "healthy",
+    statusKey: criticalCount > 0 ? "urgent" : attentionCount > 0 || watchCount > 0 ? "review" : "ready",
+    urgentCount: criticalCount,
+    urgentActionCount: criticalCount,
+    reviewCount: attentionCount + watchCount,
+    totalActions: actionSummary.actions.length,
+    actionCount: actionSummary.actions.length,
+    actions: actionSummary.actions,
+    items: actionSummary.actions,
+    nextBestAction: actionSummary.nextAction,
+    nextAction: actionSummary.nextAction,
     metrics: {
       activeFixtures: activeFixtures.length,
-      urgent: urgentCount,
-      review: reviewCount,
+      activeCount: activeFixtures.length,
+      urgent: criticalCount,
+      dangerCount: criticalCount,
+      review: attentionCount + watchCount,
+      warningCount: attentionCount + watchCount,
+      actionCount: actionSummary.actions.length,
       parkingPeak: parking.utilisation,
     },
     parking,

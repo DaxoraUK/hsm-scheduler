@@ -7,6 +7,7 @@ import {
   MINI_FORMATS,
   MINI_KW,
 } from "./constants.js";
+import { isPitchSuitableForFixture } from "./intelligence/pitch/pitchService.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -90,27 +91,20 @@ function resolveTeamConfig(fixture, cfgList) {
   return null;
 }
 
-function formatCanUsePitch(teamFormat, pitch) {
+function formatCanUsePitch(teamFormat, pitch, fixture = {}) {
   if (!pitch) return false;
 
-  if (!pitch.format) return true;
-  if (pitch.format === teamFormat) return true;
-
-  const sizeRank = {
-    "3v3": 1,
-    "5v5": 2,
-    "7v7": 3,
-    "9v9": 4,
-    "11v11-youth": 5,
-    "11v11-small": 5,
-    "11v11": 6,
-  };
-
-  const need = sizeRank[teamFormat] || 6;
-  const have = sizeRank[pitch.format] || 6;
-
-  return have >= need;
+  return isPitchSuitableForFixture(pitch, {
+    ...fixture,
+    cfg: {
+      ...(fixture.cfg || {}),
+      format: teamFormat,
+    },
+    manualFormat: fixture.manualFormat || teamFormat,
+    format: fixture.format || teamFormat,
+  });
 }
+
 
 function pitchAvailableBySurface(pitchCfg, pitchId, useAstro) {
   const artificial = isArtificialPitch(pitchCfg, pitchId);
@@ -308,6 +302,9 @@ export function scheduleSat(
       for (const pitchId of [cfg.defaultPitch, cfg.altPitch].filter(Boolean)) {
         if (!(pitchId in slots)) continue;
 
+        const pitch = getPitch(pitchCfg, pitchId);
+        if (!isPitchSuitableForFixture(pitch, { ...fixture, cfg })) continue;
+
         if (free(pitchId, adultKo, adultKo + duration)) {
           book(pitchId, adultKo, adultKo + duration);
 
@@ -341,7 +338,11 @@ export function scheduleSat(
 
     const preferredOptions = [cfg.defaultPitch, cfg.altPitch]
       .filter(Boolean)
-      .filter((pitchId) => pitchId in slots);
+      .filter((pitchId) => {
+        if (!(pitchId in slots)) return false;
+        const pitch = getPitch(pitchCfg, pitchId);
+        return isPitchSuitableForFixture(pitch, { ...fixture, cfg });
+      });
 
     let options = [...preferredOptions];
 
@@ -351,9 +352,7 @@ export function scheduleSat(
           pitch.independent &&
           pitch.id in slots &&
           !options.includes(pitch.id) &&
-          (!pitch.format ||
-            pitch.format === cfg.format ||
-            MINI_FORMATS.includes(pitch.format));
+          isPitchSuitableForFixture(pitch, { ...fixture, cfg });
 
         if (canUse) options.push(pitch.id);
       });
@@ -379,10 +378,10 @@ export function scheduleSat(
           if (!(pitch.id in slots)) return false;
 
           if (isIndependentPitch(pitchCfg, pitch.id)) {
-            return MINI_FORMATS.includes(cfg.format);
+            return MINI_FORMATS.includes(cfg.format) && isPitchSuitableForFixture(pitch, { ...fixture, cfg });
           }
 
-          return formatCanUsePitch(cfg.format, pitch);
+          return formatCanUsePitch(cfg.format, pitch, fixture);
         })
         .map((pitch) => pitch.id);
     }
@@ -411,6 +410,12 @@ export function scheduleSat(
       candidatePitches.forEach((pitchId) => {
         if (!(pitchId in slots)) {
           diagnostics.push(`${pitchId}: inactive`);
+          return;
+        }
+
+        const pitch = getPitch(pitchCfg, pitchId);
+        if (!isPitchSuitableForFixture(pitch, { ...fixture, cfg })) {
+          diagnostics.push(`${pitchId}: unsuitable format`);
           return;
         }
 

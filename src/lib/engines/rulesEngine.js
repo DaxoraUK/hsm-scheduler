@@ -82,13 +82,13 @@ export function getScheduleRules({ fixtures = [], fixtureIndex, next = {}, pitch
   ];
 }
 
-export function getOfficialRules({ fixtures = [], fixtureIndex, next = {} } = {}) {
+export function getOfficialRules({ fixtures = [], fixtureIndex, next = {}, refs = [] } = {}) {
   return [
     {
       id: "official.clash",
       stage: "official",
       source: "fixturePlan",
-      run: () => refereeClashRule({ fixtures, fixtureIndex, next }),
+      run: () => refereeClashRule({ fixtures, fixtureIndex, next, refs }),
     },
   ];
 }
@@ -113,6 +113,7 @@ export function buildFixtureRules({
   club = {},
   validateParking = true,
   changeType = "metadata",
+  refs = [],
 } = {}) {
   const rules = [];
 
@@ -123,7 +124,7 @@ export function buildFixtureRules({
   }
 
   if (changeType === "schedule" || changeType === "official") {
-    rules.push(...getOfficialRules({ fixtures, fixtureIndex, next }));
+    rules.push(...getOfficialRules({ fixtures, fixtureIndex, next, refs }));
   }
 
   if (changeType === "schedule" && validateParking) {

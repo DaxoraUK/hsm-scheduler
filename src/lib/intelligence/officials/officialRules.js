@@ -4,11 +4,13 @@ export function refereeClashRule({
   fixtures = [],
   fixtureIndex,
   next = {},
+  refs = [],
 } = {}) {
   const clash = findOfficialClash({
     fixtures,
     fixtureIndex,
     next,
+    refs,
   });
 
   if (!clash) return null;

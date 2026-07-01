@@ -28,13 +28,21 @@ export default function CollapsibleCard({
   statusLabel,
   open,
   onToggle,
+  highlighted = false,
   children,
   className = "",
 }) {
   const panelId = `${id}-panel`;
 
   return (
-    <section className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <section
+      id={`matchday-section-${id}`}
+      className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition duration-300 ${
+        highlighted
+          ? "border-emerald-300 ring-4 ring-emerald-100 shadow-lg"
+          : "border-slate-200"
+      } ${className}`}
+    >
       <button
         type="button"
         onClick={onToggle}

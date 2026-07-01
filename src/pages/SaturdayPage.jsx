@@ -6,6 +6,8 @@ export default function SaturdayPage(props) {
     <MatchdayPage
       day="Saturday"
       props={props}
+      navigationTarget={props.navigationTarget}
+      clearNavigationTarget={props.clearNavigationTarget}
       onOverride={props.satOv}
       hasRun={props.satHasRun}
       final={props.satFinal}

@@ -18,6 +18,7 @@ export default function DashboardMissionHero({
   nextAction,
   weatherLocation,
   onContinue,
+  scopeLabel = "Weekend",
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -41,12 +42,12 @@ export default function DashboardMissionHero({
   );
 
   return (
-    <section className="overflow-hidden rounded-[34px] bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 text-white shadow-xl">
-      <div className="grid gap-6 p-6 lg:grid-cols-[1.18fr_0.82fr] lg:p-7 xl:p-8">
+    <section className="overflow-hidden rounded-[30px] bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 text-white shadow-xl">
+      <div className="grid gap-6 p-6 lg:grid-cols-[1.18fr_0.82fr] lg:p-7">
         <div className="flex flex-col justify-between">
           <div>
             <div
-              className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.2em] ring-1 ${
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.2em] ring-1 ${
                 ready
                   ? "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20"
                   : "bg-amber-400/10 text-amber-200 ring-amber-300/20"
@@ -56,15 +57,15 @@ export default function DashboardMissionHero({
               {missionState?.label || "Mission Control"}
             </div>
 
-            <div className="mt-4 text-[11px] font-black uppercase tracking-[0.32em] text-emerald-300">
+            <div className="mt-4 text-[11px] font-black uppercase tracking-[0.28em] text-emerald-300">
               Mission Control
             </div>
 
-            <h1 className="mt-2 max-w-3xl text-4xl font-black leading-[0.98] tracking-tight lg:text-5xl">
-              Weekend Operations
+            <h1 className="mt-2 max-w-3xl text-4xl font-black leading-[0.95] tracking-tight lg:text-5xl">
+              {scopeLabel} Operations
             </h1>
 
-            <p className="mt-3 max-w-2xl text-base font-semibold leading-7 text-slate-300">
+            <p className="mt-3 max-w-2xl text-base font-medium leading-7 text-slate-300">
               {missionState?.detail ||
                 "Review your club's operational readiness and continue the next matchday task."}
             </p>
@@ -75,7 +76,7 @@ export default function DashboardMissionHero({
               <button
                 type="button"
                 onClick={onContinue}
-                className={`inline-flex items-center justify-center gap-3 rounded-2xl px-6 py-3.5 text-sm font-black shadow-lg transition active:scale-[0.98] ${
+                className={`inline-flex items-center justify-center gap-3 rounded-2xl px-6 py-3 text-sm font-black shadow-lg transition active:scale-[0.98] ${
                   ready
                     ? "bg-emerald-500 text-white shadow-emerald-950/30 hover:bg-emerald-400"
                     : "bg-amber-400 text-slate-950 shadow-amber-950/20 hover:bg-amber-300"
@@ -86,16 +87,16 @@ export default function DashboardMissionHero({
               </button>
 
               <div className="text-sm font-bold text-slate-400">
-                {completedSteps}/{totalSteps} checks complete
+                {completedSteps}/{totalSteps} workflow checks complete
               </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-[28px] bg-white/10 p-5 backdrop-blur-md ring-1 ring-white/10">
+        <div className="rounded-[26px] bg-white/10 p-5 backdrop-blur-md ring-1 ring-white/10">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-emerald-300">
+              <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
                 Live Status
               </div>
 
@@ -119,7 +120,7 @@ export default function DashboardMissionHero({
           <div className="mt-5 rounded-3xl bg-slate-950/35 p-4 ring-1 ring-white/10">
             <div className="flex items-end justify-between gap-5">
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
+                <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
                   Weekend Progress
                 </div>
                 <div className="mt-1 text-3xl font-black text-white">
@@ -141,10 +142,10 @@ export default function DashboardMissionHero({
           </div>
 
           <div className="mt-4 grid grid-cols-4 gap-2">
-            <MiniStat label="Sat" value={satCount} />
-            <MiniStat label="Sun" value={sunCount} />
-            <MiniStat label="Weather" value={weatherLocation ? "Ready" : "Set"} compact />
-            <MiniStat label="Club" value={club?.name || "GC"} compact />
+            <MiniStat label="Saturday" value={satCount} />
+            <MiniStat label="Sunday" value={sunCount} />
+            <MiniStat label="Weather" value={weatherLocation ? "Ready" : "Set postcode"} />
+            <MiniStat label="Club" value={club?.name || "Ground Control"} compact />
           </div>
         </div>
       </div>
@@ -154,11 +155,11 @@ export default function DashboardMissionHero({
 
 function MiniStat({ label, value, compact = false }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
-      <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+    <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
         {label}
       </div>
-      <div className={`mt-1 font-black text-white ${compact ? "truncate text-xs" : "text-xl"}`}>
+      <div className={`mt-1 font-black text-white ${compact ? "truncate text-xs" : "text-lg"}`}>
         {value}
       </div>
     </div>

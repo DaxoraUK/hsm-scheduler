@@ -19,6 +19,8 @@ import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
 import CommunicationsPage from "./pages/CommunicationsPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
+import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
+import { MATCHDAY_SCOPES, getDayTabFromScope, normaliseMatchdayScope } from "./lib/domain/matchdayScope.js";
 
 import {
   G, RE, AU, WH, AM, BL, TE, PU,
@@ -41,8 +43,21 @@ function App(){
   const [mode,setMode]=useState("test");
   const [productionMode,setProductionMode]=useState(()=>{try{return localStorage.getItem("hsm_production")==="1";}catch(e){return false;}});
   const [dayTab,setDayTab]=useState("saturday");
+  const [matchdayScope,setMatchdayScopeState]=useState(()=>{
+    try{return normaliseMatchdayScope(localStorage.getItem("gc_matchday_scope") || MATCHDAY_SCOPES.WEEKEND);}catch(e){return MATCHDAY_SCOPES.WEEKEND;}
+  });
+  const setMatchdayScope=useCallback((scope)=>{
+    const nextScope=normaliseMatchdayScope(scope);
+    setMatchdayScopeState(nextScope);
+    try{localStorage.setItem("gc_matchday_scope",nextScope);}catch(e){}
+    if(nextScope===MATCHDAY_SCOPES.SATURDAY||nextScope===MATCHDAY_SCOPES.SUNDAY){
+      setDayTab(getDayTabFromScope(nextScope));
+    }
+  },[]);
   const [mainPage, setMainPage] = useState("dashboard");
   const [settingsTab,setSettingsTab]=useState("overview");
+  const [navigationTarget,setNavigationTarget]=useState(null);
+  const clearNavigationTarget=useCallback(()=>setNavigationTarget(null),[]);
 
   // Saturday state
   const [satScheduled,setSatScheduled]=useState([]);
@@ -413,10 +428,13 @@ const { toggleClosed, resetAll } = useOperationsActions({
   );
 
 return(
+  <MatchdayScopeProvider scope={matchdayScope} setScope={setMatchdayScope}>
   <ProductShell
     mainPage={mainPage}
     setMainPage={setMainPage}
     setDayTab={setDayTab}
+    setNavigationTarget={setNavigationTarget}
+    matchdayScope={matchdayScope}
     club={club}
     satFinal={satFinal}
     sunFinal={sunFinal}
@@ -432,6 +450,9 @@ return(
   <DashboardPage
     setMainPage={setMainPage}
     setDayTab={setDayTab}
+    setNavigationTarget={setNavigationTarget}
+    matchdayScope={matchdayScope}
+    setMatchdayScope={setMatchdayScope}
     saveWeek={saveWeek}
     club={club}
     history={history}
@@ -456,13 +477,18 @@ return(
         {/* Main tabs */}
 <DayTabs
   dayTab={dayTab}
-  setDayTab={setDayTab}
+  setDayTab={(nextDay)=>{
+    clearNavigationTarget();
+    setDayTab(nextDay);
+  }}
   club={club}
   WH={WH}
 />
 {/* ── SATURDAY ── */}
 {dayTab === "saturday" && (
   <SaturdayPage
+    navigationTarget={navigationTarget}
+    clearNavigationTarget={clearNavigationTarget}
     S={S}
     G={G}
     RE={RE}
@@ -526,6 +552,8 @@ return(
         {/* ── SUNDAY ── */}
         {dayTab === "sunday" && (
           <SundayPage
+            navigationTarget={navigationTarget}
+            clearNavigationTarget={clearNavigationTarget}
             S={S}
             G={G}
             RE={RE}
@@ -671,6 +699,7 @@ return(
       )}
     </div>
   </ProductShell>
+  </MatchdayScopeProvider>
   );
 }
 

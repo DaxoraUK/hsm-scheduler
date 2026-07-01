@@ -1,0 +1,18 @@
+export const DOMAIN_EVENTS = Object.freeze({
+  CLUB_UPDATED: "club.updated",
+  SETTINGS_UPDATED: "settings.updated",
+  TEAM_UPDATED: "team.updated",
+  VENUE_UPDATED: "venue.updated",
+  PITCH_UPDATED: "pitch.updated",
+  PITCH_CLOSED: "pitch.closed",
+  PITCH_REOPENED: "pitch.reopened",
+  FIXTURES_IMPORTED: "fixtures.imported",
+  SCHEDULE_BUILT: "schedule.built",
+  SCHEDULE_CHANGED: "schedule.changed",
+  PARKING_RECALCULATED: "parking.recalculated",
+  WEATHER_UPDATED: "weather.updated",
+  OFFICIALS_UPDATED: "officials.updated",
+  HEALTH_UPDATED: "health.updated",
+  RECOMMENDATIONS_UPDATED: "recommendations.updated",
+  COMMUNICATIONS_UPDATED: "communications.updated",
+});

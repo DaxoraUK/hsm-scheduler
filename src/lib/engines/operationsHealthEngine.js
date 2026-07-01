@@ -1,5 +1,7 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { calculateOfficialsReadiness } from "./officialsEngine.js";
+import { calculatePlatformHealth } from "./platformHealthEngine.js";
+import { normalisePlatformStatus } from "./statusSystem.js";
 
 const STATUS_RANK = {
   danger: 0,
@@ -30,11 +32,13 @@ function estimateFixtureCars(fixture = {}, club = {}) {
 }
 
 function scoreDomain({ id, label, score, status, summary, issues = [], actions = [] }) {
+  const safeScore = Math.max(0, Math.min(100, Math.round(score)));
   return {
     id,
     label,
-    score: Math.max(0, Math.min(100, Math.round(score))),
+    score: safeScore,
     status,
+    platformStatus: normalisePlatformStatus(status),
     summary,
     issues,
     actions,
@@ -211,9 +215,8 @@ export function calculateOperationsHealth({
     }),
   ];
 
-  const overallScore = Math.round(
-    domains.reduce((total, domain) => total + domain.score, 0) / Math.max(domains.length, 1)
-  );
+  const platformHealth = calculatePlatformHealth({ domains });
+  const overallScore = platformHealth.score;
   const hasDanger = domains.some((domain) => domain.status === "danger");
   const hasWarning = domains.some((domain) => domain.status === "warning");
   const overall = getOverallStatus(overallScore, hasDanger, hasWarning);
@@ -228,9 +231,12 @@ export function calculateOperationsHealth({
   return {
     score: overallScore,
     status: overall.status,
+    platformStatus: platformHealth.platformStatus,
     label: overall.label,
+    platformLabel: platformHealth.label,
     summary: worstDomain?.summary || "Matchday health calculated.",
     domains,
+    platformHealth,
     issues,
     actions,
     metrics: {

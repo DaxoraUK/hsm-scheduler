@@ -27,33 +27,18 @@ export function getRefereeStats({ satFinal = [], sunFinal = [], satHasRun, sunHa
 
 export function getParkingStats({
   fixtures = [],
-  satFixtures,
-  sunFixtures,
-  fixturesByDay,
   club = {},
   pitchCfg = [],
   startMins,
   slotMins,
+  scope = "auto",
   peakCars = 0,
   carCap = 57,
 } = {}) {
-  const hasDayFixtures =
-    Boolean(fixturesByDay) ||
-    Array.isArray(satFixtures) ||
-    Array.isArray(sunFixtures);
   const hasFixtures = Array.isArray(fixtures) && fixtures.length > 0;
 
-  if (hasDayFixtures || hasFixtures) {
-    const parking = getParkingSummary({
-      fixtures: hasDayFixtures ? [] : fixtures,
-      satFixtures,
-      sunFixtures,
-      fixturesByDay,
-      club,
-      pitchCfg,
-      startMins,
-      slotMins,
-    });
+  if (hasFixtures) {
+    const parking = getParkingSummary({ fixtures, club, pitchCfg, startMins, slotMins, scope });
 
     return {
       peakCars: parking.peakCars,
@@ -69,9 +54,6 @@ export function getParkingStats({
       isHighPressure: parking.isHighPressure,
       summary: parking.headline,
       detail: parking.detail,
-      scope: parking.scope,
-      peakDayLabel: parking.peakDayLabel || parking.dayLabel,
-      dayBreakdown: parking.detailByDay || parking.dayBreakdown || [],
     };
   }
 
