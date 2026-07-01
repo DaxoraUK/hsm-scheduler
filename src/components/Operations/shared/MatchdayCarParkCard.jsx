@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import Card from "../../ui/Card.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
-import { analyseParkingPressure } from "../../../lib/intelligence/parking/parkingService.js";
+import { getParkingSnapshot } from "../../../lib/engines/parkingEngine.js";
 import { getValidatedFixRecommendations } from "../../../lib/engines/recommendationEngine.js";
 
 function clamp(value, min = 0, max = 100) {
@@ -399,13 +399,12 @@ export default function MatchdayCarParkCard({
   day = "Matchday",
   onOverride,
 }) {
-  const capacity = club?.carParkSpaces || 57;
   const startMins = startHour * 60 + startMin;
   const youthEndTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
 
-  const analysis = useMemo(
+  const parkingSnapshot = useMemo(
     () =>
-      analyseParkingPressure({
+      getParkingSnapshot({
         fixtures: satFinal,
         club,
         pitchCfg,
@@ -413,6 +412,9 @@ export default function MatchdayCarParkCard({
       }),
     [satFinal, club, pitchCfg, startMins]
   );
+
+  const analysis = parkingSnapshot.analysis;
+  const capacity = parkingSnapshot.capacity;
 
   const parkingRecommendations = useMemo(() => {
     const peakFixtures = analysis.peakSlot?.parkingFixtures || [];

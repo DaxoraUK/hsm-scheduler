@@ -5,6 +5,7 @@ import SupabaseStatusBar from "../components/Settings/SupabaseStatusBar.jsx";
 import SettingsOverviewPanel from "../components/Settings/SettingsOverviewPanel.jsx";
 import ClubSettingsPanel from "../components/Settings/ClubSettingsPanel.jsx";
 import TeamSettingsPanel from "../components/Settings/TeamSettingsPanel.jsx";
+import VenueSettingsPanel from "../components/Settings/VenueSettingsPanel.jsx";
 import TimingSettingsPanel from "../components/Settings/TimingSettingsPanel.jsx";
 import PitchSettingsPanel from "../components/Settings/PitchSettingsPanel.jsx";
 import RefereeSettingsPanel from "../components/Settings/RefereeSettingsPanel.jsx";
@@ -28,6 +29,7 @@ export default function SettingsPage(props) {
       {settingsTab === "overview" && <SettingsOverviewPanel {...props} />}
       {settingsTab === "club" && <ClubSettingsPanel {...props} />}
       {settingsTab === "teams" && <TeamSettingsPanel {...props} />}
+      {settingsTab === "venues" && <VenueSettingsPanel {...props} />}
       {settingsTab === "timing" && <TimingSettingsPanel {...props} />}
       {settingsTab === "pitches" && <PitchSettingsPanel {...props} />}
       {settingsTab === "refs" && <RefereeSettingsPanel {...props} />}

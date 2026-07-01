@@ -11,12 +11,24 @@ import {
   Wind,
 } from "lucide-react";
 
-export default function DashboardWeatherCard({ club, weatherLocation, setMainPage }) {
-  const venueName = club?.groundName || club?.venue || club?.name || "Club ground";
-  const hasLocation = Boolean(weatherLocation);
+export default function DashboardWeatherCard({ club, weatherLocation, weather, setMainPage }) {
+  const snapshot = weather || {};
+  const location = snapshot.location || weatherLocation || "";
+  const venueName = snapshot.venueName || club?.groundName || club?.venue || club?.name || "Club ground";
+  const hasLocation = Boolean(snapshot.hasLocation ?? location);
+  const forecast = snapshot.forecast || {};
+
+  const metrics = [
+    { icon: ThermometerSun, label: "Temperature", value: forecast.temperature || (hasLocation ? "18°" : "--") },
+    { icon: Sun, label: "Conditions", value: forecast.conditions || (hasLocation ? "Dry" : "Pending") },
+    { icon: Wind, label: "Wind", value: forecast.wind || (hasLocation ? "9 mph" : "--") },
+    { icon: Droplets, label: "Rain", value: forecast.rain || (hasLocation ? "Low" : "Pending") },
+    { icon: CloudRain, label: "Pitch Risk", value: forecast.pitchRisk || (hasLocation ? "Low" : "Set") },
+    { icon: ShieldCheck, label: "Ground Risk", value: forecast.groundRisk || (hasLocation ? "Low" : "Set") },
+  ];
 
   return (
-    <section className="flex h-full min-h-[390px] flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+    <section className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
       <div className="flex items-start justify-between gap-5 border-b border-slate-200 p-6">
         <div className="min-w-0">
           <div className="text-xs font-black uppercase tracking-[0.28em] text-sky-700">
@@ -47,7 +59,7 @@ export default function DashboardWeatherCard({ club, weatherLocation, setMainPag
                 Forecast Location
               </div>
               <div className="mt-1 text-3xl font-black text-slate-950">
-                {hasLocation ? weatherLocation : "Postcode needed"}
+                {hasLocation ? location : "Postcode needed"}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-500">
                 {hasLocation ? venueName : "Add a ground postcode in Settings Centre."}
@@ -55,33 +67,19 @@ export default function DashboardWeatherCard({ club, weatherLocation, setMainPag
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
-            <WeatherMetric label="Temp" value={hasLocation ? "18°" : "--"} icon={ThermometerSun} />
-            <WeatherMetric label="Conditions" value={hasLocation ? "Dry" : "Pending"} icon={Sun} />
-            <WeatherMetric label="Wind" value={hasLocation ? "9 mph" : "--"} icon={Wind} />
-            <WeatherMetric label="Risk" value={hasLocation ? "Low" : "Set"} icon={ShieldCheck} />
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <WeatherInsight
-              icon={Droplets}
-              label="Rain"
-              value={hasLocation ? "Low" : "Pending"}
-            />
-            <WeatherInsight
-              icon={CloudRain}
-              label="Pitch risk"
-              value={hasLocation ? "Low" : "Set location"}
-            />
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {metrics.map((metric) => (
+              <WeatherTile key={metric.label} {...metric} />
+            ))}
           </div>
 
           <button
             type="button"
             onClick={() => setMainPage(hasLocation ? "operations" : "settings")}
-            className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left font-black text-slate-950 shadow-sm ring-1 ring-sky-100 transition hover:bg-sky-100"
+            className="mt-5 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left text-sm font-black text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md active:scale-[0.99]"
           >
             {hasLocation ? "Open weather intelligence" : "Set weather location"}
-            <ArrowRight size={18} />
+            <ArrowRight size={20} />
           </button>
         </div>
       </div>
@@ -89,28 +87,14 @@ export default function DashboardWeatherCard({ club, weatherLocation, setMainPag
   );
 }
 
-function WeatherMetric({ label, value, icon: Icon }) {
+function WeatherTile({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-2xl bg-white/90 p-3 text-center ring-1 ring-sky-100">
-      <Icon className="mx-auto text-sky-700" size={20} strokeWidth={2.4} />
-      <div className="mt-2 text-base font-black text-slate-950">{value}</div>
-      <div className="mt-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+    <div className="flex aspect-square min-h-[112px] flex-col items-center justify-center rounded-2xl border border-sky-100 bg-white p-3 text-center shadow-sm">
+      <Icon className="text-sky-700" size={22} strokeWidth={2.35} />
+      <div className="mt-3 text-xl font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
         {label}
       </div>
-    </div>
-  );
-}
-
-function WeatherInsight({ icon: Icon, label, value }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-sky-100">
-      <div>
-        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-          {label}
-        </div>
-        <div className="mt-1 text-sm font-black text-slate-950">{value}</div>
-      </div>
-      <Icon className="text-sky-700" size={19} strokeWidth={2.4} />
     </div>
   );
 }

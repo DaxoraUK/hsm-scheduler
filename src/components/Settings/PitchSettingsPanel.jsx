@@ -20,13 +20,13 @@ const SURFACES = [
   ["indoor", "Indoor"],
 ];
 
-function getClubSites(club = {}) {
+function getSites(club = {}) {
   const sites = Array.isArray(club.sites) ? club.sites : [];
-
   if (sites.length) {
     return sites.map((site, index) => ({
       id: site.id || `site-${index + 1}`,
       name: site.name || site.venue || `Site ${index + 1}`,
+      isPrimary: !!site.isPrimary || site.id === club.primarySiteId || (!club.primarySiteId && index === 0),
     }));
   }
 
@@ -34,8 +34,13 @@ function getClubSites(club = {}) {
     {
       id: club.primarySiteId || "main-ground",
       name: club.venue || "Main Ground",
+      isPrimary: true,
     },
   ];
+}
+
+function siteLabel(sites, siteId) {
+  return sites.find((site) => site.id === siteId)?.name || "Primary";
 }
 
 export default function PitchSettingsPanel({
@@ -50,6 +55,9 @@ export default function PitchSettingsPanel({
   saveTab,
   savedTab,
 }) {
+  const sites = getSites(club);
+  const primarySite = sites.find((site) => site.isPrimary) || sites[0];
+
   return (
     <div style={S.card} className="np">
       <div style={{ ...hdrStyle(club.secondary), justifyContent: "space-between" }}>
@@ -57,9 +65,7 @@ export default function PitchSettingsPanel({
 
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {savedTab === "pitches" && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>
-              ✓ Saved
-            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>✓ Saved</span>
           )}
 
           <button
@@ -75,6 +81,7 @@ export default function PitchSettingsPanel({
               setPitchCfg(
                 PITCHES.map((pitch) => ({
                   ...pitch,
+                  siteId: pitch.siteId || primarySite?.id || null,
                   surface: pitch.surface || inferSurface(pitch),
                 }))
               )
@@ -86,31 +93,33 @@ export default function PitchSettingsPanel({
       </div>
 
       <div style={S.cb}>
-        <div style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>
-          Add, edit or remove pitches. The ID must be unique with no spaces. Set
-          the Format so games of that type can be placed here. Use Inside Pitch
-          if this pitch sits within a larger one. Set Surface to identify grass,
-          Astro, 3G, 4G or indoor pitches. Tick Independent if games here do not
-          count toward the concurrent game limit. Use Site for multi-ground clubs so future weather, parking and venue-specific rules know where each pitch sits.
+        <div
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 18,
+            padding: 14,
+            background: "#f8fafc",
+            color: "#475569",
+            fontSize: 13,
+            lineHeight: 1.55,
+            marginBottom: 14,
+          }}
+        >
+          Assign every pitch to a venue/site. Ground Control can then calculate parking,
+          weather risk and multi-site operations correctly instead of treating every pitch
+          as if it belongs to the same ground.
         </div>
 
         <table style={S.table}>
           <thead>
             <tr>
-              {[
-                "ID",
-                "Name",
-                "Format",
-                "Surface",
-                "Site",
-                "Inside Pitch",
-                "Independent",
-                "",
-              ].map((h, i) => (
-                <th key={i} style={thC(club.primary)}>
-                  {h}
-                </th>
-              ))}
+              {["ID", "Name", "Site", "Format", "Surface", "Inside", "Independent", ""].map(
+                (h, i) => (
+                  <th key={i} style={thC(club.primary)}>
+                    {h}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
 
@@ -140,16 +149,14 @@ export default function PitchSettingsPanel({
                     <input
                       style={{ ...S.iinp, width: 60, fontFamily: "monospace" }}
                       value={pitch.id}
-                      onChange={(e) =>
-                        updatePitch("id", e.target.value.replace(/ /g, ""))
-                      }
+                      onChange={(e) => updatePitch("id", e.target.value.replace(/ /g, ""))}
                       placeholder="P1"
                     />
                   </td>
 
                   <td style={S.td(rowIndex % 2)}>
                     <input
-                      style={{ ...S.iinp, width: 90 }}
+                      style={{ ...S.iinp, width: 100 }}
                       value={pitch.label}
                       onChange={(e) => updatePitch("label", e.target.value)}
                       placeholder="Pitch 1"
@@ -158,7 +165,22 @@ export default function PitchSettingsPanel({
 
                   <td style={S.td(rowIndex % 2)}>
                     <select
-                      style={{ ...S.isel, width: 95 }}
+                      style={{ ...S.isel, width: 120 }}
+                      value={pitch.siteId || primarySite?.id || ""}
+                      onChange={(e) => updatePitch("siteId", e.target.value || null)}
+                      title={`Current site: ${siteLabel(sites, pitch.siteId || primarySite?.id)}`}
+                    >
+                      {sites.map((site) => (
+                        <option key={site.id} value={site.id}>
+                          {site.name}{site.isPrimary ? " ★" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+
+                  <td style={S.td(rowIndex % 2)}>
+                    <select
+                      style={{ ...S.isel, width: 105 }}
                       value={pitch.format || ""}
                       onChange={(e) => updatePitch("format", e.target.value)}
                     >
@@ -179,20 +201,6 @@ export default function PitchSettingsPanel({
                       {SURFACES.map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-
-                  <td style={S.td(rowIndex % 2)}>
-                    <select
-                      style={{ ...S.isel, width: 110 }}
-                      value={pitch.siteId || club.primarySiteId || getClubSites(club)[0]?.id || ""}
-                      onChange={(e) => updatePitch("siteId", e.target.value || null)}
-                    >
-                      {getClubSites(club).map((site) => (
-                        <option key={site.id} value={site.id}>
-                          {site.name}
                         </option>
                       ))}
                     </select>
@@ -226,11 +234,7 @@ export default function PitchSettingsPanel({
 
                   <td style={S.td(rowIndex % 2)}>
                     <button
-                      onClick={() =>
-                        setPitchCfg((prev) =>
-                          prev.filter((_, index) => index !== realIdx)
-                        )
-                      }
+                      onClick={() => setPitchCfg((prev) => prev.filter((_, index) => index !== realIdx))}
                       style={{
                         background: "none",
                         border: "none",
@@ -260,6 +264,7 @@ export default function PitchSettingsPanel({
                 label: "Pitch " + (prev.length + 1),
                 desc: "",
                 format: "",
+                siteId: primarySite?.id || null,
                 surface: "grass",
                 innerOf: null,
                 independent: false,
@@ -279,9 +284,9 @@ export default function PitchSettingsPanel({
             color: "#888",
           }}
         >
-          <strong>Tip:</strong> Surface controls whether a pitch is grass,
-          Astro, 3G, 4G or indoor. Independent only means games on that pitch do
-          not count toward the concurrent game limit. Site links each pitch to a venue for future weather and multi-site planning.
+          <strong>Tip:</strong> Site controls venue, postcode, weather and car park capacity.
+          Surface controls grass, Astro, 3G, 4G or indoor. Independent only means games on that
+          pitch do not count toward the concurrent game limit.
         </div>
       </div>
     </div>

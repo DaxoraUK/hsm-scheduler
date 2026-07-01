@@ -1,3 +1,6 @@
+import { getParkingSnapshot } from "./parkingEngine.js";
+import { calculateOfficialsReadiness } from "./officialsEngine.js";
+
 const STATUS_RANK = {
   danger: 0,
   warning: 1,
@@ -15,9 +18,6 @@ function isPostponed(fixture = {}) {
   return String(fixture.status || "").toLowerCase() === "postponed";
 }
 
-function isConfirmedRef(fixture = {}) {
-  return String(fixture.refStatus || "").toLowerCase() === "confirmed";
-}
 
 function getFormat(fixture = {}) {
   return fixture.format || fixture.gameFormat || fixture.pitchFormat || fixture.pitchType || "11v11";
@@ -27,10 +27,6 @@ function estimateFixtureCars(fixture = {}, club = {}) {
   const avgCars = club.avgCars || {};
   const format = getFormat(fixture);
   return toNumber(avgCars[format], toNumber(club.defaultCarsPerFixture, 20));
-}
-
-function getParkingCapacity(club = {}) {
-  return toNumber(club.carParkSpaces || club.parkingSpaces || club.capacity, 0);
 }
 
 function scoreDomain({ id, label, score, status, summary, issues = [], actions = [] }) {
@@ -51,7 +47,15 @@ function getOverallStatus(score, hasDanger, hasWarning) {
   return { status: "success", label: "Healthy" };
 }
 
+function mapParkingStatus(parking = {}) {
+  if (!parking.capacity) return "warning";
+  if (parking.isOverCapacity || parking.utilisation > 100) return "danger";
+  if (parking.isHighPressure || parking.isOverConcurrentLimit || parking.utilisation >= 85) return "warning";
+  return "success";
+}
+
 export function calculateOperationsHealth({
+  clubTwin = null,
   fixtures = [],
   active = [],
   postponed = [],
@@ -64,17 +68,34 @@ export function calculateOperationsHealth({
   club = {},
   hasRun = false,
 } = {}) {
+  if (clubTwin?.operationsHealth) return clubTwin.operationsHealth;
+
   const activeFixtures = active.length ? active : fixtures.filter((fixture) => !isPostponed(fixture));
   const postponedFixtures = postponed.length ? postponed : fixtures.filter(isPostponed);
   const unresolvedCount = unresolved.length;
   const clashCount = conflicts.length;
-  const officialConflictCount = officialConflicts.length;
-  const refWarningCount = toNumber(refWarnings, activeFixtures.filter((fixture) => !isConfirmedRef(fixture)).length);
+  const officials = calculateOfficialsReadiness({
+    fixtures,
+    active: activeFixtures,
+    officialConflicts,
+    refWarnings,
+  });
+  const officialConflictCount = officials.metrics.conflicts;
+  const refWarningCount = officials.metrics.missing;
   const closedPitchCount = closedPitches.length;
   const pitchCount = pitchCfg.length;
-  const capacity = getParkingCapacity(club);
-  const estimatedCars = activeFixtures.reduce((total, fixture) => total + estimateFixtureCars(fixture, club), 0);
-  const parkingUtilisation = capacity ? Math.round((estimatedCars / capacity) * 100) : 0;
+
+  const parking = getParkingSnapshot({
+    fixtures: activeFixtures,
+    club,
+    pitchCfg,
+  });
+
+  const capacity = parking.capacity;
+  const peakParkingLoad = parking.peakCars;
+  const parkingUtilisation = parking.utilisation;
+  const parkingStatus = mapParkingStatus(parking);
+  const totalEstimatedCars = activeFixtures.reduce((total, fixture) => total + estimateFixtureCars(fixture, club), 0);
 
   const fixtureIssues = [];
   const fixtureActions = [];
@@ -110,33 +131,28 @@ export function calculateOperationsHealth({
 
   const pitchScore = pitchCount ? 100 - closedPitchCount * 10 : 40;
 
-  const officialIssues = [];
-  const officialActions = [];
-  if (refWarningCount > 0) {
-    officialIssues.push(`${refWarningCount} fixture${refWarningCount === 1 ? "" : "s"} without confirmed referee.`);
-    officialActions.push("Chase referee confirmations before Friday.");
-  }
-  if (officialConflictCount > 0) {
-    officialIssues.push(`${officialConflictCount} referee overlap${officialConflictCount === 1 ? "" : "s"} detected.`);
-    officialActions.push("Move kick-offs or reassign officials.");
-  }
-
-  const officialsScore = 100 - refWarningCount * 8 - officialConflictCount * 18;
+  const officialIssues = officials.issues;
+  const officialActions = officials.actions;
+  const officialsScore = officials.score;
 
   const parkingIssues = [];
   const parkingActions = [];
   if (!capacity) {
     parkingIssues.push("Parking capacity has not been set.");
-    parkingActions.push("Set car park capacity in club settings.");
-  } else if (parkingUtilisation >= 100) {
-    parkingIssues.push(`Parking estimated at ${parkingUtilisation}% of capacity.`);
+    parkingActions.push("Set car park capacity in venue or club settings.");
+  } else if (parking.isOverCapacity || parkingUtilisation > 100) {
+    parkingIssues.push(
+      `Parking peaks at ${parkingUtilisation}% of capacity (${peakParkingLoad}/${capacity} spaces at ${parking.peakTime}).`
+    );
     parkingActions.push("Open Parking Intelligence and apply the best fixture move.");
-  } else if (parkingUtilisation >= 85) {
-    parkingIssues.push(`Parking estimated at ${parkingUtilisation}% of capacity.`);
+  } else if (parking.isHighPressure || parking.isOverConcurrentLimit || parkingUtilisation >= 85) {
+    parkingIssues.push(
+      `Parking peaks at ${parkingUtilisation}% of capacity (${peakParkingLoad}/${capacity} spaces at ${parking.peakTime}).`
+    );
     parkingActions.push("Review Parking Intelligence before publishing.");
   }
 
-  const parkingScore = !capacity ? 65 : Math.max(0, 100 - Math.max(0, parkingUtilisation - 75) * 2);
+  const parkingScore = !capacity ? 65 : toNumber(parking.healthScore, 100);
 
   const communicationIssues = [];
   const communicationActions = [];
@@ -170,8 +186,8 @@ export function calculateOperationsHealth({
       id: "officials",
       label: "Officials",
       score: officialsScore,
-      status: officialConflictCount ? "danger" : refWarningCount ? "warning" : "success",
-      summary: officialConflictCount ? "Official clashes need action." : refWarningCount ? "Referees need chasing." : "Officials look healthy.",
+      status: officials.status,
+      summary: officials.summary,
       issues: officialIssues,
       actions: officialActions,
     }),
@@ -179,8 +195,8 @@ export function calculateOperationsHealth({
       id: "parking",
       label: "Parking",
       score: parkingScore,
-      status: !capacity || parkingUtilisation < 85 ? "success" : parkingUtilisation >= 100 ? "danger" : "warning",
-      summary: capacity ? `${parkingUtilisation}% estimated use.` : "Capacity not set.",
+      status: parkingStatus,
+      summary: capacity ? `${parkingUtilisation}% peak use.` : "Capacity not set.",
       issues: parkingIssues,
       actions: parkingActions,
     }),
@@ -228,8 +244,16 @@ export function calculateOperationsHealth({
       closedPitches: closedPitchCount,
       pitchCount,
       parkingCapacity: capacity,
-      estimatedCars,
+      totalEstimatedCars,
+      peakParkingLoad,
       parkingUtilisation,
+      parkingPeakTime: parking.peakTime,
+    },
+    parking,
+    officials,
+    debug: {
+      parkingSource: "parkingEngine.getParkingSnapshot",
+      parkingCalculation: "peak concurrent window, not all-day total",
     },
   };
 }

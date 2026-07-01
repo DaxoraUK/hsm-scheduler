@@ -76,7 +76,7 @@ export default function OperationsHealthCard({ health }) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {(health?.domains || []).map((domain) => (
           <DomainTile key={domain.id} domain={domain} />
         ))}

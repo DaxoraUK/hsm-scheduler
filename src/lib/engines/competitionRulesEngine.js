@@ -1,3 +1,5 @@
+import { buildClubConfiguration, getPitchForFixture, getTeamForFixture } from "./configurationEngine.js";
+
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -35,8 +37,9 @@ function isPostponed(fixture = {}) {
   return status === "postponed" || status === "cancelled";
 }
 
-function getTeamName(fixture = {}) {
-  return fixture.teamName || fixture.cfg?.name || fixture.homeTeam || fixture.team || "Fixture";
+function getTeamName(fixture = {}, config = {}) {
+  const team = getTeamForFixture(fixture, config.teams || []);
+  return team?.name || fixture.teamName || fixture.cfg?.name || fixture.homeTeam || fixture.team || "Fixture";
 }
 
 function getFixtureTitle(fixture = {}) {
@@ -45,13 +48,16 @@ function getFixtureTitle(fixture = {}) {
   return `${home} vs ${away}`;
 }
 
-function getFormat(fixture = {}) {
-  return fixture.cfg?.format || fixture.manualFormat || fixture.format || fixture.gameFormat || fixture.pitchFormat || "";
+function getFormat(fixture = {}, config = {}) {
+  const team = getTeamForFixture(fixture, config.teams || []);
+  return fixture.cfg?.format || fixture.manualFormat || fixture.format || fixture.gameFormat || fixture.pitchFormat || team?.format || "";
 }
 
-function getConfiguredTeamType(fixture = {}) {
+function getConfiguredTeamType(fixture = {}, config = {}) {
+  const team = getTeamForFixture(fixture, config.teams || []);
   return normaliseText(
-    fixture.cfg?.teamType ||
+    team?.teamType ||
+      fixture.cfg?.teamType ||
       fixture.cfg?.category ||
       fixture.cfg?.ageGroupType ||
       fixture.teamType ||
@@ -60,37 +66,35 @@ function getConfiguredTeamType(fixture = {}) {
   );
 }
 
-function getAgeFromName(fixture = {}) {
-  const text = normaliseText(`${getFixtureTitle(fixture)} ${getTeamName(fixture)}`);
+function getAgeFromName(fixture = {}, config = {}) {
+  const text = normaliseText(`${getFixtureTitle(fixture)} ${getTeamName(fixture, config)}`);
   const match = text.match(/\bu\s?(\d{1,2})\b/);
   return match ? Number(match[1]) : null;
 }
 
-function isAdultFixture(fixture = {}) {
-  const configuredType = getConfiguredTeamType(fixture);
+function isAdultFixture(fixture = {}, config = {}) {
+  const configuredType = getConfiguredTeamType(fixture, config);
 
-  if (["adult", "open-age", "open age", "senior", "veterans", "vets"].includes(configuredType)) {
+  if (["adult", "open-age", "open age", "senior", "seniors", "veteran", "veterans", "vets"].includes(configuredType)) {
     return true;
   }
 
-  const text = normaliseText(`${getFixtureTitle(fixture)} ${getTeamName(fixture)}`);
+  const text = normaliseText(`${getFixtureTitle(fixture)} ${getTeamName(fixture, config)}`);
 
-  return (
-    /\b(1st team|first team|reserves|sunday 1sts|sunday firsts|open age|open-age|adult|senior|vets|veterans)\b/.test(text)
-  );
+  return /\b(1st team|first team|reserves|reserve|sunday 1sts|sunday firsts|open age|open-age|adult|senior|seniors|vets|veterans)\b/.test(text);
 }
 
-function isYouthFixture(fixture = {}) {
-  const configuredType = getConfiguredTeamType(fixture);
+function isYouthFixture(fixture = {}, config = {}) {
+  const configuredType = getConfiguredTeamType(fixture, config);
 
-  if (configuredType === "youth" || configuredType === "junior") return true;
-  if (isAdultFixture(fixture)) return false;
+  if (configuredType === "youth" || configuredType === "junior" || configuredType === "mini" || configuredType === "minis") return true;
+  if (isAdultFixture(fixture, config)) return false;
 
-  const age = getAgeFromName(fixture);
+  const age = getAgeFromName(fixture, config);
   if (Number.isFinite(age) && age > 0 && age < 18) return true;
 
-  const format = normaliseText(getFormat(fixture));
-  if (format.includes("youth")) return true;
+  const format = normaliseText(getFormat(fixture, config));
+  if (format.includes("youth") || format.includes("mini")) return true;
 
   return false;
 }
@@ -132,11 +136,6 @@ function getTimingRules(club = {}) {
   };
 }
 
-function getPitchById(fixture = {}, pitchCfg = []) {
-  const id = fixture.pitchId || fixture.pitch || fixture.pitchLabel;
-  return pitchCfg.find((pitch) => pitch.id === id || pitch.label === id || pitch.name === id);
-}
-
 function pitchAllowsFormat(pitch = {}, format = "") {
   if (!pitch || !format) return true;
 
@@ -154,7 +153,7 @@ function pitchAllowsFormat(pitch = {}, format = "") {
   return supported.includes(normaliseText(format));
 }
 
-function makeIssue({ severity = "warning", type, title, detail, action, fixture }) {
+function makeIssue({ severity = "warning", type, title, detail, action, fixture, workspace = "fixtures" }) {
   return {
     severity,
     type,
@@ -162,6 +161,7 @@ function makeIssue({ severity = "warning", type, title, detail, action, fixture 
     detail,
     action,
     fixture,
+    workspace,
   };
 }
 
@@ -177,25 +177,47 @@ function getStatus(score, issues = []) {
   return { status: "success", label: "Compliant" };
 }
 
+function getPitchClosed(pitch = {}, closedSet = new Set()) {
+  if (!pitch) return false;
+  return Boolean(pitch.closed || pitch.isClosed || closedSet.has(String(pitch.id)) || closedSet.has(String(pitch.label)));
+}
+
 export function calculateCompetitionRules({
   fixtures = [],
   active = [],
   pitchCfg = [],
+  teamCfg = [],
   closedPitches = [],
   club = {},
   allowArtificial = false,
 } = {}) {
+  const config = buildClubConfiguration({ club, pitchCfg, teamCfg });
   const activeFixtures = active.length ? active : fixtures.filter((fixture) => !isPostponed(fixture));
-  const timing = getTimingRules(club);
+  const timing = getTimingRules(config.club);
   const closedSet = new Set((closedPitches || []).map((pitch) => String(pitch)));
   const issues = [];
 
-  activeFixtures.forEach((fixture) => {
-    const koMins = getKickOffMins(fixture);
-    const title = getFixtureTitle(fixture);
-    const youth = isYouthFixture(fixture);
-    const format = getFormat(fixture);
-    const pitch = getPitchById(fixture, pitchCfg);
+  const fixtureProfiles = activeFixtures.map((fixture) => {
+    const team = getTeamForFixture(fixture, config.teams);
+    const pitch = getPitchForFixture(fixture, config.pitches);
+    const youth = isYouthFixture(fixture, config);
+    const adult = isAdultFixture(fixture, config);
+
+    return {
+      fixture,
+      title: getFixtureTitle(fixture),
+      teamName: team?.name || getTeamName(fixture, config),
+      teamType: adult ? "adult" : youth ? "youth" : "unknown",
+      format: getFormat(fixture, config),
+      pitch,
+      koMins: getKickOffMins(fixture),
+    };
+  });
+
+  fixtureProfiles.forEach((profile) => {
+    const { fixture, title, teamType, format, pitch, koMins } = profile;
+    const youth = teamType === "youth";
+    const adult = teamType === "adult";
 
     if (koMins == null) {
       issues.push(makeIssue({
@@ -231,7 +253,7 @@ export function calculateCompetitionRules({
       }));
     }
 
-    if (!youth && timing.adultLatestKickOffMins != null && koMins > timing.adultLatestKickOffMins) {
+    if (adult && timing.adultLatestKickOffMins != null && koMins > timing.adultLatestKickOffMins) {
       issues.push(makeIssue({
         severity: "warning",
         type: "adult_after_window",
@@ -242,7 +264,7 @@ export function calculateCompetitionRules({
       }));
     }
 
-    if (pitch && closedSet.has(String(pitch.id))) {
+    if (pitch && getPitchClosed(pitch, closedSet)) {
       issues.push(makeIssue({
         severity: "danger",
         type: "closed_pitch",
@@ -250,6 +272,7 @@ export function calculateCompetitionRules({
         detail: `${title} is assigned to ${pitch.label || pitch.name || pitch.id}, which is closed.`,
         action: "Reopen the pitch or move the fixture to an available surface.",
         fixture: title,
+        workspace: "resources",
       }));
     }
 
@@ -258,9 +281,10 @@ export function calculateCompetitionRules({
         severity: "danger",
         type: "format_mismatch",
         title: "Pitch format mismatch",
-        detail: `${title} is a ${format} fixture but the assigned pitch does not support that format.`,
+        detail: `${title} is a ${format} fixture but ${pitch.label || pitch.name || "the assigned pitch"} does not support that format.`,
         action: "Move the fixture to a suitable pitch or update pitch configuration.",
         fixture: title,
+        workspace: "resources",
       }));
     }
 
@@ -272,6 +296,7 @@ export function calculateCompetitionRules({
         detail: `${title} is assigned to an artificial surface while artificial surfaces are not allowed in scheduling rules.`,
         action: "Enable artificial surfaces or move the fixture to grass.",
         fixture: title,
+        workspace: "resources",
       }));
     }
   });
@@ -280,32 +305,46 @@ export function calculateCompetitionRules({
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const score = Math.max(0, 100 - dangerCount * 18 - warningCount * 8);
   const status = getStatus(score, issues);
+  const youthFixtures = fixtureProfiles.filter((profile) => profile.teamType === "youth").length;
+  const adultFixtures = fixtureProfiles.filter((profile) => profile.teamType === "adult").length;
+  const unknownFixtures = fixtureProfiles.filter((profile) => profile.teamType === "unknown").length;
+
+  const timingIssue = issues.find((issue) => ["missing_kickoff", "before_window", "youth_after_window", "adult_after_window"].includes(issue.type));
+  const formatIssue = issues.find((issue) => issue.type === "format_mismatch");
+  const closureIssue = issues.find((issue) => issue.type === "closed_pitch");
+  const surfaceIssue = issues.find((issue) => issue.type === "artificial_surface");
 
   const checks = [
     {
       id: "timing",
-      label: "Timing window",
-      status: issues.some((issue) => ["missing_kickoff", "before_window", "youth_after_window", "adult_after_window"].includes(issue.type))
-        ? dangerCount ? "danger" : "warning"
-        : "success",
-      summary: `${timing.earliestKickOff} earliest, ${timing.latestYouthKickOff} youth cut-off.`,
+      label: "Timing windows",
+      status: timingIssue ? (timingIssue.severity === "danger" ? "danger" : "warning") : "success",
+      summary: `${timing.earliestKickOff} earliest, ${timing.latestYouthKickOff} youth cut-off, ${timing.adultLatestKickOff} adult latest.`,
+    },
+    {
+      id: "team-types",
+      label: "Team profiles",
+      status: unknownFixtures ? "warning" : "success",
+      summary: unknownFixtures
+        ? `${unknownFixtures} fixture${unknownFixtures === 1 ? "" : "s"} could not be confidently profiled.`
+        : `${youthFixtures} youth and ${adultFixtures} adult fixture${adultFixtures === 1 ? "" : "s"} profiled from team settings.`,
     },
     {
       id: "formats",
       label: "Pitch formats",
-      status: issues.some((issue) => issue.type === "format_mismatch") ? "danger" : "success",
-      summary: issues.some((issue) => issue.type === "format_mismatch") ? "Some fixtures are on unsuitable pitches." : "Assigned pitch formats look valid.",
+      status: formatIssue ? "danger" : "success",
+      summary: formatIssue ? "Some fixtures are on unsuitable pitches." : "Assigned pitch formats look valid.",
     },
     {
       id: "closures",
       label: "Pitch closures",
-      status: issues.some((issue) => issue.type === "closed_pitch") ? "danger" : closedPitches.length ? "warning" : "success",
+      status: closureIssue ? "danger" : closedPitches.length ? "warning" : "success",
       summary: closedPitches.length ? plural(closedPitches.length, "pitch", "pitches") + " closed." : "No pitch closure conflicts.",
     },
     {
       id: "surfaces",
       label: "Artificial surfaces",
-      status: issues.some((issue) => issue.type === "artificial_surface") ? "warning" : "success",
+      status: surfaceIssue ? "warning" : "success",
       summary: allowArtificial ? "Artificial surfaces allowed." : "Artificial surfaces restricted unless reviewed.",
     },
   ];
@@ -316,8 +355,12 @@ export function calculateCompetitionRules({
     label: status.label,
     checks,
     issues,
+    profiles: fixtureProfiles,
     metrics: {
       fixtures: activeFixtures.length,
+      youthFixtures,
+      adultFixtures,
+      unknownFixtures,
       danger: dangerCount,
       warnings: warningCount,
       earliestKickOff: timing.earliestKickOff,
@@ -325,6 +368,10 @@ export function calculateCompetitionRules({
       adultLatestKickOff: timing.adultLatestKickOff,
       youthBuffer: timing.youthBuffer,
       adultBuffer: timing.adultBuffer,
+    },
+    debug: {
+      source: "competitionRulesEngine.calculateCompetitionRules",
+      configurationSource: "configurationEngine.buildClubConfiguration",
     },
   };
 }

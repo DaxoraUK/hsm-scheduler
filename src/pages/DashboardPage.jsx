@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import PageContainer from "../components/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
@@ -7,8 +7,10 @@ import DashboardWeatherCard from "../components/dashboard/DashboardWeatherCard.j
 import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
 import WeekendTimelineCard from "../components/dashboard/WeekendTimelineCard.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
+import ClubDigitalTwinCard from "../components/dashboard/ClubDigitalTwinCard.jsx";
 import FixtureDrawer from "../components/Operations/shared/FixtureDrawer.jsx";
 import { getRefereeStats, getParkingStats } from "../lib/dashboardStats.js";
+import { buildClubDigitalTwin } from "../lib/engines/clubDigitalTwinEngine.js";
 
 import {
   CalendarDays,
@@ -84,7 +86,39 @@ export default function DashboardPage({
     sunHasRun,
   });
 
-  const parkingStats = getParkingStats({ peakCars, carCap });
+  const parkingDayGroups = useMemo(
+    () => [
+      { key: "saturday", label: "Saturday", fixtures: satHasRun ? satActive : [] },
+      { key: "sunday", label: "Sunday", fixtures: sunHasRun ? sunActive : [] },
+    ],
+    [satHasRun, sunHasRun, satActive, sunActive]
+  );
+
+  const parkingFixtures = parkingDayGroups.flatMap((group) => group.fixtures);
+
+  const parkingStats = getParkingStats({
+    fixturesByDay: parkingDayGroups,
+    club,
+    pitchCfg,
+    peakCars,
+    carCap,
+  });
+
+  const clubTwin = useMemo(
+    () =>
+      buildClubDigitalTwin({
+        club,
+        pitchCfg,
+        closedPitches,
+        satFinal,
+        sunFinal,
+        satHasRun,
+        sunHasRun,
+        fixturesByDay: parkingDayGroups,
+        refWarnings,
+      }),
+    [club, pitchCfg, closedPitches, satFinal, sunFinal, satHasRun, sunHasRun, parkingDayGroups, refWarnings]
+  );
 
   const fixtureIssues =
     satConflicts.length + satUnresolved.length + sunUnresolved.length;
@@ -127,7 +161,7 @@ export default function DashboardPage({
       ? {
           key: "parking",
           title: "Review parking pressure",
-          detail: `Parking peak is projected at ${parkingStats.pct}% of capacity.`,
+          detail: `${parkingStats.peakDayLabel || "Weekend"} parking peak is projected at ${parkingStats.pct}% of capacity.`,
           area: "Parking",
           severity: "danger",
           onClick: () => setMainPage("analytics"),
@@ -189,7 +223,9 @@ export default function DashboardPage({
       key: "parking",
       title: "Review parking pressure",
       detail: scheduleBuilt
-        ? `${parkingStats.pct}% projected peak against ${parkingStats.carCap} spaces.`
+        ? parkingStats.peakDayLabel
+          ? `${parkingStats.pct}% weekend peak on ${parkingStats.peakDayLabel} against ${parkingStats.carCap} spaces.`
+          : `${parkingStats.pct}% projected peak against ${parkingStats.carCap} spaces.`
         : "Parking forecast will update after schedule build.",
       status: !scheduleBuilt ? "pending" : parkingStats.overCapacity ? "warning" : "complete",
       onClick: () => setMainPage("analytics"),
@@ -340,8 +376,12 @@ export default function DashboardPage({
           },
           {
             label: "Parking",
-            status: parkingStats.overCapacity ? "danger" : "success",
-            detail: scheduleBuilt ? `${parkingStats.pct}% peak` : "Pending",
+            status: parkingStats.overCapacity ? "danger" : parkingStats.isHighPressure ? "warning" : "success",
+            detail: scheduleBuilt
+              ? parkingStats.peakDayLabel
+                ? `${parkingStats.peakDayLabel} ${parkingStats.pct}%`
+                : `${parkingStats.pct}% peak`
+              : "Pending",
             onClick: () => setMainPage("analytics"),
           },
           {
@@ -359,6 +399,11 @@ export default function DashboardPage({
         ]}
       />
 
+      <ClubDigitalTwinCard
+        twin={clubTwin}
+        onOpenOperations={() => openOperations(setMainPage, setDayTab)}
+        onOpenSettings={() => setMainPage("settings")}
+      />
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <div className="flex min-w-0 flex-col gap-6">

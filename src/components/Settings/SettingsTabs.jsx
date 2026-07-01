@@ -9,6 +9,7 @@ const TAB_GROUPS = [
     label: "Club",
     tabs: [
       ["club", "Club"],
+      ["venues", "Venues"],
       ["teams", "Teams"],
       ["timing", "Timing"],
     ],

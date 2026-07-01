@@ -38,6 +38,7 @@ import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
+import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
 
 const WORKSPACES = [
   {
@@ -134,19 +135,37 @@ function normaliseCapacity(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function estimateParkingLoad(games = [], club = {}) {
-  const avgCars = club.avgCars || {};
-
-  return games.reduce((total, fixture) => {
-    const format = fixture.format || fixture.gameFormat || fixture.pitchFormat || "11v11";
-    return total + (Number(avgCars[format]) || Number(club.defaultCarsPerFixture) || 20);
-  }, 0);
+function getParkingCapacityValue(club = {}) {
+  return normaliseCapacity(club.carParkSpaces || club.parkingSpaces || club.capacity);
 }
 
-function ParkingCapacityCard({ active = [], club = {} }) {
-  const capacity = normaliseCapacity(club.carParkSpaces || club.parkingSpaces || club.capacity);
-  const estimatedLoad = estimateParkingLoad(active, club);
+function getParkingCapacitySummary(games = [], club = {}, pitchCfg = []) {
+  const capacity = getParkingCapacityValue(club);
+  const analysis = analyseParkingPressure({
+    fixtures: games,
+    club: { ...club, carParkSpaces: capacity || club.carParkSpaces },
+    pitchCfg,
+  });
+
+  const peak = analysis?.peakSlot || null;
+  const estimatedLoad = peak?.estimatedCars || 0;
   const utilisation = capacity ? Math.round((estimatedLoad / capacity) * 100) : 0;
+
+  return {
+    capacity,
+    analysis,
+    peak,
+    estimatedLoad,
+    utilisation,
+  };
+}
+
+function estimateParkingLoad(games = [], club = {}, pitchCfg = []) {
+  return getParkingCapacitySummary(games, club, pitchCfg).estimatedLoad;
+}
+
+function ParkingCapacityCard({ active = [], club = {}, pitchCfg = [] }) {
+  const { capacity, peak, estimatedLoad, utilisation } = getParkingCapacitySummary(active, club, pitchCfg);
   const concurrentLimit = Number(club.maxConcurrent || 0);
   const variant = utilisation >= 100 ? "danger" : utilisation >= 85 ? "warning" : "success";
 
@@ -164,13 +183,14 @@ function ParkingCapacityCard({ active = [], club = {} }) {
             Resource view only. Detailed pressure, peaks and fixture-move recommendations are kept in Intelligence.
           </p>
         </div>
-        <StatusChip variant={variant}>{capacity ? `${utilisation}% estimated` : "Set capacity"}</StatusChip>
+        <StatusChip variant={variant}>{capacity ? `${utilisation}% peak` : "Set capacity"}</StatusChip>
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-3">
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Estimated cars</div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Peak cars</div>
           <div className="mt-2 text-3xl font-black text-slate-950">{estimatedLoad}</div>
+          <div className="mt-1 text-xs font-bold text-slate-500">{peak?.label ? `at ${peak.label}` : "After schedule build"}</div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Active fixtures</div>
@@ -320,10 +340,11 @@ export default function MatchdayPage({
     fixtures: final,
     active,
     pitchCfg: props.pitchCfg || [],
+    teamCfg: props.teamCfg || [],
     closedPitches: props.closedPitches || [],
     club: clubWithTiming,
     allowArtificial: props.useAstro,
-  }), [active, clubWithTiming, final, props.closedPitches, props.pitchCfg, props.useAstro]);
+  }), [active, clubWithTiming, final, props.closedPitches, props.pitchCfg, props.teamCfg, props.useAstro]);
 
   const dayOptimisation = useMemo(() => calculateDayOptimisation({
     fixtures: final,
@@ -523,8 +544,8 @@ export default function MatchdayPage({
         subtitle: "Resource view of available spaces, expected demand and capacity settings.",
         icon: Car,
         badge: `${normaliseCapacity(clubWithTiming.carParkSpaces || clubWithTiming.parkingSpaces || clubWithTiming.capacity) || "—"} spaces`,
-        ...getSectionStatus({ warning: estimateParkingLoad(active, clubWithTiming) > normaliseCapacity(clubWithTiming.carParkSpaces || clubWithTiming.parkingSpaces || clubWithTiming.capacity), ready: true }),
-        render: () => <ParkingCapacityCard active={active} club={clubWithTiming} />,
+        ...getSectionStatus({ warning: estimateParkingLoad(active, clubWithTiming, props.pitchCfg) > normaliseCapacity(clubWithTiming.carParkSpaces || clubWithTiming.parkingSpaces || clubWithTiming.capacity), ready: true }),
+        render: () => <ParkingCapacityCard active={active} club={clubWithTiming} pitchCfg={props.pitchCfg} />,
       },
       {
         id: "dayOptimiser",

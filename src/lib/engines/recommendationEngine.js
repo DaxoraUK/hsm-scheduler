@@ -8,7 +8,7 @@ import {
   getPitchSuitabilityScore,
   getSuitablePitchesForFixture,
 } from "../intelligence/pitch/pitchService.js";
-import { analyseParkingPressure, getParkingLoad } from "../intelligence/parking/parkingService.js";
+import { getFixtureParkingImpact, getMatchdayParkingImpact } from "./parkingEngine.js";
 
 function getTimeSortScore(time, currentTime) {
   const timeMins = timeToMinutes(time);
@@ -137,55 +137,28 @@ function describePatch(patch = {}, current = {}) {
   return parts.length ? parts.join(" and ") : "Apply validated fix";
 }
 
-function normaliseParkingLoad(load = {}, club = {}) {
-  const spaces = Number(club?.carParkSpaces || 57);
-  const estimatedCars = Number(load.estimatedCars || 0);
-  const percentage = Number.isFinite(Number(load.percentage))
-    ? Number(load.percentage)
-    : spaces
-      ? Math.round((estimatedCars / spaces) * 100)
-      : 0;
-
-  return {
-    ...load,
-    estimatedCars,
-    percentage,
-  };
-}
-
 function getParkingImprovement({ fixtures, fixtureIndex, current, patch, club, pitchCfg }) {
-  const before = normaliseParkingLoad(
-    getParkingLoad({
-      fixtures,
-      fixtureIndex,
-      next: current,
-      club,
-      pitchCfg,
-    }),
-    club
-  );
-
-  const after = normaliseParkingLoad(
-    getParkingLoad({
-      fixtures,
-      fixtureIndex,
-      next: { ...current, ...patch },
-      club,
-      pitchCfg,
-    }),
-    club
-  );
-
-  return {
-    before,
-    after,
-    carDelta: before.estimatedCars - after.estimatedCars,
-    gameDelta: before.concurrentGames - after.concurrentGames,
-    percentDelta: before.percentage - after.percentage,
-  };
+  return getFixtureParkingImpact({
+    fixtures,
+    fixtureIndex,
+    current,
+    patch,
+    club,
+    pitchCfg,
+  });
 }
 
-function scoreRecommendation({ current, patch, parking, pitchCfg }) {
+function getWholeDayParkingImpact({ fixtures, fixtureIndex, patch, club, pitchCfg }) {
+  return getMatchdayParkingImpact({
+    fixtures,
+    fixtureIndex,
+    patch,
+    club,
+    pitchCfg,
+  });
+}
+
+function scoreRecommendation({ current = {}, patch = {}, parking = {}, pitchCfg = [] } = {}) {
   let score = 50;
 
   const percentDelta = Number(parking.percentDelta || 0);
@@ -206,14 +179,14 @@ function scoreRecommendation({ current, patch, parking, pitchCfg }) {
 }
 
 function validateCandidate({
-  fixtures,
+  fixtures = [],
   fixtureIndex,
-  pitchCfg,
-  closedPitches,
-  club,
-  patch,
+  pitchCfg = [],
+  closedPitches = [],
+  club = {},
+  patch = {},
   validateParking = true,
-}) {
+} = {}) {
   return validateFixtureUpdate({
     fixtures,
     fixtureIndex,
@@ -224,48 +197,6 @@ function validateCandidate({
     validateParking,
     changeType: "schedule",
   });
-}
-
-function applyPatchToFixtures(fixtures = [], fixtureIndex, patch = {}) {
-  return fixtures.map((fixture, index) =>
-    index === fixtureIndex ? { ...fixture, ...patch } : fixture
-  );
-}
-
-function getWholeDayParkingImpact({ fixtures, fixtureIndex, patch, club, pitchCfg }) {
-  const beforeAnalysis = analyseParkingPressure({ fixtures, club, pitchCfg });
-  const afterFixtures = applyPatchToFixtures(fixtures, fixtureIndex, patch);
-  const afterAnalysis = analyseParkingPressure({ fixtures: afterFixtures, club, pitchCfg });
-
-  const beforePeak = normaliseParkingLoad(
-    {
-      estimatedCars: beforeAnalysis.peakSlot?.estimatedCars || 0,
-      percentage: beforeAnalysis.peakSlot?.occupancyPct || 0,
-      concurrentGames: beforeAnalysis.peakSlot?.fixtureCount || 0,
-      label: beforeAnalysis.peakSlot?.label || null,
-    },
-    club
-  );
-
-  const afterPeak = normaliseParkingLoad(
-    {
-      estimatedCars: afterAnalysis.peakSlot?.estimatedCars || 0,
-      percentage: afterAnalysis.peakSlot?.occupancyPct || 0,
-      concurrentGames: afterAnalysis.peakSlot?.fixtureCount || 0,
-      label: afterAnalysis.peakSlot?.label || null,
-    },
-    club
-  );
-
-  return {
-    before: beforePeak,
-    after: afterPeak,
-    carDelta: beforePeak.estimatedCars - afterPeak.estimatedCars,
-    gameDelta: beforePeak.concurrentGames - afterPeak.concurrentGames,
-    percentDelta: beforePeak.percentage - afterPeak.percentage,
-    beforeAnalysis,
-    afterAnalysis,
-  };
 }
 
 export function getFixtureRecommendations(fixture = {}) {

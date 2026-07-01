@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, ShieldCheck, UsersRound } from "lucide-react";
 import StatusChip from "../../ui/StatusChip.jsx";
 
 const STATUS_STYLES = {
@@ -15,6 +15,16 @@ function CheckIcon({ status }) {
   }
 
   return <CheckCircle2 size={18} strokeWidth={2.5} />;
+}
+
+function RuleMetric({ label, value, helper }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+      <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</div>
+      <div className="mt-2 text-3xl font-black text-slate-950">{value}</div>
+      {helper ? <div className="mt-1 text-xs font-bold text-slate-400">{helper}</div> : null}
+    </div>
+  );
 }
 
 export default function CompetitionRulesCard({ rules }) {
@@ -35,40 +45,31 @@ export default function CompetitionRulesCard({ rules }) {
               {safeRules.score ?? 0}% rules compliance
             </h3>
             <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-slate-500">
-              Uses the existing Timing Settings as the source of truth. This keeps scheduling, validation and recommendations aligned instead of creating a second set of hidden rules.
+              Uses Timing Settings, team type, pitch configuration and venue settings from the shared configuration layer. Adult fixtures no longer inherit youth cut-off rules.
             </p>
           </div>
           <StatusChip variant={safeRules.status || "neutral"}>{safeRules.label || "Pending"}</StatusChip>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-4">
-          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Active fixtures</div>
-            <div className="mt-2 text-3xl font-black text-slate-950">{metrics.fixtures || 0}</div>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Earliest KO</div>
-            <div className="mt-2 text-3xl font-black text-slate-950">{metrics.earliestKickOff || "—"}</div>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Youth cut-off</div>
-            <div className="mt-2 text-3xl font-black text-slate-950">{metrics.latestYouthKickOff || "—"}</div>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Adult latest</div>
-            <div className="mt-2 text-3xl font-black text-slate-950">{metrics.adultLatestKickOff || "—"}</div>
-          </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuleMetric label="Active fixtures" value={metrics.fixtures || 0} helper={`${metrics.youthFixtures || 0} youth · ${metrics.adultFixtures || 0} adult`} />
+          <RuleMetric label="Earliest KO" value={metrics.earliestKickOff || "—"} helper="From Timing Settings" />
+          <RuleMetric label="Youth cut-off" value={metrics.latestYouthKickOff || "—"} helper="Youth fixtures only" />
+          <RuleMetric label="Adult latest" value={metrics.adultLatestKickOff || "—"} helper="Adult/open age fixtures" />
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {checks.map((check) => (
           <div
             key={check.id}
             className={`rounded-3xl border p-5 shadow-sm ${STATUS_STYLES[check.status] || STATUS_STYLES.neutral}`}
           >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5"><CheckIcon status={check.status} /></div>
+            <div className="flex h-full flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <CheckIcon status={check.status} />
+                <StatusChip variant={check.status}>{check.status === "success" ? "OK" : check.status === "danger" ? "Action" : "Review"}</StatusChip>
+              </div>
               <div>
                 <h4 className="text-base font-black">{check.label}</h4>
                 <p className="mt-1 text-sm font-bold leading-6 opacity-80">{check.summary}</p>
@@ -87,7 +88,7 @@ export default function CompetitionRulesCard({ rules }) {
             </h3>
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 ring-1 ring-slate-200">
-            <ShieldCheck size={22} strokeWidth={2.5} />
+            {issues.length ? <AlertTriangle size={22} strokeWidth={2.5} /> : <ShieldCheck size={22} strokeWidth={2.5} />}
           </div>
         </div>
 
@@ -110,11 +111,19 @@ export default function CompetitionRulesCard({ rules }) {
             ))}
           </div>
         ) : (
-          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
-            <Clock3 size={20} strokeWidth={2.5} />
-            <p className="text-sm font-bold leading-6">
-              Current fixtures comply with timing windows, pitch closures, pitch format checks and artificial-surface rules.
-            </p>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+              <Clock3 size={20} strokeWidth={2.5} />
+              <p className="text-sm font-bold leading-6">
+                Current fixtures comply with timing windows, pitch closures, pitch format checks and artificial-surface rules.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-600">
+              <UsersRound size={20} strokeWidth={2.5} />
+              <p className="text-sm font-bold leading-6">
+                Team profiles are read from Settings, so youth and adult fixtures can follow different rule windows.
+              </p>
+            </div>
           </div>
         )}
       </div>

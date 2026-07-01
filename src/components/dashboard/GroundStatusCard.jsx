@@ -26,7 +26,7 @@ export default function GroundStatusCard({
   const parkingOk = !parkingStats?.overCapacity;
 
   return (
-    <section className="flex h-full min-h-[390px] flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+    <section className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
       <div className="flex items-start justify-between gap-5 border-b border-slate-200 p-6">
         <div className="min-w-0">
           <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-700">
@@ -53,40 +53,16 @@ export default function GroundStatusCard({
 
       <div className="flex flex-1 flex-col p-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <StatusTile
-            icon={ShieldCheck}
-            label="Pitches"
-            value={`${open}/${total || 0}`}
-            detail="Available"
-            tone={allOpen ? "success" : "warning"}
-          />
-          <StatusTile
-            icon={Car}
-            label="Parking"
-            value={parkingStats ? `${parkingPct}%` : "Pending"}
-            detail="Peak use"
-            tone={parkingOk ? "success" : "warning"}
-          />
-          <StatusTile
-            icon={MapPin}
-            label="Sites"
-            value="Primary"
-            detail="Venue active"
-            tone="success"
-          />
-          <StatusTile
-            icon={DoorOpen}
-            label="Facilities"
-            value="Open"
-            detail="Default status"
-            tone="success"
-          />
+          <StatusTile icon={ShieldCheck} label="Pitches" value={`${open}/${total || 0}`} detail="Available" tone={allOpen ? "success" : "warning"} />
+          <StatusTile icon={Car} label="Parking" value={parkingStats ? `${parkingPct}%` : "Pending"} detail="Peak use" tone={parkingOk ? "success" : "warning"} />
+          <StatusTile icon={MapPin} label="Sites" value="Primary" detail="Venue active" tone="success" />
+          <StatusTile icon={DoorOpen} label="Facilities" value="Open" detail="Default status" tone="success" />
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <CompactStatus icon={Sprout} label="Surface" value="Playable" />
-          <CompactStatus icon={Lightbulb} label="Lights" value="Available" />
-          <CompactStatus icon={DoorOpen} label="Access" value="Open" />
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          <MiniStatus label="Surface" value="Playable" />
+          <MiniStatus label="Lights" value="Available" />
+          <MiniStatus label="Access" value="Open" />
         </div>
 
         <button
@@ -95,50 +71,41 @@ export default function GroundStatusCard({
             setMainPage("operations");
             setDayTab("saturday");
           }}
-          className="mt-4 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:border-emerald-200 hover:bg-emerald-50"
+          className="mt-5 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm font-black text-slate-950 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:scale-[0.99]"
         >
           Open ground operations
-          <ArrowRight size={18} />
+          <ArrowRight size={20} />
         </button>
       </div>
     </section>
   );
 }
 
-function StatusTile({ icon: Icon, label, value, detail, tone }) {
+function StatusTile({ icon: Icon, label, value, detail, tone = "success" }) {
   const toneClass =
     tone === "warning"
       ? "border-amber-200 bg-amber-50 text-amber-800"
       : "border-emerald-200 bg-emerald-50 text-emerald-800";
 
   return (
-    <div className={`rounded-3xl border p-5 ${toneClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
+    <div className={`rounded-2xl border p-5 ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-[11px] font-black uppercase tracking-[0.22em] opacity-80">
           {label}
         </div>
-        <Icon size={18} strokeWidth={2.5} />
+        <Icon size={20} strokeWidth={2.4} />
       </div>
-      <div className="mt-3 text-3xl font-black text-slate-950">
-        {value}
-      </div>
-      <div className="mt-1 text-sm font-bold opacity-80">
-        {detail}
-      </div>
+      <div className="mt-5 text-3xl font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-1 text-sm font-black opacity-90">{detail}</div>
     </div>
   );
 }
 
-function CompactStatus({ icon: Icon, label, value }) {
+function MiniStatus({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-          {label}
-        </div>
-        <Icon className="text-slate-400" size={15} strokeWidth={2.4} />
-      </div>
-      <div className="mt-2 text-sm font-black text-slate-950">{value}</div>
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</div>
+      <div className="mt-2 truncate text-sm font-black text-slate-950">{value}</div>
     </div>
   );
 }
