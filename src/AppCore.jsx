@@ -42,7 +42,7 @@ function App(){
   const [productionMode,setProductionMode]=useState(()=>{try{return localStorage.getItem("hsm_production")==="1";}catch(e){return false;}});
   const [dayTab,setDayTab]=useState("saturday");
   const [mainPage, setMainPage] = useState("dashboard");
-  const [settingsTab,setSettingsTab]=useState("club");
+  const [settingsTab,setSettingsTab]=useState("overview");
 
   // Saturday state
   const [satScheduled,setSatScheduled]=useState([]);

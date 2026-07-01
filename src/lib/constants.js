@@ -12,6 +12,20 @@ export const CAR_PARK_CAPACITY=57;
 export const DEFAULT_CLUB = {
   name: "Horwich St Mary's FC",
   venue: "Scholes Bank, Horwich",
+  postcode: "BL6 7QE",
+  weatherPostcode: "BL6 7QE",
+  primarySiteId: "scholes-bank",
+  sites: [
+    {
+      id: "scholes-bank",
+      name: "Scholes Bank",
+      venue: "Scholes Bank, Horwich",
+      postcode: "BL6 7QE",
+      isPrimary: true,
+      carParkSpaces: 57,
+      notes: "Primary matchday site",
+    },
+  ],
   primary: "#1A5C38",
   secondary: "#C9A84C",
   sport: "Football",

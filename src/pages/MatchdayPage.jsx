@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Car,
   ChevronRight,
+  CloudSun,
   ClipboardList,
   Filter,
   Layers3,
@@ -30,11 +31,13 @@ import MatchdayScheduleCard from "../components/Operations/shared/MatchdaySchedu
 import OperationsHealthCard from "../components/Operations/shared/OperationsHealthCard.jsx";
 import CompetitionRulesCard from "../components/Operations/shared/CompetitionRulesCard.jsx";
 import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.jsx";
+import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
 import StatusChip from "../components/ui/StatusChip.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 const WORKSPACES = [
   {
@@ -331,6 +334,12 @@ export default function MatchdayPage({
     end: clubWithTiming.endTime,
   }), [clubWithTiming, final, props.closedPitches, props.pitchCfg]);
 
+  const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
+    club: clubWithTiming,
+    fixtures: final,
+    dateLabel,
+  }), [clubWithTiming, dateLabel, final]);
+
   const matchdayProps = {
     ...props,
     day,
@@ -563,6 +572,18 @@ export default function MatchdayPage({
         render: () => <OperationsHealthCard health={operationsHealth} />,
       },
       {
+        id: "weatherIntelligence",
+        workspace: "intelligence",
+        title: "Weather Intelligence",
+        subtitle: "Venue postcode readiness for live forecast, pitch-risk and postponement intelligence.",
+        icon: CloudSun,
+        badge: weatherIntelligence?.location || "Weather",
+        status: weatherIntelligence.status,
+        label: weatherIntelligence.label,
+        filter: weatherIntelligence.status === "warning" ? "warnings" : "ready",
+        render: () => <WeatherIntelligenceCard weather={weatherIntelligence} />,
+      },
+      {
         id: "coachMessages",
         workspace: "communications",
         title: "Coach Messages",
@@ -607,7 +628,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, operationsHealth, overrides, postponed.length, props, refWarnings, unresolved.length]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, operationsHealth, overrides, postponed.length, props, refWarnings, unresolved.length, weatherIntelligence]);
 
   const workspaceCounts = useMemo(() => {
     return WORKSPACES.reduce((acc, workspace) => {

@@ -10,7 +10,7 @@ import DashboardHero from "../components/dashboard/DashboardHero.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
 import FixtureDrawer from "../components/Operations/shared/FixtureDrawer.jsx";
 import { getRefereeStats, getParkingStats } from "../lib/dashboardStats.js";
-import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 import {
   CalendarDays,
@@ -59,6 +59,12 @@ export default function DashboardPage({
 
   const parkingStats = getParkingStats({ peakCars, carCap });
 
+  const weather = calculateWeatherIntelligence({
+    club,
+    fixtures: [...satActive, ...sunActive],
+    dateLabel: "This weekend",
+  });
+
   const alerts = [
     ...satConflicts.map(() => ({
       title: "Saturday pitch clash detected",
@@ -97,6 +103,7 @@ export default function DashboardPage({
         carCap={carCap}
         refWarnings={refereeStats.outstanding}
         saveWeek={saveWeek}
+        weather={weather}
       />
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
@@ -149,13 +156,6 @@ export default function DashboardPage({
         />
       </div>
 
-        <GroundStatusCard
-          pitchCfg={pitchCfg}
-          closedPitches={closedPitches}
-          setMainPage={setMainPage}
-          setDayTab={setDayTab}
-        />
-        
       <div className="grid items-stretch gap-6 xl:grid-cols-2">
         <GroundReadinessCard
           readiness={readiness}

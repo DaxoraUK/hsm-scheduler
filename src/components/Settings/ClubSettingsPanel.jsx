@@ -1,5 +1,75 @@
 import React from "react";
 
+function slugifySiteId(value, fallback = "site") {
+  const clean = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return clean || fallback;
+}
+
+function getClubSites(club = {}) {
+  const sites = Array.isArray(club.sites) ? club.sites : [];
+
+  if (sites.length) {
+    return sites.map((site, index) => ({
+      id: site.id || slugifySiteId(site.name || site.venue || `site-${index + 1}`, `site-${index + 1}`),
+      name: site.name || site.venue || `Site ${index + 1}`,
+      venue: site.venue || site.name || "",
+      postcode: site.postcode || "",
+      isPrimary: !!site.isPrimary || site.id === club.primarySiteId || (!club.primarySiteId && index === 0),
+      carParkSpaces: site.carParkSpaces ?? club.carParkSpaces ?? 0,
+      notes: site.notes || "",
+    }));
+  }
+
+  return [
+    {
+      id: club.primarySiteId || "main-ground",
+      name: club.venue || "Main Ground",
+      venue: club.venue || "",
+      postcode: club.postcode || club.weatherPostcode || "",
+      isPrimary: true,
+      carParkSpaces: club.carParkSpaces ?? 0,
+      notes: "Primary matchday site",
+    },
+  ];
+}
+
+function normaliseSitesForSave(sites = [], club = {}) {
+  const cleaned = sites.map((site, index) => {
+    const name = site.name || site.venue || `Site ${index + 1}`;
+    return {
+      id: site.id || slugifySiteId(name, `site-${index + 1}`),
+      name,
+      venue: site.venue || name,
+      postcode: String(site.postcode || "").trim().toUpperCase(),
+      isPrimary: !!site.isPrimary,
+      carParkSpaces: Number(site.carParkSpaces) || 0,
+      notes: site.notes || "",
+    };
+  });
+
+  if (!cleaned.some((site) => site.isPrimary) && cleaned[0]) {
+    cleaned[0] = { ...cleaned[0], isPrimary: true };
+  }
+
+  const primary = cleaned.find((site) => site.isPrimary) || cleaned[0] || null;
+
+  return primary
+    ? {
+        sites: cleaned,
+        primarySiteId: primary.id,
+        venue: primary.venue,
+        postcode: primary.postcode,
+        weatherPostcode: primary.postcode || club.weatherPostcode || "",
+        carParkSpaces: primary.carParkSpaces || club.carParkSpaces || 0,
+      }
+    : { sites: cleaned };
+}
+
 export default function ClubSettingsPanel({
   S,
   RE,
@@ -53,7 +123,48 @@ export default function ClubSettingsPanel({
             <input
               style={S.inp}
               value={club.venue}
-              onChange={(e) => setClub((p) => ({ ...p, venue: e.target.value }))}
+              onChange={(e) =>
+                setClub((p) => {
+                  const sites = getClubSites(p);
+                  const primaryIndex = Math.max(0, sites.findIndex((site) => site.isPrimary));
+                  const nextSites = sites.map((site, index) =>
+                    index === primaryIndex ? { ...site, venue: e.target.value, name: site.name || e.target.value } : site
+                  );
+                  return { ...p, ...normaliseSitesForSave(nextSites, p), venue: e.target.value };
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <label style={S.lbl}>Ground Postcode</label>
+            <input
+              style={S.inp}
+              value={club.postcode || club.weatherPostcode || ""}
+              onChange={(e) =>
+                setClub((p) => {
+                  const value = e.target.value.toUpperCase();
+                  const sites = getClubSites(p);
+                  const primaryIndex = Math.max(0, sites.findIndex((site) => site.isPrimary));
+                  const nextSites = sites.map((site, index) =>
+                    index === primaryIndex ? { ...site, postcode: value } : site
+                  );
+                  return { ...p, ...normaliseSitesForSave(nextSites, p), postcode: value, weatherPostcode: value };
+                })
+              }
+              placeholder="e.g. BL6 7QE"
+            />
+          </div>
+
+          <div>
+            <label style={S.lbl}>Weather Location</label>
+            <input
+              style={S.inp}
+              value={club.weatherPostcode || club.postcode || ""}
+              onChange={(e) =>
+                setClub((p) => ({ ...p, weatherPostcode: e.target.value.toUpperCase() }))
+              }
+              placeholder="Usually the primary site postcode"
             />
           </div>
 
@@ -89,6 +200,154 @@ export default function ClubSettingsPanel({
                 }))
               }
             />
+          </div>
+        </div>
+
+        <div style={{ paddingTop: 16, borderTop: "1px solid #eee", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+            <div>
+              <label style={S.lbl}>Sites / Venues</label>
+              <div style={{ fontSize: 11, color: "#888", marginTop: 3 }}>
+                Postcodes will feed the future Weather Intelligence engine. Add extra sites for multi-ground clubs.
+              </div>
+            </div>
+
+            <button
+              style={{ ...S.btn(club.primary), padding: "5px 10px", fontSize: 11 }}
+              onClick={() =>
+                setClub((p) => {
+                  const sites = getClubSites(p);
+                  const nextNumber = sites.length + 1;
+                  const nextSites = [
+                    ...sites,
+                    {
+                      id: `site-${nextNumber}`,
+                      name: `Site ${nextNumber}`,
+                      venue: "",
+                      postcode: "",
+                      isPrimary: false,
+                      carParkSpaces: 0,
+                      notes: "",
+                    },
+                  ];
+                  return { ...p, ...normaliseSitesForSave(nextSites, p) };
+                })
+              }
+            >
+              + Add Site
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {getClubSites(club).map((site, index, sites) => {
+              const updateSite = (field, value) => {
+                setClub((p) => {
+                  const current = getClubSites(p);
+                  const nextSites = current.map((row, rowIndex) => {
+                    if (rowIndex !== index) {
+                      return field === "isPrimary" && value ? { ...row, isPrimary: false } : row;
+                    }
+
+                    const updated = { ...row, [field]: value };
+                    if (field === "name" && (!row.id || row.id.startsWith("site-"))) {
+                      updated.id = slugifySiteId(value, row.id || `site-${rowIndex + 1}`);
+                    }
+                    if (field === "isPrimary" && value) updated.isPrimary = true;
+                    return updated;
+                  });
+                  return { ...p, ...normaliseSitesForSave(nextSites, p) };
+                });
+              };
+
+              return (
+                <div
+                  key={`${site.id}_${index}`}
+                  style={{
+                    border: `1px solid ${site.isPrimary ? `${club.primary}55` : "#e2e8f0"}`,
+                    background: site.isPrimary ? `${club.primary}0d` : "#fff",
+                    borderRadius: 14,
+                    padding: 12,
+                    display: "grid",
+                    gridTemplateColumns: "minmax(130px,1fr) minmax(180px,1.4fr) 120px 110px 96px 34px",
+                    gap: 10,
+                    alignItems: "end",
+                  }}
+                >
+                  <div>
+                    <label style={{ ...S.lbl, fontSize: 10 }}>Site Name</label>
+                    <input style={S.inp} value={site.name} onChange={(e) => updateSite("name", e.target.value)} />
+                  </div>
+
+                  <div>
+                    <label style={{ ...S.lbl, fontSize: 10 }}>Venue / Address</label>
+                    <input style={S.inp} value={site.venue} onChange={(e) => updateSite("venue", e.target.value)} />
+                  </div>
+
+                  <div>
+                    <label style={{ ...S.lbl, fontSize: 10 }}>Postcode</label>
+                    <input
+                      style={S.inp}
+                      value={site.postcode || ""}
+                      onChange={(e) => updateSite("postcode", e.target.value.toUpperCase())}
+                      placeholder="BL6 7QE"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ ...S.lbl, fontSize: 10 }}>Parking</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1000}
+                      style={S.inp}
+                      value={site.carParkSpaces ?? 0}
+                      onChange={(e) => updateSite("carParkSpaces", Number(e.target.value) || 0)}
+                    />
+                  </div>
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: club.primary,
+                      paddingBottom: 10,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input type="radio" name="primary-site" checked={!!site.isPrimary} onChange={() => updateSite("isPrimary", true)} />
+                    Primary
+                  </label>
+
+                  <button
+                    type="button"
+                    disabled={sites.length <= 1 || site.isPrimary}
+                    onClick={() =>
+                      setClub((p) => {
+                        const nextSites = getClubSites(p).filter((_, rowIndex) => rowIndex !== index);
+                        return { ...p, ...normaliseSitesForSave(nextSites, p) };
+                      })
+                    }
+                    title={site.isPrimary ? "Set another site as primary before removing this one" : "Remove site"}
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 10,
+                      border: "1px solid #e2e8f0",
+                      background: sites.length <= 1 || site.isPrimary ? "#f8fafc" : "#fff",
+                      color: sites.length <= 1 || site.isPrimary ? "#cbd5e1" : RE,
+                      cursor: sites.length <= 1 || site.isPrimary ? "not-allowed" : "pointer",
+                      fontSize: 18,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -243,7 +502,7 @@ export default function ClubSettingsPanel({
                 {club.name} - Ground Control
               </div>
               <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11 }}>
-                {club.venue} - {club.sport}
+                {club.venue} {club.postcode ? `(${club.postcode})` : ""} - {club.sport}
               </div>
             </div>
           </div>

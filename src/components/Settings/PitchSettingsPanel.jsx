@@ -20,6 +20,24 @@ const SURFACES = [
   ["indoor", "Indoor"],
 ];
 
+function getClubSites(club = {}) {
+  const sites = Array.isArray(club.sites) ? club.sites : [];
+
+  if (sites.length) {
+    return sites.map((site, index) => ({
+      id: site.id || `site-${index + 1}`,
+      name: site.name || site.venue || `Site ${index + 1}`,
+    }));
+  }
+
+  return [
+    {
+      id: club.primarySiteId || "main-ground",
+      name: club.venue || "Main Ground",
+    },
+  ];
+}
+
 export default function PitchSettingsPanel({
   S,
   RE,
@@ -73,7 +91,7 @@ export default function PitchSettingsPanel({
           the Format so games of that type can be placed here. Use Inside Pitch
           if this pitch sits within a larger one. Set Surface to identify grass,
           Astro, 3G, 4G or indoor pitches. Tick Independent if games here do not
-          count toward the concurrent game limit.
+          count toward the concurrent game limit. Use Site for multi-ground clubs so future weather, parking and venue-specific rules know where each pitch sits.
         </div>
 
         <table style={S.table}>
@@ -84,6 +102,7 @@ export default function PitchSettingsPanel({
                 "Name",
                 "Format",
                 "Surface",
+                "Site",
                 "Inside Pitch",
                 "Independent",
                 "",
@@ -160,6 +179,20 @@ export default function PitchSettingsPanel({
                       {SURFACES.map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+
+                  <td style={S.td(rowIndex % 2)}>
+                    <select
+                      style={{ ...S.isel, width: 110 }}
+                      value={pitch.siteId || club.primarySiteId || getClubSites(club)[0]?.id || ""}
+                      onChange={(e) => updatePitch("siteId", e.target.value || null)}
+                    >
+                      {getClubSites(club).map((site) => (
+                        <option key={site.id} value={site.id}>
+                          {site.name}
                         </option>
                       ))}
                     </select>
@@ -248,7 +281,7 @@ export default function PitchSettingsPanel({
         >
           <strong>Tip:</strong> Surface controls whether a pitch is grass,
           Astro, 3G, 4G or indoor. Independent only means games on that pitch do
-          not count toward the concurrent game limit.
+          not count toward the concurrent game limit. Site links each pitch to a venue for future weather and multi-site planning.
         </div>
       </div>
     </div>

@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Rocket, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  Rocket,
+  CheckCircle2,
+  AlertTriangle,
+  CloudSun,
+  MapPin,
+} from "lucide-react";
 
 export default function DashboardHero({
   readiness,
@@ -8,6 +14,7 @@ export default function DashboardHero({
   carCap,
   refWarnings,
   saveWeek,
+  weather,
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -18,12 +25,14 @@ export default function DashboardHero({
 
   const pct = readiness?.pct ?? 0;
   const parkingPct = Math.round((peakCars / Math.max(carCap, 1)) * 100);
-
   const ready = pct >= 90;
+
+  const weatherLocation = weather?.location || "Set postcode";
+  const weatherReady = weather?.status !== "warning" && weather?.status !== "danger";
 
   return (
     <section className="overflow-hidden rounded-[32px] bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-900 text-white shadow-xl">
-      <div className="grid gap-10 p-10 lg:grid-cols-[1.35fr_420px]">
+      <div className="grid gap-10 p-10 lg:grid-cols-[1.35fr_460px]">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-300 ring-1 ring-emerald-400/20">
             {ready ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
@@ -69,24 +78,51 @@ export default function DashboardHero({
         </div>
 
         <div className="rounded-3xl bg-white/10 p-8 backdrop-blur-md ring-1 ring-white/10">
-          <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
-            Live Status
-          </div>
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
+                Live Status
+              </div>
 
-          <div className="mt-3 text-5xl font-black">
-            {now.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </div>
+              <div className="mt-3 text-5xl font-black">
+                {now.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
 
-          <div className="text-slate-300">
-            {now.toLocaleDateString("en-GB", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
+              <div className="text-slate-300">
+                {now.toLocaleDateString("en-GB", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </div>
+            </div>
+
+            <div className="min-w-[150px] rounded-3xl bg-white/10 p-4 text-right ring-1 ring-white/10">
+              <div
+                className={`ml-auto flex h-14 w-14 items-center justify-center rounded-2xl ${
+                  weatherReady
+                    ? "bg-sky-400/15 text-sky-200 ring-1 ring-sky-300/30"
+                    : "bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/30"
+                }`}
+              >
+                <CloudSun size={30} strokeWidth={2.5} />
+              </div>
+
+              <div className="mt-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Weather
+              </div>
+              <div className="mt-1 truncate text-sm font-black text-white">
+                {weatherLocation}
+              </div>
+              <div className="mt-1 flex items-center justify-end gap-1 text-xs font-bold text-slate-300">
+                <MapPin size={12} strokeWidth={2.5} />
+                {weather?.provider || "Foundation"}
+              </div>
+            </div>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-5">
