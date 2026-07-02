@@ -646,8 +646,20 @@ return(
     )}
 
     {mainPage === "analytics" && (
-    <AnalyticsPage />
-)}
+      <AnalyticsPage
+        club={club}
+        history={history}
+        pitchCfg={pitchCfg}
+        teamCfg={teamCfg}
+        refs={refs}
+        closedPitches={closedPitches}
+        satFinal={satFinal}
+        sunFinal={sunFinal}
+        satHasRun={satHasRun}
+        sunHasRun={sunHasRun}
+        refWarnings={refWarnings}
+      />
+    )}
 
     {mainPage === "reports" && (
     <ReportsPage S={S} hdrStyle={hdrStyle} club={club} />
