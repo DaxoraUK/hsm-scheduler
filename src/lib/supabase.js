@@ -4,7 +4,12 @@
 
 export const SUPA_URL = "https://keanexqompimqafhuiow.supabase.co";
 
-export const getSupaKey = () => { try { return localStorage.getItem("hsm_supa_key") || ""; } catch(e){ return ""; } };
+const ENV_SUPA_KEY = String(import.meta.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+
+export const getSupaKey = () => {
+  try { return localStorage.getItem("hsm_supa_key") || ENV_SUPA_KEY; }
+  catch(e){ return ENV_SUPA_KEY; }
+};
 
 export const setSupaKey = (k) => { try { localStorage.setItem("hsm_supa_key", k); } catch(e){} };
 
@@ -76,8 +81,12 @@ export const Auth = {
     return await authFetch("/token?grant_type=password", { email, password });
   },
   async signOut(token) {
-    await authFetch("/logout", {}, "POST", token);
-    Auth.clearSession();
+    try {
+      if (token) await authFetch("/logout", {}, "POST", token);
+      return { ok: true };
+    } finally {
+      Auth.clearSession();
+    }
   },
   async getUser(token) {
     return await authFetch("/user", null, "GET", token);

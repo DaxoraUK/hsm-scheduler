@@ -1,6 +1,7 @@
 import { Toaster } from "sonner";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
+import GroundControlBrand from "../components/GroundControlBrand.jsx";
 import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
 
@@ -27,6 +28,8 @@ export default function ProductShell({
   satHasRun,
   sunHasRun,
   readiness,
+  authSession,
+  onSignOut,
 }) {
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
 
@@ -60,21 +63,8 @@ export default function ProductShell({
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-slate-800 bg-[#050816] px-5 py-5 text-white lg:flex lg:flex-col">
-          <div className="mb-7">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10 text-emerald-300">
-                <span className="text-xl font-black">◉</span>
-              </div>
-
-              <div>
-                <div className="text-sm font-black uppercase tracking-[0.3em] text-white">
-                  Ground
-                </div>
-                <div className="text-sm font-black uppercase tracking-[0.3em] text-emerald-400">
-                  Control
-                </div>
-              </div>
-            </div>
+          <div className="mb-8">
+            <GroundControlBrand />
           </div>
 
           <div className="flex flex-1 flex-col">
@@ -166,7 +156,14 @@ export default function ProductShell({
         <div className="flex min-h-screen flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-6 border-b border-slate-200 bg-white/90 px-8 backdrop-blur-xl">
             <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} />
-            <HeaderProfile />
+            <HeaderProfile
+              user={authSession?.user}
+              clubName={club?.name}
+              onOpenSettings={(settingsTab = "overview") => {
+                nav.goToSettings({ settingsTab, scroll: false });
+              }}
+              onSignOut={onSignOut}
+            />
           </header>
 
           <main className="flex-1 overflow-auto p-8">{children}</main>

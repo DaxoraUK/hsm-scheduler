@@ -39,6 +39,7 @@ import SatPrintSheet from "./components/SatPrintSheet.jsx";
 import SunPrintSheet from "./components/SunPrintSheet.jsx";
 import CombinedPrintSheet from "./components/CombinedPrintSheet.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
+import BrandSplash from "./components/BrandSplash.jsx";
 
 function App(){
   const [mode,setMode]=useState("test");
@@ -107,6 +108,7 @@ function App(){
   const [savedTab,setSavedTab]=useState("");
   const [authSession,setAuthSession]=useState(()=>Auth.getSession());
   const [authLoading,setAuthLoading]=useState(true);
+  const [minimumSplashComplete,setMinimumSplashComplete]=useState(false);
 
 
   const [club,setClub]=useState(()=>{
@@ -175,6 +177,12 @@ function App(){
   // Load from localStorage immediately, Supabase loads via supaKey effect
   // Force live mode in production
   useEffect(()=>{if(productionMode&&mode!=="live")setMode("live");},[productionMode,mode]);
+
+  // Keep the launch sequence visible long enough to feel intentional, even when auth resolves instantly.
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>setMinimumSplashComplete(true),1400);
+    return()=>window.clearTimeout(timer);
+  },[]);
 
   // Validate auth session on mount
   useEffect(()=>{
@@ -411,14 +419,28 @@ const { toggleClosed, resetAll } = useOperationsActions({
   const sh=String(startHour).padStart(2,"0")+":"+String(startMin).padStart(2,"0");
   const eh=String(endHour).padStart(2,"0")+":"+String(endMin).padStart(2,"0");
 
+  const handleSignOut=useCallback(async()=>{
+    const accessToken=authSession?.access_token;
+
+    // Remove the local session first so the secure workspace closes immediately.
+    Auth.clearSession();
+    setAuthSession(null);
+    setMainPage("dashboard");
+    setDayTab("saturday");
+    setSettingsTab("overview");
+    setNavigationTarget(null);
+
+    if(typeof window!=="undefined"){
+      window.scrollTo({top:0,left:0,behavior:"auto"});
+    }
+
+    // Also revoke the remote session when a token is available.
+    if(accessToken) await Auth.signOut(accessToken);
+  },[authSession]);
+
   // Auth gate
-  if(authLoading) return(
-    <div style={{minHeight:"100vh",background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{textAlign:"center"}}>
-        <div style={{width:48,height:48,borderRadius:"50%",background:G,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",fontSize:20,fontWeight:900,color:AU}}>GC</div>
-        <div style={{fontSize:14,color:"#666"}}>Loading...</div>
-      </div>
-    </div>
+  if(authLoading||!minimumSplashComplete) return(
+    <BrandSplash message={authLoading?"Verifying secure workspace":"Preparing Ground Control"}/>
   );
 
   if(!authSession) return(
@@ -434,6 +456,7 @@ return(
     mainPage={mainPage}
     setMainPage={setMainPage}
     setDayTab={setDayTab}
+    setSettingsTab={setSettingsTab}
     setNavigationTarget={setNavigationTarget}
     matchdayScope={matchdayScope}
     club={club}
@@ -442,6 +465,8 @@ return(
     satHasRun={satHasRun}
     sunHasRun={sunHasRun}
     readiness={readiness}
+    authSession={authSession}
+    onSignOut={handleSignOut}
   >
        <style dangerouslySetInnerHTML={{__html:"@media print{.np{display:none!important}#combined-print,#combined-print *{visibility:visible!important}body{visibility:hidden!important}#combined-print{position:fixed;top:0;left:0;width:100%}}"}}/>
 

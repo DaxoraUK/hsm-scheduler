@@ -1,160 +1,374 @@
 import React, { useState } from "react";
-import { G } from "../lib/constants.js";
-import { Auth, getSupaKey, isSupaConfigured } from "../lib/supabase.js";
+import { Auth, getSupaKey, isSupaConfigured, setSupaKey } from "../lib/supabase.js";
+import BrandSplash, { GroundControlMark } from "./BrandSplash.jsx";
+import "./authExperience.css";
 
-function LoginScreen(props) {
-  var onLogin = props.onLogin;
-  var supaConfigured = props.supaConfigured;
-  var modeState = useState("signin");
-  var mode = modeState[0]; var setMode = modeState[1];
-  var emailState = useState(""); var email = emailState[0]; var setEmail = emailState[1];
-  var passState = useState(""); var password = passState[0]; var setPassword = passState[1];
-  var nameState = useState(""); var displayName = nameState[0]; var setDisplayName = nameState[1];
-  var loadState = useState(false); var loading = loadState[0]; var setLoading = loadState[1];
-  var errState = useState(""); var error = errState[0]; var setError = errState[1];
-  var msgState = useState(""); var msg = msgState[0]; var setMsg = msgState[1];
-  var keyState = useState(function(){ return getSupaKey()||""; }); var keyInput = keyState[0]; var setKeyInput = keyState[1];
-  var keySetState = useState(function(){ return isSupaConfigured(); }); var keySet = keySetState[0]; var setKeySet = keySetState[1];
+function Icon({ name }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  };
 
-  function saveKey() {
-    var k = keyInput.trim();
-    if (k.length < 20) { setError("Key too short - paste the full anon key."); return; }
-    try { localStorage.setItem("hsm_supa_key", k); } catch(e) {}
-    setKeySet(true);
-    setError("");
+  if (name === "mail") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6" /></svg>;
   }
-
-  function submit() {
-    setError(""); setMsg("");
-    if (!keySet) { setError("Connect to Supabase first."); return; }
-    if (!email.trim()) { setError("Enter your email."); return; }
-    if (mode !== "reset" && !password) { setError("Enter your password."); return; }
-    if (mode === "signup" && password.length < 6) { setError("Password must be 6+ characters."); return; }
-    setLoading(true);
-    if (mode === "reset") {
-      Auth.resetPassword(email.trim()).then(function(res) {
-        setLoading(false);
-        if (res && res.error) { setError(res.error); return; }
-        setMsg("Reset email sent! Check your inbox.");
-      });
-      return;
-    }
-    var authCall = mode === "signup"
-      ? Auth.signUp(email.trim(), password, displayName.trim())
-      : Auth.signIn(email.trim(), password);
-    authCall.then(function(res) {
-      setLoading(false);
-      if (!res || res.error) { setError(res ? res.error : "Something went wrong."); return; }
-      if (mode === "signup" && !res.access_token) {
-        setMsg("Account created! Check email to confirm, then sign in.");
-        setMode("signin");
-        return;
-      }
-      if (res.access_token) {
-        Auth.saveSession(res);
-        onLogin(res);
-      } else {
-        setError("Unexpected response - try again.");
-      }
-    });
+  if (name === "lock") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><rect {...common} x="5" y="10" width="14" height="10" rx="2" /><path {...common} d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>;
   }
+  if (name === "user") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="8" r="4" /><path {...common} d="M4.5 20c.8-4.3 3.3-6.5 7.5-6.5s6.7 2.2 7.5 6.5" /></svg>;
+  }
+  if (name === "key") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="8" cy="15" r="4" /><path {...common} d="m11 12 8-8M15 8l2 2M18 5l2 2" /></svg>;
+  }
+  if (name === "eye") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle {...common} cx="12" cy="12" r="2.5" /></svg>;
+  }
+  if (name === "eyeOff") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="m3 3 18 18M10.7 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a16.2 16.2 0 0 1-2.2 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6a10 10 0 0 0 3.1-.5M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>;
+  }
+  if (name === "shield") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3 5 6v5c0 4.7 2.6 8 7 10 4.4-2 7-5.3 7-10V6l-7-3Z" /><path {...common} d="m9 12 2 2 4-4" /></svg>;
+  }
+  if (name === "alert") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3 2.8 20h18.4L12 3Z" /><path {...common} d="M12 9v5M12 17.5h.01" /></svg>;
+  }
+  if (name === "check") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="m8 12 2.5 2.5L16 9" /></svg>;
+  }
+  if (name === "route") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="6" cy="18" r="2" /><circle {...common} cx="18" cy="6" r="2" /><path {...common} d="M8 18h3a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3" /></svg>;
+  }
+  if (name === "pulse") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 12h4l2.2-5 4.2 10 2.2-5H21" /></svg>;
+  }
+  if (name === "chart") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>;
+  }
+  return null;
+}
 
-  var inp = { border:"1.5px solid #e5e7eb", borderRadius:8, padding:"10px 14px", fontSize:13, width:"100%", boxSizing:"border-box", background:"#fafafa", marginBottom:12, display:"block" };
-  var btn = { background:G, color:"#fff", border:"none", borderRadius:50, padding:"12px 0", fontWeight:700, fontSize:14, cursor:"pointer", width:"100%", marginBottom:12, opacity:loading?0.7:1 };
-  var lbl = { fontSize:11, fontWeight:600, color:"#555", marginBottom:4, display:"block" };
-  var err = { background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 14px", fontSize:12, color:"#922B21", marginBottom:12 };
-  var ok = { background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:8, padding:"10px 14px", fontSize:12, color:"#166534", marginBottom:12 };
-  var lnk = { background:"none", border:"none", color:G, cursor:"pointer", fontSize:12, textDecoration:"underline" };
-
+function Alert({ type, children }) {
   return (
-    <div style={{minHeight:"100vh",background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div style={{background:"#fff",borderRadius:16,boxShadow:"0 8px 40px rgba(0,0,0,0.1)",width:"100%",maxWidth:440,overflow:"hidden"}}>
-
-        <div style={{background:"#f8f9fa",padding:"36px 32px 28px",textAlign:"center",borderBottom:"1px solid #e8e8e8"}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:14}}>
-            <div style={{width:54,height:54,border:"3px solid #C0392B",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
-              <div style={{width:32,height:32,borderRadius:"50%",background:"#1D2D44",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:900}}>GC</div>
-            </div>
-            <div style={{textAlign:"left"}}>
-              <div style={{fontSize:24,fontWeight:900,color:"#1D2D44",lineHeight:1,letterSpacing:1}}>GROUND</div>
-              <div style={{fontSize:24,fontWeight:900,color:"#C0392B",lineHeight:1,letterSpacing:1}}>CONTROL</div>
-              <div style={{fontSize:8,fontWeight:600,color:"#999",letterSpacing:3,marginTop:3}}>MATCHDAY PLATFORM</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{padding:"28px 32px"}}>
-
-          {!keySet ? (
-            <div>
-              <div style={{fontSize:13,fontWeight:600,color:"#333",marginBottom:8}}>First-time setup</div>
-              <div style={{fontSize:12,color:"#666",marginBottom:14}}>Paste your Supabase anon key. Find it in Supabase, Settings, API, anon/public.</div>
-              {error && <div style={err}>{error}</div>}
-              <label style={lbl}>Supabase Anon Key</label>
-              <input style={{...inp,fontFamily:"monospace",fontSize:10}} type="password" placeholder="eyJ..." value={keyInput} onChange={function(e){setKeyInput(e.target.value);}}/>
-              <button style={btn} onClick={saveKey}>Connect to Supabase</button>
-              <div style={{fontSize:11,color:"#aaa",textAlign:"center"}}>Key stored locally on this device only</div>
-            </div>
-          ) : (
-            <div>
-              <div style={{display:"flex",gap:0,marginBottom:20,background:"#f0f0f0",borderRadius:8,overflow:"hidden"}}>
-                {[["signin","Sign In"],["signup","Create Account"]].map(function(item) {
-                  return (
-                    <button key={item[0]} onClick={function(){setMode(item[0]);setError("");setMsg("");}}
-                      style={{flex:1,padding:"8px 0",fontSize:12,fontWeight:mode===item[0]?700:400,background:mode===item[0]?G:"transparent",color:mode===item[0]?"#fff":"#666",border:"none",cursor:"pointer"}}>
-                      {item[1]}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {error && <div style={err}>{error}</div>}
-              {msg && <div style={ok}>{msg}</div>}
-
-              {mode === "reset" ? (
-                <div>
-                  <label style={lbl}>Email address</label>
-                  <input style={inp} type="email" placeholder="your@email.com" value={email} onChange={function(e){setEmail(e.target.value);}}/>
-                  <button style={btn} onClick={submit} disabled={loading}>{loading?"Sending...":"Send Reset Email"}</button>
-                  <div style={{textAlign:"center"}}>
-                    <button onClick={function(){setMode("signin");setError("");setMsg("");}} style={lnk}>Back to sign in</button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  {mode === "signup" && (
-                    <div>
-                      <label style={lbl}>Your Name</label>
-                      <input style={inp} type="text" placeholder="e.g. Andy Smith" value={displayName} onChange={function(e){setDisplayName(e.target.value);}}/>
-                    </div>
-                  )}
-                  <label style={lbl}>Email address</label>
-                  <input style={inp} type="email" placeholder="your@email.com" value={email} onChange={function(e){setEmail(e.target.value);}}/>
-                  <label style={lbl}>Password</label>
-                  <input style={inp} type="password" placeholder={mode==="signup"?"At least 6 characters":"Your password"} value={password} onChange={function(e){setPassword(e.target.value);}}/>
-                  <button style={btn} onClick={submit} disabled={loading}>
-                    {loading?(mode==="signup"?"Creating account...":"Signing in..."):(mode==="signup"?"Create Account":"Sign In")}
-                  </button>
-                  {mode === "signin" && (
-                    <div style={{textAlign:"center"}}>
-                      <button onClick={function(){setMode("reset");setError("");setMsg("");}} style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>Forgot password?</button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{padding:"20px 32px 28px",textAlign:"center",background:"#f8f9fa",borderTop:"1px solid #e8e8e8"}}>
-          <div style={{fontSize:9,color:"#aaa",marginBottom:10,letterSpacing:3,fontFamily:"Arial,sans-serif"}}>POWERED BY</div>
-          <div style={{fontFamily:"Arial,Helvetica,sans-serif",fontWeight:800,fontSize:32,letterSpacing:1,display:"inline-block"}}>
-            <span style={{color:"#1B2A41"}}>DA</span><span style={{color:"#16BDCA"}}>X</span><span style={{color:"#1B2A41"}}>ORA</span>
-          </div>
-        </div>
-      </div>
+    <div className={`gc-auth-alert ${type === "success" ? "is-success" : "is-error"}`}>
+      <Icon name={type === "success" ? "check" : "alert"} />
+      <span>{children}</span>
     </div>
   );
 }
 
-export default LoginScreen;
+function Capability({ icon, title, text }) {
+  return (
+    <div className="gc-auth-capability">
+      <Icon name={icon} />
+      <strong>{title}</strong>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+export default function LoginScreen({ onLogin }) {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [keyInput, setKeyInput] = useState(() => getSupaKey() || "");
+  const [keySet, setKeySet] = useState(() => isSupaConfigured());
+
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setError("");
+    setMessage("");
+  }
+
+  function saveKey(event) {
+    event.preventDefault();
+    const key = keyInput.trim();
+    if (key.length < 20) {
+      setError("Paste the complete Supabase anon key to connect this workspace.");
+      return;
+    }
+    setSupaKey(key);
+    setKeySet(true);
+    setError("");
+    setMessage("Workspace connected. You can now sign in.");
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!keySet) {
+      setError("Connect the workspace before signing in.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Enter your email address.");
+      return;
+    }
+    if (mode !== "reset" && !password) {
+      setError("Enter your password.");
+      return;
+    }
+    if (mode === "signup" && password.length < 6) {
+      setError("Your password must contain at least six characters.");
+      return;
+    }
+
+    setLoading(true);
+
+    if (mode === "reset") {
+      const response = await Auth.resetPassword(email.trim());
+      setLoading(false);
+      if (response && response.error) {
+        setError(response.error);
+        return;
+      }
+      setMessage("Password reset email sent. Check your inbox.");
+      return;
+    }
+
+    const response = mode === "signup"
+      ? await Auth.signUp(email.trim(), password, displayName.trim())
+      : await Auth.signIn(email.trim(), password);
+
+    setLoading(false);
+
+    if (!response || response.error) {
+      setError(response ? response.error : "Ground Control could not complete the request.");
+      return;
+    }
+
+    if (mode === "signup" && !response.access_token) {
+      setMessage("Account created. Confirm your email, then sign in.");
+      setMode("signin");
+      return;
+    }
+
+    if (!response.access_token) {
+      setError("The sign-in response was incomplete. Please try again.");
+      return;
+    }
+
+    Auth.saveSession(response);
+    setLaunching(true);
+    window.setTimeout(() => onLogin(response), 1250);
+  }
+
+  if (launching) {
+    return <BrandSplash message="Opening Mission Control" />;
+  }
+
+  const isReset = mode === "reset";
+  const isSignup = mode === "signup";
+
+  return (
+    <main className="gc-auth-page">
+      <div className="gc-grid-field" aria-hidden="true" />
+      <div className="gc-auth-ambient gc-auth-ambient-one" aria-hidden="true" />
+      <div className="gc-auth-ambient gc-auth-ambient-two" aria-hidden="true" />
+      <div className="gc-auth-version">Platform Core v1.0</div>
+
+      <section className="gc-auth-story" aria-label="Ground Control platform introduction">
+        <div>
+          <div className="gc-auth-brand">
+            <GroundControlMark className="gc-auth-mark" />
+            <div className="gc-auth-wordmark">
+              <span>GROUND</span>
+              <strong>CONTROL</strong>
+              <small>OPERATIONS PLATFORM</small>
+            </div>
+          </div>
+
+          <div className="gc-auth-copy">
+            <div className="gc-auth-eyebrow">Grassroots sport, under control</div>
+            <h1>The operating system for <span>matchday.</span></h1>
+            <p>
+              Plan the weekend, predict operational pressure and guide every decision
+              from one intelligent command centre.
+            </p>
+          </div>
+
+          <div className="gc-auth-capabilities" aria-label="Platform capabilities">
+            <Capability icon="route" title="Build with confidence" text="Fixtures, pitches and timings aligned automatically." />
+            <Capability icon="pulse" title="See pressure early" text="Parking, officials and weather risks surfaced before matchday." />
+            <Capability icon="chart" title="Prove your impact" text="Turn club operations into grant-ready evidence." />
+          </div>
+        </div>
+
+        <div className="gc-auth-story-footer">
+          <span className="gc-live-dot" aria-hidden="true" />
+          <span>Platform services online</span>
+          <span>•</span>
+          <span>Secure club workspace</span>
+        </div>
+      </section>
+
+      <section className="gc-auth-panel-wrap" aria-label="Account access">
+        <div className="gc-auth-panel">
+          <header className="gc-auth-panel-header">
+            <div className="gc-auth-secure"><Icon name="shield" /> Secure workspace access</div>
+            <h2>{!keySet ? "Connect Ground Control" : isReset ? "Reset your password" : isSignup ? "Create your account" : "Welcome back"}</h2>
+            <p className="gc-auth-panel-subtitle">
+              {!keySet
+                ? "Complete the one-time platform connection for this device."
+                : isReset
+                  ? "We will send a secure recovery link to your inbox."
+                  : isSignup
+                    ? "Create the account that will manage your club workspace."
+                    : "Sign in to open Mission Control and prepare the next matchday."}
+            </p>
+          </header>
+
+          {!keySet ? (
+            <form className="gc-auth-setup" onSubmit={saveKey}>
+              {error && <Alert type="error">{error}</Alert>}
+              {message && <Alert type="success">{message}</Alert>}
+
+              <div className="gc-auth-setup-card">
+                <strong>One-time workspace connection</strong>
+                <p>Your platform administrator provides this key. It is stored only on this device.</p>
+              </div>
+
+              <label className="gc-auth-field">
+                <span className="gc-auth-field-label">Supabase anon key</span>
+                <span className="gc-auth-input-wrap">
+                  <Icon name="key" />
+                  <input
+                    className="gc-auth-input is-mono"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="eyJ..."
+                    value={keyInput}
+                    onChange={(event) => setKeyInput(event.target.value)}
+                  />
+                </span>
+              </label>
+
+              <button className="gc-auth-submit" type="submit">Connect workspace</button>
+              <div className="gc-auth-key-note">For production deployments this connection can be supplied securely through the environment configuration.</div>
+            </form>
+          ) : (
+            <>
+              {!isReset && (
+                <div className="gc-auth-tabs" role="tablist" aria-label="Account access options">
+                  <button
+                    className={`gc-auth-tab ${mode === "signin" ? "is-active" : ""}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === "signin"}
+                    onClick={() => switchMode("signin")}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    className={`gc-auth-tab ${mode === "signup" ? "is-active" : ""}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === "signup"}
+                    onClick={() => switchMode("signup")}
+                  >
+                    Create account
+                  </button>
+                </div>
+              )}
+
+              <form className="gc-auth-form" onSubmit={submit}>
+                {error && <Alert type="error">{error}</Alert>}
+                {message && <Alert type="success">{message}</Alert>}
+
+                {isSignup && (
+                  <label className="gc-auth-field">
+                    <span className="gc-auth-field-label">Your name</span>
+                    <span className="gc-auth-input-wrap">
+                      <Icon name="user" />
+                      <input
+                        className="gc-auth-input"
+                        type="text"
+                        autoComplete="name"
+                        placeholder="e.g. Andrew Manville"
+                        value={displayName}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                      />
+                    </span>
+                  </label>
+                )}
+
+                <label className="gc-auth-field">
+                  <span className="gc-auth-field-label">Email address</span>
+                  <span className="gc-auth-input-wrap">
+                    <Icon name="mail" />
+                    <input
+                      className="gc-auth-input"
+                      type="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="you@yourclub.co.uk"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </span>
+                </label>
+
+                {!isReset && (
+                  <label className="gc-auth-field">
+                    <span className="gc-auth-field-label">Password</span>
+                    <span className="gc-auth-input-wrap">
+                      <Icon name="lock" />
+                      <input
+                        className="gc-auth-input"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={isSignup ? "new-password" : "current-password"}
+                        placeholder={isSignup ? "At least six characters" : "Enter your password"}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                      <button
+                        className="gc-password-toggle"
+                        type="button"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        onClick={() => setShowPassword((current) => !current)}
+                      >
+                        <Icon name={showPassword ? "eyeOff" : "eye"} />
+                      </button>
+                    </span>
+                  </label>
+                )}
+
+                <button className="gc-auth-submit" type="submit" disabled={loading}>
+                  {loading
+                    ? isReset ? "Sending recovery link..." : isSignup ? "Creating secure account..." : "Authorising access..."
+                    : isReset ? "Send recovery link" : isSignup ? "Create account" : "Enter Mission Control"}
+                </button>
+
+                <div className="gc-auth-form-footer">
+                  {isReset ? (
+                    <button className="gc-auth-link" type="button" onClick={() => switchMode("signin")}>Back to sign in</button>
+                  ) : mode === "signin" ? (
+                    <button className="gc-auth-link" type="button" onClick={() => switchMode("reset")}>Forgot your password?</button>
+                  ) : (
+                    <span className="gc-auth-link">Email confirmation may be required.</span>
+                  )}
+                </div>
+              </form>
+            </>
+          )}
+
+          <footer className="gc-auth-panel-footer">
+            <span>Engineered by</span>
+            <div className="gc-daxora-wordmark">DA<span>X</span>ORA</div>
+          </footer>
+        </div>
+      </section>
+    </main>
+  );
+}
