@@ -1,6 +1,3 @@
-export const pitcheroService = Object.freeze({
-  id: "pitcheroService",
-  status: "foundation",
-  isConfigured: () => false,
-  describe: () => "pitcheroService integration foundation only. Live API wiring is not enabled yet.",
-});
+import { createPlatformService } from "./serviceRegistry.js";
+
+export const pitcheroService = createPlatformService("pitchero");

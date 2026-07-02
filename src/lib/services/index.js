@@ -1,3 +1,14 @@
+export {
+  calculateServiceReadiness,
+  createPlatformService,
+  getPlatformServiceById,
+  getPlatformServiceDefinition,
+  getPlatformServiceDefinitions,
+  getPlatformServices,
+  getServiceRoadmap,
+  getServiceStatusMeta,
+} from "./serviceRegistry.js";
+
 export { weatherService } from "./weatherService.js";
 export { faService } from "./faService.js";
 export { teamFeePayService } from "./teamFeePayService.js";
