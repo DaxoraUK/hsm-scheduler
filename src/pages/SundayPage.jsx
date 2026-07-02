@@ -24,7 +24,14 @@ export default function SundayPage(props) {
         <MatchdayScheduleCard
           title="Sunday Schedule"
           subtitle="Scheduled fixtures, pitch allocation and matchday controls."
-          games={pageProps.sunFinal || []}
+          day="Sunday"
+          mode={pageProps.mode}
+          dateLabel={pageProps.dateLabel}
+          hasRun={pageProps.hasRun}
+          games={pageProps.final || pageProps.sunFinal || []}
+          conflicts={pageProps.conflicts || []}
+          officialConflicts={pageProps.officialConflicts || []}
+          refWarnings={pageProps.refWarnings || 0}
           club={pageProps.club}
           onFixtureClick={pageProps.onFixtureClick}
         />

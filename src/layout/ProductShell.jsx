@@ -2,6 +2,7 @@ import { Toaster } from "sonner";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
 import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
+import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
 
 import {
   LayoutDashboard,
@@ -17,6 +18,8 @@ export default function ProductShell({
   mainPage,
   setMainPage,
   setDayTab,
+  setSettingsTab,
+  setNavigationTarget,
   matchdayScope = MATCHDAY_SCOPES.WEEKEND,
   club,
   satFinal = [],
@@ -25,13 +28,15 @@ export default function ProductShell({
   sunHasRun,
   readiness,
 }) {
+  const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
+
   const navItems = [
-    ["dashboard", "Mission Control", LayoutDashboard],
-    ["operations", "Operations", CalendarDays],
-    ["communications", "Communications", MessageSquareText],
-    ["analytics", "Analytics", ChartNoAxesCombined],
-    ["reports", "Reports", FileText],
-    ["settings", "Settings", Settings],
+    ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
+    ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
+    ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
+    ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
+    ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
+    ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
   ];
 
   const satCount = satHasRun
@@ -79,7 +84,7 @@ export default function ProductShell({
               </div>
 
               <nav className="space-y-1 overflow-y-auto pr-1">
-                {navItems.map(([key, label, Icon]) => {
+                {navItems.map(([key, label, Icon, target]) => {
                   const active = mainPage === key;
 
                   return (
@@ -87,8 +92,10 @@ export default function ProductShell({
                       key={key}
                       type="button"
                       onClick={() => {
-                        setMainPage(key);
-                        if (key === "operations") setDayTab(getDayTabFromScope(matchdayScope));
+                        nav.goTo(target, {
+                          day: key === "operations" ? getDayTabFromScope(matchdayScope) : undefined,
+                          scroll: false,
+                        });
                       }}
                       className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${
                         active

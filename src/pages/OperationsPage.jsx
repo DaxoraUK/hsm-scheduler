@@ -10,7 +10,7 @@ export default function OperationsPage({ children }) {
               Weekend Operations
             </h1>
             <p className="mt-1 text-sm font-medium text-slate-500">
-              Plan fixtures, manage pitch pressure, monitor parking and prepare coach communications.
+              Plan fixtures, control the operational timeline, monitor pitch pressure, parking and coach communications.
             </p>
           </div>
 

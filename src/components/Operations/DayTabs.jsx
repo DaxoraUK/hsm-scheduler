@@ -4,11 +4,12 @@ export default function DayTabs({ dayTab, setDayTab }) {
   const tabs = [
     ["saturday", "Saturday", "Primary matchday"],
     ["sunday", "Sunday", "Secondary matchday"],
+    ["timeline", "Timeline", "Operational command view"],
   ];
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">
-      <div className="grid gap-2 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-3">
         {tabs.map(([key, label, description]) => {
           const active = dayTab === key;
 

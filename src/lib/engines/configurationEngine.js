@@ -1,4 +1,5 @@
 import { AVG_CARS, DEFAULT_CLUB, PITCHES, TEAM_CONFIG_DEFAULT } from "../constants.js";
+import { normalisePitchRegistry } from "../registry/pitchRegistry.js";
 
 function asArray(value, fallback = []) {
   return Array.isArray(value) ? value : fallback;
@@ -96,13 +97,9 @@ export function normalisePitches(pitchCfg = PITCHES, club = DEFAULT_CLUB) {
   const sites = normaliseSites(club);
   const primarySiteId = sites.find((site) => site.isPrimary)?.id || sites[0]?.id || "primary-site";
 
-  return asArray(pitchCfg, PITCHES).map((pitch) => ({
+  return normalisePitchRegistry(asArray(pitchCfg, PITCHES)).map((pitch) => ({
     ...pitch,
-    id: clean(pitch.id || pitch.pitchId || pitch.label),
-    label: clean(pitch.label || pitch.name || pitch.id),
-    format: clean(pitch.format || pitch.pitchFormat || "11v11"),
     siteId: clean(pitch.siteId || pitch.venueId || pitch.groundId || primarySiteId),
-    closed: Boolean(pitch.closed || pitch.isClosed),
   }));
 }
 

@@ -1,6 +1,8 @@
 export const NAV_TARGETS = Object.freeze({
   MISSION_CONTROL: "mission-control",
   OPERATIONS: "operations",
+  TIMELINE: "operations.timeline",
+  OPERATIONS_TIMELINE: "operations.timeline",
   FIXTURES: "operations.fixtures",
   RESOURCES: "operations.resources",
   PARKING: "operations.parking",
@@ -20,7 +22,8 @@ export const NAV_TARGETS = Object.freeze({
 export const NAV_TARGET_META = Object.freeze({
   [NAV_TARGETS.MISSION_CONTROL]: { page: "dashboard", label: "Mission Control" },
   [NAV_TARGETS.OPERATIONS]: { page: "operations", label: "Operations" },
-  [NAV_TARGETS.FIXTURES]: { page: "operations", workspace: "fixtures", card: "actionBar", label: "Fixtures" },
+  [NAV_TARGETS.TIMELINE]: { page: "operations", workspace: "timeline", dayTab: "timeline", label: "Operations Timeline" },
+  [NAV_TARGETS.FIXTURES]: { page: "operations", workspace: "fixtures", card: "schedule", label: "Fixtures" },
   [NAV_TARGETS.RESOURCES]: { page: "operations", workspace: "resources", card: "pitchClosures", label: "Resources" },
   [NAV_TARGETS.PARKING]: { page: "operations", workspace: "intelligence", card: "parkingIntelligence", label: "Parking" },
   [NAV_TARGETS.OFFICIALS]: { page: "operations", workspace: "intelligence", card: "operationsHealth", label: "Officials" },

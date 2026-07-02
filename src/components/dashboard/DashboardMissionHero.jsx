@@ -58,7 +58,7 @@ export default function DashboardMissionHero({
             </div>
 
             <div className="mt-4 text-[11px] font-black uppercase tracking-[0.28em] text-emerald-300">
-              Mission Control
+              Ground Control OS
             </div>
 
             <h1 className="mt-2 max-w-3xl text-4xl font-black leading-[0.95] tracking-tight lg:text-5xl">
@@ -67,7 +67,7 @@ export default function DashboardMissionHero({
 
             <p className="mt-3 max-w-2xl text-base font-medium leading-7 text-slate-300">
               {missionState?.detail ||
-                "Review your club's operational readiness and continue the next matchday task."}
+                "Your grassroots sport operating system: schedule the weekend, protect capacity, guide decisions and capture the evidence clubs need."}
             </p>
           </div>
 
@@ -121,7 +121,7 @@ export default function DashboardMissionHero({
             <div className="flex items-end justify-between gap-5">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-                  Weekend Progress
+                  Platform Readiness
                 </div>
                 <div className="mt-1 text-3xl font-black text-white">
                   {progress}%

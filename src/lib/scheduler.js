@@ -8,6 +8,7 @@ import {
   MINI_KW,
 } from "./constants.js";
 import { isPitchSuitableForFixture } from "./intelligence/pitch/pitchService.js";
+import { createPitchRegistry, normalisePitchRegistry } from "./registry/pitchRegistry.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -44,21 +45,7 @@ function getPitch(pitchCfg, pitchId) {
 }
 
 function getPitchSurface(pitch) {
-  if (!pitch) return "grass";
-
-  const explicit = String(pitch.surface || "").toLowerCase();
-
-  if (explicit) return explicit;
-
-  const text = `${pitch.id || ""} ${pitch.name || ""} ${pitch.label || ""} ${
-    pitch.desc || ""
-  } ${pitch.type || ""}`.toLowerCase();
-
-  if (text.includes("astro")) return "astro";
-  if (text.includes("3g")) return "3g";
-  if (text.includes("4g")) return "4g";
-
-  return "grass";
+  return pitch?.surface || "grass";
 }
 
 function isArtificialPitch(pitchCfg, pitchId) {
@@ -115,17 +102,7 @@ function pitchAvailableBySurface(pitchCfg, pitchId, useAstro) {
 }
 
 function getLinkedPitchIds(pitchCfg, pitchId) {
-  const linked = new Set([pitchId]);
-  const pitch = getPitch(pitchCfg, pitchId);
-
-  if (pitch?.innerOf) linked.add(pitch.innerOf);
-
-  pitchCfg.forEach((candidate) => {
-    if (candidate.innerOf === pitchId) linked.add(candidate.id);
-    if (pitch?.innerOf && candidate.innerOf === pitch.innerOf) linked.add(candidate.id);
-  });
-
-  return [...linked];
+  return createPitchRegistry(pitchCfg).getLinkedPitchIds(pitchId);
 }
 
 function buildClosedPitchSet(pitchCfg, closedPitches = []) {
@@ -151,7 +128,7 @@ export function scheduleSat(
   pitchCfgArg = PITCHES,
   maxConcurrent = 3
 ) {
-  const pitchCfg = pitchCfgArg && pitchCfgArg.length ? pitchCfgArg : PITCHES;
+  const pitchCfg = normalisePitchRegistry(pitchCfgArg && pitchCfgArg.length ? pitchCfgArg : PITCHES);
   const closedPitchSet = buildClosedPitchSet(pitchCfg, closedPitches);
 
   const active = fixtures.filter((fixture) => fixture.status === "active");

@@ -11,6 +11,7 @@ import OperationsPage from "./pages/OperationsPage.jsx";
 import DayTabs from "./components/Operations/DayTabs.jsx";
 import SundayPage from "./pages/SundayPage.jsx";
 import SaturdayPage from "./pages/SaturdayPage.jsx";
+import OperationsTimelinePage from "./pages/OperationsTimelinePage.jsx";
 import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
@@ -596,6 +597,20 @@ return(
             useAstro={useAstro}
             setUseAstro={setUseAstro}
             testSun={testSun}
+          />
+        )}
+
+        {dayTab === "timeline" && (
+          <OperationsTimelinePage
+            club={club}
+            satFinal={satFinal}
+            sunFinal={sunFinal}
+            satHasRun={satHasRun}
+            sunHasRun={sunHasRun}
+            carCap={carCap}
+            refs={refs}
+            refWarnings={refWarnings}
+            closedPitches={closedPitches}
           />
         )}
 

@@ -37,38 +37,21 @@ export const DEFAULT_CLUB = {
 
 export const AVG_CARS={"3v3":8,"5v5":12,"7v7":16,"9v9":20,"11v11-youth":28,"11v11-small":28,"11v11":36};
 
-export const PITCHES=[
-  {id:"P1",label:"Pitch 1",desc:"Full 11v11",format:"11v11",siteId:"scholes-bank",innerOf:null,independent:false},
-  {id:"P1a",label:"Pitch 1a",desc:"9v9 (inside P1)",format:"9v9",siteId:"scholes-bank",innerOf:"P1",independent:false},
-  {id:"P2",label:"Pitch 2",desc:"Small 11v11",format:"11v11-small",siteId:"scholes-bank",innerOf:null,independent:false},
-  {id:"P2a",label:"Pitch 2a",desc:"7v7 (inside P2)",format:"7v7",siteId:"scholes-bank",innerOf:"P2",independent:false},
-  {id:"P3",label:"Pitch 3",desc:"9v9",format:"9v9",siteId:"scholes-bank",innerOf:null,independent:false},
-  {id:"P3a",label:"Pitch 3a",desc:"7v7 (inside P3)",format:"7v7",siteId:"scholes-bank",innerOf:"P3",independent:false},
-  {id:"P4",label:"Pitch 4",desc:"Youth 11v11",format:"11v11-youth",siteId:"scholes-bank",innerOf:null,independent:false},
-  {id:"P5",label:"Pitch 5",desc:"7v7",format:"7v7",siteId:"scholes-bank",innerOf:null,independent:false},
-  {id:"3v3",label:"3v3 Area",desc:"3v3 (separate)",format:"3v3",siteId:"scholes-bank",innerOf:null,independent:true},
-  {id:"AST",label:"Astro",desc:"Station Park",format:"5v5",siteId:"scholes-bank",innerOf:null,independent:true,astroOnly:true,affectsParking:false},
-];
-
-export const PITCH_CONFLICTS={P1a:"P1",P2a:"P2",P3a:"P3"};
-
-export const INNER_PITCHES=["P1a","P2a","P3a"];
-
-export const INDEPENDENT_PITCHES=["3v3","AST"];
-
-export const MINI_FORMATS=["3v3","5v5"];
-
+// Legacy mini age keywords kept here while older forms/scheduler imports are consolidated.
 export const MINI_KW=["u7","u8","u9","u10"];
 
-export const FORMAT_COMPAT={
-  "3v3":["3v3","AST"],
-  "5v5":["P5","AST","P3a","P2a"],
-  "7v7":["P5","P3a","P2a"],
-  "9v9":["P3","P1a","P3a"],
-  "11v11-youth":["P4","P2","P1"],
-  "11v11-small":["P2","P4","P1"],
-  "11v11":["P1","P2"],
-};
+export {
+  DEFAULT_PITCHES as PITCHES,
+  FORMAT_PITCH_OPTIONS as FORMAT_COMPAT,
+  MINI_FORMATS,
+  getPitchConflictMap,
+  getInnerPitchIds,
+  getIndependentPitchIds,
+} from "./registry/pitchRegistry.js";
+
+export const PITCH_CONFLICTS={P1a:"P1",P2a:"P2",P3a:"P3"};
+export const INNER_PITCHES=["P1a","P2a","P3a"];
+export const INDEPENDENT_PITCHES=["3v3","AST"];
 
 export const TEAM_CONFIG_DEFAULT=[
   {name:"U7",teamType:"youth",format:"3v3",defaultPitch:"3v3",altPitch:null,ageOrder:1,day:"Saturday",gameMins:40},

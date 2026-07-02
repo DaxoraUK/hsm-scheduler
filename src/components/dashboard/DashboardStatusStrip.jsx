@@ -30,10 +30,10 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null, s
       <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">
-            Live Operations
+            Command Strip
           </div>
           <div className="mt-1 text-sm font-bold text-slate-500">
-            Jump to the right area from one compact control strip.
+            Jump to the right operational area without leaving Mission Control guessing.
           </div>
         </div>
 

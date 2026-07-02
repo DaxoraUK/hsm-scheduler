@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import PageContainer from "../components/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
+import DashboardInsightGrid from "../components/dashboard/DashboardInsightGrid.jsx";
 import DashboardWorkflowCard from "../components/dashboard/DashboardWorkflowCard.jsx";
 import DashboardWeatherCard from "../components/dashboard/DashboardWeatherCard.jsx";
 import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
@@ -126,7 +127,7 @@ export default function DashboardPage({
           detail: "Build the selected matchday schedule before final readiness checks.",
           area: "Fixtures",
           severity: "warning",
-          onClick: () => nav.goToFixtures({ day: navigationDay }),
+          onClick: () => nav.goToFixtures({ day: navigationDay, card: "actionBar", workspace: "fixtures" }),
         }
       : null,
     fixtureIssues > 0
@@ -195,7 +196,7 @@ export default function DashboardPage({
   });
 
   const workflowActionMap = {
-    [WORKFLOW_ACTIONS.FIXTURES]: () => nav.goToFixtures({ day: navigationDay }),
+    [WORKFLOW_ACTIONS.FIXTURES]: () => nav.goToFixtures({ day: navigationDay, card: "actionBar", workspace: "fixtures" }),
     [WORKFLOW_ACTIONS.GROUND]: () => nav.goToResources({ day: navigationDay, card: "pitchClosures" }),
     [WORKFLOW_ACTIONS.OFFICIALS]: () => nav.goToOfficials({ day: navigationDay }),
     [WORKFLOW_ACTIONS.PARKING]: () => nav.goToParking({ day: navigationDay }),
@@ -357,6 +358,16 @@ export default function DashboardPage({
         ]}
       />
 
+      <DashboardInsightGrid
+        totalFixtures={totalFixtures}
+        pitchCount={pitchCfg.length}
+        closedPitchCount={closedPitches.length}
+        scheduleBuilt={scheduleBuilt}
+        fixtureIssues={fixtureIssues}
+        refereeOutstanding={refereeStats.outstanding}
+        parkingStats={parkingStats}
+        communicationsReady={communicationsReady}
+      />
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <div className="flex min-w-0 flex-col gap-6">

@@ -672,6 +672,10 @@ export default function MatchdayPage({
       recommendationCentre: "recommendationCentre",
       actionQueue: "recommendationCentre",
       dayOptimiser: "dayOptimiser",
+      actionBar: "actionBar",
+      build: "actionBar",
+      buildSchedule: "actionBar",
+      controls: "actionBar",
       officials: "operationsHealth",
       operationsHealth: "operationsHealth",
       fixtures: "schedule",
@@ -684,6 +688,10 @@ export default function MatchdayPage({
     };
 
     const sectionId = aliases[requestedCard] || requestedCard;
+    if (sectionId === "actionBar") {
+      return { id: "actionBar", workspace: navigationTarget.workspace || "fixtures" };
+    }
+
     const byCard = sectionId ? sections.find((section) => section.id === sectionId) : null;
     if (byCard) return byCard;
 
@@ -785,21 +793,23 @@ export default function MatchdayPage({
 
   return (
     <div className="space-y-6">
-      <MatchdayActionBar
-        day={day}
-        mode={props.mode}
-        hasRun={hasRun}
-        fixtureCount={final.length}
-        pitchCfg={props.pitchCfg}
-        closedPitches={props.closedPitches}
-        unresolvedCount={unresolved.length}
-        refWarnings={refWarnings}
-        runTest={isSunday ? props.runSunTest : props.runSatTest}
-        runLive={isSunday ? props.runSunLive : props.runSatLive}
-        saveWeek={props.saveWeek}
-        allowArtificial={props.useAstro}
-        setAllowArtificial={props.setUseAstro}
-      />
+      <div id="matchday-section-actionBar">
+        <MatchdayActionBar
+          day={day}
+          mode={props.mode}
+          hasRun={hasRun}
+          fixtureCount={final.length}
+          pitchCfg={props.pitchCfg}
+          closedPitches={props.closedPitches}
+          unresolvedCount={unresolved.length}
+          refWarnings={refWarnings}
+          runTest={isSunday ? props.runSunTest : props.runSatTest}
+          runLive={isSunday ? props.runSunLive : props.runSatLive}
+          saveWeek={props.saveWeek}
+          allowArtificial={props.useAstro}
+          setAllowArtificial={props.setUseAstro}
+        />
+      </div>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="grid gap-3 lg:grid-cols-4">

@@ -1,49 +1,19 @@
 import React, { useState } from "react";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
+import { createNavigationController, resolveSearchNavigation } from "../lib/navigation/index.js";
 
-export default function HeaderSearch({ setMainPage, setDayTab }) {
+export default function HeaderSearch({ setMainPage, setDayTab, setNavigationTarget }) {
   const [query, setQuery] = useState("");
 
   const performSearch = () => {
     const q = query.trim().toLowerCase();
     if (!q) return;
 
-    if (
-      q.includes("sat") ||
-      q.includes("fixture") ||
-      q.includes("pitch") ||
-      q.includes("lioness") ||
-      q.includes("u15")
-    ) {
-      setMainPage("operations");
-      setDayTab("saturday");
-      return;
-    }
-
-    if (q.includes("sun") || q.includes("sunday 1st")) {
-      setMainPage("operations");
-      setDayTab("sunday");
-      return;
-    }
-
-    if (q.includes("message") || q.includes("coach") || q.includes("whatsapp")) {
-      setMainPage("communications");
-      return;
-    }
-
-    if (q.includes("analytics") || q.includes("stats") || q.includes("parking")) {
-      setMainPage("analytics");
-      return;
-    }
-
-    if (q.includes("report") || q.includes("pdf") || q.includes("print")) {
-      setMainPage("reports");
-      return;
-    }
-
-    if (q.includes("setting") || q.includes("team") || q.includes("ref")) {
-      setMainPage("settings");
+    const match = resolveSearchNavigation(q);
+    if (match) {
+      const nav = createNavigationController({ setMainPage, setDayTab, setNavigationTarget });
+      nav.goTo(match.target, match.options);
       return;
     }
 

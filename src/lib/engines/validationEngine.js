@@ -3,6 +3,7 @@ import {
   getFixtureChangeType,
   runRules,
 } from "./rulesEngine.js";
+import { createPitchRegistry } from "../registry/pitchRegistry.js";
 
 export function normaliseStatus(value = "") {
   return String(value || "").trim().toLowerCase();
@@ -43,17 +44,7 @@ export function getFixtureDuration(fixture = {}) {
 }
 
 export function getLinkedPitchIds(pitchId, pitchCfg = []) {
-  if (!pitchId) return [];
-
-  const targetPitch = pitchCfg.find((pitch) => pitch.id === pitchId);
-
-  return [
-    pitchId,
-    targetPitch?.innerOf,
-    ...pitchCfg
-      .filter((pitch) => pitch.innerOf === pitchId)
-      .map((pitch) => pitch.id),
-  ].filter(Boolean);
+  return createPitchRegistry(pitchCfg).getLinkedPitchIds(pitchId);
 }
 
 export { getFixtureChangeType };

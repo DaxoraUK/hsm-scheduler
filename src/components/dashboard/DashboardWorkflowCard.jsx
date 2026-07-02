@@ -21,7 +21,7 @@ export default function DashboardWorkflowCard({
         <div className="flex items-start justify-between gap-5">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-700">
-              Today's Workflow
+              Guided Workflow
             </div>
             <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
               {nextAction?.title || "Weekend ready"}

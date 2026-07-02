@@ -1,15 +1,21 @@
+import {
+  getCompatiblePitchFormats as getRegistryCompatiblePitchFormats,
+  getPitchDisplayFormat as getRegistryPitchDisplayFormat,
+  normalisePitch,
+} from "../../registry/pitchRegistry.js";
+
 function normaliseFormat(value = "") {
   return String(value || "").trim().toLowerCase();
 }
 
 export function getFixtureFormat(fixture = {}) {
   return normaliseFormat(
-    fixture.cfg?.format || fixture.manualFormat || fixture.format || ""
+    fixture.cfg?.format || fixture.manualFormat || fixture.format || fixture.gameFormat || ""
   );
 }
 
 export function getPitchFormat(pitch = {}) {
-  return normaliseFormat(pitch.format || pitch.desc || "");
+  return normaliseFormat(normalisePitch(pitch).format || "");
 }
 
 export function getPreferredPitchIds(fixture = {}) {
@@ -18,23 +24,12 @@ export function getPreferredPitchIds(fixture = {}) {
     fixture.cfg?.altPitch,
     fixture.defaultPitch,
     fixture.altPitch,
+    fixture.manualPitch,
   ].filter(Boolean);
 }
 
 export function getCompatiblePitchFormats(fixture = {}) {
-  const format = getFixtureFormat(fixture);
-
-  const compatibility = {
-    "3v3": ["3v3"],
-    "5v5": ["5v5", "7v7"],
-    "7v7": ["7v7"],
-    "9v9": ["9v9"],
-    "11v11-youth": ["11v11-youth", "11v11-small"],
-    "11v11-small": ["11v11-small", "11v11"],
-    "11v11": ["11v11", "11v11-small"],
-  };
-
-  return compatibility[format] || (format ? [format] : []);
+  return getRegistryCompatiblePitchFormats(getFixtureFormat(fixture));
 }
 
 export function isPitchSuitableForFixture(pitch = {}, fixture = {}) {
@@ -51,29 +46,22 @@ export function isPitchSuitableForFixture(pitch = {}, fixture = {}) {
 }
 
 export function getPitchDisplayFormat(pitch = {}) {
-  return (
-    pitch.displayFormat ||
-    pitch.formatLabel ||
-    pitch.format ||
-    pitch.desc ||
-    pitch.type ||
-    "Unconfigured"
-  );
+  return getRegistryPitchDisplayFormat(normalisePitch(pitch));
 }
 
-
 export function getPitchSuitabilityScore(pitch = {}, fixture = {}, currentPitchId) {
+  const normalisedPitch = normalisePitch(pitch);
   const preferredPitchIds = getPreferredPitchIds(fixture);
   const fixtureFormat = getFixtureFormat(fixture);
-  const pitchFormat = getPitchFormat(pitch);
+  const pitchFormat = getPitchFormat(normalisedPitch);
 
   let score = 0;
 
-  if (pitch.id === fixture.cfg?.defaultPitch || pitch.id === fixture.defaultPitch) {
+  if (normalisedPitch.id === fixture.cfg?.defaultPitch || normalisedPitch.id === fixture.defaultPitch) {
     score -= 100;
   }
 
-  if (pitch.id === fixture.cfg?.altPitch || pitch.id === fixture.altPitch) {
+  if (normalisedPitch.id === fixture.cfg?.altPitch || normalisedPitch.id === fixture.altPitch) {
     score -= 80;
   }
 
@@ -81,32 +69,28 @@ export function getPitchSuitabilityScore(pitch = {}, fixture = {}, currentPitchI
     score -= 40;
   }
 
-  if (preferredPitchIds.includes(pitch.id)) {
+  if (preferredPitchIds.includes(normalisedPitch.id)) {
     score -= 30;
   }
 
-  if (pitch.id === currentPitchId) {
+  if (normalisedPitch.id === currentPitchId) {
     score += 100;
   }
 
-  if (pitch.innerOf) {
+  if (normalisedPitch.innerOf) {
     score += 10;
   }
 
-  if (pitch.astroOnly) {
+  if (normalisedPitch.astroOnly) {
     score += 15;
   }
 
   return score;
 }
 
-export function getSuitablePitchesForFixture({
-  fixture = {},
-  pitchCfg = [],
-} = {}) {
+export function getSuitablePitchesForFixture({ fixture = {}, pitchCfg = [] } = {}) {
   return pitchCfg.filter((pitch) => isPitchSuitableForFixture(pitch, fixture));
 }
-
 
 export function getPitchSuitabilityReason(pitch = {}, fixture = {}) {
   const fixtureFormat = getFixtureFormat(fixture) || "this fixture";
