@@ -1,17 +1,21 @@
 import React from "react";
 
-export default function DayTabs({ dayTab, setDayTab }) {
+export default function DayTabs({ dayTab, setDayTab, midweekEnabled = true }) {
   const tabs = [
     ["centre", "Operations Centre", "Live matchday control room"],
     ["saturday", "Saturday", "Primary matchday"],
     ["sunday", "Sunday", "Secondary matchday"],
-    ["midweek", "Midweek", "Any weekday fixture date"],
+    ...(midweekEnabled ? [["midweek", "Midweek", "Any weekday fixture date"]] : []),
     ["timeline", "Timeline", "Operational command view"],
   ];
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+      <div
+        className={`grid gap-2 md:grid-cols-2 ${
+          tabs.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"
+        }`}
+      >
         {tabs.map(([key, label, description]) => {
           const active = dayTab === key;
 

@@ -1,205 +1,104 @@
 import React from "react";
+import { CalendarDays, CheckCircle2, Clock3, PlugZap } from "lucide-react";
+import {
+  Field,
+  Notice,
+  SaveBar,
+  SettingsPanel,
+  SettingsSectionHeader,
+  Toggle,
+  inputClass,
+  selectClass,
+} from "./SettingsPrimitives.jsx";
 
-const PROVIDERS = [
-  {
-    id: "fullTimeFa",
-    name: "Full-Time FA",
-    category: "Fixtures",
-    description: "Fixture import source for leagues, cups and county competitions.",
-    fields: [
-      ["sourceUrl", "Fixture source URL"],
-      ["clubId", "Club ID"],
-    ],
-  },
-  {
-    id: "teamFeePay",
-    name: "TeamFeePay",
-    category: "Payments & members",
-    description: "Future sync for teams, members, payments and subscription status.",
-    fields: [
-      ["clientId", "Client ID"],
-      ["apiKey", "API key / token"],
-    ],
-  },
-  {
-    id: "pitchero",
-    name: "Pitchero",
-    category: "Website & teams",
-    description: "Future sync for fixtures, teams, availability and publishing.",
-    fields: [
-      ["clubSlug", "Club slug"],
-      ["apiKey", "API key / token"],
-    ],
-  },
-  {
-    id: "spond",
-    name: "Spond",
-    category: "Team comms",
-    description: "Future sync for teams, events, attendance and manager communications.",
-    fields: [
-      ["groupId", "Group ID"],
-      ["apiKey", "API key / token"],
-    ],
-  },
-  {
-    id: "googleCalendar",
-    name: "Google Calendar",
-    category: "Calendar",
-    description: "Future publish and sync layer for club, pitch and team calendars.",
-    fields: [
-      ["calendarId", "Calendar ID"],
-      ["syncMode", "Sync mode"],
-    ],
-  },
+const PLANNED_PROVIDERS = [
+  ["TeamFeePay", "Payments, memberships and team records"],
+  ["Pitchero", "Website, teams and fixture publishing"],
+  ["Spond", "Events, attendance and communications"],
+  ["Google Calendar", "Publishing club and team calendars"],
 ];
 
-function providerStatus(provider) {
-  if (!provider?.enabled) return { label: "Off", colour: "#64748b", bg: "#f1f5f9" };
-  if (provider?.status === "connected") return { label: "Ready", colour: "#1A5C38", bg: "#E8F5EE" };
-  return { label: "Configured", colour: "#E67E22", bg: "#fff7ed" };
-}
-
-export default function IntegrationSettingsPanel({ S, club, setClub, hdrStyle, saveTab, savedTab }) {
+export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, savedTab }) {
   const integrations = club.integrations || {};
+  const fullTime = integrations.fullTimeFa || {};
 
-  const updateProvider = (providerId, patch) => {
-    setClub((prev) => ({
-      ...prev,
+  const updateFullTime = (patch) => {
+    setClub((current) => ({
+      ...current,
       integrations: {
-        ...(prev.integrations || {}),
-        [providerId]: {
-          ...((prev.integrations || {})[providerId] || {}),
-          ...patch,
-        },
+        ...(current.integrations || {}),
+        fullTimeFa: { ...((current.integrations || {}).fullTimeFa || {}), ...patch },
       },
     }));
   };
 
   return (
-    <div style={S.card} className="np">
-      <div style={{ ...hdrStyle(club.primary), justifyContent: "space-between" }}>
-        <span>Integration Settings</span>
-        <button
-          style={{ ...S.btn(club.secondary, club.primary), padding: "3px 10px", fontSize: 11 }}
-          onClick={() =>
-            setClub((prev) => ({
-              ...prev,
-              integrations: {},
-            }))
-          }
-        >
-          Reset Integrations
-        </button>
-      </div>
+    <div className="space-y-5">
+      <SettingsPanel>
+        <SettingsSectionHeader
+          icon={PlugZap}
+          eyebrow="Available connection"
+          title="Full-Time FA fixture source"
+          description="Configure the fixture source the club can actually use today. Credentials and service keys should be environment-managed, not entered by ordinary club users."
+        />
 
-      <div style={S.cb}>
-        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, marginBottom: 16 }}>
-          These are safe foundations only. They store provider configuration ready for the Integration Engine, but they do not make live API calls yet.
+        <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-5">
+            <Field label="Fixture source URL" hint="Use the club or team fixture page from Full-Time FA.">
+              <input className={inputClass} value={fullTime.sourceUrl || ""} onChange={(event) => updateFullTime({ sourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/..." />
+            </Field>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Club ID">
+                <input className={inputClass} value={fullTime.clubId || ""} onChange={(event) => updateFullTime({ clubId: event.target.value })} placeholder="Optional Full-Time club ID" />
+              </Field>
+              <Field label="Import mode">
+                <select className={selectClass} value={fullTime.mode || "import"} onChange={(event) => updateFullTime({ mode: event.target.value })}>
+                  <option value="import">Import fixtures</option>
+                  <option value="manual">Manual preparation</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          <Toggle
+            checked={!!fullTime.enabled}
+            onChange={(enabled) => updateFullTime({ enabled })}
+            label="Enable Full-Time FA"
+            description="Makes this provider available to fixture import workflows."
+          />
         </div>
 
-        <div style={{ display: "grid", gap: 14 }}>
-          {PROVIDERS.map((provider) => {
-            const value = integrations[provider.id] || {};
-            const status = providerStatus(value);
+        <Notice tone="warning">
+          This screen stores the club’s fixture-source configuration. A source should only be marked connected after the live import has been verified against the club’s own fixtures.
+        </Notice>
 
-            return (
-              <div
-                key={provider.id}
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 18,
-                  background: value.enabled ? "#fff" : "#f8fafc",
-                  padding: 16,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <div style={{ fontSize: 16, fontWeight: 950, color: "#0f172a" }}>{provider.name}</div>
-                      <span
-                        style={{
-                          borderRadius: 999,
-                          padding: "4px 8px",
-                          background: status.bg,
-                          color: status.colour,
-                          fontSize: 10,
-                          fontWeight: 900,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.08em",
-                        }}
-                      >
-                        {status.label}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.12em", marginTop: 4 }}>
-                      {provider.category}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 7, lineHeight: 1.45 }}>
-                      {provider.description}
-                    </div>
-                  </div>
+        <SaveBar onSave={() => saveTab?.("integrations", { club })} saved={savedTab === "integrations"} label="Save fixture source">
+          Ground Control will keep unavailable providers out of the active setup flow.
+        </SaveBar>
+      </SettingsPanel>
 
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 900, color: "#334155" }}>
-                    <input
-                      type="checkbox"
-                      checked={!!value.enabled}
-                      onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
-                    />
-                    Enabled
-                  </label>
-                </div>
+      <SettingsPanel>
+        <SettingsSectionHeader
+          icon={Clock3}
+          eyebrow="Product roadmap"
+          title="Planned integrations"
+          description="These providers are shown for transparency only. There are no fake toggles or unused credential fields."
+        />
 
-                {value.enabled && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-                      gap: 12,
-                      marginTop: 14,
-                      paddingTop: 14,
-                      borderTop: "1px solid #e2e8f0",
-                    }}
-                  >
-                    {provider.fields.map(([field, label]) => (
-                      <div key={field}>
-                        <label style={S.lbl}>{label}</label>
-                        <input
-                          style={S.inp}
-                          value={value[field] || ""}
-                          type={field.toLowerCase().includes("key") || field.toLowerCase().includes("token") ? "password" : "text"}
-                          onChange={(e) => updateProvider(provider.id, { [field]: e.target.value })}
-                          placeholder={label}
-                        />
-                      </div>
-                    ))}
-
-                    <div>
-                      <label style={S.lbl}>Mode</label>
-                      <select
-                        style={S.sel}
-                        value={value.mode || "manual"}
-                        onChange={(e) => updateProvider(provider.id, { mode: e.target.value })}
-                      >
-                        <option value="manual">Manual preparation</option>
-                        <option value="import">Import only</option>
-                        <option value="publish">Publish only</option>
-                        <option value="sync">Two-way sync</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {PLANNED_PROVIDERS.map(([name, description]) => (
+            <div key={name} className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm"><CalendarDays size={19} /></span>
+                <span className="rounded-full bg-slate-200 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-slate-600">Planned</span>
               </div>
-            );
-          })}
+              <h3 className="mt-4 text-base font-black text-slate-950">{name}</h3>
+              <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">{description}</p>
+            </div>
+          ))}
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, paddingTop: 14, borderTop: "1px solid #e2e8f0" }}>
-          <button style={S.btn(club.primary)} onClick={() => saveTab("integrations")}>
-            Save Integrations
-          </button>
-          {savedTab === "integrations" && <span style={{ color: club.primary, fontSize: 12, fontWeight: 800 }}>Saved</span>}
-        </div>
-      </div>
+      </SettingsPanel>
     </div>
   );
 }

@@ -24,7 +24,7 @@ const toneMap = {
   },
 };
 
-export default function DashboardStatusStrip({ items = [], actionsMenu = null, scope = "weekend", onScopeChange }) {
+export default function DashboardStatusStrip({ items = [], actionsMenu = null, scope = "weekend", onScopeChange, midweekEnabled = true }) {
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
       <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -41,9 +41,9 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null, s
           {onScopeChange ? (
             <div className="flex rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200" aria-label="Mission Control scope">
               {[
-                { key: "matchweek", label: "Week" },
+                ...(midweekEnabled ? [{ key: "matchweek", label: "Week" }] : []),
                 { key: "weekend", label: "W/end" },
-                { key: "midweek", label: "Mid" },
+                ...(midweekEnabled ? [{ key: "midweek", label: "Mid" }] : []),
                 { key: "saturday", label: "Sat" },
                 { key: "sunday", label: "Sun" },
               ].map((option) => (

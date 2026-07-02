@@ -1,97 +1,100 @@
 import React from "react";
-import { isSupaConfigured, DB } from "../../lib/supabase.js";
+import { CheckCircle2, CloudOff, Database, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import { DB, isSupaConfigured } from "../../lib/supabase.js";
 
-export default function SupabaseStatusBar({
-  S,
-  RE,
-  AM,
-  club,
-  dbStatus,
-  setDbStatus,
-  setHistory,
-}) {
+const STATUS = {
+  connected: {
+    label: "Cloud sync connected",
+    detail: "Club configuration and operational data can sync across devices.",
+    wrap: "border-emerald-200 bg-emerald-50",
+    icon: CheckCircle2,
+    iconClass: "text-emerald-600",
+    textClass: "text-emerald-950",
+  },
+  saving: {
+    label: "Saving changes",
+    detail: "Ground Control is updating the shared workspace.",
+    wrap: "border-blue-200 bg-blue-50",
+    icon: LoaderCircle,
+    iconClass: "animate-spin text-blue-600",
+    textClass: "text-blue-950",
+  },
+  loading: {
+    label: "Refreshing workspace",
+    detail: "Ground Control is loading the latest saved configuration.",
+    wrap: "border-blue-200 bg-blue-50",
+    icon: LoaderCircle,
+    iconClass: "animate-spin text-blue-600",
+    textClass: "text-blue-950",
+  },
+  connecting: {
+    label: "Connecting",
+    detail: "Ground Control is establishing a secure data connection.",
+    wrap: "border-blue-200 bg-blue-50",
+    icon: LoaderCircle,
+    iconClass: "animate-spin text-blue-600",
+    textClass: "text-blue-950",
+  },
+  error: {
+    label: "Cloud sync needs attention",
+    detail: "Local storage is still active. Review the database configuration before launch.",
+    wrap: "border-rose-200 bg-rose-50",
+    icon: TriangleAlert,
+    iconClass: "text-rose-600",
+    textClass: "text-rose-950",
+  },
+  disabled: {
+    label: "Cloud sync not configured",
+    detail: "This workspace is currently using local browser storage only.",
+    wrap: "border-amber-200 bg-amber-50",
+    icon: CloudOff,
+    iconClass: "text-amber-700",
+    textClass: "text-amber-950",
+  },
+};
+
+export default function SupabaseStatusBar({ dbStatus = "disabled", setDbStatus, setHistory }) {
+  const config = STATUS[dbStatus] || STATUS.disabled;
+  const Icon = config.icon || Database;
+
+  const refresh = async () => {
+    if (!isSupaConfigured()) {
+      setDbStatus?.("disabled");
+      return;
+    }
+
+    setDbStatus?.("loading");
+    const data = await DB.loadHistory();
+
+    if (data) {
+      setHistory?.(data);
+      setDbStatus?.("connected");
+    } else {
+      setDbStatus?.("error");
+    }
+  };
+
   return (
-    <div style={{ ...S.card, marginBottom: 14 }} className="np">
-      <div style={S.cb}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background:
-                  dbStatus === "connected"
-                    ? club.primary
-                    : dbStatus === "error"
-                    ? RE
-                    : dbStatus === "disabled"
-                    ? "#aaa"
-                    : AM,
-                flexShrink: 0,
-              }}
-            />
-
-            <span style={{ fontSize: 12, fontWeight: 600 }}>
-              Supabase:{" "}
-              {dbStatus === "connected"
-                ? "Connected"
-                : dbStatus === "error"
-                ? "Error - check key in Settings"
-                : dbStatus === "disabled"
-                ? "Not configured - paste key in Settings"
-                : dbStatus === "saving"
-                ? "Saving..."
-                : "Connecting..."}
-            </span>
-          </div>
-
-          {dbStatus === "disabled" && (
-            <span style={{ fontSize: 11, color: "#888" }}>
-              Paste your Supabase anon key in Settings - Supabase DB to sync across devices
-            </span>
-          )}
-
-          {dbStatus === "connected" && (
-            <span style={{ fontSize: 11, color: club.primary }}>
-              History, refs and team config synced across all devices
-            </span>
-          )}
-
-          {dbStatus === "error" && (
-            <span style={{ fontSize: 11, color: RE }}>
-              Using local storage - check anon key in Settings - Supabase DB
-            </span>
-          )}
-
-          <button
-            style={{
-              ...S.btn(club.primary),
-              padding: "4px 12px",
-              fontSize: 11,
-              marginLeft: "auto",
-            }}
-            onClick={async () => {
-              if (!isSupaConfigured()) {
-                alert("Supabase not configured - update SUPA_KEY in the code.");
-                return;
-              }
-
-              setDbStatus("loading");
-              const data = await DB.loadHistory();
-
-              if (data) {
-                setHistory(data);
-                setDbStatus("connected");
-              } else {
-                setDbStatus("error");
-              }
-            }}
-          >
-            Refresh from Supabase
-          </button>
+    <div className={`flex flex-col gap-4 rounded-[22px] border p-4 sm:flex-row sm:items-center sm:justify-between ${config.wrap}`}>
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-black/[0.04]">
+          <Icon size={21} className={config.iconClass} strokeWidth={2.4} />
+        </span>
+        <div className="min-w-0">
+          <div className={`text-sm font-black ${config.textClass}`}>{config.label}</div>
+          <div className="mt-1 text-sm font-semibold leading-5 text-slate-600">{config.detail}</div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={refresh}
+        disabled={["loading", "saving", "connecting"].includes(dbStatus)}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/80 bg-white px-4 text-xs font-black text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <RefreshCw size={15} />
+        Refresh status
+      </button>
     </div>
   );
 }

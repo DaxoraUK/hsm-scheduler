@@ -31,6 +31,7 @@ export default function ProductShell({
   midweekHasRun,
   readiness,
   midweekReadiness,
+  midweekEnabled = true,
   authSession,
   onSignOut,
 }) {
@@ -53,7 +54,7 @@ export default function ProductShell({
     ? sunFinal.filter((game) => game.status !== "postponed").length
     : 0;
 
-  const midweekCount = midweekHasRun
+  const midweekCount = midweekEnabled && midweekHasRun
     ? midweekFinal.filter((game) => game.status !== "postponed").length
     : 0;
 
@@ -134,7 +135,7 @@ export default function ProductShell({
                   {getMatchdayScopeLabel(matchdayScope)} view
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className={`mt-4 grid gap-2 ${midweekEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
                   <div className="rounded-2xl bg-white/[0.04] p-2.5">
                     <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
                       Saturday
@@ -153,14 +154,16 @@ export default function ProductShell({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-white/[0.04] p-2.5">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
-                      Midweek
+                  {midweekEnabled ? (
+                    <div className="rounded-2xl bg-white/[0.04] p-2.5">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
+                        Midweek
+                      </div>
+                      <div className="mt-1 text-lg font-black text-white">
+                        {midweekCount}
+                      </div>
                     </div>
-                    <div className="mt-1 text-lg font-black text-white">
-                      {midweekCount}
-                    </div>
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">

@@ -1,109 +1,89 @@
 import React from "react";
+import {
+  Building2,
+  CalendarClock,
+  Database,
+  Gauge,
+  History,
+  LayoutGrid,
+  MapPinned,
+  PlugZap,
+  ShieldCheck,
+  TestTube2,
+  Trophy,
+  UsersRound,
+} from "lucide-react";
 
 const TAB_GROUPS = [
   {
-    label: "Centre",
-    tabs: [["overview", "Overview"]],
-  },
-  {
-    label: "Club",
+    label: "Workspace",
     tabs: [
-      ["club", "Club"],
-      ["venues", "Venues"],
-      ["teams", "Teams"],
-      ["timing", "Timing"],
+      ["overview", "Overview", LayoutGrid],
+      ["workspace", "Workspace", Gauge],
     ],
   },
   {
-    label: "Resources",
+    label: "Club setup",
     tabs: [
-      ["pitches", "Pitches"],
-      ["refs", "Referees"],
-      ["closures", "Closures"],
+      ["club", "Club profile", Building2],
+      ["venues", "Venues & sites", MapPinned],
+      ["timing", "Scheduling rules", CalendarClock],
     ],
   },
   {
-    label: "Platform",
+    label: "Matchday setup",
     tabs: [
-      ["integrations", "Integrations"],
-      ["history", "History"],
-      ["stats", "Stats"],
-      ["analytics", "Analytics"],
-      ["sheets", "Supabase"],
-      ["testdata", "Test Data"],
+      ["teams", "Teams", UsersRound],
+      ["pitches", "Pitches", Trophy],
+      ["refs", "Officials", ShieldCheck],
+    ],
+  },
+  {
+    label: "Connections & data",
+    tabs: [
+      ["integrations", "Fixture sources", PlugZap],
+      ["history", "Matchweek history", History],
+      ["data", "Data & backups", Database],
+      ["testdata", "Developer tools", TestTube2],
     ],
   },
 ];
 
-export default function SettingsTabs({ club, WH, settingsTab, setSettingsTab, productionMode }) {
+export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode }) {
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
     tabs: group.tabs.filter(([key]) => !(productionMode && key === "testdata")),
   })).filter((group) => group.tabs.length);
 
   return (
-    <div
-      className="np"
-      style={{
-        border: "1px solid #e2e8f0",
-        borderRadius: 22,
-        background: "#fff",
-        padding: 12,
-        marginBottom: 14,
-        boxShadow: "0 10px 28px rgba(15,23,42,0.06)",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
-          gap: 10,
-        }}
-      >
+    <nav className="rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm" aria-label="Settings sections">
+      <div className="space-y-5">
         {groups.map((group) => (
-          <div key={group.label}>
-            <div
-              style={{
-                color: "#94a3b8",
-                fontSize: 10,
-                fontWeight: 900,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-                margin: "0 0 7px 4px",
-              }}
-            >
-              {group.label}
-            </div>
-
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {group.tabs.map(([key, label]) => {
+          <section key={group.label}>
+            <div className="px-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{group.label}</div>
+            <div className="mt-2 grid gap-1 sm:grid-cols-2 xl:grid-cols-1">
+              {group.tabs.map(([key, label, Icon]) => {
                 const active = settingsTab === key;
-
                 return (
                   <button
                     key={key}
+                    type="button"
                     onClick={() => setSettingsTab(key)}
-                    style={{
-                      background: active ? club.primary : "#f8fafc",
-                      color: active ? WH : "#475569",
-                      border: active ? `1px solid ${club.primary}` : "1px solid #e2e8f0",
-                      borderRadius: 999,
-                      padding: "7px 12px",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      fontWeight: active ? 900 : 750,
-                      transition: "all 0.15s ease",
-                      whiteSpace: "nowrap",
-                    }}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-sm font-black transition ${
+                      active ? "bg-slate-950 text-white shadow-lg shadow-slate-950/10" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                    }`}
                   >
-                    {label}
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${active ? "bg-emerald-400/15 text-emerald-300" : "bg-slate-100 text-slate-400"}`}>
+                      <Icon size={18} strokeWidth={2.4} />
+                    </span>
+                    <span className="min-w-0 truncate">{label}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </section>
         ))}
       </div>
-    </div>
+    </nav>
   );
 }

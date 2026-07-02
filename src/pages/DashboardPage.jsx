@@ -53,6 +53,7 @@ export default function DashboardPage({
   midweekUnresolved = [],
   midweekConflicts = [],
   closedPitches = [],
+  midweekEnabled = true,
 }) {
   const matchdayScopeContext = useMatchdayScope();
   const matchdayScope = normaliseMatchdayScope(matchdayScopeProp || matchdayScopeContext.scope);
@@ -325,6 +326,7 @@ export default function DashboardPage({
         satCount={satHasRun ? satActive.length : 0}
         sunCount={sunHasRun ? sunActive.length : 0}
         midweekCount={midweekHasRun ? midweekActive.length : 0}
+        midweekEnabled={midweekEnabled}
         completedSteps={completedSteps}
         totalSteps={workflowSteps.length}
         nextAction={nextAction}
@@ -337,6 +339,7 @@ export default function DashboardPage({
         actionsMenu={commandMenu}
         scope={matchdayScope}
         onScopeChange={setMatchdayScope}
+        midweekEnabled={midweekEnabled}
         items={[
           {
             label: "Ground",

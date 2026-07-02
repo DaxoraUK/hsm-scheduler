@@ -468,15 +468,21 @@ function CoverageBars({ weekly }) {
   );
 }
 
-export default function AnalyticsVisualDashboard(props) {
+export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...props }) {
   const [period, setPeriod] = useState("all");
   const [matchday, setMatchday] = useState("all");
   const [day, setDay] = useState("matchweek");
   const [openPanels, setOpenPanels] = useState(() => new Set());
 
+  const dayOptions = midweekEnabled
+    ? DAY_OPTIONS
+    : DAY_OPTIONS.filter((option) => !["matchweek", "midweek"].includes(option.value));
+
+  const effectiveDay = !midweekEnabled && ["matchweek", "midweek"].includes(day) ? "weekend" : day;
+
   const model = useMemo(
-    () => buildAnalyticsVisualisationModel({ ...props, period, matchday, day }),
-    [props, period, matchday, day]
+    () => buildAnalyticsVisualisationModel({ ...props, period, matchday, day: effectiveDay }),
+    [props, period, matchday, effectiveDay]
   );
 
   const togglePanel = (id) => {
@@ -524,8 +530,8 @@ export default function AnalyticsVisualDashboard(props) {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectControl>
-          <SelectControl label="Matchday scope" value={day} onChange={setDay}>
-            {DAY_OPTIONS.map((option) => (
+          <SelectControl label="Matchday scope" value={effectiveDay} onChange={setDay}>
+            {dayOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectControl>

@@ -35,13 +35,13 @@ const typeIcons = {
 
 export default function OperationsTimelinePage({
   club,
-  fixtureDays = [],
   satFinal = [],
   sunFinal = [],
   midweekFinal = [],
   satHasRun = false,
   sunHasRun = false,
   midweekHasRun = false,
+  midweekEnabled = true,
   satDate = "",
   sunDate = "",
   midweekDate = "",
@@ -54,7 +54,6 @@ export default function OperationsTimelinePage({
   const timeline = useMemo(
     () =>
       buildOperationsTimeline({
-        fixtureDays,
         saturdayGames: satFinal,
         sundayGames: sunFinal,
         midweekGames: midweekFinal,
@@ -71,7 +70,7 @@ export default function OperationsTimelinePage({
         sunHasRun,
         midweekHasRun,
       }),
-    [fixtureDays, satFinal, sunFinal, midweekFinal, satDate, sunDate, midweekDate, midweekDateLabel, club, carCap, refs, refWarnings, closedPitches, satHasRun, sunHasRun, midweekHasRun]
+    [satFinal, sunFinal, midweekFinal, satDate, sunDate, midweekDate, midweekDateLabel, club, carCap, refs, refWarnings, closedPitches, satHasRun, sunHasRun, midweekHasRun]
   );
 
   const primary = club?.primary || "#10b981";
@@ -113,7 +112,9 @@ export default function OperationsTimelinePage({
 
       {!timeline.hasFixtures && (
         <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-800">
-          Build a Saturday, Sunday or Midweek schedule first. The operational timeline will fill automatically from live fixtures and matchday intelligence.
+          {midweekEnabled
+            ? "Build a Saturday, Sunday or Midweek schedule first. The operational timeline will fill automatically from live fixtures and matchday intelligence."
+            : "Build a Saturday or Sunday schedule first. The operational timeline will fill automatically from live fixtures and matchday intelligence."}
         </div>
       )}
 
@@ -185,7 +186,7 @@ export default function OperationsTimelinePage({
             <div className="mt-4 space-y-3">
               <TotalRow label="Saturday fixtures" value={timeline.summary.saturday} />
               <TotalRow label="Sunday fixtures" value={timeline.summary.sunday} />
-              <TotalRow label="Midweek fixtures" value={timeline.summary.midweek} />
+              {midweekEnabled ? <TotalRow label="Midweek fixtures" value={timeline.summary.midweek} /> : null}
               <TotalRow label="Estimated cars" value={timeline.summary.parking} />
               <TotalRow label="Officials listed" value={timeline.summary.officials} />
             </div>

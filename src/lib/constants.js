@@ -32,6 +32,9 @@ export const DEFAULT_CLUB = {
   logo: "",
   carParkSpaces: 57,
   maxConcurrent: 3,
+  features: {
+    midweekEnabled: true,
+  },
   avgCars: {"3v3":8,"5v5":12,"7v7":16,"9v9":20,"11v11-youth":28,"11v11-small":28,"11v11":36},
 };
 

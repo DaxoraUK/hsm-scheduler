@@ -220,6 +220,7 @@ export default function OperationsCentrePage({
   satHasRun = false,
   sunHasRun = false,
   midweekHasRun = false,
+  midweekEnabled = true,
   satUnresolved = [],
   sunUnresolved = [],
   midweekUnresolved = [],
@@ -254,6 +255,12 @@ export default function OperationsCentrePage({
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!midweekEnabled && [MATCHDAY_SCOPES.MATCHWEEK, MATCHDAY_SCOPES.MIDWEEK].includes(scope)) {
+      setScope(MATCHDAY_SCOPES.WEEKEND);
+    }
+  }, [midweekEnabled, scope]);
 
   useEffect(() => {
     const completed = checks.reduce((map, item) => ({ ...map, [item.id]: item.complete }), {});
@@ -436,9 +443,9 @@ export default function OperationsCentrePage({
           <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="inline-flex w-full rounded-2xl border border-white/10 bg-black/20 p-1 sm:w-auto">
               {[
-                [MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"],
+                ...(midweekEnabled ? [[MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"]] : []),
                 [MATCHDAY_SCOPES.WEEKEND, "Weekend"],
-                [MATCHDAY_SCOPES.MIDWEEK, "Midweek"],
+                ...(midweekEnabled ? [[MATCHDAY_SCOPES.MIDWEEK, "Midweek"]] : []),
                 [MATCHDAY_SCOPES.SATURDAY, "Saturday"],
                 [MATCHDAY_SCOPES.SUNDAY, "Sunday"],
               ].map(([value, label]) => (

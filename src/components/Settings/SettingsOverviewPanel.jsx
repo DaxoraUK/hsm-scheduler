@@ -1,335 +1,235 @@
 import React from "react";
+import {
+  ArrowRight,
+  Building2,
+  CalendarClock,
+  CheckCircle2,
+  CircleAlert,
+  Database,
+  Gauge,
+  MapPinned,
+  PlugZap,
+  ShieldCheck,
+  Trophy,
+  UsersRound,
+} from "lucide-react";
+import { isMidweekEnabled } from "../../lib/settings/workspaceSettings.js";
 
-function normalise(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function isAdultTeam(team = {}) {
-  const explicitType = normalise(team.teamType || team.type || team.category);
-
-  if (["adult", "open-age", "open age", "senior", "seniors", "veteran", "veterans"].includes(explicitType)) {
-    return true;
-  }
-
-  if (["youth", "junior", "juniors", "mini", "minis"].includes(explicitType)) {
-    return false;
-  }
-
-  const name = normalise(team.name || team.teamName || team.label);
-
-  if (/\bu\s?\d{1,2}\b/.test(name)) return false;
-
-  return (
-    name.includes("1st team") ||
-    name.includes("first team") ||
-    name.includes("reserves") ||
-    name.includes("reserve") ||
-    name.includes("sunday 1sts") ||
-    name.includes("sunday first") ||
-    name.includes("open age") ||
-    name.includes("open-age") ||
-    name.includes("adult") ||
-    name.includes("senior") ||
-    name.includes("veteran") ||
-    name.includes("vets")
-  );
-}
-
-function MetricChip({ label, value, tone = "neutral" }) {
-  const tones = {
-    neutral: { bg: "#f8fafc", border: "#e2e8f0", label: "#64748b", value: "#0f172a" },
-    green: { bg: "#ecfdf5", border: "#bbf7d0", label: "#047857", value: "#065f46" },
-    blue: { bg: "#eff6ff", border: "#bfdbfe", label: "#2563eb", value: "#1e3a8a" },
-    purple: { bg: "#faf5ff", border: "#e9d5ff", label: "#7e22ce", value: "#581c87" },
-    amber: { bg: "#fffbeb", border: "#fde68a", label: "#b45309", value: "#92400e" },
-    red: { bg: "#fef2f2", border: "#fecaca", label: "#dc2626", value: "#991b1b" },
-    slate: { bg: "#f1f5f9", border: "#cbd5e1", label: "#475569", value: "#0f172a" },
+function SetupCard({ icon: Icon, eyebrow, title, description, status, tone = "ready", metrics = [], onClick }) {
+  const toneClasses = {
+    ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    attention: "border-amber-200 bg-amber-50 text-amber-800",
+    neutral: "border-slate-200 bg-slate-50 text-slate-600",
   };
 
-  const t = tones[tone] || tones.neutral;
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        borderRadius: 999,
-        border: `1px solid ${t.border}`,
-        background: t.bg,
-        padding: "7px 10px",
-        boxShadow: "0 1px 0 rgba(15,23,42,0.03)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span
-        style={{
-          color: t.label,
-          fontSize: 10,
-          fontWeight: 900,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ color: t.value, fontSize: 12, fontWeight: 950 }}>{value}</span>
-    </span>
-  );
-}
-
-function StatusBadge({ children, tone = "green" }) {
-  const tones = {
-    green: { bg: "#ecfdf5", border: "#bbf7d0", colour: "#047857" },
-    blue: { bg: "#eff6ff", border: "#bfdbfe", colour: "#2563eb" },
-    purple: { bg: "#faf5ff", border: "#e9d5ff", colour: "#7e22ce" },
-    amber: { bg: "#fffbeb", border: "#fde68a", colour: "#b45309" },
-    slate: { bg: "#f8fafc", border: "#e2e8f0", colour: "#475569" },
-  };
-  const t = tones[tone] || tones.green;
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 999,
-        border: `1px solid ${t.border}`,
-        background: t.bg,
-        color: t.colour,
-        padding: "6px 10px",
-        fontSize: 11,
-        fontWeight: 950,
-        whiteSpace: "nowrap",
-        lineHeight: 1,
-        flex: "0 0 auto",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function SettingsCard({ title, eyebrow, description, status, statusTone, metrics, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{
-        textAlign: "left",
-        border: "1px solid #e2e8f0",
-        borderRadius: 24,
-        background: "#fff",
-        padding: 22,
-        cursor: "pointer",
-        boxShadow: "0 14px 34px rgba(15,23,42,0.06)",
-        transition: "transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease",
-        minHeight: 212,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        gap: 18,
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = "0 20px 44px rgba(15,23,42,0.10)";
-        e.currentTarget.style.borderColor = "#cbd5e1";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = "0 14px 34px rgba(15,23,42,0.06)";
-        e.currentTarget.style.borderColor = "#e2e8f0";
-      }}
+      className="group flex min-h-[220px] flex-col justify-between rounded-[26px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-950/[0.06]"
     >
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                color: "#94a3b8",
-                fontSize: 11,
-                fontWeight: 950,
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              {eyebrow}
-            </div>
-            <div style={{ color: "#0f172a", fontSize: 22, lineHeight: 1.12, fontWeight: 950 }}>{title}</div>
-          </div>
-          <StatusBadge tone={statusTone}>{status}</StatusBadge>
+        <div className="flex items-start justify-between gap-4">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-emerald-300">
+            <Icon size={21} strokeWidth={2.4} />
+          </span>
+          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${toneClasses[tone] || toneClasses.neutral}`}>
+            {status}
+          </span>
         </div>
-
-        <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.52, margin: "16px 0 0" }}>{description}</p>
+        <div className="mt-5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</div>
+        <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{title}</h3>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{description}</p>
       </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{metrics}</div>
+      <div className="mt-5 flex items-end justify-between gap-4">
+        <div className="flex flex-wrap gap-2">
+          {metrics.map((metric) => (
+            <span key={`${metric.label}-${metric.value}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+              {metric.label}: {metric.value}
+            </span>
+          ))}
+        </div>
+        <ArrowRight size={18} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600" />
+      </div>
     </button>
   );
 }
 
 export default function SettingsOverviewPanel({
-  S,
-  club,
+  club = {},
   teamCfg = [],
   pitchCfg = [],
   refs = [],
   productionMode,
+  dbStatus,
   setSettingsTab,
-  savedTab,
+  startHour,
+  startMin,
+  endHour,
+  endMin,
 }) {
-  const adultTeams = teamCfg.filter(isAdultTeam).length;
-  const youthTeams = Math.max(0, teamCfg.length - adultTeams);
-  const closedPitchCount = pitchCfg.filter((pitch) => pitch.closed || pitch.isClosed).length;
-  const integrationCount = Object.values(club.integrations || {}).filter((integration) => integration?.enabled).length;
-  const siteCount = Array.isArray(club.sites) && club.sites.length ? club.sites.length : 1;
-  const weatherLocation = club.weatherPostcode || club.postcode || "Missing";
+  const sites = Array.isArray(club.sites) && club.sites.length ? club.sites : club.venue ? [{ venue: club.venue, postcode: club.postcode }] : [];
+  const primarySite = sites.find((site) => site.isPrimary) || sites[0];
+  const integrations = Object.values(club.integrations || {}).filter((integration) => integration?.enabled).length;
+  const midweekEnabled = isMidweekEnabled(club);
+  const hasVenue = Boolean(primarySite?.venue || primarySite?.name || club.venue);
+  const hasPostcode = Boolean(primarySite?.postcode || club.postcode || club.weatherPostcode);
+  const hasScheduling = Number.isFinite(Number(startHour)) && Number.isFinite(Number(endHour));
+
+  const checks = [
+    Boolean(club.name && club.sport),
+    hasVenue && hasPostcode,
+    teamCfg.length > 0,
+    pitchCfg.length > 0,
+    hasScheduling,
+    productionMode,
+    dbStatus === "connected",
+  ];
+  const completed = checks.filter(Boolean).length;
+  const readiness = Math.round((completed / checks.length) * 100);
+  const ready = readiness === 100;
 
   return (
-    <div className="np" style={{ display: "grid", gap: 22 }}>
-      <div
-        style={{
-          ...S.card,
-          padding: 0,
-          overflow: "hidden",
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 18px 48px rgba(15,23,42,0.08)",
-        }}
-      >
-        <div
-          style={{
-            padding: "26px 28px",
-            background: `linear-gradient(135deg, ${club.primary || "#1A5C38"}, #0f172a)`,
-            color: "#fff",
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 950, letterSpacing: "0.22em", textTransform: "uppercase", opacity: 0.82 }}>
-            Settings Centre
+    <div className="space-y-5">
+      <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-xl sm:p-7">
+        <div className="absolute -right-24 -top-28 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
+              <Gauge size={14} /> Configuration centre
+            </div>
+            <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight sm:text-4xl">Set the club up once. Let every workspace use the same truth.</h2>
+            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300 sm:text-base">
+              Ground Control now separates club setup, matchday resources, operating rules and data controls. Reporting and pitch closures live in their operational workspaces, not here.
+            </p>
           </div>
-          <div style={{ marginTop: 8, fontSize: 32, lineHeight: 1.05, fontWeight: 950 }}>
-            Configure Ground Control from one place
-          </div>
-          <div style={{ marginTop: 12, maxWidth: 850, color: "rgba(255,255,255,0.80)", fontSize: 14, lineHeight: 1.55 }}>
-            Club defaults, teams, competition rules, resources, communications, integrations and data settings are grouped around how the platform operates.
+
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.07] p-5 backdrop-blur">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Launch readiness</div>
+                <div className="mt-2 text-4xl font-black">{readiness}%</div>
+              </div>
+              {ready ? <CheckCircle2 size={30} className="text-emerald-300" /> : <CircleAlert size={30} className="text-amber-300" />}
+            </div>
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/10">
+              <div className={`h-full rounded-full ${ready ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${readiness}%` }} />
+            </div>
+            <div className="mt-3 text-sm font-bold text-slate-300">{completed} of {checks.length} launch checks complete</div>
           </div>
         </div>
+      </section>
 
-        <div style={{ padding: 18, display: "flex", gap: 9, flexWrap: "wrap" }}>
-          <MetricChip label="Teams" value={teamCfg.length} tone="green" />
-          <MetricChip label="Youth" value={youthTeams} tone="blue" />
-          <MetricChip label="Adult" value={adultTeams} tone="purple" />
-          <MetricChip label="Sites" value={siteCount} tone={siteCount > 1 ? "blue" : "green"} />
-          <MetricChip label="Weather" value={weatherLocation} tone={weatherLocation === "Missing" ? "red" : "blue"} />
-          <MetricChip label="Pitches" value={pitchCfg.length} tone="green" />
-          <MetricChip label="Closed" value={closedPitchCount} tone={closedPitchCount ? "red" : "green"} />
-          <MetricChip label="Refs" value={refs.length} tone={refs.length ? "amber" : "slate"} />
-          <MetricChip label="Integrations" value={integrationCount} tone="slate" />
-          <MetricChip label="Mode" value={productionMode ? "Production" : "Development"} tone={productionMode ? "green" : "amber"} />
-        </div>
-      </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <SetupCard
+          icon={Gauge}
+          eyebrow="Workspace"
+          title="Modules & environment"
+          description="Choose whether Midweek is visible and keep development tools away from live club staff."
+          status={productionMode ? "Production" : "Development"}
+          tone={productionMode ? "ready" : "attention"}
+          metrics={[{ label: "Midweek", value: midweekEnabled ? "On" : "Off" }]}
+          onClick={() => setSettingsTab("workspace")}
+        />
 
-      {savedTab && (
-        <div
-          style={{
-            borderRadius: 16,
-            border: `1px solid ${(club.primary || "#1A5C38")}26`,
-            background: `${club.primary || "#1A5C38"}0d`,
-            color: club.primary || "#1A5C38",
-            padding: "10px 14px",
-            fontSize: 12,
-            fontWeight: 850,
-          }}
-        >
-          Saved {savedTab} settings.
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
-          gap: 18,
-        }}
-      >
-        <SettingsCard
-          title="Club Defaults"
-          eyebrow="Identity"
-          status="Core"
-          statusTone="green"
+        <SetupCard
+          icon={Building2}
+          eyebrow="Organisation"
+          title="Club profile"
+          description="Keep the core organisation name, sport and contact details accurate without mixing in venues or branding controls."
+          status={club.name && club.sport ? "Configured" : "Needs setup"}
+          tone={club.name && club.sport ? "ready" : "attention"}
+          metrics={[{ label: "Sport", value: club.sport || "Missing" }]}
           onClick={() => setSettingsTab("club")}
-          description="Club name, venues, site postcodes, sport, branding, parking assumptions and production mode."
-          metrics={
-            <>
-              <MetricChip label="Sites" value={siteCount} tone={siteCount > 1 ? "blue" : "green"} />
-              <MetricChip label="Weather" value={weatherLocation} tone={weatherLocation === "Missing" ? "red" : "blue"} />
-              <MetricChip label="Sport" value={club.sport || "Unset"} tone="blue" />
-            </>
-          }
         />
 
-        <SettingsCard
-          title="Teams & Competition"
-          eyebrow="Rules"
-          status="Source"
-          statusTone="blue"
+        <SetupCard
+          icon={MapPinned}
+          eyebrow="Locations"
+          title="Venues & parking"
+          description="Manage every site, postcode, parking capacity and weather location from one dedicated view."
+          status={hasVenue && hasPostcode ? "Configured" : "Needs setup"}
+          tone={hasVenue && hasPostcode ? "ready" : "attention"}
+          metrics={[
+            { label: "Sites", value: sites.length },
+            { label: "Postcode", value: hasPostcode ? "Set" : "Missing" },
+          ]}
+          onClick={() => setSettingsTab("venues")}
+        />
+
+        <SetupCard
+          icon={UsersRound}
+          eyebrow="People"
+          title="Teams & officials"
+          description="Maintain the operational people and teams used by scheduling, communications and intelligence."
+          status={teamCfg.length ? "Configured" : "Needs setup"}
+          tone={teamCfg.length ? "ready" : "attention"}
+          metrics={[
+            { label: "Teams", value: teamCfg.length },
+            { label: "Officials", value: refs.length },
+          ]}
           onClick={() => setSettingsTab("teams")}
-          description="Team type, format, match duration, preferred pitches and competition rules that feed the scheduler and rules engines."
-          metrics={
-            <>
-              <MetricChip label="Youth" value={youthTeams} tone="blue" />
-              <MetricChip label="Adult" value={adultTeams} tone="purple" />
-            </>
-          }
         />
 
-        <SettingsCard
-          title="Resources"
-          eyebrow="Ground Ops"
-          status="Operational"
-          statusTone="green"
+        <SetupCard
+          icon={Trophy}
+          eyebrow="Resources"
+          title="Pitches & suitability"
+          description="Keep formats, surfaces, site assignments and shared-pitch relationships in one registry."
+          status={pitchCfg.length ? "Configured" : "Needs setup"}
+          tone={pitchCfg.length ? "ready" : "attention"}
+          metrics={[
+            { label: "Pitches", value: pitchCfg.length },
+            { label: "Max games", value: club.maxConcurrent || "Unset" },
+          ]}
           onClick={() => setSettingsTab("pitches")}
-          description="Pitches, sites, pitch closures, artificial surface rules, referees and physical operating constraints."
-          metrics={
-            <>
-              <MetricChip label="Sites" value={siteCount} tone={siteCount > 1 ? "blue" : "green"} />
-              <MetricChip label="Pitches" value={pitchCfg.length} tone="green" />
-              <MetricChip label="Closed" value={closedPitchCount} tone={closedPitchCount ? "red" : "green"} />
-            </>
-          }
         />
 
-        <SettingsCard
-          title="Integrations"
+        <SetupCard
+          icon={CalendarClock}
+          eyebrow="Rules"
+          title="Scheduling controls"
+          description="Review the weekend operating window, changeover buffers and concurrent-game limit."
+          status={hasScheduling ? "Configured" : "Needs setup"}
+          tone={hasScheduling ? "ready" : "attention"}
+          metrics={[{ label: "Window", value: `${String(startHour ?? 8).padStart(2, "0")}:${String(startMin ?? 30).padStart(2, "0")}–${String(endHour ?? 11).padStart(2, "0")}:${String(endMin ?? 30).padStart(2, "0")}` }]}
+          onClick={() => setSettingsTab("timing")}
+        />
+
+        <SetupCard
+          icon={PlugZap}
           eyebrow="Connections"
-          status="Foundation"
-          statusTone="slate"
+          title="Fixture sources"
+          description="Configure live fixture sources only. Planned integrations stay visible without pretending to be available."
+          status={integrations ? `${integrations} enabled` : "Not configured"}
+          tone={integrations ? "ready" : "neutral"}
+          metrics={[{ label: "Active", value: integrations }]}
           onClick={() => setSettingsTab("integrations")}
-          description="Prepare Full-Time FA, TeamFeePay, Pitchero, Spond and calendar connections without live API calls yet."
-          metrics={
-            <>
-              <MetricChip label="Enabled" value={integrationCount} tone="slate" />
-              <MetricChip label="Providers" value="5" tone="purple" />
-            </>
-          }
         />
 
-        <SettingsCard
-          title="Data & Intelligence"
-          eyebrow="Platform"
-          status="Admin"
-          statusTone="amber"
-          onClick={() => setSettingsTab("analytics")}
-          description="Analytics, history, Supabase, test data and reporting behaviour for the wider product."
-          metrics={
-            <>
-              <MetricChip label="History" value="Ready" tone="amber" />
-              <MetricChip label="Database" value="Supabase" tone="green" />
-            </>
-          }
+        <SetupCard
+          icon={Database}
+          eyebrow="Data"
+          title="Sync & backups"
+          description="Check cloud status and export a portable club configuration backup before launch."
+          status={dbStatus === "connected" ? "Connected" : "Needs attention"}
+          tone={dbStatus === "connected" ? "ready" : "attention"}
+          metrics={[{ label: "Storage", value: dbStatus === "connected" ? "Cloud" : "Local" }]}
+          onClick={() => setSettingsTab("data")}
         />
-      </div>
+      </section>
+
+      <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700"><ShieldCheck size={21} /></span>
+          <div>
+            <h3 className="text-lg font-black text-slate-950">What no longer belongs in Settings</h3>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+              Analytics and statistics stay in Analytics. Pitch closures stay in Operations, where matchday decisions are made. Product colours and club-logo uploads are removed so Ground Control keeps one consistent interface.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

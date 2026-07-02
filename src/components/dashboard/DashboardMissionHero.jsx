@@ -14,6 +14,7 @@ export default function DashboardMissionHero({
   satCount = 0,
   sunCount = 0,
   midweekCount = 0,
+  midweekEnabled = true,
   completedSteps = 0,
   totalSteps = 6,
   nextAction,
@@ -142,12 +143,12 @@ export default function DashboardMissionHero({
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className={`mt-4 grid grid-cols-2 gap-2 ${midweekEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <MiniStat label="Saturday" value={satCount} />
             <MiniStat label="Sunday" value={sunCount} />
-            <MiniStat label="Midweek" value={midweekCount} />
+            {midweekEnabled ? <MiniStat label="Midweek" value={midweekCount} /> : null}
             <MiniStat label="Weather" value={weatherLocation ? "Ready" : "Set postcode"} />
-            <div className="col-span-1 h-full sm:col-span-2 [&>div]:h-full">
+            <div className={`h-full [&>div]:h-full ${midweekEnabled ? "col-span-1 sm:col-span-2" : "col-span-2"}`}>
               <MiniStat
                 label="Club"
                 value={club?.name || "Ground Control"}
