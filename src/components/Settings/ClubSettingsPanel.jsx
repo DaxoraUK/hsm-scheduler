@@ -2,7 +2,6 @@ import React from "react";
 import { Building2, Mail, Phone, UserRound } from "lucide-react";
 import {
   Field,
-  Notice,
   SaveBar,
   SettingsPanel,
   SettingsSectionHeader,
@@ -85,9 +84,6 @@ export default function ClubSettingsPanel({ club = {}, setClub, saveTab, savedTa
           </Field>
         </div>
 
-        <Notice tone="neutral">
-          Ground Control now uses one fixed product identity. Legacy colour pickers, logo uploads and preview controls have been removed from club settings.
-        </Notice>
 
         <SaveBar onSave={() => saveTab?.("club", { club })} saved={savedTab === "club"} label="Save contact details">
           Contact details are stored with the shared club profile.

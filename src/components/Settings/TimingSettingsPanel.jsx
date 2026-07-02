@@ -120,7 +120,7 @@ export default function TimingSettingsPanel({
           </div>
         </div>
 
-        <Notice tone="info">
+        <Notice tone="info" className="mt-5">
           Adult/open-age weekend fixtures continue to use the weekend adult rule. Midweek adult fixtures are unrestricted inside the selected Midweek operating window.
         </Notice>
 

@@ -11,7 +11,6 @@ function clearFixtureDayState(day = {}) {
 }
 
 export function useOperationsActions({
-  setClosedPitches,
   fixtureDayResetters = [],
   // Compatibility props for older callers.
   setSatScheduled,
@@ -22,17 +21,6 @@ export function useOperationsActions({
   setSatHasRun,
   setUseAstro,
 }) {
-  const toggleClosed = useCallback(
-    (pitchId) => {
-      setClosedPitches((previous) =>
-        previous.includes(pitchId)
-          ? previous.filter((id) => id !== pitchId)
-          : [...previous, pitchId]
-      );
-    },
-    [setClosedPitches]
-  );
-
   const resetAll = useCallback(() => {
     const resetters = fixtureDayResetters.length
       ? fixtureDayResetters
@@ -48,7 +36,8 @@ export function useOperationsActions({
         ];
 
     resetters.forEach(clearFixtureDayState);
-    setClosedPitches([]);
+    // Facility closures are persistent operational records and must not be
+    // cleared when a schedule is reset.
     setUseAstro(false);
   }, [
     fixtureDayResetters,
@@ -58,12 +47,8 @@ export function useOperationsActions({
     setSatManual,
     setSatFetchStatus,
     setSatHasRun,
-    setClosedPitches,
     setUseAstro,
   ]);
 
-  return {
-    toggleClosed,
-    resetAll,
-  };
+  return { resetAll };
 }

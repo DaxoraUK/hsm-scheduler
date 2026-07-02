@@ -4,6 +4,7 @@ import { sortPitches } from "../../lib/pitches.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
 import {
+  Field,
   Notice,
   PrimaryButton,
   SaveBar,
@@ -97,7 +98,9 @@ export default function TeamSettingsPanel({
   }, {});
 
   const updateTeam = (index, field, value) => {
-    setTeamCfg((current) => current.map((team, rowIndex) => rowIndex === index ? { ...team, [field]: value || null } : team));
+    setTeamCfg((current) => current.map((team, rowIndex) => (
+      rowIndex === index ? { ...team, [field]: value === "" ? null : value } : team
+    )));
   };
 
   const addTeam = () => setTeamCfg((current) => [...current, {
@@ -113,78 +116,118 @@ export default function TeamSettingsPanel({
   }]);
 
   return (
-    <div className="space-y-5">
-      <SettingsPanel>
-        <SettingsSectionHeader
-          icon={UsersRound}
-          eyebrow="Matchday setup"
-          title="Teams"
-          description="Team records feed format suitability, match duration, operating-day defaults and scheduling intelligence."
-          action={<PrimaryButton icon={Plus} onClick={addTeam}>Add team</PrimaryButton>}
+    <SettingsPanel>
+      <SettingsSectionHeader
+        icon={UsersRound}
+        eyebrow="Matchday setup"
+        title="Teams"
+        description="Team records feed format suitability, match duration, operating-day defaults and scheduling intelligence."
+        action={<PrimaryButton icon={Plus} onClick={addTeam}>Add team</PrimaryButton>}
+      />
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <StatTile label="Teams" value={teamCfg.length} tone="green" />
+        <StatTile label="Youth" value={counts.youth || 0} tone="blue" />
+        <StatTile label="Adult" value={counts.adult || 0} tone="violet" />
+        <StatTile label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
+        <StatTile label="Veterans" value={counts.veterans || 0} tone="slate" />
+      </div>
+
+      <div className="mt-5">
+        <SettingsDataActions
+          label="Teams"
+          rows={teamCfg}
+          columns={TEAM_COLUMNS}
+          filename="ground-control-teams"
+          templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, ageOrder: 7 }]}
+          normaliseRow={(row, index) => normaliseImportedTeam(row, index, primarySite?.id)}
+          onImport={(rows, mode) => setTeamCfg((current) => mode === "append" ? [...current, ...rows] : rows)}
         />
+      </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatTile label="Teams" value={teamCfg.length} tone="green" />
-          <StatTile label="Youth" value={counts.youth || 0} tone="blue" />
-          <StatTile label="Adult" value={counts.adult || 0} tone="violet" />
-          <StatTile label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
-          <StatTile label="Veterans" value={counts.veterans || 0} tone="slate" />
-        </div>
-
-        <div className="mt-5">
-          <SettingsDataActions
-            label="Teams"
-            rows={teamCfg}
-            columns={TEAM_COLUMNS}
-            filename="ground-control-teams"
-            templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, ageOrder: 7 }]}
-            normaliseRow={(row, index) => normaliseImportedTeam(row, index, primarySite?.id)}
-            onImport={(rows, mode) => setTeamCfg((current) => mode === "append" ? [...current, ...rows] : rows)}
-          />
-        </div>
-
+      <div className="mt-5">
         <Notice tone="info">
           Adult/open-age teams use adult rules. Midweek is available as a default day but only appears operationally when the Midweek workspace is enabled.
         </Notice>
+      </div>
 
-        <div className="mt-5 overflow-x-auto rounded-[22px] border border-slate-200">
-          <table className="min-w-[1120px] w-full border-collapse text-left">
-            <thead className="bg-slate-950 text-white">
-              <tr>
-                {['Team', 'Type', 'Format', 'Home site', 'Default pitch', 'Alternative', 'Day', 'Minutes', ''].map((heading) => (
-                  <th key={heading} className="px-3 py-3 text-[10px] font-black uppercase tracking-[0.15em]">{heading}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {teamCfg.map((team, index) => {
-                const homeSiteId = team.siteId || primarySite?.id || "";
-                const sitePitches = sortedPitches.filter((pitch) => (pitch.siteId || primarySite?.id) === homeSiteId);
-                const options = sitePitches.length ? sitePitches : sortedPitches;
-                return (
-                  <tr key={`${team.name}-${index}`} className="hover:bg-slate-50">
-                    <td className="p-2"><input className={`${inputClass} min-w-[170px]`} value={team.name || ""} onChange={(event) => updateTeam(index, "name", event.target.value)} /></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[120px]`} value={classifyFallback(team)} onChange={(event) => updateTeam(index, "teamType", event.target.value)}>{TEAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[135px]`} value={team.format || ""} onChange={(event) => updateTeam(index, "format", event.target.value)}>{FORMATS.map((format) => <option key={format}>{format}</option>)}</select></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[150px]`} value={homeSiteId} onChange={(event) => updateTeam(index, "siteId", event.target.value)}>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}</select></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[135px]`} value={team.defaultPitch || ""} onChange={(event) => updateTeam(index, "defaultPitch", event.target.value)}><option value="">Unassigned</option>{options.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}</select></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[135px]`} value={team.altPitch || ""} onChange={(event) => updateTeam(index, "altPitch", event.target.value)}><option value="">None</option>{options.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}</select></td>
-                    <td className="p-2"><select className={`${selectClass} min-w-[115px]`} value={team.day || "Saturday"} onChange={(event) => updateTeam(index, "day", event.target.value)}>{DAYS.map((day) => <option key={day}>{day}</option>)}</select></td>
-                    <td className="p-2"><input type="number" min={20} max={120} step={5} className={`${inputClass} w-24`} value={team.gameMins ?? 70} onChange={(event) => updateTeam(index, "gameMins", Number(event.target.value))} /></td>
-                    <td className="p-2"><button type="button" onClick={() => setTeamCfg((current) => current.filter((_, rowIndex) => rowIndex !== index))} className="flex h-10 w-10 items-center justify-center rounded-xl text-rose-600 transition hover:bg-rose-50" aria-label={`Remove ${team.name}`}><Trash2 size={17} /></button></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="mt-6 space-y-4">
+        {teamCfg.map((team, index) => {
+          const homeSiteId = team.siteId || primarySite?.id || "";
+          const sitePitches = sortedPitches.filter((pitch) => (pitch.siteId || primarySite?.id) === homeSiteId);
+          const options = sitePitches.length ? sitePitches : sortedPitches;
 
-        {!teamCfg.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No teams configured. Add a team or import a CSV template.</div> : null}
+          return (
+            <article key={`${team.name}-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Team {index + 1}</div>
+                  <div className="mt-1 text-sm font-black text-slate-950">{team.name || "Unnamed team"}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTeamCfg((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50"
+                  aria-label={`Remove ${team.name || "team"}`}
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
 
-        <SaveBar onSave={() => saveTab?.("teams", { teamCfg })} saved={savedTab === "teams"} label="Save teams">
-          <SecondaryButton icon={RotateCcw} onClick={() => setTeamCfg(TEAM_CONFIG_DEFAULT)}>Restore demo defaults</SecondaryButton>
-        </SaveBar>
-      </SettingsPanel>
-    </div>
+              <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
+                <Field label="Team name" className="lg:col-span-2 xl:col-span-2">
+                  <input className={inputClass} value={team.name || ""} onChange={(event) => updateTeam(index, "name", event.target.value)} />
+                </Field>
+                <Field label="Type" >
+                  <select className={selectClass} value={classifyFallback(team)} onChange={(event) => updateTeam(index, "teamType", event.target.value)}>
+                    {TEAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Format" >
+                  <select className={selectClass} value={team.format || ""} onChange={(event) => updateTeam(index, "format", event.target.value)}>
+                    {FORMATS.map((format) => <option key={format}>{format}</option>)}
+                  </select>
+                </Field>
+                <Field label="Default day" >
+                  <select className={selectClass} value={team.day || "Saturday"} onChange={(event) => updateTeam(index, "day", event.target.value)}>
+                    {DAYS.map((day) => <option key={day}>{day}</option>)}
+                  </select>
+                </Field>
+                <Field label="Minutes" >
+                  <input type="number" min={20} max={120} step={5} className={inputClass} value={team.gameMins ?? 70} onChange={(event) => updateTeam(index, "gameMins", Number(event.target.value))} />
+                </Field>
+
+                <Field label="Home site" >
+                  <select className={selectClass} value={homeSiteId} onChange={(event) => updateTeam(index, "siteId", event.target.value)}>
+                    {sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}
+                  </select>
+                </Field>
+                <Field label="Default pitch" >
+                  <select className={selectClass} value={team.defaultPitch || ""} onChange={(event) => updateTeam(index, "defaultPitch", event.target.value)}>
+                    <option value="">Unassigned</option>
+                    {options.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Alternative pitch" >
+                  <select className={selectClass} value={team.altPitch || ""} onChange={(event) => updateTeam(index, "altPitch", event.target.value)}>
+                    <option value="">None</option>
+                    {options.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Scheduling order" hint="Lower numbers are considered first." >
+                  <input type="number" min={1} className={inputClass} value={team.ageOrder ?? index + 1} onChange={(event) => updateTeam(index, "ageOrder", Number(event.target.value))} />
+                </Field>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {!teamCfg.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No teams configured. Add a team or import a CSV template.</div> : null}
+
+      <SaveBar onSave={() => saveTab?.("teams", { teamCfg })} saved={savedTab === "teams"} label="Save teams">
+        <SecondaryButton icon={RotateCcw} onClick={() => setTeamCfg(TEAM_CONFIG_DEFAULT)}>Restore demo defaults</SecondaryButton>
+      </SaveBar>
+    </SettingsPanel>
   );
 }

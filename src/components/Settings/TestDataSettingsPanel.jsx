@@ -1,7 +1,13 @@
-import React, { useState } from "react";
-import { Plus, RotateCcw, TestTube2, Trash2 } from "lucide-react";
-import { TEST_SAT, TEST_SUN } from "../../lib/constants.js";
+import React, { useEffect, useMemo, useState } from "react";
+import { Plus, RefreshCw, Save, TestTube2, Trash2 } from "lucide-react";
+import { getFixtureDayDefinition } from "../../lib/domain/fixtureDay.js";
+import {
+  TEST_DATA_SCENARIOS,
+  createTestDataSeed,
+  generateTestFixtures,
+} from "../../lib/testData/testFixtureGenerator.js";
 import { isSupaConfigured, supaFetch } from "../../lib/supabase.js";
+import { isMidweekEnabled } from "../../lib/settings/workspaceSettings.js";
 import {
   Field,
   Notice,
@@ -13,28 +19,95 @@ import {
   selectClass,
 } from "./SettingsPrimitives.jsx";
 
-function blankFixture() {
-  return { homeTeam: "", awayTeam: "", league: "", isCup: false, status: "active", referee: "", refPhone: "", refStatus: "TBC" };
+function blankFixture(dayKey) {
+  return {
+    homeTeam: "",
+    awayTeam: "",
+    league: "",
+    isCup: false,
+    status: "active",
+    referee: "",
+    refPhone: "",
+    refStatus: "TBC",
+    fixtureDayKey: dayKey,
+    __day: dayKey,
+  };
 }
 
-export default function TestDataSettingsPanel({ testSat = [], setTestSat, testSun = [], setTestSun, club = {}, teamCfg = [] }) {
-  const [day, setDay] = useState("sat");
+const ALL_DAY_OPTIONS = [
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+  { key: "midweek", label: "Midweek" },
+];
+
+export default function TestDataSettingsPanel({
+  testSat = [],
+  setTestSat,
+  testSun = [],
+  setTestSun,
+  testMidweek = [],
+  setTestMidweek,
+  club = {},
+  teamCfg = [],
+}) {
+  const dayOptions = useMemo(
+    () => ALL_DAY_OPTIONS.filter((option) => option.key !== "midweek" || isMidweekEnabled(club)),
+    [club]
+  );
+  const [dayKey, setDayKey] = useState(dayOptions[0]?.key || "saturday");
+  const [scenario, setScenario] = useState("standard");
+  const [seed, setSeed] = useState("ground-control-demo");
   const [saved, setSaved] = useState("");
-  const list = day === "sat" ? testSat : testSun;
-  const setList = day === "sat" ? setTestSat : setTestSun;
 
-  const update = (index, field, value) => setList((current) => current.map((fixture, rowIndex) => rowIndex === index ? { ...fixture, [field]: value } : fixture));
-
-  const save = () => {
-    try {
-      localStorage.setItem(day === "sat" ? "hsm_testsat" : "hsm_testsun", JSON.stringify(list));
-    } catch (error) {}
-    if (isSupaConfigured()) {
-      const key = day === "sat" ? "testsat" : "testsun";
-      supaFetch("DELETE", `club_config?id=eq.${key}`);
-      supaFetch("POST", "club_config", [{ id: key, data: { fixtures: list } }], { Prefer: "return=minimal" });
+  useEffect(() => {
+    if (!dayOptions.some((option) => option.key === dayKey)) {
+      setDayKey(dayOptions[0]?.key || "saturday");
     }
-    setSaved(day);
+  }, [dayKey, dayOptions]);
+
+  const collections = {
+    saturday: { list: testSat, setList: setTestSat },
+    sunday: { list: testSun, setList: setTestSun },
+    midweek: { list: testMidweek, setList: setTestMidweek },
+  };
+  const active = collections[dayKey] || collections.saturday;
+  const list = active.list || [];
+  const setList = active.setList;
+  const definition = getFixtureDayDefinition(dayKey);
+
+  const update = (index, field, value) => {
+    setList?.((current) => current.map((fixture, rowIndex) => (
+      rowIndex === index ? { ...fixture, [field]: value } : fixture
+    )));
+  };
+
+  const generate = (nextSeed = seed) => {
+    const safeSeed = String(nextSeed || "ground-control-demo").trim() || "ground-control-demo";
+    setSeed(safeSeed);
+    setList?.(generateTestFixtures({ dayKey, seed: safeSeed, scenario, club, teams: teamCfg }));
+    setSaved("");
+  };
+
+  const generateNew = () => generate(createTestDataSeed(dayKey));
+
+  const save = async () => {
+    try {
+      localStorage.setItem(definition.testStorageKey, JSON.stringify(list));
+    } catch (error) {}
+
+    if (isSupaConfigured()) {
+      try {
+        await supaFetch("DELETE", `club_config?id=eq.${definition.remoteConfigKey}`);
+        await supaFetch(
+          "POST",
+          "club_config",
+          [{ id: definition.remoteConfigKey, data: { fixtures: list } }],
+          { Prefer: "return=minimal" }
+        );
+      } catch (error) {}
+    }
+
+    setSaved(dayKey);
     window.setTimeout(() => setSaved(""), 2200);
   };
 
@@ -44,44 +117,92 @@ export default function TestDataSettingsPanel({ testSat = [], setTestSat, testSu
         icon={TestTube2}
         eyebrow="Development only"
         title="Demonstration fixtures"
-        description="Prepare repeatable Saturday and Sunday fixtures for product demonstrations. This page disappears in production mode."
+        description="Generate repeatable fixture sets for light, standard or high-pressure product demonstrations. This page disappears in production mode."
       />
 
-      <div className="mt-5 inline-flex rounded-2xl bg-slate-100 p-1">
-        <button type="button" onClick={() => setDay("sat")} className={`rounded-xl px-4 py-2 text-sm font-black transition ${day === "sat" ? "bg-slate-950 text-white shadow" : "text-slate-500"}`}>Saturday ({testSat.length})</button>
-        <button type="button" onClick={() => setDay("sun")} className={`rounded-xl px-4 py-2 text-sm font-black transition ${day === "sun" ? "bg-slate-950 text-white shadow" : "text-slate-500"}`}>Sunday ({testSun.length})</button>
+      <div className="mt-5 flex flex-wrap gap-2 rounded-2xl bg-slate-100 p-1.5">
+        {dayOptions.map((option) => {
+          const count = collections[option.key]?.list?.length || 0;
+          const activeDay = dayKey === option.key;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setDayKey(option.key)}
+              className={`rounded-xl px-4 py-2 text-sm font-black transition ${activeDay ? "bg-slate-950 text-white shadow" : "text-slate-500 hover:text-slate-900"}`}
+            >
+              {option.label} ({count})
+            </button>
+          );
+        })}
       </div>
 
-      <Notice tone="warning">These fixtures are not operational records and should never be mixed with a live club matchweek.</Notice>
+      <div className="mt-5">
+        <Notice tone="warning">Generated fixtures are development records only. A seed recreates the same fixture set, which keeps demonstrations and regression checks repeatable.</Notice>
+      </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-5 sm:p-6">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Field
+            label="Scenario"
+            hint={TEST_DATA_SCENARIOS.find((option) => option.value === scenario)?.description}
+          >
+            <select className={selectClass} value={scenario} onChange={(event) => setScenario(event.target.value)}>
+              {TEST_DATA_SCENARIOS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Seed" hint="Reuse this value whenever you need to recreate the same fixture set.">
+            <input className={inputClass} value={seed} onChange={(event) => setSeed(event.target.value)} />
+          </Field>
+        </div>
+        <div className="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-end">
+          <SecondaryButton className="sm:min-w-44" icon={RefreshCw} onClick={() => generate(seed)}>Rebuild same set</SecondaryButton>
+          <PrimaryButton className="sm:min-w-44" icon={RefreshCw} onClick={generateNew}>Generate new set</PrimaryButton>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
         {list.map((fixture, index) => (
-          <div key={index} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_160px_auto_auto] xl:items-end">
+          <article key={fixture.id || `${fixture.homeTeam}-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+            <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
               <Field label="Home team">
                 <select className={selectClass} value={fixture.homeTeam || ""} onChange={(event) => update(index, "homeTeam", event.target.value)}>
                   <option value="">Select team…</option>
                   {teamCfg.map((team) => {
-                    const full = `${club.name} ${team.name}`;
+                    const full = `${club.name || "Ground Control FC"} ${team.name}`;
                     return <option key={team.name} value={full}>{team.name}</option>;
                   })}
                 </select>
               </Field>
-              <Field label="Opposition"><input className={inputClass} value={fixture.awayTeam || ""} onChange={(event) => update(index, "awayTeam", event.target.value)} placeholder="Opposition" /></Field>
-              <Field label="League"><input className={inputClass} value={fixture.league || ""} onChange={(event) => update(index, "league", event.target.value)} placeholder="League" /></Field>
-              <label className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700"><input type="checkbox" checked={!!fixture.isCup} onChange={(event) => update(index, "isCup", event.target.checked)} className="h-5 w-5 rounded border-slate-300" /> Cup</label>
-              <button type="button" onClick={() => setList((current) => current.filter((_, rowIndex) => rowIndex !== index))} className="flex h-11 w-11 items-center justify-center rounded-2xl text-rose-600 transition hover:bg-rose-50" aria-label="Remove test fixture"><Trash2 size={18} /></button>
+              <Field label="Opposition">
+                <input className={inputClass} value={fixture.awayTeam || ""} onChange={(event) => update(index, "awayTeam", event.target.value)} placeholder="Opposition" />
+              </Field>
+              <Field label="League">
+                <input className={inputClass} value={fixture.league || ""} onChange={(event) => update(index, "league", event.target.value)} placeholder="League" />
+              </Field>
+              <div className="flex items-end justify-between gap-3 lg:col-span-2 xl:col-span-3">
+                <label className="flex h-11 min-w-28 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700">
+                  <input type="checkbox" checked={!!fixture.isCup} onChange={(event) => update(index, "isCup", event.target.checked)} className="h-5 w-5 rounded border-slate-300" /> Cup fixture
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setList?.((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                  className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 text-sm font-black text-rose-600 transition hover:bg-rose-50"
+                  aria-label="Remove test fixture"
+                >
+                  <Trash2 size={18} /> Remove
+                </button>
+              </div>
             </div>
-          </div>
+          </article>
         ))}
       </div>
 
-      {!list.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No demonstration fixtures for this day.</div> : null}
+      {!list.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No demonstration fixtures for this day. Generate a scenario or add one manually.</div> : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-5">
-        <PrimaryButton icon={Plus} onClick={() => setList((current) => [...current, blankFixture()])}>Add fixture</PrimaryButton>
-        <SecondaryButton onClick={save}>{saved === day ? "Saved" : `Save ${day === "sat" ? "Saturday" : "Sunday"}`}</SecondaryButton>
-        <SecondaryButton icon={RotateCcw} onClick={() => setList(day === "sat" ? TEST_SAT : TEST_SUN)}>Restore demo data</SecondaryButton>
+        <PrimaryButton icon={Plus} onClick={() => setList?.((current) => [...current, blankFixture(dayKey)])}>Add fixture</PrimaryButton>
+        <SecondaryButton icon={Save} onClick={save}>{saved === dayKey ? "Saved" : `Save ${definition.label}`}</SecondaryButton>
       </div>
     </SettingsPanel>
   );

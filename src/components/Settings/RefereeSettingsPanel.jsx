@@ -129,29 +129,32 @@ export default function RefereeSettingsPanel({ refs = [], setRefs, saveTab, save
           <div className="mt-4 flex justify-end"><PrimaryButton icon={Plus} onClick={addOfficial} disabled={!form.name.trim()}>Add person</PrimaryButton></div>
         </div>
 
-        <Notice tone="info">League, club, manager and assistant referees are clash-checked. Parent referees, volunteers and observers are treated as flexible helpers unless you override the setting.</Notice>
+        <Notice tone="info" className="mt-5">League, club, manager and assistant referees are clash-checked. Parent referees, volunteers and observers are treated as flexible helpers unless you override the setting.</Notice>
 
-        <div className="mt-5 overflow-x-auto rounded-[22px] border border-slate-200">
-          <table className="min-w-[1040px] w-full border-collapse text-left">
-            <thead className="bg-slate-950 text-white"><tr>{['Name', 'Phone', 'Email', 'Role', 'Clash checks', ''].map((heading) => <th key={heading} className="px-3 py-3 text-[10px] font-black uppercase tracking-[0.15em]">{heading}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {refs.map((official) => {
-                const role = official.role || "club_referee";
-                const meta = roleMeta(role);
-                const enforce = typeof official.enforceClashes === "boolean" ? official.enforceClashes : meta.enforceClashes;
-                return (
-                  <tr key={official.id} className="hover:bg-slate-50">
-                    <td className="p-3"><div className="font-black text-slate-950">{official.name}</div></td>
-                    <td className="p-3"><input className={`${inputClass} min-w-[155px]`} value={official.phone || ""} onChange={(event) => updateOfficial(official.id, { phone: event.target.value })} placeholder="07xxx xxxxxx" /></td>
-                    <td className="p-3"><input type="email" className={`${inputClass} min-w-[190px]`} value={official.email || ""} onChange={(event) => updateOfficial(official.id, { email: event.target.value })} placeholder="name@example.org" /></td>
-                    <td className="p-3"><select className={`${selectClass} min-w-[170px]`} value={role} onChange={(event) => updateOfficial(official.id, { role: event.target.value })}>{ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
-                    <td className="p-3"><label className="inline-flex items-center gap-2 text-sm font-black text-slate-700"><input type="checkbox" checked={enforce} onChange={(event) => updateOfficial(official.id, { enforceClashes: event.target.checked })} className="h-5 w-5 rounded border-slate-300 text-emerald-600" />{enforce ? "Enforced" : "Flexible"}</label></td>
-                    <td className="p-3"><button type="button" onClick={() => setRefs((current) => current.filter((item) => item.id !== official.id))} className="flex h-10 w-10 items-center justify-center rounded-xl text-rose-600 transition hover:bg-rose-50" aria-label={`Remove ${official.name}`}><Trash2 size={17} /></button></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mt-6 space-y-4">
+          {refs.map((official, index) => {
+            const role = official.role || "club_referee";
+            const meta = roleMeta(role);
+            const enforce = typeof official.enforceClashes === "boolean" ? official.enforceClashes : meta.enforceClashes;
+            return (
+              <article key={official.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Person {index + 1}</div>
+                    <div className="mt-1 text-sm font-black text-slate-950">{official.name || "Unnamed person"}</div>
+                  </div>
+                  <button type="button" onClick={() => setRefs((current) => current.filter((item) => item.id !== official.id))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50" aria-label={`Remove ${official.name}`}><Trash2 size={17} /></button>
+                </div>
+                <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
+                  <Field label="Name" ><input className={inputClass} value={official.name || ""} onChange={(event) => updateOfficial(official.id, { name: event.target.value })} /></Field>
+                  <Field label="Phone" ><input className={inputClass} value={official.phone || ""} onChange={(event) => updateOfficial(official.id, { phone: event.target.value })} placeholder="07xxx xxxxxx" /></Field>
+                  <Field label="Email" ><input type="email" className={inputClass} value={official.email || ""} onChange={(event) => updateOfficial(official.id, { email: event.target.value })} placeholder="name@example.org" /></Field>
+                  <Field label="Role" ><select className={selectClass} value={role} onChange={(event) => updateOfficial(official.id, { role: event.target.value })}>{ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
+                  <Field label="Clash handling" ><label className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700"><input type="checkbox" checked={enforce} onChange={(event) => updateOfficial(official.id, { enforceClashes: event.target.checked })} className="h-5 w-5 rounded border-slate-300 text-emerald-600" />{enforce ? "Enforced" : "Flexible"}</label></Field>
+                </div>
+              </article>
+            );
+          })}
         </div>
 
         {!refs.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No officials saved. Add a person or import a CSV template.</div> : null}

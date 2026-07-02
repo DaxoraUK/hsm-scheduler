@@ -196,7 +196,7 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
             </Field>
           ))}
         </div>
-        <Notice tone="neutral">These are club-wide defaults. Site capacity is configured above and can differ between grounds.</Notice>
+        <Notice tone="neutral" className="mt-5">These are club-wide defaults. Site capacity is configured above and can differ between grounds.</Notice>
         <SaveBar onSave={() => saveTab?.("venues", { club })} saved={savedTab === "venues"} label="Save venue settings">
           Saves sites, parking capacity, weather locations and vehicle assumptions together.
         </SaveBar>

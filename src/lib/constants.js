@@ -1,5 +1,5 @@
 // constants.js
-// All shared constant data: colours, pitch defaults, team defaults, test data.
+// Shared platform defaults: colours, pitch defaults and team defaults.
 // This file depends on NOTHING else - it is the foundation.
 
 export const APP_MODE = "development";
@@ -84,30 +84,9 @@ export const TEAM_CONFIG_DEFAULT=[
   {name:"HSM Reserves",teamType:"adult",format:"11v11",defaultPitch:"P2",altPitch:"P1",ageOrder:11,day:"Saturday",gameMins:90},
   {name:"HSM Sunday 1sts",teamType:"adult",format:"11v11",defaultPitch:"P1",altPitch:"P2",ageOrder:11,day:"Sunday",gameMins:90},];
 
-export const TEST_SAT=[
-  {homeTeam:"Horwich St Marys U7",awayTeam:"Farnworth Town U7",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U8 Lions",awayTeam:"Westhoughton U8",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U9 Dragons",awayTeam:"Leigh Rangers U9",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U10 Avengers",awayTeam:"Atherton U10",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U10 Cobras",awayTeam:"Bury AFC U10",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U12 Eagles",awayTeam:"Bolton Wanderers U12",league:"BBDFL",isCup:false,status:"active",referee:"J. Smith",refPhone:"07700 900123",refStatus:"Confirmed"},
-  {homeTeam:"Horwich St Marys U12 Raptors",awayTeam:"Radcliffe FC U12",league:"BBDFL",isCup:true,status:"active",referee:"P. Jones",refPhone:"07700 900456",refStatus:"Awaiting"},
-  {homeTeam:"Horwich St Marys U13 Locomotives",awayTeam:"Leigh Rangers U13",league:"BBDFL",isCup:false,status:"active",referee:"M. Brown",refPhone:"07700 900789",refStatus:"Confirmed"},
-  {homeTeam:"Horwich St Marys U14 Lightning",awayTeam:"Salford City U14",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U16 Bears",awayTeam:"Rochdale AFC U16",league:"BBDFL",isCup:false,status:"active",referee:"D. Wilson",refPhone:"07700 900321",refStatus:"Confirmed"},
-  {homeTeam:"Horwich St Marys HSM 1st Team",awayTeam:"Eagley FC",league:"LAL",isCup:false,status:"active",referee:"R. Taylor",refPhone:"07700 900654",refStatus:"Confirmed"},
-];
-
-export const TEST_SUN=[
-  {homeTeam:"Horwich St Marys U15 Lionesses",awayTeam:"Oldham Athletic U15",league:"WDYFL",isCup:false,status:"active",referee:"K. Davies",refPhone:"07700 900888",refStatus:"Confirmed"},
-  {homeTeam:"Horwich St Marys HSM Sunday 1sts",awayTeam:"Salford Victoria",league:"SLC",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-];
-
-export const TEST_MIDWEEK=[
-  {homeTeam:"Horwich St Marys U10 Avengers",awayTeam:"Atherton Town U10",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
-  {homeTeam:"Horwich St Marys U14 Spartans",awayTeam:"Westhoughton Juniors U14",league:"BBDFL",isCup:false,status:"active",referee:"A. Green",refPhone:"07700 900777",refStatus:"Confirmed"},
-  {homeTeam:"Horwich St Marys HSM 1st Team",awayTeam:"Eagley FC",league:"LAL",isCup:false,status:"active",referee:"R. Taylor",refPhone:"07700 900654",refStatus:"Confirmed"},
-];
+// Demonstration fixtures are generated at runtime by
+// lib/testData/testFixtureGenerator.js. Keeping them out of this foundation
+// file prevents day-specific demo records becoming platform constants.
 
 export const FA_LEAGUES=[
   {id:"BBDFL",name:"Bolton, Bury and District FL",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=467452772&selectedFixtureGroupAgeGroup=0&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=608702885&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=608702885&itemsPerPage=25"},

@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { Archive, Database, Download, FileUp, ShieldCheck } from "lucide-react";
 import SupabaseStatusBar from "./SupabaseStatusBar.jsx";
 import { downloadJson } from "../../lib/settings/dataExchange.js";
+import { normalisePitchClosures } from "../../lib/domain/pitchClosures.js";
 import {
   Notice,
   PrimaryButton,
@@ -11,7 +12,7 @@ import {
   StatTile,
 } from "./SettingsPrimitives.jsx";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export default function DataSettingsPanel({
   club = {},
@@ -20,6 +21,8 @@ export default function DataSettingsPanel({
   setTeamCfg,
   pitchCfg = [],
   setPitchCfg,
+  pitchClosures = [],
+  setPitchClosures,
   refs = [],
   setRefs,
   history = [],
@@ -50,6 +53,7 @@ export default function DataSettingsPanel({
     club,
     teams: teamCfg,
     pitches: pitchCfg,
+    pitchClosures: normalisePitchClosures(pitchClosures),
     officials: refs,
     scheduling: { startHour, startMin, endHour, endMin, bufferYouth, bufferAdult },
   };
@@ -72,6 +76,9 @@ export default function DataSettingsPanel({
       setClub?.(parsed.club);
       setTeamCfg?.(parsed.teams);
       setPitchCfg?.(parsed.pitches);
+      if (Array.isArray(parsed.pitchClosures)) {
+        setPitchClosures?.(normalisePitchClosures(parsed.pitchClosures));
+      }
       setRefs?.(parsed.officials);
       const scheduling = parsed.scheduling || {};
       if (Number.isFinite(Number(scheduling.startHour))) setStartHour?.(Number(scheduling.startHour));
@@ -119,7 +126,7 @@ export default function DataSettingsPanel({
         <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-black text-slate-950">Club configuration JSON</div>
-            <div className="mt-1 text-sm font-semibold leading-5 text-slate-500">Includes club, venues, modules, teams, pitches, officials and scheduling controls.</div>
+            <div className="mt-1 text-sm font-semibold leading-5 text-slate-500">Includes club, venues, modules, teams, pitches, pitch closure records, officials and scheduling controls.</div>
           </div>
           <div className="flex flex-wrap gap-2">
             <input ref={inputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} />
@@ -128,9 +135,9 @@ export default function DataSettingsPanel({
           </div>
         </div>
 
-        {message ? <Notice tone="success">{message}</Notice> : null}
-        {error ? <Notice tone="warning">{error}</Notice> : null}
-        <Notice tone="neutral">Team, pitch and official pages also provide spreadsheet-friendly CSV import and export for day-to-day administration.</Notice>
+        {message ? <Notice tone="success" className="mt-4">{message}</Notice> : null}
+        {error ? <Notice tone="warning" className="mt-4">{error}</Notice> : null}
+        <Notice tone="neutral" className="mt-4">Team, pitch and official pages also provide spreadsheet-friendly CSV import and export for day-to-day administration.</Notice>
       </SettingsPanel>
 
       <SettingsPanel>

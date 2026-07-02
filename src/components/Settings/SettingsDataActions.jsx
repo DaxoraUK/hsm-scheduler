@@ -42,8 +42,8 @@ export default function SettingsDataActions({
   };
 
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <div className="text-sm font-black text-slate-950">Import and export</div>
           <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">

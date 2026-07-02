@@ -2,7 +2,7 @@
 // The main application container. Holds all state and handlers,
 // imports logic from lib/ and UI from components/.
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import AppLayout from "./layout/AppLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
@@ -46,7 +46,7 @@ import {
 import {
   G, RE, AU, WH, AM, BL, TE, PU,
   DEFAULT_CLUB, PITCHES, AVG_CARS,
-  TEAM_CONFIG_DEFAULT, TEST_SAT, TEST_SUN, TEST_MIDWEEK,
+  TEAM_CONFIG_DEFAULT,
   DEFAULT_BUFFER_YOUTH, DEFAULT_BUFFER_ADULT
 } from "./lib/constants.js";
 
@@ -55,6 +55,14 @@ import { supaFetch, isSupaConfigured, Auth, DB, getSupaKey, setSupaKey } from ".
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
+import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
+import {
+  addPitchClosure as addPitchClosureRecord,
+  getActiveClosedPitchIds,
+  loadPitchClosures,
+  persistPitchClosures,
+  reopenPitchClosures as reopenPitchClosureRecords,
+} from "./lib/domain/pitchClosures.js";
 
 import SatPrintSheet from "./components/SatPrintSheet.jsx";
 import SunPrintSheet from "./components/SunPrintSheet.jsx";
@@ -127,14 +135,7 @@ function App(){
   const [bufferYouth,setBufferYouth]=useState(DEFAULT_BUFFER_YOUTH);
   const [bufferAdult,setBufferAdult]=useState(DEFAULT_BUFFER_ADULT);
   const [useAstro,setUseAstro]=useState(false);
-  const [closedPitches,setClosedPitches]=useState([]);
-  const closeAllPitches = () => {
-    setClosedPitches((pitchCfg || []).map((pitch) => pitch.id));
-  };
-
-  const reopenAllPitches = () => {
-    setClosedPitches([]);
-  };
+  const [pitchClosures,setPitchClosures]=useState(()=>loadPitchClosures());
   const [showManual,setShowManual]=useState(false);
   const [showSunManual,setShowSunManual]=useState(false);
   const [showMidweekManual,setShowMidweekManual]=useState(false);
@@ -255,13 +256,106 @@ function App(){
     return PITCHES;
   });
 
+  const satClosedPitches=useMemo(
+    ()=>getActiveClosedPitchIds(pitchClosures,satDate),
+    [pitchClosures,satDate]
+  );
+  const sunClosedPitches=useMemo(
+    ()=>getActiveClosedPitchIds(pitchClosures,sunDate),
+    [pitchClosures,sunDate]
+  );
+  const midweekClosedPitches=useMemo(
+    ()=>getActiveClosedPitchIds(pitchClosures,midweekDate),
+    [pitchClosures,midweekDate]
+  );
+  const closedPitches=useMemo(
+    ()=>[...new Set([
+      ...satClosedPitches,
+      ...sunClosedPitches,
+      ...(midweekEnabled?midweekClosedPitches:[]),
+    ])],
+    [midweekClosedPitches,midweekEnabled,satClosedPitches,sunClosedPitches]
+  );
+
+  const closureUser=useMemo(()=>{
+    const user=authSession?.user||{};
+    return user.user_metadata?.display_name||user.email||"Ground Control user";
+  },[authSession]);
+
+  const addPitchClosure=useCallback((input={})=>{
+    setPitchClosures((current)=>addPitchClosureRecord(current,{
+      ...input,
+      createdBy:input.createdBy||closureUser,
+    }));
+  },[closureUser]);
+
+  const reopenPitchClosures=useCallback((pitchIds,activeDate,metadata={})=>{
+    setPitchClosures((current)=>reopenPitchClosureRecords(
+      current,
+      pitchIds,
+      activeDate,
+      {
+        ...metadata,
+        reopenedBy:metadata.reopenedBy||closureUser,
+      }
+    ));
+  },[closureUser]);
+
+  const closeAllPitches=useCallback((activeDate)=>{
+    setPitchClosures((current)=>(pitchCfg||[]).reduce(
+      (records,pitch)=>addPitchClosureRecord(records,{
+        pitchId:pitch.id,
+        mode:"matchday",
+        effectiveFrom:activeDate,
+        effectiveTo:activeDate,
+        reason:"Whole ground closure",
+        notes:"All pitches closed for the selected fixture day.",
+        createdBy:closureUser,
+      }),
+      current
+    ));
+  },[closureUser,pitchCfg]);
+
+  const reopenAllPitches=useCallback((activeDate)=>{
+    reopenPitchClosures((pitchCfg||[]).map((pitch)=>pitch.id),activeDate,{
+      reopenedReason:"All pitches reopened for the selected fixture day",
+    });
+  },[pitchCfg,reopenPitchClosures]);
+
+  const toggleClosed=useCallback((pitchId,linkedPitchIds=[],activeDate=satDate)=>{
+    const group=[pitchId,...(Array.isArray(linkedPitchIds)?linkedPitchIds:[])];
+    const activeIds=new Set(getActiveClosedPitchIds(pitchClosures,activeDate));
+    const sources=group.filter((id)=>activeIds.has(String(id)));
+    if(sources.length){
+      reopenPitchClosures(sources,activeDate);
+      return;
+    }
+    addPitchClosure({
+      pitchId,
+      mode:"untilReopened",
+      effectiveFrom:activeDate,
+      reason:"Pitch unavailable",
+    });
+  },[addPitchClosure,pitchClosures,reopenPitchClosures,satDate]);
+
+  const defaultTestFixtures=(dayKey)=>generateTestFixtures({
+    dayKey,
+    seed:`ground-control-${dayKey}`,
+    scenario:"standard",
+    club,
+    teams:teamCfg,
+  });
   const [testSat,setTestSat]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsat");if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
-    return TEST_SAT;
+    try{const s=localStorage.getItem("hsm_testsat");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
+    return defaultTestFixtures("saturday");
   });
   const [testSun,setTestSun]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsun");if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
-    return TEST_SUN;
+    try{const s=localStorage.getItem("hsm_testsun");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
+    return defaultTestFixtures("sunday");
+  });
+  const [testMidweek,setTestMidweek]=useState(()=>{
+    try{const s=localStorage.getItem("hsm_testmidweek");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
+    return defaultTestFixtures("midweek");
   });
 
   useEffect(()=>{
@@ -377,6 +471,7 @@ function App(){
   useEffect(()=>{try{localStorage.setItem("hsm_pitches",JSON.stringify(pitchCfg));}catch(e){}},[pitchCfg]);
   useEffect(()=>{try{localStorage.setItem("hsm_history",JSON.stringify(history));}catch(e){}},[history]);
   useEffect(()=>{try{localStorage.setItem("hsm_teamcfg",JSON.stringify(teamCfg));}catch(e){}},[teamCfg]);
+  useEffect(()=>{persistPitchClosures(pitchClosures);},[pitchClosures]);
 
   // Connect to Supabase on mount and whenever key changes
   useEffect(()=>{
@@ -402,6 +497,8 @@ function App(){
           if(tsRow&&tsRow.length&&tsRow[0].data&&tsRow[0].data.fixtures&&tsRow[0].data.fixtures.length)setTestSat(tsRow[0].data.fixtures);
           const tnRow=await supaFetch("GET","club_config?id=eq.testsun&select=data");
           if(tnRow&&tnRow.length&&tnRow[0].data&&tnRow[0].data.fixtures&&tnRow[0].data.fixtures.length)setTestSun(tnRow[0].data.fixtures);
+          const tmRow=await supaFetch("GET","club_config?id=eq.testmidweek&select=data");
+          if(tmRow&&tmRow.length&&tmRow[0].data&&tmRow[0].data.fixtures&&tmRow[0].data.fixtures.length)setTestMidweek(tmRow[0].data.fixtures);
         }catch(e){}
         setDbStatus("connected");
       }catch(e){ console.error("Supabase connect failed:",e); setDbStatus("error"); }
@@ -451,9 +548,9 @@ function App(){
   const runSat=useCallback((baseFx)=>{
     setSatOverrides({});
     const all=[...baseFx,...satManual];
-    const {scheduled:s,unresolved:u}=scheduleSat(all,useAstro,closedPitches,teamCfg,getBufMap(),getStartMins(),getEndMins(),pitchCfg,club.maxConcurrent||3);
+    const {scheduled:s,unresolved:u}=scheduleSat(all,useAstro,satClosedPitches,teamCfg,getBufMap(),getStartMins(),getEndMins(),pitchCfg,club.maxConcurrent||3);
     setSatScheduled(s);setSatUnresolved(u);setSatHasRun(true);
-  },[satManual,useAstro,closedPitches,teamCfg,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,pitchCfg]);
+  },[satManual,useAstro,satClosedPitches,teamCfg,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,pitchCfg]);
 
   const runSatTest=()=>{setSatFetchStatus([{id:"TEST",name:"Test Data",ok:true,count:testSat.length}]);runSat(testSat);};
 
@@ -481,7 +578,7 @@ function App(){
     const { scheduled: s, unresolved: u } = scheduleSun(
       all,
       useAstro,
-      closedPitches,
+      sunClosedPitches,
       teamCfg,
       getBufMap(),
       getStartMins(),
@@ -490,7 +587,7 @@ function App(){
       club.maxConcurrent || 3
     );
     setSunScheduled(s);setSunUnresolved(u);setSunHasRun(true);
-  },[sunManual,teamCfg,pitchCfg]);
+  },[sunManual,useAstro,sunClosedPitches,teamCfg,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,pitchCfg,club.maxConcurrent]);
 
   const runSunTest=()=>runSun(testSun);
 
@@ -511,7 +608,7 @@ const runSunLive = async () => {
     const {scheduled:s,unresolved:u}=scheduleSat(
       all,
       useAstro,
-      closedPitches,
+      midweekClosedPitches,
       teamCfg,
       getBufMap(),
       midweekStartMins,
@@ -523,11 +620,11 @@ const runSunLive = async () => {
     setMidweekScheduled(s);
     setMidweekUnresolved(u);
     setMidweekHasRun(true);
-  },[midweekManual,useAstro,closedPitches,teamCfg,bufferYouth,bufferAdult,midweekStartMins,midweekEndMins,pitchCfg,club.maxConcurrent]);
+  },[midweekManual,useAstro,midweekClosedPitches,teamCfg,bufferYouth,bufferAdult,midweekStartMins,midweekEndMins,pitchCfg,club.maxConcurrent]);
 
   const runMidweekTest=()=>{
-    setMidweekFetchStatus([{id:"TEST",name:"Midweek Test Data",ok:true,count:TEST_MIDWEEK.length}]);
-    runMidweek(TEST_MIDWEEK);
+    setMidweekFetchStatus([{id:"TEST",name:"Midweek Test Data",ok:true,count:testMidweek.length}]);
+    runMidweek(testMidweek);
   };
 
   const runMidweekLive=async()=>{
@@ -635,8 +732,7 @@ const {
   fetchMidweekFixtures,
 } = useFixtureFetcher();
 
-const { toggleClosed, resetAll } = useOperationsActions({
-  setClosedPitches,
+const { resetAll } = useOperationsActions({
   setSatScheduled,
   setSatUnresolved,
   setSatOverrides,
@@ -803,10 +899,13 @@ return(
     refs={refs}
     thC={thC}
     hdrStyle={hdrStyle}
-    closedPitches={closedPitches}
-    toggleClosed={toggleClosed}
-    closeAllPitches={closeAllPitches}
-    reopenAllPitches={reopenAllPitches}
+    pitchClosures={pitchClosures}
+    closedPitches={satClosedPitches}
+    toggleClosed={(pitchId,linkedIds)=>toggleClosed(pitchId,linkedIds,satDate)}
+    addPitchClosure={addPitchClosure}
+    reopenPitchClosures={reopenPitchClosures}
+    closeAllPitches={()=>closeAllPitches(satDate)}
+    reopenAllPitches={()=>reopenAllPitches(satDate)}
     startHour={startHour}
     startMin={startMin}
     endHour={endHour}
@@ -846,10 +945,13 @@ return(
             refs={refs}
             sunOv={sunOv}
             thC={thC}
-            closedPitches={closedPitches}
-            toggleClosed={toggleClosed}
-            closeAllPitches={closeAllPitches}
-            reopenAllPitches={reopenAllPitches}
+            pitchClosures={pitchClosures}
+            closedPitches={sunClosedPitches}
+            toggleClosed={(pitchId,linkedIds)=>toggleClosed(pitchId,linkedIds,sunDate)}
+            addPitchClosure={addPitchClosure}
+            reopenPitchClosures={reopenPitchClosures}
+            closeAllPitches={()=>closeAllPitches(sunDate)}
+            reopenAllPitches={()=>reopenAllPitches(sunDate)}
             sunOverrides={sunOverrides}
             startHour={startHour}
             startMin={startMin}
@@ -903,10 +1005,13 @@ return(
             refs={refs}
             midweekOv={midweekOv}
             thC={thC}
-            closedPitches={closedPitches}
-            toggleClosed={toggleClosed}
-            closeAllPitches={closeAllPitches}
-            reopenAllPitches={reopenAllPitches}
+            pitchClosures={pitchClosures}
+            closedPitches={midweekClosedPitches}
+            toggleClosed={(pitchId,linkedIds)=>toggleClosed(pitchId,linkedIds,midweekDate)}
+            addPitchClosure={addPitchClosure}
+            reopenPitchClosures={reopenPitchClosures}
+            closeAllPitches={()=>closeAllPitches(midweekDate)}
+            reopenAllPitches={()=>reopenAllPitches(midweekDate)}
             midweekOverrides={midweekOverrides}
             midweekScheduled={midweekScheduled}
             setMidweekScheduled={setMidweekScheduled}
@@ -1066,9 +1171,12 @@ return(
             setTestSat={setTestSat}
             testSun={testSun}
             setTestSun={setTestSun}
+            testMidweek={testMidweek}
+            setTestMidweek={setTestMidweek}
+            pitchClosures={pitchClosures}
+            setPitchClosures={setPitchClosures}
             closedPitches={closedPitches}
             toggleClosed={toggleClosed}
-            setClosedPitches={setClosedPitches}
             history={history}
             setSatScheduled={setSatScheduled}
             setSatHasRun={setSatHasRun}

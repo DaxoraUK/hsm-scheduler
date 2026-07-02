@@ -108,7 +108,14 @@ function getLinkedPitchIds(pitchCfg, pitchId) {
 function buildClosedPitchSet(pitchCfg, closedPitches = []) {
   const closed = new Set();
 
-  (Array.isArray(closedPitches) ? closedPitches : Object.keys(closedPitches || {}))
+  const explicitClosures = Array.isArray(closedPitches)
+    ? closedPitches
+    : Object.entries(closedPitches || {})
+        .filter(([, isClosed]) => Boolean(isClosed))
+        .map(([pitchId]) => pitchId);
+
+  explicitClosures
+    .map((pitchId) => String(pitchId || "").trim())
     .filter(Boolean)
     .forEach((pitchId) => {
       getLinkedPitchIds(pitchCfg, pitchId).forEach((linkedId) => closed.add(linkedId));

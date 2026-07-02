@@ -4,6 +4,7 @@ import { sortPitches } from "../../lib/pitches.js";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
 import {
+  Field,
   Notice,
   PrimaryButton,
   SaveBar,
@@ -89,7 +90,7 @@ export default function PitchSettingsPanel({
   const updatePitch = (realIndex, field, value) => {
     setPitchCfg((current) => current.map((pitch, index) => {
       if (index !== realIndex) return pitch;
-      const next = { ...pitch, [field]: value };
+      const next = { ...pitch, [field]: value === "" ? null : value };
       delete next.astroOnly;
       delete next.toggleOnly;
       return next;
@@ -137,35 +138,74 @@ export default function PitchSettingsPanel({
         />
       </div>
 
-      <Notice tone="info">
-        “Inside pitch” models a smaller layout marked within a larger pitch. Independent pitches do not count towards the concurrent-game limit.
-      </Notice>
+      <div className="mt-5">
+        <Notice tone="info">
+          “Inside pitch” models a smaller layout marked within a larger pitch. Independent pitches do not count towards the concurrent-game limit.
+        </Notice>
+      </div>
 
-      <div className="mt-5 overflow-x-auto rounded-[22px] border border-slate-200">
-        <table className="min-w-[1080px] w-full border-collapse text-left">
-          <thead className="bg-slate-950 text-white">
-            <tr>
-              {['ID', 'Name', 'Site', 'Format', 'Surface', 'Inside', 'Independent', ''].map((heading) => <th key={heading} className="px-3 py-3 text-[10px] font-black uppercase tracking-[0.15em]">{heading}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {sortPitches(pitchCfg).map((pitch, displayIndex) => {
-              const realIndex = Math.max(0, pitchCfg.findIndex((candidate) => candidate === pitch || candidate.id === pitch.id));
-              return (
-                <tr key={`${pitch.id}-${displayIndex}`} className="hover:bg-slate-50">
-                  <td className="p-2"><input className={`${inputClass} w-24 font-mono`} value={pitch.id || ""} onChange={(event) => updatePitch(realIndex, "id", event.target.value.replace(/\s+/g, ""))} /></td>
-                  <td className="p-2"><input className={`${inputClass} min-w-[150px]`} value={pitch.label || ""} onChange={(event) => updatePitch(realIndex, "label", event.target.value)} /></td>
-                  <td className="p-2"><select className={`${selectClass} min-w-[150px]`} value={pitch.siteId || primarySite?.id || ""} onChange={(event) => updatePitch(realIndex, "siteId", event.target.value)}>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}</select></td>
-                  <td className="p-2"><select className={`${selectClass} min-w-[135px]`} value={pitch.format || ""} onChange={(event) => updatePitch(realIndex, "format", event.target.value)}>{FORMATS.map(([value, label]) => <option key={value || "any"} value={value}>{label}</option>)}</select></td>
-                  <td className="p-2"><select className={`${selectClass} min-w-[115px]`} value={pitch.surface || inferSurface(pitch)} onChange={(event) => updatePitch(realIndex, "surface", event.target.value)}>{SURFACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
-                  <td className="p-2"><select className={`${selectClass} min-w-[110px]`} value={pitch.innerOf || ""} onChange={(event) => updatePitch(realIndex, "innerOf", event.target.value || null)}><option value="">None</option>{pitchCfg.filter((candidate) => candidate.id !== pitch.id && !candidate.innerOf).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.id}</option>)}</select></td>
-                  <td className="p-2 text-center"><input type="checkbox" checked={!!pitch.independent} onChange={(event) => updatePitch(realIndex, "independent", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" /></td>
-                  <td className="p-2"><button type="button" onClick={() => setPitchCfg((current) => current.filter((_, index) => index !== realIndex))} className="flex h-10 w-10 items-center justify-center rounded-xl text-rose-600 transition hover:bg-rose-50" aria-label={`Remove ${pitch.label}`}><Trash2 size={17} /></button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="mt-6 space-y-4">
+        {sortPitches(pitchCfg).map((pitch, displayIndex) => {
+          const realIndex = Math.max(0, pitchCfg.findIndex((candidate) => candidate === pitch || candidate.id === pitch.id));
+          return (
+            <article key={`${pitch.id}-${displayIndex}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Pitch {displayIndex + 1}</div>
+                  <div className="mt-1 text-sm font-black text-slate-950">{pitch.label || pitch.id || "Unnamed pitch"}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPitchCfg((current) => current.filter((_, index) => index !== realIndex))}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50"
+                  aria-label={`Remove ${pitch.label || pitch.id || "pitch"}`}
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
+
+              <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
+                <Field label="Pitch ID" >
+                  <input className={`${inputClass} font-mono`} value={pitch.id || ""} onChange={(event) => updatePitch(realIndex, "id", event.target.value.replace(/\s+/g, ""))} />
+                </Field>
+                <Field label="Name" className="lg:col-span-2 xl:col-span-2">
+                  <input className={inputClass} value={pitch.label || ""} onChange={(event) => updatePitch(realIndex, "label", event.target.value)} />
+                </Field>
+                <Field label="Site" >
+                  <select className={selectClass} value={pitch.siteId || primarySite?.id || ""} onChange={(event) => updatePitch(realIndex, "siteId", event.target.value)}>
+                    {sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}
+                  </select>
+                </Field>
+                <Field label="Format" >
+                  <select className={selectClass} value={pitch.format || ""} onChange={(event) => updatePitch(realIndex, "format", event.target.value)}>
+                    {FORMATS.map(([value, label]) => <option key={value || "any"} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+
+                <Field label="Surface" >
+                  <select className={selectClass} value={pitch.surface || inferSurface(pitch)} onChange={(event) => updatePitch(realIndex, "surface", event.target.value)}>
+                    {SURFACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Inside pitch" hint="Optional parent layout." >
+                  <select className={selectClass} value={pitch.innerOf || ""} onChange={(event) => updatePitch(realIndex, "innerOf", event.target.value || null)}>
+                    <option value="">None</option>
+                    {pitchCfg.filter((candidate) => candidate.id !== pitch.id && !candidate.innerOf).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label || candidate.id}</option>)}
+                  </select>
+                </Field>
+                <Field label="Capacity handling" >
+                  <label className="flex h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700">
+                    <input type="checkbox" checked={!!pitch.independent} onChange={(event) => updatePitch(realIndex, "independent", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" />
+                    Independent pitch
+                  </label>
+                </Field>
+                <Field label="Description" >
+                  <input className={inputClass} value={pitch.desc || ""} onChange={(event) => updatePitch(realIndex, "desc", event.target.value)} placeholder="Optional notes" />
+                </Field>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {!pitchCfg.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No pitches configured. Add one or import the CSV template.</div> : null}

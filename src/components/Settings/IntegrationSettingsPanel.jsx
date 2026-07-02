@@ -69,7 +69,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
           />
         </div>
 
-        <Notice tone="warning">
+        <Notice tone="warning" className="mt-5">
           This screen stores the club’s fixture-source configuration. A source should only be marked connected after the live import has been verified against the club’s own fixtures.
         </Notice>
 

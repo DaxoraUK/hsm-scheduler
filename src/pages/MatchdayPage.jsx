@@ -33,8 +33,7 @@ import OperationsHealthCard from "../components/Operations/shared/OperationsHeal
 import CompetitionRulesCard from "../components/Operations/shared/CompetitionRulesCard.jsx";
 import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.jsx";
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
-import RecommendationCentreCard from "../components/Operations/shared/RecommendationCentreCard.jsx";
-import OperationsIntelligenceCard from "../components/Operations/shared/OperationsIntelligenceCard.jsx";
+import MatchdayGuidanceCard from "../components/Operations/shared/MatchdayGuidanceCard.jsx";
 import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
 import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
 import StatusChip from "../components/ui/StatusChip.jsx";
@@ -64,7 +63,7 @@ const WORKSPACES = [
     id: "intelligence",
     label: "Intelligence",
     icon: Sparkles,
-    description: "Review risks, parking pressure and operational insight.",
+    description: "Start with Matchday Guidance, then open specialist detail only when it is needed.",
   },
   {
     id: "communications",
@@ -102,7 +101,9 @@ const INTELLIGENCE_TARGETS = Object.freeze({
   weatherIntelligence: { workspace: "intelligence", section: "weatherIntelligence" },
   optimiser: { workspace: "intelligence", section: "dayOptimiser" },
   dayOptimiser: { workspace: "intelligence", section: "dayOptimiser" },
-  recommendationCentre: { workspace: "intelligence", section: "recommendationCentre" },
+  matchdayGuidance: { workspace: "intelligence", section: "matchdayGuidance" },
+  operationsIntelligence: { workspace: "intelligence", section: "matchdayGuidance" },
+  recommendationCentre: { workspace: "intelligence", section: "matchdayGuidance" },
   communications: { workspace: "communications", section: "coachMessages" },
   coachMessages: { workspace: "communications", section: "coachMessages" },
 });
@@ -129,7 +130,7 @@ function getIntelligenceTarget(target, item = {}) {
 
   return INTELLIGENCE_TARGETS[target] || {
     workspace: "intelligence",
-    section: "operationsIntelligence",
+    section: "matchdayGuidance",
   };
 }
 
@@ -312,6 +313,13 @@ export default function MatchdayPage({
   const targetAppliedRef = useRef(null);
 
   const isSunday = day === "Sunday";
+  const matchdayDate = fixtureDay?.date || (
+    day === "Sunday"
+      ? props.sunDate
+      : day === "Midweek"
+        ? props.midweekDate
+        : props.satDate
+  );
 
   const clubWithTiming = useMemo(() => ({
     ...(props.club || {}),
@@ -614,10 +622,15 @@ export default function MatchdayPage({
         render: () => (
           <PitchClosuresCard
             pitchCfg={props.pitchCfg}
+            pitchClosures={props.pitchClosures}
             closedPitches={props.closedPitches}
+            activeDate={matchdayDate}
+            addPitchClosure={props.addPitchClosure}
+            reopenPitchClosures={props.reopenPitchClosures}
             toggleClosed={props.toggleClosed}
             closeAllPitches={props.closeAllPitches}
             reopenAllPitches={props.reopenAllPitches}
+            allowArtificial={props.useAstro}
           />
         ),
       },
@@ -651,39 +664,21 @@ export default function MatchdayPage({
         render: () => <ParkingCapacityCard active={active} club={clubWithTiming} pitchCfg={props.pitchCfg} />,
       },
       {
-        id: "operationsIntelligence",
+        id: "matchdayGuidance",
         workspace: "intelligence",
-        title: "Operations Intelligence",
-        subtitle: "Predictive guidance across fixtures, parking, officials, pitch flow, rules and weather.",
+        title: "Matchday Guidance",
+        subtitle: "One clear operating status, one next best action and one prioritised queue.",
         icon: Sparkles,
         badge: operationsIntelligence.metrics?.total
-          ? `${operationsIntelligence.metrics.total} insights`
-          : "Intelligence",
+          ? `${operationsIntelligence.metrics.total} guidance items`
+          : "Guidance",
         status: operationsIntelligence.status,
         label: operationsIntelligence.label,
         filter: operationsIntelligence.status === "danger" ? "issues" : operationsIntelligence.status === "warning" ? "warnings" : "ready",
         render: () => (
-          <OperationsIntelligenceCard
+          <MatchdayGuidanceCard
             intelligence={operationsIntelligence}
-            onNavigate={openIntelligenceTarget}
-          />
-        ),
-      },
-      {
-        id: "recommendationCentre",
-        workspace: "intelligence",
-        title: "Recommendation Centre",
-        subtitle: "One shared action queue for parking, officials, weather, rules and resources.",
-        icon: Sparkles,
-        badge: recommendationCentre.metrics?.total
-          ? `${recommendationCentre.metrics.total} actions`
-          : "Action queue",
-        status: recommendationCentre.status,
-        label: recommendationCentre.label,
-        filter: recommendationCentre.status === "danger" ? "issues" : recommendationCentre.status === "warning" ? "warnings" : "ready",
-        render: () => (
-          <RecommendationCentreCard
-            centre={recommendationCentre}
+            recommendations={recommendationCentre}
             onNavigate={openIntelligenceTarget}
           />
         ),
@@ -691,9 +686,9 @@ export default function MatchdayPage({
       {
         id: "dayOptimiser",
         workspace: "intelligence",
-        title: "Day Optimiser",
-        subtitle: "Best overall validated fixture moves for the whole matchday.",
-        icon: Sparkles,
+        title: "Schedule Improvements",
+        subtitle: "Optional validated fixture moves that can improve the overall matchday flow.",
+        icon: CalendarDays,
         badge: dayOptimisation.metrics?.validatedMoves
           ? `${dayOptimisation.metrics.validatedMoves} moves`
           : "Optimised",
@@ -705,9 +700,9 @@ export default function MatchdayPage({
       {
         id: "parkingIntelligence",
         workspace: "intelligence",
-        title: "Parking Intelligence",
-        subtitle: "Peak pressure, parking risks and validated fixture-move recommendations.",
-        icon: Sparkles,
+        title: "Parking & Arrivals",
+        subtitle: "Arrival waves, peak parking demand and practical mitigation actions.",
+        icon: Car,
         badge: "Engine",
         ...getSectionStatus({ warning: active.length > 0, ready: active.length === 0 }),
         render: () => (
@@ -724,8 +719,8 @@ export default function MatchdayPage({
       {
         id: "officialsIntelligence",
         workspace: "intelligence",
-        title: "Officials Intelligence",
-        subtitle: "Coverage, confirmation pressure, peak demand and official workload.",
+        title: "Officials Coverage",
+        subtitle: "Confirmation gaps, peak demand, clashes and official workload.",
         icon: UsersRound,
         badge: officialsIntelligence.metrics?.fixtures
           ? `${officialsIntelligence.metrics.confirmed}/${officialsIntelligence.metrics.fixtures} confirmed`
@@ -743,8 +738,8 @@ export default function MatchdayPage({
       {
         id: "operationsHealth",
         workspace: "intelligence",
-        title: "Operations Health",
-        subtitle: "Single health score covering fixtures, pitches, officials, parking and communications.",
+        title: "Readiness Score",
+        subtitle: "One supporting score across fixtures, pitches, officials, parking and communications.",
         icon: ShieldAlert,
         badge: `${operationsHealth.score}%`,
         status: operationsHealth.status,
@@ -755,8 +750,8 @@ export default function MatchdayPage({
       {
         id: "weatherIntelligence",
         workspace: "intelligence",
-        title: "Weather Intelligence",
-        subtitle: "Venue postcode readiness for live forecast, pitch-risk and postponement intelligence.",
+        title: "Weather & Surface Risk",
+        subtitle: "Forecast readiness, pitch exposure and postponement risk for the selected venue.",
         icon: CloudSun,
         badge: weatherIntelligence?.location || "Weather",
         status: weatherIntelligence.status,
@@ -809,7 +804,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
 
 
   const navigationSection = useMemo(() => {
@@ -824,11 +819,12 @@ export default function MatchdayPage({
       parkingIntelligence: "parkingIntelligence",
       weather: "weatherIntelligence",
       weatherIntelligence: "weatherIntelligence",
-      intelligence: "operationsIntelligence",
-      operationsIntelligence: "operationsIntelligence",
-      recommendations: "recommendationCentre",
-      recommendationCentre: "recommendationCentre",
-      actionQueue: "recommendationCentre",
+      intelligence: "matchdayGuidance",
+      matchdayGuidance: "matchdayGuidance",
+      operationsIntelligence: "matchdayGuidance",
+      recommendations: "matchdayGuidance",
+      recommendationCentre: "matchdayGuidance",
+      actionQueue: "matchdayGuidance",
       dayOptimiser: "dayOptimiser",
       actionBar: "actionBar",
       build: "actionBar",
@@ -921,6 +917,8 @@ export default function MatchdayPage({
     .filter((section) => section.workspace === activeWorkspace)
     .map((section) => section.id);
   function shouldAutoExpandSection(section) {
+    if (section?.id === "matchdayGuidance") return true;
+    if (section?.workspace === "intelligence") return false;
     return section?.status === "danger" || section?.status === "warning";
   }
 
