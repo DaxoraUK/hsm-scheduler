@@ -100,6 +100,12 @@ export const TEST_SUN=[
   {homeTeam:"Horwich St Marys HSM Sunday 1sts",awayTeam:"Salford Victoria",league:"SLC",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
 ];
 
+export const TEST_MIDWEEK=[
+  {homeTeam:"Horwich St Marys U10 Avengers",awayTeam:"Atherton Town U10",league:"BBDFL",isCup:false,status:"active",referee:"",refPhone:"",refStatus:"TBC"},
+  {homeTeam:"Horwich St Marys U14 Spartans",awayTeam:"Westhoughton Juniors U14",league:"BBDFL",isCup:false,status:"active",referee:"A. Green",refPhone:"07700 900777",refStatus:"Confirmed"},
+  {homeTeam:"Horwich St Marys HSM 1st Team",awayTeam:"Eagley FC",league:"LAL",isCup:false,status:"active",referee:"R. Taylor",refPhone:"07700 900654",refStatus:"Confirmed"},
+];
+
 export const FA_LEAGUES=[
   {id:"BBDFL",name:"Bolton, Bury and District FL",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=467452772&selectedFixtureGroupAgeGroup=0&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=608702885&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=608702885&itemsPerPage=25"},
   {id:"LAL",name:"Lancashire Amateur League",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=219056685&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=358794991&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=&itemsPerPage=25"},

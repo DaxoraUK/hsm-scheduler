@@ -13,6 +13,7 @@ export default function DashboardMissionHero({
   totalFixtures = 0,
   satCount = 0,
   sunCount = 0,
+  midweekCount = 0,
   completedSteps = 0,
   totalSteps = 6,
   nextAction,
@@ -141,11 +142,18 @@ export default function DashboardMissionHero({
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-4 gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             <MiniStat label="Saturday" value={satCount} />
             <MiniStat label="Sunday" value={sunCount} />
+            <MiniStat label="Midweek" value={midweekCount} />
             <MiniStat label="Weather" value={weatherLocation ? "Ready" : "Set postcode"} />
-            <MiniStat label="Club" value={club?.name || "Ground Control"} compact />
+            <div className="col-span-1 h-full sm:col-span-2 [&>div]:h-full">
+              <MiniStat
+                label="Club"
+                value={club?.name || "Ground Control"}
+                compact
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -159,7 +167,7 @@ function MiniStat({ label, value, compact = false }) {
       <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
         {label}
       </div>
-      <div className={`mt-1 font-black text-white ${compact ? "truncate text-xs" : "text-lg"}`}>
+      <div className={`mt-1 font-black text-white ${compact ? "truncate text-sm" : "text-lg"}`}>
         {value}
       </div>
     </div>

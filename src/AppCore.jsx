@@ -11,7 +11,9 @@ import OperationsPage from "./pages/OperationsPage.jsx";
 import DayTabs from "./components/Operations/DayTabs.jsx";
 import SundayPage from "./pages/SundayPage.jsx";
 import SaturdayPage from "./pages/SaturdayPage.jsx";
+import MidweekPage from "./pages/MidweekPage.jsx";
 import OperationsTimelinePage from "./pages/OperationsTimelinePage.jsx";
+import OperationsCentrePage from "./pages/OperationsCentrePage.jsx";
 import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
@@ -22,11 +24,29 @@ import CommunicationsPage from "./pages/CommunicationsPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import { MATCHDAY_SCOPES, getDayTabFromScope, normaliseMatchdayScope } from "./lib/domain/matchdayScope.js";
+import {
+  formatMatchdayDate,
+  getCurrentMatchWeekend,
+  getInitialMatchWeekend,
+  getWeekendFromSaturday,
+  getWeekendFromSunday,
+  persistMatchWeekend,
+} from "./lib/date/weekendCalendar.js";
+import {
+  formatMidweekDate,
+  getCurrentOrNextMidweekDate,
+  getInitialMidweekDate,
+  getInitialMidweekWindow,
+  isWeekendDate,
+  persistMidweekDate,
+  persistMidweekWindow,
+  timeValueToMinutes,
+} from "./lib/date/matchweekCalendar.js";
 
 import {
   G, RE, AU, WH, AM, BL, TE, PU,
   DEFAULT_CLUB, PITCHES, AVG_CARS,
-  TEAM_CONFIG_DEFAULT, TEST_SAT, TEST_SUN,
+  TEAM_CONFIG_DEFAULT, TEST_SAT, TEST_SUN, TEST_MIDWEEK,
   DEFAULT_BUFFER_YOUTH, DEFAULT_BUFFER_ADULT
 } from "./lib/constants.js";
 
@@ -52,7 +72,7 @@ function App(){
     const nextScope=normaliseMatchdayScope(scope);
     setMatchdayScopeState(nextScope);
     try{localStorage.setItem("gc_matchday_scope",nextScope);}catch(e){}
-    if(nextScope===MATCHDAY_SCOPES.SATURDAY||nextScope===MATCHDAY_SCOPES.SUNDAY){
+    if([MATCHDAY_SCOPES.SATURDAY,MATCHDAY_SCOPES.SUNDAY,MATCHDAY_SCOPES.MIDWEEK].includes(nextScope)){
       setDayTab(getDayTabFromScope(nextScope));
     }
   },[]);
@@ -60,6 +80,20 @@ function App(){
   const [settingsTab,setSettingsTab]=useState("overview");
   const [navigationTarget,setNavigationTarget]=useState(null);
   const clearNavigationTarget=useCallback(()=>setNavigationTarget(null),[]);
+  const [matchWeekend,setMatchWeekend]=useState(()=>getInitialMatchWeekend());
+  const satDate=matchWeekend.saturday;
+  const sunDate=matchWeekend.sunday;
+  const [midweekDateState,setMidweekDateState]=useState(()=>getInitialMidweekDate());
+  const [midweekWindow,setMidweekWindow]=useState(()=>getInitialMidweekWindow());
+  const midweekDate=midweekDateState;
+  const midweekStartTime=midweekWindow.start;
+  const midweekEndTime=midweekWindow.end;
+  const midweekStartMins=timeValueToMinutes(midweekStartTime,18*60);
+  const midweekEndMins=timeValueToMinutes(midweekEndTime,21*60+30);
+  const midweekStartHour=Math.floor(midweekStartMins/60);
+  const midweekStartMin=midweekStartMins%60;
+  const midweekEndHour=Math.floor(midweekEndMins/60);
+  const midweekEndMin=midweekEndMins%60;
 
   // Saturday state
   const [satScheduled,setSatScheduled]=useState([]);
@@ -68,7 +102,6 @@ function App(){
   const [satManual,setSatManual]=useState([]);
   const [satFetchStatus,setSatFetchStatus]=useState([]);
   const [satHasRun,setSatHasRun]=useState(false);
-  const [satDate,setSatDate]=useState("2026-09-13");
 
   // Sunday state
   const [sunScheduled,setSunScheduled]=useState([]);
@@ -76,7 +109,14 @@ function App(){
   const [sunOverrides,setSunOverrides]=useState({});
   const [sunManual,setSunManual]=useState([]);
   const [sunHasRun,setSunHasRun]=useState(false);
-  const [sunDate,setSunDate]=useState("2026-09-14");
+
+  // Midweek state
+  const [midweekScheduled,setMidweekScheduled]=useState([]);
+  const [midweekUnresolved,setMidweekUnresolved]=useState([]);
+  const [midweekOverrides,setMidweekOverrides]=useState({});
+  const [midweekManual,setMidweekManual]=useState([]);
+  const [midweekFetchStatus,setMidweekFetchStatus]=useState([]);
+  const [midweekHasRun,setMidweekHasRun]=useState(false);
 
   // Settings state
   const [startHour,setStartHour]=useState(8);
@@ -96,6 +136,80 @@ function App(){
   };
   const [showManual,setShowManual]=useState(false);
   const [showSunManual,setShowSunManual]=useState(false);
+  const [showMidweekManual,setShowMidweekManual]=useState(false);
+
+  const clearWeekendScheduleForDateChange=useCallback(()=>{
+    setSatScheduled([]);
+    setSatUnresolved([]);
+    setSatOverrides({});
+    setSatManual([]);
+    setSatFetchStatus([]);
+    setSatHasRun(false);
+    setSunScheduled([]);
+    setSunUnresolved([]);
+    setSunOverrides({});
+    setSunManual([]);
+    setSunHasRun(false);
+    setShowManual(false);
+    setShowSunManual(false);
+  },[]);
+
+  const clearMidweekScheduleForDateChange=useCallback(()=>{
+    setMidweekScheduled([]);
+    setMidweekUnresolved([]);
+    setMidweekOverrides({});
+    setMidweekManual([]);
+    setMidweekFetchStatus([]);
+    setMidweekHasRun(false);
+    setShowMidweekManual(false);
+  },[]);
+
+  const setMidweekDate=useCallback((value)=>{
+    if(!value||value===midweekDateState) return;
+    setMidweekDateState(value);
+    clearMidweekScheduleForDateChange();
+  },[clearMidweekScheduleForDateChange,midweekDateState]);
+
+  const clearMidweekBuiltSchedule=useCallback(()=>{
+    setMidweekScheduled([]);
+    setMidweekUnresolved([]);
+    setMidweekOverrides({});
+    setMidweekHasRun(false);
+  },[]);
+
+  const setMidweekStartTime=useCallback((value)=>{
+    setMidweekWindow((current)=>({...current,start:value}));
+    clearMidweekBuiltSchedule();
+  },[clearMidweekBuiltSchedule]);
+
+  const setMidweekEndTime=useCallback((value)=>{
+    setMidweekWindow((current)=>({...current,end:value}));
+    clearMidweekBuiltSchedule();
+  },[clearMidweekBuiltSchedule]);
+
+  const useCurrentMidweekDate=useCallback(()=>{
+    setMidweekDate(getCurrentOrNextMidweekDate());
+  },[setMidweekDate]);
+
+  const applyMatchWeekend=useCallback((nextWeekend)=>{
+    if(!nextWeekend?.saturday||!nextWeekend?.sunday) return;
+    if(nextWeekend.saturday===satDate&&nextWeekend.sunday===sunDate) return;
+    setMatchWeekend(nextWeekend);
+    clearWeekendScheduleForDateChange();
+  },[satDate,sunDate,clearWeekendScheduleForDateChange]);
+
+  const setSatDate=useCallback((value)=>{
+    applyMatchWeekend(getWeekendFromSaturday(value));
+  },[applyMatchWeekend]);
+
+  const setSunDate=useCallback((value)=>{
+    applyMatchWeekend(getWeekendFromSunday(value));
+  },[applyMatchWeekend]);
+
+  const useCurrentMatchWeekend=useCallback(()=>{
+    applyMatchWeekend(getCurrentMatchWeekend());
+  },[applyMatchWeekend]);
+
   const [refs,setRefs]=useState([]);
   const [history,setHistory]=useState([]);
   const [teamCfg,setTeamCfg]=useState(()=>{
@@ -128,6 +242,18 @@ function App(){
     try{const s=localStorage.getItem("hsm_testsun");if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
     return TEST_SUN;
   });
+
+  useEffect(()=>{
+    persistMatchWeekend(matchWeekend);
+  },[matchWeekend]);
+
+  useEffect(()=>{
+    persistMidweekDate(midweekDate);
+  },[midweekDate]);
+
+  useEffect(()=>{
+    persistMidweekWindow(midweekWindow);
+  },[midweekWindow]);
 
   const updateSupaKey=(k)=>{
     const trimmed=k.trim();
@@ -269,7 +395,9 @@ function App(){
         setDayTab(
           event?.detail?.day === "sunday"
             ? "sunday"
-            : "saturday"
+            : event?.detail?.day === "midweek"
+              ? "midweek"
+              : "saturday"
         );
       };
 
@@ -356,8 +484,55 @@ const runSunLive = async () => {
   runSun(fixtures);
 };
 
+  const runMidweek=useCallback((baseFx)=>{
+    setMidweekOverrides({});
+    const all=[...baseFx,...midweekManual];
+    const {scheduled:s,unresolved:u}=scheduleSat(
+      all,
+      useAstro,
+      closedPitches,
+      teamCfg,
+      getBufMap(),
+      midweekStartMins,
+      midweekEndMins,
+      pitchCfg,
+      club.maxConcurrent||3,
+      { fixedAdultKickOffMins: null }
+    );
+    setMidweekScheduled(s);
+    setMidweekUnresolved(u);
+    setMidweekHasRun(true);
+  },[midweekManual,useAstro,closedPitches,teamCfg,bufferYouth,bufferAdult,midweekStartMins,midweekEndMins,pitchCfg,club.maxConcurrent]);
+
+  const runMidweekTest=()=>{
+    setMidweekFetchStatus([{id:"TEST",name:"Midweek Test Data",ok:true,count:TEST_MIDWEEK.length}]);
+    runMidweek(TEST_MIDWEEK);
+  };
+
+  const runMidweekLive=async()=>{
+    if(!midweekDate){
+      alert("Select a midweek fixture date.");
+      return;
+    }
+
+    if(midweekEndMins<=midweekStartMins){
+      alert("The midweek end time must be later than the start time.");
+      return;
+    }
+
+    setMidweekHasRun(false);
+    setMidweekFetchStatus([]);
+    setMidweekScheduled([]);
+    setMidweekUnresolved([]);
+
+    const {statuses,fixtures}=await fetchMidweekFixtures(midweekDate);
+    setMidweekFetchStatus(statuses);
+    runMidweek(fixtures);
+  };
+
   const satOv=(i,k,v)=>setSatOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
   const sunOv=(i,k,v)=>setSunOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
+  const midweekOv=(i,k,v)=>setMidweekOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
 const {
   satFinal,
   satActive,
@@ -381,8 +556,27 @@ const { sunFinal } = useSundayScheduling({
   sunOverrides,
 });
 
-const satDateLabel=satDate?new Date(satDate).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"Test Saturday";
-const sunDateLabel=sunDate?new Date(sunDate).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"Test Sunday";
+const {
+  satFinal: midweekFinal,
+  satActive: midweekActive,
+  satPostponed: midweekPostponed,
+  refWarnings: midweekRefWarnings,
+  satConflicts: midweekConflicts,
+  peakCars: midweekPeakCars,
+  parkingOver: midweekParkingOver,
+  readiness: midweekReadiness,
+} = useSaturdayScheduling({
+  satScheduled: midweekScheduled,
+  satOverrides: midweekOverrides,
+  satUnresolved: midweekUnresolved,
+  pitchCfg,
+  club,
+});
+
+const satDateLabel=formatMatchdayDate(satDate,"Saturday");
+const sunDateLabel=formatMatchdayDate(sunDate,"Sunday");
+const midweekDateLabel=formatMidweekDate(midweekDate,"Midweek");
+const midweekDateIsWeekend=isWeekendDate(midweekDate);
 
 const { saveWeek } = useWeekPersistence({
   mode,
@@ -393,6 +587,12 @@ const { saveWeek } = useWeekPersistence({
   satPostponed,
   sunHasRun,
   sunFinal,
+  midweekDate,
+  midweekDateLabel,
+  midweekHasRun,
+  midweekFinal,
+  midweekActive,
+  midweekPostponed,
   club,
   history,
   setHistory,
@@ -403,6 +603,7 @@ const { saveWeek } = useWeekPersistence({
 const {
   fetchSaturdayFixtures,
   fetchSundayFixtures,
+  fetchMidweekFixtures,
 } = useFixtureFetcher();
 
 const { toggleClosed, resetAll } = useOperationsActions({
@@ -462,9 +663,12 @@ return(
     club={club}
     satFinal={satFinal}
     sunFinal={sunFinal}
+    midweekFinal={midweekFinal}
     satHasRun={satHasRun}
     sunHasRun={sunHasRun}
+    midweekHasRun={midweekHasRun}
     readiness={readiness}
+    midweekReadiness={midweekReadiness}
     authSession={authSession}
     onSignOut={handleSignOut}
   >
@@ -485,15 +689,20 @@ return(
     pitchCfg={pitchCfg}
     satFinal={satFinal}
     sunFinal={sunFinal}
+    midweekFinal={midweekFinal}
     satHasRun={satHasRun}
     sunHasRun={sunHasRun}
+    midweekHasRun={midweekHasRun}
     readiness={readiness}
+    midweekReadiness={midweekReadiness}
     refWarnings={refWarnings}
     peakCars={peakCars}
     carCap={carCap}
     satConflicts={satConflicts}
     satUnresolved={satUnresolved}
     sunUnresolved={sunUnresolved}
+    midweekUnresolved={midweekUnresolved}
+    midweekConflicts={midweekConflicts}
     closedPitches={closedPitches}
   />
 )}
@@ -625,13 +834,135 @@ return(
           />
         )}
 
+        {dayTab === "midweek" && (
+          <MidweekPage
+            navigationTarget={navigationTarget}
+            clearNavigationTarget={clearNavigationTarget}
+            S={S}
+            G={G}
+            RE={RE}
+            AM={AM}
+            PU={PU}
+            WH={WH}
+            club={club}
+            hdrStyle={hdrStyle}
+            mode={mode}
+            midweekDate={midweekDate}
+            setMidweekDate={setMidweekDate}
+            midweekDateLabel={midweekDateLabel}
+            midweekDateIsWeekend={midweekDateIsWeekend}
+            midweekStartTime={midweekStartTime}
+            setMidweekStartTime={setMidweekStartTime}
+            midweekEndTime={midweekEndTime}
+            setMidweekEndTime={setMidweekEndTime}
+            useCurrentMidweekDate={useCurrentMidweekDate}
+            runMidweekTest={runMidweekTest}
+            runMidweekLive={runMidweekLive}
+            showMidweekManual={showMidweekManual}
+            setShowMidweekManual={setShowMidweekManual}
+            midweekManual={midweekManual}
+            setMidweekManual={setMidweekManual}
+            midweekFetchStatus={midweekFetchStatus}
+            teamCfg={teamCfg}
+            midweekUnresolved={midweekUnresolved}
+            midweekHasRun={midweekHasRun}
+            midweekFinal={midweekFinal}
+            pitchCfg={pitchCfg}
+            refs={refs}
+            midweekOv={midweekOv}
+            thC={thC}
+            closedPitches={closedPitches}
+            toggleClosed={toggleClosed}
+            closeAllPitches={closeAllPitches}
+            reopenAllPitches={reopenAllPitches}
+            midweekOverrides={midweekOverrides}
+            midweekScheduled={midweekScheduled}
+            setMidweekScheduled={setMidweekScheduled}
+            setMidweekUnresolved={setMidweekUnresolved}
+            midweekConflicts={midweekConflicts}
+            midweekRefWarnings={midweekRefWarnings}
+            midweekPeakCars={midweekPeakCars}
+            midweekParkingOver={midweekParkingOver}
+            midweekStartHour={midweekStartHour}
+            midweekStartMin={midweekStartMin}
+            midweekEndHour={midweekEndHour}
+            midweekEndMin={midweekEndMin}
+            bufferYouth={bufferYouth}
+            bufferAdult={bufferAdult}
+            useAstro={useAstro}
+            setUseAstro={setUseAstro}
+            testSat={testSat}
+            saveWeek={saveWeek}
+            cleanName={cleanName}
+          />
+        )}
+
+        {dayTab === "centre" && (
+          <OperationsCentrePage
+            club={club}
+            pitchCfg={pitchCfg}
+            closedPitches={closedPitches}
+            refs={refs}
+            satFinal={satFinal}
+            sunFinal={sunFinal}
+            midweekFinal={midweekFinal}
+            satHasRun={satHasRun}
+            sunHasRun={sunHasRun}
+            midweekHasRun={midweekHasRun}
+            satUnresolved={satUnresolved}
+            sunUnresolved={sunUnresolved}
+            midweekUnresolved={midweekUnresolved}
+            satConflicts={satConflicts}
+            midweekConflicts={midweekConflicts}
+            satDate={satDate}
+            sunDate={sunDate}
+            midweekDate={midweekDate}
+            satDateLabel={satDateLabel}
+            sunDateLabel={sunDateLabel}
+            midweekDateLabel={midweekDateLabel}
+            onWeekendChange={setSatDate}
+            onUseCurrentWeekend={useCurrentMatchWeekend}
+            onMidweekChange={setMidweekDate}
+            onUseCurrentMidweekDate={useCurrentMidweekDate}
+            onOpenTimeline={()=>{
+              clearNavigationTarget();
+              setDayTab("timeline");
+            }}
+            onOpenArea={(card,targetDay="saturday")=>{
+              const workspace =
+                ["actionBar","schedule","unresolved"].includes(card)
+                  ? "fixtures"
+                  : ["pitchClosures","pitchAssignments"].includes(card)
+                    ? "resources"
+                    : card === "coachMessages"
+                      ? "communications"
+                      : "intelligence";
+
+              setDayTab(targetDay);
+              setNavigationTarget({
+                card,
+                workspace,
+                day:targetDay,
+                scrollToSection:true,
+                createdAt:Date.now(),
+              });
+            }}
+          />
+        )}
+
         {dayTab === "timeline" && (
           <OperationsTimelinePage
             club={club}
             satFinal={satFinal}
             sunFinal={sunFinal}
+            midweekFinal={midweekFinal}
             satHasRun={satHasRun}
             sunHasRun={sunHasRun}
+            midweekHasRun={midweekHasRun}
+            satDate={satDate}
+            sunDate={sunDate}
+            midweekDate={midweekDate}
+            midweekDateLabel={midweekDateLabel}
             carCap={carCap}
             refs={refs}
             refWarnings={refWarnings}
@@ -655,8 +986,10 @@ return(
         closedPitches={closedPitches}
         satFinal={satFinal}
         sunFinal={sunFinal}
+        midweekFinal={midweekFinal}
         satHasRun={satHasRun}
         sunHasRun={sunHasRun}
+        midweekHasRun={midweekHasRun}
         refWarnings={refWarnings}
       />
     )}

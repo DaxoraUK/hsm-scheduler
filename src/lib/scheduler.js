@@ -126,7 +126,8 @@ export function scheduleSat(
   startMins,
   endMins,
   pitchCfgArg = PITCHES,
-  maxConcurrent = 3
+  maxConcurrent = 3,
+  options = {}
 ) {
   const pitchCfg = normalisePitchRegistry(pitchCfgArg && pitchCfgArg.length ? pitchCfgArg : PITCHES);
   const closedPitchSet = buildClosedPitchSet(pitchCfg, closedPitches);
@@ -169,7 +170,12 @@ export function scheduleSat(
   });
 
   const maxConcurrentAllowed = maxConcurrent || 3;
-  const adultKo = 14 * 60;
+  const fixedAdultKickOffMins = Object.prototype.hasOwnProperty.call(
+    options,
+    "fixedAdultKickOffMins"
+  )
+    ? options.fixedAdultKickOffMins
+    : 14 * 60;
 
   const free = (pitchId, start, end) => {
     if (!(pitchId in slots)) return false;
@@ -273,7 +279,7 @@ export function scheduleSat(
     const buffer = bufMap[cfg.format] || 15;
     const duration = cfg.gameMins + buffer;
 
-    if (isAdult(fixture.homeTeam)) {
+    if (isAdult(fixture.homeTeam) && Number.isFinite(fixedAdultKickOffMins)) {
       let placed = false;
 
       for (const pitchId of [cfg.defaultPitch, cfg.altPitch].filter(Boolean)) {
@@ -282,15 +288,15 @@ export function scheduleSat(
         const pitch = getPitch(pitchCfg, pitchId);
         if (!isPitchSuitableForFixture(pitch, { ...fixture, cfg })) continue;
 
-        if (free(pitchId, adultKo, adultKo + duration)) {
-          book(pitchId, adultKo, adultKo + duration);
+        if (free(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration)) {
+          book(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration);
 
           scheduled.push({
             ...fixture,
             pitchId,
-            koTime: t2s(adultKo),
-            koMins: adultKo,
-            endMins: adultKo + duration,
+            koTime: t2s(fixedAdultKickOffMins),
+            koMins: fixedAdultKickOffMins,
+            endMins: fixedAdultKickOffMins + duration,
             cfg,
             usingAlt: pitchId !== cfg.defaultPitch,
             usingAstro: isArtificialPitch(pitchCfg, pitchId),
@@ -306,7 +312,7 @@ export function scheduleSat(
       if (!placed) {
         unresolved.push({
           ...fixture,
-          reason: "No valid adult 2pm slot. Preferred pitches may be closed, wrong surface, or already occupied.",
+          reason: `No valid adult ${t2s(fixedAdultKickOffMins)} slot. Preferred pitches may be closed, wrong surface, or already occupied.`,
         });
       }
 
