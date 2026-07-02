@@ -117,7 +117,7 @@ function buildClosedPitchSet(pitchCfg, closedPitches = []) {
   return closed;
 }
 
-export function scheduleSat(
+function scheduleFixtureDayCore(
   fixtures,
   useAstro,
   closedPitches,
@@ -441,6 +441,83 @@ export function scheduleSat(
   };
 }
 
+
+export function scheduleFixtureDay({
+  fixtureDay = {},
+  dayKey = fixtureDay.key || "saturday",
+  fixtures = [],
+  useAstro = false,
+  closedPitches = [],
+  teamConfig = [],
+  cfgList = teamConfig,
+  bufferMap = {},
+  bufMap = bufferMap,
+  operatingWindow = fixtureDay.operatingWindow || {},
+  startMins = operatingWindow.startMins,
+  endMins = operatingWindow.endMins,
+  pitchCfg = PITCHES,
+  maxConcurrent = 3,
+  rules = fixtureDay.rules || {},
+} = {}) {
+  const result = scheduleFixtureDayCore(
+    fixtures,
+    useAstro,
+    closedPitches,
+    cfgList,
+    bufMap,
+    startMins,
+    endMins,
+    pitchCfg,
+    maxConcurrent,
+    rules
+  );
+
+  const normalisedDayKey = String(dayKey || fixtureDay.key || "saturday").toLowerCase();
+  const decorate = (fixture) => ({
+    ...fixture,
+    fixtureDayKey: fixture.fixtureDayKey || normalisedDayKey,
+    __day: fixture.__day || normalisedDayKey,
+  });
+
+  return {
+    scheduled: result.scheduled.map(decorate),
+    unresolved: result.unresolved.map(decorate),
+    metadata: {
+      dayKey: normalisedDayKey,
+      operatingWindow: { startMins, endMins },
+      rules: { ...rules },
+    },
+  };
+}
+
+// Compatibility positional API retained while callers migrate to scheduleFixtureDay.
+export function scheduleSat(
+  fixtures,
+  useAstro,
+  closedPitches,
+  cfgList,
+  bufMap,
+  startMins,
+  endMins,
+  pitchCfgArg = PITCHES,
+  maxConcurrent = 3,
+  options = {}
+) {
+  return scheduleFixtureDay({
+    dayKey: "saturday",
+    fixtures,
+    useAstro,
+    closedPitches,
+    cfgList,
+    bufMap,
+    startMins,
+    endMins,
+    pitchCfg: pitchCfgArg,
+    maxConcurrent,
+    rules: { fixedAdultKickOffMins: 14 * 60, ...options },
+  });
+}
+
 export function scheduleSun(
   fixtures,
   useAstro,
@@ -450,9 +527,11 @@ export function scheduleSun(
   startMins,
   endMins,
   pitchCfgArg = PITCHES,
-  maxConcurrent = 3
+  maxConcurrent = 3,
+  options = {}
 ) {
-  return scheduleSat(
+  return scheduleFixtureDay({
+    dayKey: "sunday",
     fixtures,
     useAstro,
     closedPitches,
@@ -460,7 +539,8 @@ export function scheduleSun(
     bufMap,
     startMins,
     endMins,
-    pitchCfgArg,
-    maxConcurrent
-  );
+    pitchCfg: pitchCfgArg,
+    maxConcurrent,
+    rules: { fixedAdultKickOffMins: 14 * 60, ...options },
+  });
 }

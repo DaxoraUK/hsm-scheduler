@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Sparkles,
   Target,
+  UsersRound,
 } from "lucide-react";
 import FixtureDrawer from "../components/Operations/shared/FixtureDrawer.jsx";
 import MatchdayTimelineCard from "../components/Operations/shared/MatchdayTimelineCard.jsx";
@@ -34,6 +35,7 @@ import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.j
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import RecommendationCentreCard from "../components/Operations/shared/RecommendationCentreCard.jsx";
 import OperationsIntelligenceCard from "../components/Operations/shared/OperationsIntelligenceCard.jsx";
+import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
 import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
 import StatusChip from "../components/ui/StatusChip.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
@@ -42,7 +44,7 @@ import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { buildRecommendationCentre } from "../lib/engines/recommendationCentreEngine.js";
 import { calculateOperationsIntelligence } from "../lib/engines/operationsIntelligenceEngine.js";
-import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
+import { calculateOfficialsReadiness, findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
 
 const WORKSPACES = [
@@ -83,20 +85,48 @@ const INTELLIGENCE_TARGETS = Object.freeze({
   actionBar: { workspace: "fixtures", section: "actionBar" },
   build: { workspace: "fixtures", section: "actionBar" },
   buildSchedule: { workspace: "fixtures", section: "actionBar" },
+  controls: { workspace: "fixtures", section: "actionBar" },
   schedule: { workspace: "fixtures", section: "schedule" },
+  fixtures: { workspace: "fixtures", section: "schedule" },
   unresolved: { workspace: "fixtures", section: "unresolved" },
   competitionRules: { workspace: "fixtures", section: "competitionRules" },
   pitchClosures: { workspace: "resources", section: "pitchClosures" },
   pitchAssignments: { workspace: "resources", section: "pitchAssignments" },
+  resources: { workspace: "resources", section: "pitchAssignments" },
+  parking: { workspace: "intelligence", section: "parkingIntelligence" },
   parkingIntelligence: { workspace: "intelligence", section: "parkingIntelligence" },
+  officials: { workspace: "intelligence", section: "officialsIntelligence" },
+  officialsIntelligence: { workspace: "intelligence", section: "officialsIntelligence" },
   operationsHealth: { workspace: "intelligence", section: "operationsHealth" },
+  weather: { workspace: "intelligence", section: "weatherIntelligence" },
   weatherIntelligence: { workspace: "intelligence", section: "weatherIntelligence" },
+  optimiser: { workspace: "intelligence", section: "dayOptimiser" },
   dayOptimiser: { workspace: "intelligence", section: "dayOptimiser" },
   recommendationCentre: { workspace: "intelligence", section: "recommendationCentre" },
+  communications: { workspace: "communications", section: "coachMessages" },
   coachMessages: { workspace: "communications", section: "coachMessages" },
 });
 
-function getIntelligenceTarget(target) {
+function getIntelligenceTarget(target, item = {}) {
+  const itemText = `${item.id || ""} ${item.title || ""}`.toLowerCase();
+  if (itemText.includes("build") && itemText.includes("schedule")) {
+    return INTELLIGENCE_TARGETS.actionBar;
+  }
+
+  if (item.domain === "officials") {
+    return INTELLIGENCE_TARGETS.officialsIntelligence;
+  }
+
+  if (target && typeof target === "object") {
+    const section = target.section || target.card;
+    if (section) {
+      return {
+        workspace: target.workspace || INTELLIGENCE_TARGETS[section]?.workspace || "intelligence",
+        section: INTELLIGENCE_TARGETS[section]?.section || section,
+      };
+    }
+  }
+
   return INTELLIGENCE_TARGETS[target] || {
     workspace: "intelligence",
     section: "operationsIntelligence",
@@ -249,9 +279,21 @@ function WorkspaceTab({ workspace, active, count, onClick }) {
 export default function MatchdayPage({
   day,
   props,
+  fixtureDay = null,
   hasRun,
   final = [],
   overrides = {},
+  unresolved: suppliedUnresolved,
+  scheduled: suppliedScheduled,
+  setScheduled: suppliedSetScheduled,
+  setUnresolved: suppliedSetUnresolved,
+  manualFixtures: suppliedManualFixtures,
+  setManualFixtures: suppliedSetManualFixtures,
+  showManual: suppliedShowManual,
+  setShowManual: suppliedSetShowManual,
+  conflicts: suppliedConflicts,
+  runTest,
+  runLive,
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
@@ -273,6 +315,8 @@ export default function MatchdayPage({
 
   const clubWithTiming = useMemo(() => ({
     ...(props.club || {}),
+    fixtureDayKey: fixtureDay?.key || day.toLowerCase(),
+    fixtureDayRules: fixtureDay?.rules || {},
     startHour: props.startHour,
     startMin: props.startMin,
     endHour: props.endHour,
@@ -281,7 +325,7 @@ export default function MatchdayPage({
     endTime: `${String(props.endHour ?? 11).padStart(2, "0")}:${String(props.endMin ?? 30).padStart(2, "0")}`,
     bufferYouth: props.bufferYouth,
     bufferAdult: props.bufferAdult,
-  }), [props.club, props.startHour, props.startMin, props.endHour, props.endMin, props.bufferYouth, props.bufferAdult]);
+  }), [day, fixtureDay, props.club, props.startHour, props.startMin, props.endHour, props.endMin, props.bufferYouth, props.bufferAdult]);
 
   const active = useMemo(
     () => final.filter((fixture) => fixture.status !== "postponed"),
@@ -293,15 +337,15 @@ export default function MatchdayPage({
     [final]
   );
 
-  const unresolved = isSunday ? props.sunUnresolved || [] : props.satUnresolved || [];
-  const scheduled = isSunday ? props.sunScheduled || [] : props.satScheduled || [];
-  const setScheduled = isSunday ? props.setSunScheduled : props.setSatScheduled;
-  const setUnresolved = isSunday ? props.setSunUnresolved : props.setSatUnresolved;
-  const manualFixtures = isSunday ? props.sunManual || [] : props.satManual || [];
-  const setManualFixtures = isSunday ? props.setSunManual : props.setSatManual;
-  const showManual = isSunday ? props.showSunManual : props.showManual;
-  const setShowManual = isSunday ? props.setShowSunManual : props.setShowManual;
-  const conflicts = isSunday ? props.sunConflicts || [] : props.satConflicts || [];
+  const unresolved = suppliedUnresolved ?? (isSunday ? props.sunUnresolved || [] : props.satUnresolved || []);
+  const scheduled = suppliedScheduled ?? (isSunday ? props.sunScheduled || [] : props.satScheduled || []);
+  const setScheduled = suppliedSetScheduled || (isSunday ? props.setSunScheduled : props.setSatScheduled);
+  const setUnresolved = suppliedSetUnresolved || (isSunday ? props.setSunUnresolved : props.setSatUnresolved);
+  const manualFixtures = suppliedManualFixtures ?? (isSunday ? props.sunManual || [] : props.satManual || []);
+  const setManualFixtures = suppliedSetManualFixtures || (isSunday ? props.setSunManual : props.setSatManual);
+  const showManual = suppliedShowManual ?? (isSunday ? props.showSunManual : props.showManual);
+  const setShowManual = suppliedSetShowManual || (isSunday ? props.setShowSunManual : props.setShowManual);
+  const conflicts = suppliedConflicts ?? (isSunday ? props.sunConflicts || [] : props.satConflicts || []);
 
   const refWarnings = useMemo(
     () =>
@@ -315,14 +359,22 @@ export default function MatchdayPage({
 
   const officialConflicts = useMemo(() => findOfficialConflicts(final, props.refs || []), [final, props.refs]);
 
+  const officialsIntelligence = useMemo(() => calculateOfficialsReadiness({
+    fixtures: final,
+    active,
+    officialConflicts,
+    refWarnings,
+    refs: props.refs || [],
+  }), [active, final, officialConflicts, props.refs, refWarnings]);
+
   const fixtureSearchResults = useMemo(() => {
     const query = sectionQuery.trim().toLowerCase();
     if (!query) return final.length;
     return final.filter((fixture) => getFixtureLabel(fixture).includes(query)).length;
   }, [final, sectionQuery]);
 
-  const openIntelligenceTarget = useCallback((target) => {
-    const destination = getIntelligenceTarget(target);
+  const openIntelligenceTarget = useCallback((target, item = {}) => {
+    const destination = getIntelligenceTarget(target, item);
 
     setSectionQuery("");
     setSectionFilter("all");
@@ -340,7 +392,6 @@ export default function MatchdayPage({
       window.setTimeout(() => setHighlightedSection(null), 2200);
     }
   }, []);
-
 
   const operationsHealth = useMemo(() => calculateOperationsHealth({
     fixtures: final,
@@ -630,7 +681,12 @@ export default function MatchdayPage({
         status: recommendationCentre.status,
         label: recommendationCentre.label,
         filter: recommendationCentre.status === "danger" ? "issues" : recommendationCentre.status === "warning" ? "warnings" : "ready",
-        render: () => <RecommendationCentreCard centre={recommendationCentre} />,
+        render: () => (
+          <RecommendationCentreCard
+            centre={recommendationCentre}
+            onNavigate={openIntelligenceTarget}
+          />
+        ),
       },
       {
         id: "dayOptimiser",
@@ -662,6 +718,25 @@ export default function MatchdayPage({
             satHasRun={hasRun}
             satFinal={final}
             onOverride={onOverride}
+          />
+        ),
+      },
+      {
+        id: "officialsIntelligence",
+        workspace: "intelligence",
+        title: "Officials Intelligence",
+        subtitle: "Coverage, confirmation pressure, peak demand and official workload.",
+        icon: UsersRound,
+        badge: officialsIntelligence.metrics?.fixtures
+          ? `${officialsIntelligence.metrics.confirmed}/${officialsIntelligence.metrics.fixtures} confirmed`
+          : "Officials",
+        status: officialsIntelligence.status,
+        label: officialsIntelligence.label,
+        filter: officialsIntelligence.status === "danger" ? "issues" : officialsIntelligence.status === "warning" ? "warnings" : "ready",
+        render: () => (
+          <OfficialsIntelligenceCard
+            intelligence={officialsIntelligence}
+            onFixtureClick={openFixture}
           />
         ),
       },
@@ -734,7 +809,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
 
 
   const navigationSection = useMemo(() => {
@@ -759,7 +834,11 @@ export default function MatchdayPage({
       build: "actionBar",
       buildSchedule: "actionBar",
       controls: "actionBar",
-      officials: "operationsHealth",
+      officials: "officialsIntelligence",
+      official: "officialsIntelligence",
+      referees: "officialsIntelligence",
+      referee: "officialsIntelligence",
+      officialsIntelligence: "officialsIntelligence",
       operationsHealth: "operationsHealth",
       fixtures: "schedule",
       schedule: "schedule",
@@ -886,8 +965,8 @@ export default function MatchdayPage({
           closedPitches={props.closedPitches}
           unresolvedCount={unresolved.length}
           refWarnings={refWarnings}
-          runTest={isSunday ? props.runSunTest : props.runSatTest}
-          runLive={isSunday ? props.runSunLive : props.runSatLive}
+          runTest={runTest || (isSunday ? props.runSunTest : props.runSatTest)}
+          runLive={runLive || (isSunday ? props.runSunLive : props.runSatLive)}
           saveWeek={props.saveWeek}
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}

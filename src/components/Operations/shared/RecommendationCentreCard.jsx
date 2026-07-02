@@ -35,9 +35,10 @@ const severityStyles = {
   },
 };
 
-function RecommendationItem({ item }) {
+function RecommendationItem({ item, onNavigate }) {
   const style = severityStyles[item.severity] || severityStyles.watch;
   const Icon = style.icon;
+  const canNavigate = Boolean(item.target && typeof onNavigate === "function");
 
   return (
     <div className={`rounded-3xl border p-4 shadow-sm ${style.card}`}>
@@ -58,15 +59,25 @@ function RecommendationItem({ item }) {
         <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-600 ring-1 ring-slate-200">
           {item.target?.label || "Review"}
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white">
-          Action ready <ArrowRight size={13} strokeWidth={2.5} />
-        </span>
+        {canNavigate ? (
+          <button
+            type="button"
+            onClick={() => onNavigate(item.target, item)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+          >
+            Open area <ArrowRight size={13} strokeWidth={2.5} />
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white">
+            Action ready <ArrowRight size={13} strokeWidth={2.5} />
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-export default function RecommendationCentreCard({ centre = {} }) {
+export default function RecommendationCentreCard({ centre = {}, onNavigate }) {
   const items = centre.items || centre.actions || [];
   const metrics = centre.metrics || {};
   const nextAction = centre.nextAction || items[0] || null;
@@ -112,7 +123,7 @@ export default function RecommendationCentreCard({ centre = {} }) {
       {items.length ? (
         <div className="grid gap-3 xl:grid-cols-2">
           {items.slice(0, 6).map((item) => (
-            <RecommendationItem key={item.id} item={item} />
+            <RecommendationItem key={item.id} item={item} onNavigate={onNavigate} />
           ))}
         </div>
       ) : (

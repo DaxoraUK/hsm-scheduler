@@ -1,19 +1,27 @@
-import { useMemo } from "react";
+import { useFixtureDayScheduling } from "./useFixtureDayScheduling.js";
 
 export function useSundayScheduling({
   sunScheduled,
   sunOverrides,
+  sunUnresolved = [],
+  pitchCfg = [],
+  club = {},
 }) {
-  const sunFinal = useMemo(
-    () =>
-      sunScheduled.map((game, index) => ({
-        ...game,
-        ...(sunOverrides[index] || {}),
-      })),
-    [sunScheduled, sunOverrides]
-  );
+  const model = useFixtureDayScheduling({
+    dayKey: "sunday",
+    scheduled: sunScheduled,
+    overrides: sunOverrides,
+    unresolved: sunUnresolved,
+    pitchCfg,
+    club,
+  });
 
   return {
-    sunFinal,
+    ...model,
+    sunFinal: model.final,
+    sunActive: model.active,
+    sunPostponed: model.postponed,
+    sunConflicts: model.conflicts,
+    sunRefWarnings: model.officialWarnings,
   };
 }

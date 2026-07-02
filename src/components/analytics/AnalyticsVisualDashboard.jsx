@@ -20,7 +20,9 @@ import EmptyState from "../../ui/EmptyState.jsx";
 import { buildAnalyticsVisualisationModel } from "../../lib/engines/analyticsVisualisationEngine.js";
 
 const DAY_OPTIONS = [
+  { value: "matchweek", label: "Matchweek" },
   { value: "weekend", label: "Weekend" },
+  { value: "midweek", label: "Midweek" },
   { value: "saturday", label: "Saturday" },
   { value: "sunday", label: "Sunday" },
 ];
@@ -469,7 +471,7 @@ function CoverageBars({ weekly }) {
 export default function AnalyticsVisualDashboard(props) {
   const [period, setPeriod] = useState("all");
   const [matchday, setMatchday] = useState("all");
-  const [day, setDay] = useState("weekend");
+  const [day, setDay] = useState("matchweek");
   const [openPanels, setOpenPanels] = useState(() => new Set());
 
   const model = useMemo(
@@ -534,7 +536,7 @@ export default function AnalyticsVisualDashboard(props) {
         <EmptyState
           icon={Database}
           title="No saved matchday data yet"
-          description="Build, publish and save completed weekends to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."
+          description="Build, publish and save completed matchweeks to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."
         />
       ) : (
         <>

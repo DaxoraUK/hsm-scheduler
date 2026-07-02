@@ -25,9 +25,12 @@ export default function ProductShell({
   club,
   satFinal = [],
   sunFinal = [],
+  midweekFinal = [],
   satHasRun,
   sunHasRun,
+  midweekHasRun,
   readiness,
+  midweekReadiness,
   authSession,
   onSignOut,
 }) {
@@ -50,14 +53,21 @@ export default function ProductShell({
     ? sunFinal.filter((game) => game.status !== "postponed").length
     : 0;
 
-  const readinessPct = readiness?.pct ?? 0;
+  const midweekCount = midweekHasRun
+    ? midweekFinal.filter((game) => game.status !== "postponed").length
+    : 0;
+
+  const readinessPct =
+    matchdayScope === MATCHDAY_SCOPES.MIDWEEK
+      ? midweekReadiness?.pct ?? 0
+      : readiness?.pct ?? 0;
 
   const workspaceStatus =
     readinessPct >= 90
-      ? "Weekend Ready"
+      ? `${getMatchdayScopeLabel(matchdayScope)} Ready`
       : readinessPct >= 70
-      ? "Almost Ready"
-      : "Needs Attention";
+        ? "Almost Ready"
+        : "Needs Attention";
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
@@ -124,7 +134,7 @@ export default function ProductShell({
                   {getMatchdayScopeLabel(matchdayScope)} view
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   <div className="rounded-2xl bg-white/[0.04] p-2.5">
                     <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
                       Saturday
@@ -140,6 +150,15 @@ export default function ProductShell({
                     </div>
                     <div className="mt-1 text-lg font-black text-white">
                       {sunCount}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/[0.04] p-2.5">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
+                      Midweek
+                    </div>
+                    <div className="mt-1 text-lg font-black text-white">
+                      {midweekCount}
                     </div>
                   </div>
                 </div>

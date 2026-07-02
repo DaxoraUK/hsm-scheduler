@@ -1,18 +1,31 @@
 import { getParkingSummary } from "./engines/parkingEngine.js";
 
-export function getActiveFixtures({ satFinal = [], sunFinal = [], satHasRun, sunHasRun }) {
-  return [
-    ...(satHasRun ? satFinal : []),
-    ...(sunHasRun ? sunFinal : []),
-  ].filter((fixture) => fixture.status !== "postponed");
+export function getActiveFixtures({
+  fixtures = null,
+  satFinal = [],
+  sunFinal = [],
+  midweekFinal = [],
+  satHasRun,
+  sunHasRun,
+  midweekHasRun,
+} = {}) {
+  const source = Array.isArray(fixtures)
+    ? fixtures
+    : [
+        ...(satHasRun ? satFinal : []),
+        ...(sunHasRun ? sunFinal : []),
+        ...(midweekHasRun ? midweekFinal : []),
+      ];
+
+  return source.filter((fixture) => fixture.status !== "postponed");
 }
 
 export function isRefConfirmed(fixture) {
   return String(fixture.refStatus || "").toLowerCase() === "confirmed";
 }
 
-export function getRefereeStats({ satFinal = [], sunFinal = [], satHasRun, sunHasRun }) {
-  const fixtures = getActiveFixtures({ satFinal, sunFinal, satHasRun, sunHasRun });
+export function getRefereeStats(options = {}) {
+  const fixtures = getActiveFixtures(options);
 
   const confirmed = fixtures.filter(isRefConfirmed).length;
   const outstanding = fixtures.length - confirmed;

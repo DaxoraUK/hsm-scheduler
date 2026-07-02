@@ -41,7 +41,9 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null, s
           {onScopeChange ? (
             <div className="flex rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200" aria-label="Mission Control scope">
               {[
-                { key: "weekend", label: "Weekend" },
+                { key: "matchweek", label: "Week" },
+                { key: "weekend", label: "W/end" },
+                { key: "midweek", label: "Mid" },
                 { key: "saturday", label: "Sat" },
                 { key: "sunday", label: "Sun" },
               ].map((option) => (

@@ -9,6 +9,7 @@ export default function SundayPage(props) {
   return (
     <MatchdayPage
       day="Sunday"
+      fixtureDay={props.fixtureDay}
       props={props}
       navigationTarget={props.navigationTarget}
       clearNavigationTarget={props.clearNavigationTarget}
@@ -16,6 +17,17 @@ export default function SundayPage(props) {
       hasRun={props.sunHasRun}
       final={props.sunFinal}
       overrides={props.sunOverrides}
+      unresolved={props.sunUnresolved || []}
+      scheduled={props.sunScheduled || []}
+      setScheduled={props.setSunScheduled}
+      setUnresolved={props.setSunUnresolved}
+      manualFixtures={props.sunManual || []}
+      setManualFixtures={props.setSunManual}
+      showManual={props.showSunManual}
+      setShowManual={props.setShowSunManual}
+      conflicts={props.sunConflicts || []}
+      runTest={props.runSunTest}
+      runLive={props.runSunLive}
       dateLabel={props.sunDateLabel}
       ManualFixtures={SundayManualFixtures}
       SummaryBar={SundaySummaryBar}

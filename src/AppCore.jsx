@@ -2,7 +2,7 @@
 // The main application container. Holds all state and handlers,
 // imports logic from lib/ and UI from components/.
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import AppLayout from "./layout/AppLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
@@ -14,8 +14,7 @@ import SaturdayPage from "./pages/SaturdayPage.jsx";
 import MidweekPage from "./pages/MidweekPage.jsx";
 import OperationsTimelinePage from "./pages/OperationsTimelinePage.jsx";
 import OperationsCentrePage from "./pages/OperationsCentrePage.jsx";
-import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
-import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
+import { useFixtureDayScheduling } from "./hooks/useFixtureDayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
@@ -24,6 +23,11 @@ import CommunicationsPage from "./pages/CommunicationsPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import { MATCHDAY_SCOPES, getDayTabFromScope, normaliseMatchdayScope } from "./lib/domain/matchdayScope.js";
+import {
+  FIXTURE_DAY_KEYS,
+  createFixtureDayModel,
+  getFixtureDayDefinition,
+} from "./lib/domain/fixtureDay.js";
 import {
   formatMatchdayDate,
   getCurrentMatchWeekend,
@@ -50,7 +54,7 @@ import {
   DEFAULT_BUFFER_YOUTH, DEFAULT_BUFFER_ADULT
 } from "./lib/constants.js";
 
-import { cleanName, isMini, findCfg, scheduleSat, scheduleSun } from "./lib/scheduler.js";
+import { cleanName, isMini, findCfg, scheduleFixtureDay } from "./lib/scheduler.js";
 import { supaFetch, isSupaConfigured, Auth, DB, getSupaKey, setSupaKey } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
@@ -235,12 +239,16 @@ function App(){
   });
 
   const [testSat,setTestSat]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsat");if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
-    return TEST_SAT;
+    try{const s=localStorage.getItem(getFixtureDayDefinition(FIXTURE_DAY_KEYS.SATURDAY).testStorageKey);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
+    return TEST_SAT.map((fixture)=>({...fixture}));
   });
   const [testSun,setTestSun]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsun");if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
-    return TEST_SUN;
+    try{const s=localStorage.getItem(getFixtureDayDefinition(FIXTURE_DAY_KEYS.SUNDAY).testStorageKey);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
+    return TEST_SUN.map((fixture)=>({...fixture}));
+  });
+  const [testMidweek,setTestMidweek]=useState(()=>{
+    try{const s=localStorage.getItem(getFixtureDayDefinition(FIXTURE_DAY_KEYS.MIDWEEK).testStorageKey);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}
+    return TEST_MIDWEEK.map((fixture)=>({...fixture}));
   });
 
   useEffect(()=>{
@@ -377,10 +385,14 @@ function App(){
         const pitchData=await DB.loadPitches();
         if(pitchData&&pitchData.length) setPitchCfg(migratePitches(pitchData));
         try{
-          const tsRow=await supaFetch("GET","club_config?id=eq.testsat&select=data");
-          if(tsRow&&tsRow.length&&tsRow[0].data&&tsRow[0].data.fixtures&&tsRow[0].data.fixtures.length)setTestSat(tsRow[0].data.fixtures);
-          const tnRow=await supaFetch("GET","club_config?id=eq.testsun&select=data");
-          if(tnRow&&tnRow.length&&tnRow[0].data&&tnRow[0].data.fixtures&&tnRow[0].data.fixtures.length)setTestSun(tnRow[0].data.fixtures);
+          const [satTestRow,sunTestRow,midweekTestRow]=await Promise.all([
+            supaFetch("GET",`club_config?id=eq.${getFixtureDayDefinition(FIXTURE_DAY_KEYS.SATURDAY).remoteConfigKey}&select=data`),
+            supaFetch("GET",`club_config?id=eq.${getFixtureDayDefinition(FIXTURE_DAY_KEYS.SUNDAY).remoteConfigKey}&select=data`),
+            supaFetch("GET",`club_config?id=eq.${getFixtureDayDefinition(FIXTURE_DAY_KEYS.MIDWEEK).remoteConfigKey}&select=data`),
+          ]);
+          if(satTestRow?.[0]?.data?.fixtures?.length)setTestSat(satTestRow[0].data.fixtures);
+          if(sunTestRow?.[0]?.data?.fixtures?.length)setTestSun(sunTestRow[0].data.fixtures);
+          if(midweekTestRow?.[0]?.data?.fixtures?.length)setTestMidweek(midweekTestRow[0].data.fixtures);
         }catch(e){}
         setDbStatus("connected");
       }catch(e){ console.error("Supabase connect failed:",e); setDbStatus("error"); }
@@ -417,99 +429,152 @@ function App(){
   // Auto-save to localStorage only - Supabase saves happen via Save buttons
   const mountedRef = typeof window !== "undefined" ? ((window)._hsmMounted = (window)._hsmMounted || {refs:false,cfg:false}) : {refs:false,cfg:false};
 
-  const makePitchBuffer=(youth,adult)=>{
+  const {
+    fetchSaturdayFixtures,
+    fetchSundayFixtures,
+    fetchMidweekFixtures,
+  } = useFixtureFetcher();
+
+  const pitchBufferMap=useMemo(()=>{
     const map={};
-    ["3v3","5v5","7v7","9v9","11v11-youth","11v11-small"].forEach(f=>{map[f]=youth;});
-    map["11v11"]=adult;
+    ["3v3","5v5","7v7","9v9","11v11-youth","11v11-small"].forEach((format)=>{map[format]=bufferYouth;});
+    map["11v11"]=bufferAdult;
     return map;
-  };
-  const getBufMap=()=>makePitchBuffer(bufferYouth,bufferAdult);
-  const getStartMins=()=>startHour*60+startMin;
-  const getEndMins=()=>endHour*60+endMin;
+  },[bufferYouth,bufferAdult]);
 
-  const runSat=useCallback((baseFx)=>{
+  const weekendStartMins=startHour*60+startMin;
+  const weekendEndMins=endHour*60+endMin;
+  const satDateLabel=formatMatchdayDate(satDate,"Saturday");
+  const sunDateLabel=formatMatchdayDate(sunDate,"Sunday");
+  const midweekDateLabel=formatMidweekDate(midweekDate,"Midweek");
+  const midweekDateIsWeekend=isWeekendDate(midweekDate);
+
+  const fixtureDayConfigs=useMemo(()=>({
+    [FIXTURE_DAY_KEYS.SATURDAY]:createFixtureDayModel({
+      key:FIXTURE_DAY_KEYS.SATURDAY,
+      date:satDate,
+      dateLabel:satDateLabel,
+      startMins:weekendStartMins,
+      endMins:weekendEndMins,
+      testFixtures:testSat,
+    }),
+    [FIXTURE_DAY_KEYS.SUNDAY]:createFixtureDayModel({
+      key:FIXTURE_DAY_KEYS.SUNDAY,
+      date:sunDate,
+      dateLabel:sunDateLabel,
+      startMins:weekendStartMins,
+      endMins:weekendEndMins,
+      testFixtures:testSun,
+    }),
+    [FIXTURE_DAY_KEYS.MIDWEEK]:createFixtureDayModel({
+      key:FIXTURE_DAY_KEYS.MIDWEEK,
+      date:midweekDate,
+      dateLabel:midweekDateLabel,
+      startMins:midweekStartMins,
+      endMins:midweekEndMins,
+      testFixtures:testMidweek,
+    }),
+  }),[
+    satDate,
+    satDateLabel,
+    sunDate,
+    sunDateLabel,
+    midweekDate,
+    midweekDateLabel,
+    weekendStartMins,
+    weekendEndMins,
+    midweekStartMins,
+    midweekEndMins,
+    testSat,
+    testSun,
+    testMidweek,
+  ]);
+
+  const buildFixtureDaySchedule=useCallback((dayKey,baseFixtures,manualFixtures=[])=>{
+    const fixtureDay=fixtureDayConfigs[dayKey];
+    return scheduleFixtureDay({
+      fixtureDay,
+      dayKey,
+      fixtures:[...(baseFixtures||[]),...(manualFixtures||[])],
+      useAstro,
+      closedPitches,
+      teamConfig:teamCfg,
+      bufferMap:pitchBufferMap,
+      pitchCfg,
+      maxConcurrent:club.maxConcurrent||3,
+    });
+  },[fixtureDayConfigs,useAstro,closedPitches,teamCfg,pitchBufferMap,pitchCfg,club.maxConcurrent]);
+
+  const runSat=useCallback((baseFixtures)=>{
     setSatOverrides({});
-    const all=[...baseFx,...satManual];
-    const {scheduled:s,unresolved:u}=scheduleSat(all,useAstro,closedPitches,teamCfg,getBufMap(),getStartMins(),getEndMins(),pitchCfg,club.maxConcurrent||3);
-    setSatScheduled(s);setSatUnresolved(u);setSatHasRun(true);
-  },[satManual,useAstro,closedPitches,teamCfg,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,pitchCfg]);
+    const {scheduled,unresolved}=buildFixtureDaySchedule(FIXTURE_DAY_KEYS.SATURDAY,baseFixtures,satManual);
+    setSatScheduled(scheduled);
+    setSatUnresolved(unresolved);
+    setSatHasRun(true);
+  },[buildFixtureDaySchedule,satManual]);
 
-  const runSatTest=()=>{setSatFetchStatus([{id:"TEST",name:"Test Data",ok:true,count:testSat.length}]);runSat(testSat);};
+  const runSatTest=useCallback(()=>{
+    const fixtures=fixtureDayConfigs[FIXTURE_DAY_KEYS.SATURDAY].testFixtures;
+    setSatFetchStatus([{id:"TEST",name:"Saturday Test Data",ok:true,count:fixtures.length}]);
+    runSat(fixtures);
+  },[fixtureDayConfigs,runSat]);
 
-  const runSatLive = async () => {
-  if (!satDate) {
-    alert("Select a Saturday date.");
-    return;
-  }
+  const runSatLive=useCallback(async()=>{
+    if(!satDate){
+      alert("Select a Saturday date.");
+      return;
+    }
 
-  setSatHasRun(false);
-  setSatFetchStatus([]);
-  setSatScheduled([]);
-  setSatUnresolved([]);
+    setSatHasRun(false);
+    setSatFetchStatus([]);
+    setSatScheduled([]);
+    setSatUnresolved([]);
 
-  const { statuses, fixtures } =
-    await fetchSaturdayFixtures(satDate);
+    const {statuses,fixtures}=await fetchSaturdayFixtures(satDate);
+    setSatFetchStatus(statuses);
+    runSat(fixtures);
+  },[satDate,fetchSaturdayFixtures,runSat]);
 
-  setSatFetchStatus(statuses);
-  runSat(fixtures);
-};
-
-  const runSun=useCallback((baseFx)=>{
+  const runSun=useCallback((baseFixtures)=>{
     setSunOverrides({});
-    const all=[...baseFx,...sunManual];
-    const { scheduled: s, unresolved: u } = scheduleSun(
-      all,
-      useAstro,
-      closedPitches,
-      teamCfg,
-      getBufMap(),
-      getStartMins(),
-      getEndMins(),
-      pitchCfg,
-      club.maxConcurrent || 3
-    );
-    setSunScheduled(s);setSunUnresolved(u);setSunHasRun(true);
-  },[sunManual,teamCfg,pitchCfg]);
+    const {scheduled,unresolved}=buildFixtureDaySchedule(FIXTURE_DAY_KEYS.SUNDAY,baseFixtures,sunManual);
+    setSunScheduled(scheduled);
+    setSunUnresolved(unresolved);
+    setSunHasRun(true);
+  },[buildFixtureDaySchedule,sunManual]);
 
-  const runSunTest=()=>runSun(testSun);
+  const runSunTest=useCallback(()=>{
+    runSun(fixtureDayConfigs[FIXTURE_DAY_KEYS.SUNDAY].testFixtures);
+  },[fixtureDayConfigs,runSun]);
 
-const runSunLive = async () => {
-  if (!sunDate) {
-    alert("Select a Sunday date.");
-    return;
-  }
+  const runSunLive=useCallback(async()=>{
+    if(!sunDate){
+      alert("Select a Sunday date.");
+      return;
+    }
 
-  const fixtures = await fetchSundayFixtures(sunDate);
+    setSunHasRun(false);
+    setSunScheduled([]);
+    setSunUnresolved([]);
+    const fixtures=await fetchSundayFixtures(sunDate);
+    runSun(fixtures);
+  },[sunDate,fetchSundayFixtures,runSun]);
 
-  runSun(fixtures);
-};
-
-  const runMidweek=useCallback((baseFx)=>{
+  const runMidweek=useCallback((baseFixtures)=>{
     setMidweekOverrides({});
-    const all=[...baseFx,...midweekManual];
-    const {scheduled:s,unresolved:u}=scheduleSat(
-      all,
-      useAstro,
-      closedPitches,
-      teamCfg,
-      getBufMap(),
-      midweekStartMins,
-      midweekEndMins,
-      pitchCfg,
-      club.maxConcurrent||3,
-      { fixedAdultKickOffMins: null }
-    );
-    setMidweekScheduled(s);
-    setMidweekUnresolved(u);
+    const {scheduled,unresolved}=buildFixtureDaySchedule(FIXTURE_DAY_KEYS.MIDWEEK,baseFixtures,midweekManual);
+    setMidweekScheduled(scheduled);
+    setMidweekUnresolved(unresolved);
     setMidweekHasRun(true);
-  },[midweekManual,useAstro,closedPitches,teamCfg,bufferYouth,bufferAdult,midweekStartMins,midweekEndMins,pitchCfg,club.maxConcurrent]);
+  },[buildFixtureDaySchedule,midweekManual]);
 
-  const runMidweekTest=()=>{
-    setMidweekFetchStatus([{id:"TEST",name:"Midweek Test Data",ok:true,count:TEST_MIDWEEK.length}]);
-    runMidweek(TEST_MIDWEEK);
-  };
+  const runMidweekTest=useCallback(()=>{
+    const fixtures=fixtureDayConfigs[FIXTURE_DAY_KEYS.MIDWEEK].testFixtures;
+    setMidweekFetchStatus([{id:"TEST",name:"Midweek Test Data",ok:true,count:fixtures.length}]);
+    runMidweek(fixtures);
+  },[fixtureDayConfigs,runMidweek]);
 
-  const runMidweekLive=async()=>{
+  const runMidweekLive=useCallback(async()=>{
     if(!midweekDate){
       alert("Select a midweek fixture date.");
       return;
@@ -528,71 +593,128 @@ const runSunLive = async () => {
     const {statuses,fixtures}=await fetchMidweekFixtures(midweekDate);
     setMidweekFetchStatus(statuses);
     runMidweek(fixtures);
-  };
+  },[midweekDate,midweekEndMins,midweekStartMins,fetchMidweekFixtures,runMidweek]);
 
   const satOv=(i,k,v)=>setSatOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
   const sunOv=(i,k,v)=>setSunOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
   const midweekOv=(i,k,v)=>setMidweekOverrides(p=>({...p,[i]:{...(p[i]||{}),[k]:v}}));
+const saturdayScheduling=useFixtureDayScheduling({
+  dayKey:FIXTURE_DAY_KEYS.SATURDAY,
+  scheduled:satScheduled,
+  overrides:satOverrides,
+  unresolved:satUnresolved,
+  pitchCfg,
+  club,
+});
 const {
-  satFinal,
-  satActive,
-  satPostponed,
-  refWarnings,
-  satConflicts,
+  final:satFinal,
+  active:satActive,
+  postponed:satPostponed,
+  officialWarnings:refWarnings,
+  conflicts:satConflicts,
   peakCars,
   carCap,
   parkingOver,
   readiness,
-} = useSaturdayScheduling({
-  satScheduled,
-  satOverrides,
-  satUnresolved,
+}=saturdayScheduling;
+
+const sundayScheduling=useFixtureDayScheduling({
+  dayKey:FIXTURE_DAY_KEYS.SUNDAY,
+  scheduled:sunScheduled,
+  overrides:sunOverrides,
+  unresolved:sunUnresolved,
   pitchCfg,
   club,
 });
-
-const { sunFinal } = useSundayScheduling({
-  sunScheduled,
-  sunOverrides,
-});
-
 const {
-  satFinal: midweekFinal,
-  satActive: midweekActive,
-  satPostponed: midweekPostponed,
-  refWarnings: midweekRefWarnings,
-  satConflicts: midweekConflicts,
-  peakCars: midweekPeakCars,
-  parkingOver: midweekParkingOver,
-  readiness: midweekReadiness,
-} = useSaturdayScheduling({
-  satScheduled: midweekScheduled,
-  satOverrides: midweekOverrides,
-  satUnresolved: midweekUnresolved,
+  final:sunFinal,
+  active:sunActive,
+  postponed:sunPostponed,
+  officialWarnings:sunRefWarnings,
+  conflicts:sunConflicts,
+  peakCars:sunPeakCars,
+  parkingOver:sunParkingOver,
+  readiness:sunReadiness,
+}=sundayScheduling;
+
+const midweekScheduling=useFixtureDayScheduling({
+  dayKey:FIXTURE_DAY_KEYS.MIDWEEK,
+  scheduled:midweekScheduled,
+  overrides:midweekOverrides,
+  unresolved:midweekUnresolved,
   pitchCfg,
   club,
 });
+const {
+  final:midweekFinal,
+  active:midweekActive,
+  postponed:midweekPostponed,
+  officialWarnings:midweekRefWarnings,
+  conflicts:midweekConflicts,
+  peakCars:midweekPeakCars,
+  parkingOver:midweekParkingOver,
+  readiness:midweekReadiness,
+}=midweekScheduling;
 
-const satDateLabel=formatMatchdayDate(satDate,"Saturday");
-const sunDateLabel=formatMatchdayDate(sunDate,"Sunday");
-const midweekDateLabel=formatMidweekDate(midweekDate,"Midweek");
-const midweekDateIsWeekend=isWeekendDate(midweekDate);
+const fixtureDays=useMemo(()=>[
+  createFixtureDayModel({
+    ...fixtureDayConfigs[FIXTURE_DAY_KEYS.MIDWEEK],
+    hasRun:midweekHasRun,
+    scheduled:midweekScheduled,
+    unresolved:midweekUnresolved,
+    final:midweekFinal,
+  }),
+  createFixtureDayModel({
+    ...fixtureDayConfigs[FIXTURE_DAY_KEYS.SATURDAY],
+    hasRun:satHasRun,
+    scheduled:satScheduled,
+    unresolved:satUnresolved,
+    final:satFinal,
+  }),
+  createFixtureDayModel({
+    ...fixtureDayConfigs[FIXTURE_DAY_KEYS.SUNDAY],
+    hasRun:sunHasRun,
+    scheduled:sunScheduled,
+    unresolved:sunUnresolved,
+    final:sunFinal,
+  }),
+],[
+  fixtureDayConfigs,
+  midweekHasRun,
+  midweekScheduled,
+  midweekUnresolved,
+  midweekFinal,
+  satHasRun,
+  satScheduled,
+  satUnresolved,
+  satFinal,
+  sunHasRun,
+  sunScheduled,
+  sunUnresolved,
+  sunFinal,
+]);
 
 const { saveWeek } = useWeekPersistence({
   mode,
+  satDate,
+  sunDate,
   satDateLabel,
+  sunDateLabel,
   satHasRun,
   satFinal,
   satActive,
   satPostponed,
   sunHasRun,
   sunFinal,
+  sunActive,
+  sunPostponed,
   midweekDate,
   midweekDateLabel,
   midweekHasRun,
   midweekFinal,
   midweekActive,
   midweekPostponed,
+  fixtureDays,
   club,
   history,
   setHistory,
@@ -600,20 +722,42 @@ const { saveWeek } = useWeekPersistence({
   authSession,
 });
 
-const {
-  fetchSaturdayFixtures,
-  fetchSundayFixtures,
-  fetchMidweekFixtures,
-} = useFixtureFetcher();
+
+const fixtureDayResetters=useMemo(()=>[
+  {
+    key:FIXTURE_DAY_KEYS.SATURDAY,
+    setScheduled:setSatScheduled,
+    setUnresolved:setSatUnresolved,
+    setOverrides:setSatOverrides,
+    setManual:setSatManual,
+    setFetchStatus:setSatFetchStatus,
+    setHasRun:setSatHasRun,
+    setShowManual,
+  },
+  {
+    key:FIXTURE_DAY_KEYS.SUNDAY,
+    setScheduled:setSunScheduled,
+    setUnresolved:setSunUnresolved,
+    setOverrides:setSunOverrides,
+    setManual:setSunManual,
+    setHasRun:setSunHasRun,
+    setShowManual:setShowSunManual,
+  },
+  {
+    key:FIXTURE_DAY_KEYS.MIDWEEK,
+    setScheduled:setMidweekScheduled,
+    setUnresolved:setMidweekUnresolved,
+    setOverrides:setMidweekOverrides,
+    setManual:setMidweekManual,
+    setFetchStatus:setMidweekFetchStatus,
+    setHasRun:setMidweekHasRun,
+    setShowManual:setShowMidweekManual,
+  },
+],[]);
 
 const { toggleClosed, resetAll } = useOperationsActions({
   setClosedPitches,
-  setSatScheduled,
-  setSatUnresolved,
-  setSatOverrides,
-  setSatManual,
-  setSatFetchStatus,
-  setSatHasRun,
+  fixtureDayResetters,
   setUseAstro,
 });
 
@@ -722,6 +866,7 @@ return(
 {/* ── SATURDAY ── */}
 {dayTab === "saturday" && (
   <SaturdayPage
+    fixtureDay={fixtureDayConfigs[FIXTURE_DAY_KEYS.SATURDAY]}
     navigationTarget={navigationTarget}
     clearNavigationTarget={clearNavigationTarget}
     S={S}
@@ -787,6 +932,7 @@ return(
         {/* ── SUNDAY ── */}
         {dayTab === "sunday" && (
           <SundayPage
+            fixtureDay={fixtureDayConfigs[FIXTURE_DAY_KEYS.SUNDAY]}
             navigationTarget={navigationTarget}
             clearNavigationTarget={clearNavigationTarget}
             S={S}
@@ -810,6 +956,13 @@ return(
             sunDateLabel={sunDateLabel}
             sunHasRun={sunHasRun}
             sunFinal={sunFinal}
+            sunActive={sunActive}
+            sunPostponed={sunPostponed}
+            sunConflicts={sunConflicts}
+            sunRefWarnings={sunRefWarnings}
+            sunPeakCars={sunPeakCars}
+            sunParkingOver={sunParkingOver}
+            sunReadiness={sunReadiness}
             pitchCfg={pitchCfg}
             refs={refs}
             sunOv={sunOv}
@@ -836,6 +989,7 @@ return(
 
         {dayTab === "midweek" && (
           <MidweekPage
+            fixtureDay={fixtureDayConfigs[FIXTURE_DAY_KEYS.MIDWEEK]}
             navigationTarget={navigationTarget}
             clearNavigationTarget={clearNavigationTarget}
             S={S}
@@ -891,7 +1045,7 @@ return(
             bufferAdult={bufferAdult}
             useAstro={useAstro}
             setUseAstro={setUseAstro}
-            testSat={testSat}
+            testMidweek={testMidweek}
             saveWeek={saveWeek}
             cleanName={cleanName}
           />
@@ -953,6 +1107,7 @@ return(
         {dayTab === "timeline" && (
           <OperationsTimelinePage
             club={club}
+            fixtureDays={fixtureDays}
             satFinal={satFinal}
             sunFinal={sunFinal}
             midweekFinal={midweekFinal}
@@ -1031,6 +1186,8 @@ return(
             setTestSat={setTestSat}
             testSun={testSun}
             setTestSun={setTestSun}
+            testMidweek={testMidweek}
+            setTestMidweek={setTestMidweek}
             closedPitches={closedPitches}
             toggleClosed={toggleClosed}
             setClosedPitches={setClosedPitches}

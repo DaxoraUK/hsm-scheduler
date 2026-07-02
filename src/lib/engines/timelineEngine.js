@@ -189,8 +189,14 @@ export function formatTimelineTime(totalMins) {
 
 
 export function buildOperationsTimeline({
+  fixtureDays = [],
   saturdayGames = [],
   sundayGames = [],
+  midweekGames = [],
+  midweekLabel = "Midweek",
+  saturdayDate = "",
+  sundayDate = "",
+  midweekDate = "",
   club = null,
   carCap = 0,
   refs = [],
@@ -198,11 +204,46 @@ export function buildOperationsTimeline({
   closedPitches = {},
   satHasRun = false,
   sunHasRun = false,
+  midweekHasRun = false,
 } = {}) {
-  const combined = [
-    ...normaliseOperationsGames(saturdayGames, "Saturday", club),
-    ...normaliseOperationsGames(sundayGames, "Sunday", club),
-  ].sort((a, b) => a.timeMins - b.timeMins || a.sortOrder - b.sortOrder);
+  const canonicalSources = (Array.isArray(fixtureDays) ? fixtureDays : [])
+    .filter((day) => day?.hasRun)
+    .map((day, index) => ({
+      games: day.final || day.scheduled || [],
+      label: day.dateLabel || day.label || day.key || "Matchday",
+      date: day.date || "",
+      fallbackOrder: index,
+      key: day.key,
+    }));
+
+  const legacySources = [
+    { games: midweekGames, label: midweekLabel || "Midweek", date: midweekDate, fallbackOrder: 0, key: "midweek" },
+    { games: saturdayGames, label: "Saturday", date: saturdayDate, fallbackOrder: 1, key: "saturday" },
+    { games: sundayGames, label: "Sunday", date: sundayDate, fallbackOrder: 2, key: "sunday" },
+  ];
+
+  const daySources = (canonicalSources.length ? canonicalSources : legacySources)
+    .filter((source) =>
+      (source.games || []).some(
+        (game) => game && game.status !== "postponed" && Number.isFinite(game.koMins)
+      )
+    )
+    .sort((a, b) => {
+      const aDate = parseTimelineDate(a.date);
+      const bDate = parseTimelineDate(b.date);
+      if (aDate != null && bDate != null && aDate !== bDate) return aDate - bDate;
+      if (aDate != null && bDate == null) return -1;
+      if (aDate == null && bDate != null) return 1;
+      return a.fallbackOrder - b.fallbackOrder;
+    });
+
+  const combined = daySources
+    .flatMap((source, dayOrder) =>
+      normaliseOperationsGames(source.games, source.label, club, dayOrder)
+    )
+    .sort((a, b) => a.dayOrder - b.dayOrder || a.timeMins - b.timeMins || a.sortOrder - b.sortOrder);
+
+  const operationalDay = daySources[0]?.label || "Operations";
 
   const fixtureEvents = combined.map((game) => ({
     id: `fixture-${game.day}-${game.id}`,
@@ -212,6 +253,7 @@ export function buildOperationsTimeline({
     description: `${game.day} • ${game.pitchLabel || game.pitchId || "Pitch TBC"} • v ${game.opposition}`,
     time: game.koTime,
     timeMins: game.timeMins,
+    sequenceMins: game.dayOrder * 1440 + game.timeMins,
     day: game.day,
     meta: [game.format, game.official ? `Official: ${game.official}` : null].filter(Boolean),
     source: game.source,
@@ -232,7 +274,7 @@ export function buildOperationsTimeline({
       description: "Prepare pitch checks, signage, parking flow and first volunteer arrivals.",
       time: formatTimelineTime(Math.max(6 * 60, earliestFixture - 90)),
       timeMins: Math.max(6 * 60, earliestFixture - 90),
-      day: "Operations",
+      day: operationalDay,
       meta: ["Site readiness"],
     },
     {
@@ -245,7 +287,7 @@ export function buildOperationsTimeline({
         : "Brief coaches, parking helpers and matchday volunteers before arrivals build.",
       time: formatTimelineTime(Math.max(6 * 60, earliestFixture - 45)),
       timeMins: Math.max(6 * 60, earliestFixture - 45),
-      day: "Operations",
+      day: operationalDay,
       meta: [refs?.length ? `${refs.length} officials listed` : "Officials TBC"],
     },
     {
@@ -258,7 +300,7 @@ export function buildOperationsTimeline({
         : `${peakCars} estimated car movements. Add venue capacity to improve parking intelligence.`,
       time: formatTimelineTime(Math.max(6 * 60, earliestFixture - 20)),
       timeMins: Math.max(6 * 60, earliestFixture - 20),
-      day: "Operations",
+      day: operationalDay,
       meta: ["Parking", carCap ? `${Math.round((peakCars / Math.max(carCap, 1)) * 100)}% capacity` : "Capacity missing"],
     },
     {
@@ -271,7 +313,7 @@ export function buildOperationsTimeline({
         : "No closed pitches currently recorded for the matchday workspace.",
       time: formatTimelineTime(Math.max(6 * 60, earliestFixture - 30)),
       timeMins: Math.max(6 * 60, earliestFixture - 30),
-      day: "Operations",
+      day: operationalDay,
       meta: ["Facilities"],
     },
     {
@@ -282,13 +324,15 @@ export function buildOperationsTimeline({
       description: "Check pitch condition, incidents, equipment, clubhouse handover and communications follow-up.",
       time: formatTimelineTime(Math.min(22 * 60, latestFixture + 45)),
       timeMins: Math.min(22 * 60, latestFixture + 45),
-      day: "Operations",
+      day: operationalDay,
       meta: ["Close-down"],
     },
   ];
 
   const events = [...operationalEvents, ...fixtureEvents].sort(
-    (a, b) => a.timeMins - b.timeMins || String(a.title).localeCompare(String(b.title))
+    (a, b) =>
+      (a.sequenceMins ?? a.timeMins) - (b.sequenceMins ?? b.timeMins) ||
+      String(a.title).localeCompare(String(b.title))
   );
 
   const criticalCount = events.filter((event) => event.tone === "critical").length;
@@ -312,13 +356,24 @@ export function buildOperationsTimeline({
     summary: {
       saturday: satHasRun ? saturdayGames.filter((game) => game.status !== "postponed").length : 0,
       sunday: sunHasRun ? sundayGames.filter((game) => game.status !== "postponed").length : 0,
+      midweek: midweekHasRun ? midweekGames.filter((game) => game.status !== "postponed").length : 0,
       parking: peakCars,
       officials: refs?.length || 0,
     },
   };
 }
 
-function normaliseOperationsGames(games = [], day = "Matchday", club = null) {
+function parseTimelineDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime();
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function normaliseOperationsGames(games = [], day = "Matchday", club = null, dayOrder = 0) {
   return (games || [])
     .filter((game) => game && game.status !== "postponed" && Number.isFinite(game.koMins))
     .map((game, index) => ({
@@ -328,6 +383,7 @@ function normaliseOperationsGames(games = [], day = "Matchday", club = null) {
         `${day}-${game.pitchId || "pitch"}-${game.koMins}-${game.homeTeam || "home"}-${index}`,
       source: game,
       sortOrder: index,
+      dayOrder,
       day,
       pitchId: game.pitchId,
       pitchLabel: game.pitchLabel || game.pitchName || game.pitch,

@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import PageContainer from "../components/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
-import DashboardInsightGrid from "../components/dashboard/DashboardInsightGrid.jsx";
 import DashboardWorkflowCard from "../components/dashboard/DashboardWorkflowCard.jsx";
 import DashboardWeatherCard from "../components/dashboard/DashboardWeatherCard.jsx";
+import DashboardInsightGrid from "../components/dashboard/DashboardInsightGrid.jsx";
 import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
 import WeekendTimelineCard from "../components/dashboard/WeekendTimelineCard.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
@@ -38,15 +38,20 @@ export default function DashboardPage({
   pitchCfg = [],
   satFinal = [],
   sunFinal = [],
+  midweekFinal = [],
   satHasRun,
   sunHasRun,
+  midweekHasRun,
   readiness,
+  midweekReadiness,
   refWarnings = 0,
   peakCars = 0,
   carCap = 57,
   satConflicts = [],
   satUnresolved = [],
   sunUnresolved = [],
+  midweekUnresolved = [],
+  midweekConflicts = [],
   closedPitches = [],
 }) {
   const matchdayScopeContext = useMatchdayScope();
@@ -84,23 +89,23 @@ export default function DashboardPage({
 
   const satActive = satFinal.filter((game) => game.status !== "postponed");
   const sunActive = sunFinal.filter((game) => game.status !== "postponed");
+  const midweekActive = midweekFinal.filter((game) => game.status !== "postponed");
 
   const scopedMatchday = getScopedMatchdayData({
     scope: matchdayScope,
     satFinal,
     sunFinal,
+    midweekFinal,
     satHasRun,
     sunHasRun,
+    midweekHasRun,
   });
 
   const totalFixtures = scopedMatchday.activeFixtures.length;
   const scheduleBuilt = scopedMatchday.scheduleBuilt;
 
   const refereeStats = getRefereeStats({
-    satFinal: scopedMatchday.satFinal,
-    sunFinal: scopedMatchday.sunFinal,
-    satHasRun: scopedMatchday.satHasRun,
-    sunHasRun: scopedMatchday.sunHasRun,
+    fixtures: scopedMatchday.activeFixtures,
   });
 
   const parkingStats = getParkingStats({
@@ -114,7 +119,8 @@ export default function DashboardPage({
 
   const fixtureIssues =
     (scopedMatchday.includeSaturday ? satConflicts.length + satUnresolved.length : 0) +
-    (scopedMatchday.includeSunday ? sunUnresolved.length : 0);
+    (scopedMatchday.includeSunday ? sunUnresolved.length : 0) +
+    (scopedMatchday.includeMidweek ? midweekConflicts.length + midweekUnresolved.length : 0);
 
   const communicationsReady = scheduleBuilt && totalFixtures > 0;
   const weatherLocation = getWeatherLocation(club);
@@ -127,7 +133,13 @@ export default function DashboardPage({
           detail: "Build the selected matchday schedule before final readiness checks.",
           area: "Fixtures",
           severity: "warning",
-          onClick: () => nav.goToFixtures({ day: navigationDay, card: "actionBar", workspace: "fixtures" }),
+          onClick: () =>
+            nav.goToFixtures({
+              day: navigationDay,
+              card: "actionBar",
+              workspace: "fixtures",
+              scrollToSection: true,
+            }),
         }
       : null,
     fixtureIssues > 0
@@ -196,7 +208,13 @@ export default function DashboardPage({
   });
 
   const workflowActionMap = {
-    [WORKFLOW_ACTIONS.FIXTURES]: () => nav.goToFixtures({ day: navigationDay, card: "actionBar", workspace: "fixtures" }),
+    [WORKFLOW_ACTIONS.FIXTURES]: () =>
+      nav.goToFixtures({
+        day: navigationDay,
+        card: scheduleBuilt ? "schedule" : "actionBar",
+        workspace: "fixtures",
+        scrollToSection: true,
+      }),
     [WORKFLOW_ACTIONS.GROUND]: () => nav.goToResources({ day: navigationDay, card: "pitchClosures" }),
     [WORKFLOW_ACTIONS.OFFICIALS]: () => nav.goToOfficials({ day: navigationDay }),
     [WORKFLOW_ACTIONS.PARKING]: () => nav.goToParking({ day: navigationDay }),
@@ -306,6 +324,7 @@ export default function DashboardPage({
         totalFixtures={totalFixtures}
         satCount={satHasRun ? satActive.length : 0}
         sunCount={sunHasRun ? sunActive.length : 0}
+        midweekCount={midweekHasRun ? midweekActive.length : 0}
         completedSteps={completedSteps}
         totalSteps={workflowSteps.length}
         nextAction={nextAction}
@@ -329,7 +348,13 @@ export default function DashboardPage({
             label: "Fixtures",
             status: scheduleBuilt && fixtureIssues === 0 ? "success" : "warning",
             detail: scheduleBuilt ? `${totalFixtures} scheduled` : "Build needed",
-            onClick: () => nav.goToFixtures({ day: navigationDay }),
+            onClick: () =>
+              nav.goToFixtures({
+                day: navigationDay,
+                card: scheduleBuilt ? "schedule" : "actionBar",
+                workspace: "fixtures",
+                scrollToSection: true,
+              }),
           },
           {
             label: "Officials",
@@ -402,13 +427,20 @@ export default function DashboardPage({
       <WeekendTimelineCard
         satFinal={satFinal}
         sunFinal={sunFinal}
+        midweekFinal={midweekFinal}
         satHasRun={satHasRun}
         sunHasRun={sunHasRun}
+        midweekHasRun={midweekHasRun}
         pitchCfg={pitchCfg}
         club={club}
         onFixtureClick={(fixture) => {
           const isSunday = sunFinal.includes(fixture);
-          const fixtureDay = isSunday ? MATCHDAY_SCOPES.SUNDAY : MATCHDAY_SCOPES.SATURDAY;
+          const isMidweek = midweekFinal.includes(fixture);
+          const fixtureDay = isMidweek
+            ? MATCHDAY_SCOPES.MIDWEEK
+            : isSunday
+              ? MATCHDAY_SCOPES.SUNDAY
+              : MATCHDAY_SCOPES.SATURDAY;
           setMatchdayScope(fixtureDay);
 
           setSelectedFixture({

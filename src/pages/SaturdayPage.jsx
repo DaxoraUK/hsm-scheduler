@@ -5,6 +5,7 @@ export default function SaturdayPage(props) {
   return (
     <MatchdayPage
       day="Saturday"
+      fixtureDay={props.fixtureDay}
       props={props}
       navigationTarget={props.navigationTarget}
       clearNavigationTarget={props.clearNavigationTarget}
@@ -20,6 +21,9 @@ export default function SaturdayPage(props) {
       setManualFixtures={props.setSatManual}
       showManual={props.showManual}
       setShowManual={props.setShowManual}
+      conflicts={props.satConflicts || []}
+      runTest={props.runSatTest}
+      runLive={props.runSatLive}
       dateLabel={props.satDateLabel}
     />
   );

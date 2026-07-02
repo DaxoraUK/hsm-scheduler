@@ -72,15 +72,52 @@ function withDay(fixtures = [], day) {
 }
 
 function getWeekData(entry = {}) {
+  if (asArray(entry.fixtureDays).length) {
+    const active = [];
+    const postponed = [];
+
+    asArray(entry.fixtureDays).forEach((day) => {
+      const key = String(day.key || day.day || "matchday").toLowerCase();
+      active.push(
+        ...withDay(
+          asArray(day.scheduled).filter((fixture) => !isPostponed(fixture)),
+          key
+        )
+      );
+      postponed.push(
+        ...withDay(
+          [
+            ...asArray(day.postponed),
+            ...asArray(day.cancelled),
+          ],
+          key
+        )
+      );
+    });
+
+    return {
+      label: entry.dateLabel || "Saved matchweek",
+      active,
+      postponed,
+    };
+  }
+
   const saturdayActive = asArray(entry.scheduled).filter((fixture) => !isPostponed(fixture));
   const sundayActive = asArray(entry.sunScheduled).filter((fixture) => !isPostponed(fixture));
+  const midweekActive = asArray(entry.midweekScheduled).filter((fixture) => !isPostponed(fixture));
   const saturdayPostponed = asArray(entry.postponedGames);
   const sundayPostponed = asArray(entry.sunPostponed);
+  const midweekPostponed = asArray(entry.midweekPostponed);
 
   return {
-    label: entry.dateLabel || "Saved matchday",
-    active: [...withDay(saturdayActive, "saturday"), ...withDay(sundayActive, "sunday")],
+    label: entry.dateLabel || "Saved matchweek",
+    active: [
+      ...withDay(midweekActive, "midweek"),
+      ...withDay(saturdayActive, "saturday"),
+      ...withDay(sundayActive, "sunday"),
+    ],
     postponed: [
+      ...withDay(midweekPostponed, "midweek"),
       ...withDay(saturdayPostponed, "saturday"),
       ...withDay(sundayPostponed, "sunday"),
     ],
@@ -141,8 +178,10 @@ export function buildGrantImpactModel({
   closedPitches = [],
   satFinal = [],
   sunFinal = [],
+  midweekFinal = [],
   satHasRun = false,
   sunHasRun = false,
+  midweekHasRun = false,
   refWarnings = null,
 } = {}) {
   const savedWeeks = asArray(history).map(getWeekData);
@@ -156,13 +195,17 @@ export function buildGrantImpactModel({
   const currentSunday = sunHasRun
     ? withDay(asArray(sunFinal).filter((fixture) => !isPostponed(fixture)), "sunday")
     : [];
-  const currentActive = [...currentSaturday, ...currentSunday];
+  const currentMidweek = midweekHasRun
+    ? withDay(asArray(midweekFinal).filter((fixture) => !isPostponed(fixture)), "midweek")
+    : [];
+  const currentActive = [...currentMidweek, ...currentSaturday, ...currentSunday];
   const currentPostponed = [
+    ...(midweekHasRun ? withDay(asArray(midweekFinal).filter(isPostponed), "midweek") : []),
     ...(satHasRun ? withDay(asArray(satFinal).filter(isPostponed), "saturday") : []),
     ...(sunHasRun ? withDay(asArray(sunFinal).filter(isPostponed), "sunday") : []),
   ];
 
-  // Saved history remains the formal evidence base. The live weekend is used only
+  // Saved history remains the formal evidence base. The live matchweek is used only
   // when no saved evidence exists, preventing the same matchday being double-counted.
   const evidenceActive = recordedWeeks > 0 ? historicalActive : currentActive;
   const evidencePostponed = recordedWeeks > 0 ? historicalPostponed : currentPostponed;

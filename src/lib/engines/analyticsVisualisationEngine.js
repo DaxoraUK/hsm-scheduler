@@ -126,23 +126,61 @@ function withDay(fixtures, day, source) {
   return asArray(fixtures).map((fixture) => ({ ...fixture, __day: day, __source: source }));
 }
 
-function entryFixtures(entry = {}, dayFilter = "weekend") {
-  const saturday = [
-    ...withDay(entry.scheduled, "saturday", "scheduled"),
-    ...withDay(entry.postponedGames, "saturday", "postponed"),
-  ];
-  const sunday = [
-    ...withDay(entry.sunScheduled, "sunday", "scheduled"),
-    ...withDay(entry.sunPostponed, "sunday", "postponed"),
-  ];
+function entryFixtureDays(entry = {}) {
+  if (asArray(entry.fixtureDays).length) {
+    return asArray(entry.fixtureDays).map((day) => ({
+      key: String(day.key || day.day || "matchday").toLowerCase(),
+      scheduled: asArray(day.scheduled),
+      postponed: asArray(day.postponed),
+      cancelled: asArray(day.cancelled),
+    }));
+  }
 
-  const selected =
-    dayFilter === "saturday" ? saturday : dayFilter === "sunday" ? sunday : [...saturday, ...sunday];
+  return [
+    {
+      key: "saturday",
+      scheduled: asArray(entry.scheduled),
+      postponed: asArray(entry.postponedGames),
+      cancelled: [],
+    },
+    {
+      key: "sunday",
+      scheduled: asArray(entry.sunScheduled),
+      postponed: asArray(entry.sunPostponed),
+      cancelled: [],
+    },
+    {
+      key: "midweek",
+      scheduled: asArray(entry.midweekScheduled),
+      postponed: asArray(entry.midweekPostponed),
+      cancelled: [],
+    },
+  ];
+}
 
-  return selected.map((fixture) => {
-    const sourceStatus = fixture.__source === "postponed" ? "postponed" : fixtureStatus(fixture);
-    return { ...fixture, __status: sourceStatus };
+function entryFixtures(entry = {}, dayFilter = "matchweek") {
+  const days = entryFixtureDays(entry);
+  const selectedDays = days.filter((day) => {
+    if (dayFilter === "matchweek" || dayFilter === "all") return true;
+    if (dayFilter === "weekend") return ["saturday", "sunday"].includes(day.key);
+    return day.key === dayFilter;
   });
+
+  return selectedDays
+    .flatMap((day) => [
+      ...withDay(day.scheduled, day.key, "scheduled"),
+      ...withDay(day.postponed, day.key, "postponed"),
+      ...withDay(day.cancelled, day.key, "cancelled"),
+    ])
+    .map((fixture) => {
+      const sourceStatus =
+        fixture.__source === "postponed"
+          ? "postponed"
+          : fixture.__source === "cancelled"
+            ? "cancelled"
+            : fixtureStatus(fixture);
+      return { ...fixture, __status: sourceStatus };
+    });
 }
 
 function estimateCars(fixture = {}, club = {}) {
@@ -254,7 +292,7 @@ export function buildAnalyticsVisualisationModel({
   pitchCfg = [],
   period = "all",
   matchday = "all",
-  day = "weekend",
+  day = "matchweek",
 } = {}) {
   const pitchMap = buildPitchMap(pitchCfg);
   const entries = asArray(history)
@@ -367,10 +405,18 @@ export function buildAnalyticsVisualisationModel({
     (a, b) => parseClock(a) - parseClock(b)
   );
   const heatmapDays =
-    day === "saturday" ? ["saturday"] : day === "sunday" ? ["sunday"] : ["saturday", "sunday"];
+    day === "saturday"
+      ? ["saturday"]
+      : day === "sunday"
+        ? ["sunday"]
+        : day === "midweek"
+          ? ["midweek"]
+          : day === "weekend"
+            ? ["saturday", "sunday"]
+            : ["midweek", "saturday", "sunday"];
   const dayTimeHeatmap = heatmapDays.map((dayName) => ({
     day: dayName,
-    label: dayName === "saturday" ? "Saturday" : "Sunday",
+    label: dayName === "saturday" ? "Saturday" : dayName === "sunday" ? "Sunday" : "Midweek",
     values: allSlots.map((slot) => ({
       slot,
       count: fixtures.filter(

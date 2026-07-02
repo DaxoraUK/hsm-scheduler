@@ -1,7 +1,10 @@
 import React, { useMemo } from "react";
 import Card from "../../ui/Card.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
-import { getParkingSnapshot } from "../../../lib/engines/parkingEngine.js";
+import {
+  getParkingOperationalPlan,
+  getParkingSnapshot,
+} from "../../../lib/engines/parkingEngine.js";
 import { getValidatedFixRecommendations } from "../../../lib/engines/recommendationEngine.js";
 
 function clamp(value, min = 0, max = 100) {
@@ -343,6 +346,179 @@ function ParkingRecommendations({ recommendations = [], onApplyRecommendation })
   );
 }
 
+
+
+function getPlanToneClasses(tone = "neutral") {
+  if (tone === "critical") return "border-red-200 bg-red-50 text-red-900";
+  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-900";
+  if (tone === "positive") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function ArrivalWaveChart({ forecast }) {
+  const slots = (forecast?.slots || []).filter(
+    (slot) => slot.arrivalCars > 0 || slot.departureCars > 0
+  );
+
+  if (!slots.length) return null;
+
+  const maxMovement = Math.max(
+    1,
+    ...slots.map((slot) => Math.max(slot.arrivalCars, slot.departureCars))
+  );
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+            Arrival and departure waves
+          </div>
+          <p className="mt-1 text-sm font-bold text-slate-500">
+            Planning estimate of vehicle movements around kick-off and full-time.
+          </p>
+        </div>
+        <div className="flex gap-3 text-xs font-bold text-slate-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded bg-emerald-500" /> Arrivals
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded bg-slate-400" /> Departures
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-5 overflow-x-auto pb-1">
+        <div
+          className="grid min-w-[760px] gap-2"
+          style={{ gridTemplateColumns: `repeat(${slots.length}, minmax(34px, 1fr))` }}
+        >
+          {slots.map((slot) => {
+            const arrivalHeight = Math.max(3, (slot.arrivalCars / maxMovement) * 100);
+            const departureHeight = Math.max(3, (slot.departureCars / maxMovement) * 100);
+            const isPeak = slot.mins === forecast.peakArrivalSlot?.mins;
+
+            return (
+              <div key={slot.mins} className="min-w-0 text-center">
+                <div className="flex h-28 items-end justify-center gap-1 rounded-xl bg-slate-50 px-1.5 py-2">
+                  <div
+                    className="w-2.5 rounded-t bg-emerald-500"
+                    style={{ height: `${arrivalHeight}%` }}
+                    title={`${slot.label}: ${slot.arrivalCars} arriving`}
+                  />
+                  <div
+                    className="w-2.5 rounded-t bg-slate-400"
+                    style={{ height: `${departureHeight}%` }}
+                    title={`${slot.label}: ${slot.departureCars} departing`}
+                  />
+                </div>
+                <div className={`mt-2 text-[10px] font-black ${isPeak ? "text-slate-950" : "text-slate-400"}`}>
+                  {slot.label}
+                </div>
+                <div className="mt-0.5 text-[10px] font-bold text-slate-500">
+                  {slot.arrivalCars}/{slot.departureCars}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ParkingOperationsPlan({ plan }) {
+  if (!plan) return null;
+
+  const pressureWindow = plan.primaryPressureWindow;
+  const planVariant = pressureWindow?.tone === "critical"
+    ? "danger"
+    : pressureWindow
+      ? "warning"
+      : "success";
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">
+              Matchday parking plan
+            </div>
+            <h3 className="mt-2 text-xl font-black tracking-tight">{plan.headline}</h3>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">
+              Use this operational window to place volunteers, open overflow capacity and time arrival messages.
+            </p>
+          </div>
+          <StatusChip variant={planVariant}>
+            {pressureWindow ? pressureWindow.label : "Controlled"}
+          </StatusChip>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Peak arrivals</div>
+            <div className="mt-2 text-2xl font-black">{plan.peakArrivalCars}</div>
+            <div className="mt-1 text-xs font-bold text-slate-300">vehicles during {plan.peakArrivalLabel}</div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pressure window</div>
+            <div className="mt-2 text-lg font-black">{pressureWindow?.label || "No pressure window"}</div>
+            <div className="mt-1 text-xs font-bold text-slate-300">
+              {pressureWindow ? `${pressureWindow.peakPct}% peak occupancy` : "Current schedule remains below the watch threshold"}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Turnover points</div>
+            <div className="mt-2 text-2xl font-black">{plan.turnoverCount}</div>
+            <div className="mt-1 text-xs font-bold text-slate-300">arrival and departure waves overlapping</div>
+          </div>
+        </div>
+      </div>
+
+      {plan.actions.length ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+            Control-room actions
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {plan.actions.map((action) => (
+              <div key={action.id} className={`rounded-2xl border p-4 ${getPlanToneClasses(action.tone)}`}>
+                <div className="text-xs font-black uppercase tracking-[0.18em] opacity-70">{action.time}</div>
+                <div className="mt-2 text-sm font-black">{action.title}</div>
+                <div className="mt-1 text-xs font-bold leading-5 opacity-80">{action.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {plan.pressureDrivers.length ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+            Peak pressure drivers
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {plan.pressureDrivers.map((driver) => (
+              <div key={driver.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black text-slate-950">{driver.name}</div>
+                  <div className="mt-0.5 text-xs font-bold text-slate-500">{driver.koTime} • {driver.pitch}</div>
+                </div>
+                <div className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">
+                  {driver.cars} cars
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <ArrivalWaveChart forecast={plan.arrivalForecast} />
+    </div>
+  );
+}
+
 function applyParkingRecommendation(recommendation, onOverride) {
   if (!recommendation || typeof onOverride !== "function") return;
 
@@ -405,6 +581,17 @@ export default function MatchdayCarParkCard({
 
   const analysis = parkingSnapshot.analysis;
   const capacity = parkingSnapshot.capacity;
+
+  const parkingPlan = useMemo(
+    () =>
+      getParkingOperationalPlan({
+        snapshot: parkingSnapshot,
+        fixtures: satFinal,
+        club,
+        pitchCfg,
+      }),
+    [parkingSnapshot, satFinal, club, pitchCfg]
+  );
 
   const parkingRecommendations = useMemo(() => {
     const peakFixtures = analysis.peakSlot?.parkingFixtures || [];
@@ -482,6 +669,10 @@ export default function MatchdayCarParkCard({
 
       <div className="mt-5">
         <ParkingMessage analysis={analysis} />
+      </div>
+
+      <div className="mt-5">
+        <ParkingOperationsPlan plan={parkingPlan} />
       </div>
 
       <div className="mt-5">

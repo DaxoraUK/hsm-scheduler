@@ -2,7 +2,6 @@ export const NAV_TARGETS = Object.freeze({
   MISSION_CONTROL: "mission-control",
   OPERATIONS: "operations",
   TIMELINE: "operations.timeline",
-  OPERATIONS_TIMELINE: "operations.timeline",
   FIXTURES: "operations.fixtures",
   RESOURCES: "operations.resources",
   PARKING: "operations.parking",

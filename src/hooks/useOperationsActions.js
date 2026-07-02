@@ -1,7 +1,19 @@
 import { useCallback } from "react";
 
+function clearFixtureDayState(day = {}) {
+  day.setScheduled?.([]);
+  day.setUnresolved?.([]);
+  day.setOverrides?.({});
+  day.setManual?.([]);
+  day.setFetchStatus?.([]);
+  day.setHasRun?.(false);
+  day.setShowManual?.(false);
+}
+
 export function useOperationsActions({
   setClosedPitches,
+  fixtureDayResetters = [],
+  // Compatibility props for older callers.
   setSatScheduled,
   setSatUnresolved,
   setSatOverrides,
@@ -12,25 +24,34 @@ export function useOperationsActions({
 }) {
   const toggleClosed = useCallback(
     (pitchId) => {
-      setClosedPitches((prev) =>
-        prev.includes(pitchId)
-          ? prev.filter((id) => id !== pitchId)
-          : [...prev, pitchId]
+      setClosedPitches((previous) =>
+        previous.includes(pitchId)
+          ? previous.filter((id) => id !== pitchId)
+          : [...previous, pitchId]
       );
     },
     [setClosedPitches]
   );
 
   const resetAll = useCallback(() => {
-    setSatScheduled([]);
-    setSatUnresolved([]);
-    setSatOverrides({});
-    setSatManual([]);
-    setSatFetchStatus([]);
-    setSatHasRun(false);
+    const resetters = fixtureDayResetters.length
+      ? fixtureDayResetters
+      : [
+          {
+            setScheduled: setSatScheduled,
+            setUnresolved: setSatUnresolved,
+            setOverrides: setSatOverrides,
+            setManual: setSatManual,
+            setFetchStatus: setSatFetchStatus,
+            setHasRun: setSatHasRun,
+          },
+        ];
+
+    resetters.forEach(clearFixtureDayState);
     setClosedPitches([]);
     setUseAstro(false);
   }, [
+    fixtureDayResetters,
     setSatScheduled,
     setSatUnresolved,
     setSatOverrides,

@@ -26,7 +26,9 @@ function normaliseDay(day = "Saturday") {
   const text = String(day || "Saturday").toLowerCase();
   if (text.startsWith("sun")) return "Sunday";
   if (text.startsWith("sat")) return "Saturday";
+  if (text.startsWith("mid") || text === "weekday") return "Midweek";
   if (text === "weekend") return "Weekend";
+  if (text === "matchweek" || text === "week") return "Matchweek";
   return day || "Matchday";
 }
 
@@ -101,7 +103,11 @@ function buildCounts(fixtures = [], pitches = [], teams = [], closedPitches = []
 export function createMatchdayDomain({
   id,
   day = "Saturday",
+  date = "",
   dateLabel = "Matchday",
+  fixtureDay = null,
+  operatingWindow = null,
+  rules = null,
   games = [],
   fixtures,
   teams = [],
@@ -139,7 +145,11 @@ export function createMatchdayDomain({
     id: id || `${normalisedDay.toLowerCase()}-${String(dateLabel || "matchday").replace(/\s+/g, "-").toLowerCase()}`,
     kind: "matchday",
     day: normalisedDay,
-    dateLabel,
+    dayKey: String(fixtureDay?.key || normalisedDay).toLowerCase(),
+    date: date || fixtureDay?.date || "",
+    dateLabel: dateLabel || fixtureDay?.dateLabel || normalisedDay,
+    operatingWindow: operatingWindow || fixtureDay?.operatingWindow || null,
+    rules: rules || fixtureDay?.rules || {},
     metadata: {
       ...asObject(metadata),
       hasRun: Boolean(hasRun),
