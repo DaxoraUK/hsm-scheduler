@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -33,6 +33,7 @@ import CompetitionRulesCard from "../components/Operations/shared/CompetitionRul
 import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.jsx";
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import RecommendationCentreCard from "../components/Operations/shared/RecommendationCentreCard.jsx";
+import OperationsIntelligenceCard from "../components/Operations/shared/OperationsIntelligenceCard.jsx";
 import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
 import StatusChip from "../components/ui/StatusChip.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
@@ -40,6 +41,7 @@ import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { buildRecommendationCentre } from "../lib/engines/recommendationCentreEngine.js";
+import { calculateOperationsIntelligence } from "../lib/engines/operationsIntelligenceEngine.js";
 import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
 
@@ -76,6 +78,30 @@ const FILTERS = [
   { id: "warnings", label: "Warnings" },
   { id: "ready", label: "Ready" },
 ];
+
+const INTELLIGENCE_TARGETS = Object.freeze({
+  actionBar: { workspace: "fixtures", section: "actionBar" },
+  build: { workspace: "fixtures", section: "actionBar" },
+  buildSchedule: { workspace: "fixtures", section: "actionBar" },
+  schedule: { workspace: "fixtures", section: "schedule" },
+  unresolved: { workspace: "fixtures", section: "unresolved" },
+  competitionRules: { workspace: "fixtures", section: "competitionRules" },
+  pitchClosures: { workspace: "resources", section: "pitchClosures" },
+  pitchAssignments: { workspace: "resources", section: "pitchAssignments" },
+  parkingIntelligence: { workspace: "intelligence", section: "parkingIntelligence" },
+  operationsHealth: { workspace: "intelligence", section: "operationsHealth" },
+  weatherIntelligence: { workspace: "intelligence", section: "weatherIntelligence" },
+  dayOptimiser: { workspace: "intelligence", section: "dayOptimiser" },
+  recommendationCentre: { workspace: "intelligence", section: "recommendationCentre" },
+  coachMessages: { workspace: "communications", section: "coachMessages" },
+});
+
+function getIntelligenceTarget(target) {
+  return INTELLIGENCE_TARGETS[target] || {
+    workspace: "intelligence",
+    section: "operationsIntelligence",
+  };
+}
 
 function getFixtureLabel(fixture = {}) {
   return [
@@ -295,6 +321,26 @@ export default function MatchdayPage({
     return final.filter((fixture) => getFixtureLabel(fixture).includes(query)).length;
   }, [final, sectionQuery]);
 
+  const openIntelligenceTarget = useCallback((target) => {
+    const destination = getIntelligenceTarget(target);
+
+    setSectionQuery("");
+    setSectionFilter("all");
+    setActiveWorkspace(destination.workspace);
+    setOpenSections((current) => ({ ...current, [destination.section]: true }));
+    setHighlightedSection(destination.section);
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        document
+          .getElementById(`matchday-section-${destination.section}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+
+      window.setTimeout(() => setHighlightedSection(null), 2200);
+    }
+  }, []);
+
 
   const operationsHealth = useMemo(() => calculateOperationsHealth({
     fixtures: final,
@@ -336,6 +382,22 @@ export default function MatchdayPage({
   }), [clubWithTiming, dateLabel, final]);
 
   const recommendationCentre = useMemo(() => buildRecommendationCentre({
+    fixtures: final,
+    active,
+    unresolved,
+    conflicts,
+    officialConflicts,
+    refWarnings,
+    hasRun,
+    club: clubWithTiming,
+    pitchCfg: props.pitchCfg || [],
+    closedPitches: props.closedPitches || [],
+    competitionRules,
+    weatherIntelligence,
+    dayOptimisation,
+  }), [active, clubWithTiming, competitionRules, conflicts, dayOptimisation, final, hasRun, officialConflicts, props.closedPitches, props.pitchCfg, refWarnings, unresolved, weatherIntelligence]);
+
+  const operationsIntelligence = useMemo(() => calculateOperationsIntelligence({
     fixtures: final,
     active,
     unresolved,
@@ -538,6 +600,25 @@ export default function MatchdayPage({
         render: () => <ParkingCapacityCard active={active} club={clubWithTiming} pitchCfg={props.pitchCfg} />,
       },
       {
+        id: "operationsIntelligence",
+        workspace: "intelligence",
+        title: "Operations Intelligence",
+        subtitle: "Predictive guidance across fixtures, parking, officials, pitch flow, rules and weather.",
+        icon: Sparkles,
+        badge: operationsIntelligence.metrics?.total
+          ? `${operationsIntelligence.metrics.total} insights`
+          : "Intelligence",
+        status: operationsIntelligence.status,
+        label: operationsIntelligence.label,
+        filter: operationsIntelligence.status === "danger" ? "issues" : operationsIntelligence.status === "warning" ? "warnings" : "ready",
+        render: () => (
+          <OperationsIntelligenceCard
+            intelligence={operationsIntelligence}
+            onNavigate={openIntelligenceTarget}
+          />
+        ),
+      },
+      {
         id: "recommendationCentre",
         workspace: "intelligence",
         title: "Recommendation Centre",
@@ -653,7 +734,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, operationsHealth, overrides, postponed.length, props, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayProps, officialConflicts.length, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
 
 
   const navigationSection = useMemo(() => {
@@ -668,6 +749,8 @@ export default function MatchdayPage({
       parkingIntelligence: "parkingIntelligence",
       weather: "weatherIntelligence",
       weatherIntelligence: "weatherIntelligence",
+      intelligence: "operationsIntelligence",
+      operationsIntelligence: "operationsIntelligence",
       recommendations: "recommendationCentre",
       recommendationCentre: "recommendationCentre",
       actionQueue: "recommendationCentre",
