@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   MapPinned,
   PlugZap,
+  Rocket,
   ShieldCheck,
   TestTube2,
   Trophy,
@@ -20,6 +21,7 @@ const TAB_GROUPS = [
     tabs: [
       ["overview", "Overview", LayoutGrid],
       ["workspace", "Workspace", Gauge],
+      ["onboarding", "Setup wizard", Rocket],
       ["access", "Access & audit", ShieldCheck],
     ],
   },
@@ -56,6 +58,7 @@ export default function SettingsTabs({ settingsTab, setSettingsTab, productionMo
     tabs: group.tabs.filter(([key]) => {
       if (productionMode && key === "testdata") return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
+      if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;
       return true;
     }),
   })).filter((group) => group.tabs.length);

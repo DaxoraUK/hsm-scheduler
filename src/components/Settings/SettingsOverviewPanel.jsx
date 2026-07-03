@@ -9,6 +9,7 @@ import {
   Gauge,
   MapPinned,
   PlugZap,
+  Rocket,
   ShieldCheck,
   Trophy,
   UsersRound,
@@ -67,6 +68,8 @@ export default function SettingsOverviewPanel({
   startMin,
   endHour,
   endMin,
+  onboarding = {},
+  onOpenOnboarding,
 }) {
   const sites = Array.isArray(club.sites) && club.sites.length ? club.sites : club.venue ? [{ venue: club.venue, postcode: club.postcode }] : [];
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
@@ -122,6 +125,17 @@ export default function SettingsOverviewPanel({
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <SetupCard
+          icon={Rocket}
+          eyebrow="Guided setup"
+          title="Customer onboarding"
+          description="Review or re-run the secure setup wizard that creates the club's operational baseline."
+          status={onboarding.status === "complete" ? "Complete" : onboarding.status === "in_progress" ? "In progress" : "Needs setup"}
+          tone={onboarding.status === "complete" ? "ready" : "attention"}
+          metrics={[{ label: "Progress", value: onboarding.status === "complete" ? "8/8" : `${onboarding.completedSteps?.length || 0}/8` }]}
+          onClick={() => onOpenOnboarding?.()}
+        />
+
         <SetupCard
           icon={Gauge}
           eyebrow="Workspace"

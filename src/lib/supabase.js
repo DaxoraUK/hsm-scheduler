@@ -584,4 +584,40 @@ export const DB = {
     }));
   },
 
+  async getClubOnboarding(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/get_club_onboarding", {
+      target_club_id: id,
+    });
+  },
+
+  async startClubOnboarding(clubId, { forceRestart = false } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/start_club_onboarding", {
+      target_club_id: id,
+      force_restart: Boolean(forceRestart),
+    });
+  },
+
+  async saveClubOnboarding(clubId, { currentStep = 0, completedSteps = [], draft = {} } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_club_onboarding", {
+      target_club_id: id,
+      step_index: Math.max(0, Math.min(Number(currentStep) || 0, 7)),
+      completed_step_ids: Array.isArray(completedSteps) ? completedSteps : [],
+      onboarding_draft: draft && typeof draft === "object" ? draft : {},
+    });
+  },
+
+  async completeClubOnboarding(clubId, { configuration, teams, pitches, draft } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/complete_club_onboarding", {
+      target_club_id: id,
+      configuration: configuration || {},
+      teams: Array.isArray(teams) ? teams : [],
+      pitches: Array.isArray(pitches) ? pitches : [],
+      final_draft: draft && typeof draft === "object" ? draft : {},
+    });
+  },
+
 };

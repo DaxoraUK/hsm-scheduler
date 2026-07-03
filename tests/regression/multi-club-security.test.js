@@ -226,6 +226,41 @@ describe("authenticated Supabase repository", () => {
     expect(url).not.toContain("club_memberships?");
   });
 
+  test("customer onboarding progress and completion use guarded club RPCs", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "in_progress", current_step: 2 }))
+      .mockResolvedValueOnce(jsonResponse({ status: "complete", current_step: 7 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await DB.saveClubOnboarding(CLUB_A, {
+      currentStep: 2,
+      completedSteps: ["welcome", "club"],
+      draft: { club: { name: "Club A" } },
+    });
+    await DB.completeClubOnboarding(CLUB_A, {
+      configuration: { name: "Club A" },
+      teams: [{ name: "First Team" }],
+      pitches: [{ id: "P1", label: "Pitch 1" }],
+      draft: { club: { name: "Club A" } },
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/save_club_onboarding");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      target_club_id: CLUB_A,
+      step_index: 2,
+      completed_step_ids: ["welcome", "club"],
+      onboarding_draft: { club: { name: "Club A" } },
+    });
+    expect(fetchMock.mock.calls[1][0]).toContain("/rest/v1/rpc/complete_club_onboarding");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      target_club_id: CLUB_A,
+      configuration: { name: "Club A" },
+      teams: [{ name: "First Team" }],
+      pitches: [{ id: "P1", label: "Pitch 1" }],
+      final_draft: { club: { name: "Club A" } },
+    });
+  });
+
   test("support access requests are time-limited RPC calls with no service key in the browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "session-1" }));
     vi.stubGlobal("fetch", fetchMock);

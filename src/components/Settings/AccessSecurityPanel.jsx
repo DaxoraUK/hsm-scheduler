@@ -38,6 +38,9 @@ const ROLE_TONES = {
 
 const ACTION_LABELS = {
   "workspace.bootstrap": "Workspace secured",
+  "onboarding.start": "Customer onboarding started",
+  "onboarding.restart": "Customer onboarding restarted",
+  "onboarding.complete": "Customer onboarding completed",
   "membership.invitation.create": "Member invitation created",
   "membership.invitation.revoke": "Member invitation revoked",
   "membership.invitation.accept": "Member invitation accepted",

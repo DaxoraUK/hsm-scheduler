@@ -19,6 +19,7 @@ import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
+import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
 import CommunicationsPage from "./pages/CommunicationsPage.jsx";
@@ -71,6 +72,7 @@ import CombinedPrintSheet from "./components/CombinedPrintSheet.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
 import WorkspaceAccessGate from "./components/WorkspaceAccessGate.jsx";
+import CustomerOnboardingWizard from "./components/CustomerOnboardingWizard.jsx";
 import { toast } from "sonner";
 import {
   clearTenantStorageContext,
@@ -82,6 +84,53 @@ import {
   tenantSetJson,
 } from "./lib/storage/tenantStorage.js";
 import { createWorkspaceAccess } from "./lib/security/permissions.js";
+import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
+
+function readClubTiming(club = {}) {
+  const timing = club.timingSettings || club.timing || {};
+  return {
+    startHour: Number(timing.startHour ?? club.startHour ?? 8),
+    startMin: Number(timing.startMin ?? club.startMin ?? 30),
+    endHour: Number(timing.endHour ?? 11),
+    endMin: Number(timing.endMin ?? 30),
+    bufferYouth: Number(timing.youthBuffer ?? club.bufferYouth ?? DEFAULT_BUFFER_YOUTH),
+    bufferAdult: Number(timing.adultBuffer ?? club.bufferAdult ?? DEFAULT_BUFFER_ADULT),
+  };
+}
+
+function createUnconfiguredClub(memberClub = {}, clubId = "") {
+  const siteId = "main-ground";
+  return {
+    ...DEFAULT_CLUB,
+    id: clubId,
+    name: memberClub.name || "New club",
+    venue: "",
+    postcode: "",
+    weatherPostcode: "",
+    primarySiteId: siteId,
+    sites: [
+      {
+        id: siteId,
+        name: "Main Ground",
+        venue: "",
+        postcode: "",
+        isPrimary: true,
+        weatherEnabled: true,
+        carParkSpaces: 0,
+        notes: "",
+      },
+    ],
+    carParkSpaces: 0,
+    maxConcurrent: 3,
+    sport: memberClub.sport || "Football",
+    logo: "",
+    features: {
+      ...DEFAULT_CLUB.features,
+      midweekEnabled: true,
+      parkingEnabled: true,
+    },
+  };
+}
 
 function App(){
   const [mode,setMode]=useState("test");
@@ -253,6 +302,17 @@ function App(){
     [activeMembership]
   );
 
+  const [onboardingOpen,setOnboardingOpen]=useState(false);
+  const {
+    onboarding,
+    status:onboardingStatus,
+    error:onboardingError,
+    refresh:refreshOnboarding,
+    start:startOnboarding,
+    saveProgress:saveOnboardingProgress,
+    complete:completeOnboarding,
+  }=useClubOnboarding(activeClubId,clubAccessStatus==="ready");
+
   useLayoutEffect(()=>{
     setWorkspaceHydrated(false);
     setWorkspaceSecurityError("");
@@ -288,6 +348,80 @@ function App(){
   },[dayTab,matchdayScope,midweekEnabled,setMatchdayScope]);
 
   const [pitchCfg,setPitchCfg]=useState(PITCHES);
+
+  const onboardingInitialDraft=useMemo(()=>createOnboardingDraft({
+    club,
+    teamCfg,
+    pitchCfg,
+    scheduling:{startHour,startMin,endHour,endMin,bufferYouth,bufferAdult},
+  }),[club,teamCfg,pitchCfg,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult]);
+
+  const handleOpenOnboarding=useCallback(async()=>{
+    if(!workspaceAccess.canManageSettings){
+      toast.error("Administrator access required",{
+        description:"Only a club owner or administrator can run onboarding.",
+      });
+      return false;
+    }
+    try{
+      if(onboarding.status==="complete") await startOnboarding({forceRestart:true});
+      else if(onboarding.status!=="in_progress") await startOnboarding();
+      setOnboardingOpen(true);
+      return true;
+    }catch(error){
+      toast.error("Onboarding could not be opened",{description:error?.message});
+      return false;
+    }
+  },[onboarding.status,startOnboarding,workspaceAccess.canManageSettings]);
+
+  const handleCompleteOnboarding=useCallback(async({club:nextClub,teams,pitches,scheduling,draft})=>{
+    await completeOnboarding({
+      configuration:{...nextClub,id:activeClubId||nextClub?.id},
+      teams,
+      pitches,
+      draft,
+    });
+
+    const securedClub={...nextClub,id:activeClubId||nextClub?.id};
+    setClub(securedClub);
+    setTeamCfg(teams);
+    setPitchCfg(migratePitches(pitches));
+    setStartHour(scheduling.startHour);
+    setStartMin(scheduling.startMin);
+    setEndHour(scheduling.endHour);
+    setEndMin(scheduling.endMin);
+    setBufferYouth(scheduling.bufferYouth);
+    setBufferAdult(scheduling.bufferAdult);
+    tenantSetJson("club",securedClub);
+    tenantSetJson("teamConfig",teams);
+    tenantSetJson("pitches",pitches);
+    setDbStatus("connected");
+    setOnboardingOpen(false);
+    await refreshClubAccess();
+    toast.success("Customer setup complete",{
+      description:"The club operating baseline is now secured and ready to use.",
+    });
+  },[activeClubId,completeOnboarding,refreshClubAccess]);
+
+  useEffect(()=>{
+    if(!workspaceHydrated||onboardingOpen||onboardingStatus!=="ready") return;
+    if(onboarding.status==="complete"||!onboarding.required||!workspaceAccess.canManageSettings) return;
+    if(onboarding.status==="in_progress"){
+      setOnboardingOpen(true);
+      return;
+    }
+    startOnboarding()
+      .then(()=>setOnboardingOpen(true))
+      .catch((error)=>toast.error("Required setup could not start",{description:error?.message}));
+  },[
+    onboarding.required,
+    onboarding.status,
+    onboardingOpen,
+    onboardingStatus,
+    startOnboarding,
+    workspaceAccess.canManageSettings,
+    workspaceHydrated,
+  ]);
 
   const satClosedPitches=useMemo(
     ()=>getActiveClosedPitchIds(pitchClosures,satDate),
@@ -402,7 +536,23 @@ function App(){
       return false;
     }
 
-    const nextClub={...(data.club||club),id:activeClubId||data.club?.id||club?.id};
+    const baseClub={...(data.club||club),id:activeClubId||data.club?.id||club?.id};
+    const nextClub=tab==="timing"
+      ? {
+          ...baseClub,
+          timingSettings:{
+            ...(baseClub.timingSettings||{}),
+            startHour,
+            startMin,
+            endHour,
+            endMin,
+            earliestKickOff:`${String(startHour).padStart(2,"0")}:${String(startMin).padStart(2,"0")}`,
+            latestYouthKickOff:`${String(endHour).padStart(2,"0")}:${String(endMin).padStart(2,"0")}`,
+            youthBuffer:bufferYouth,
+            adultBuffer:bufferAdult,
+          },
+        }
+      : baseClub;
     const nextTeamCfg=data.teamCfg||teamCfg;
     const nextRefs=data.refs||refs;
 
@@ -516,6 +666,13 @@ function App(){
       const fallbackTeams=Array.isArray(localTeams)?localTeams:TEAM_CONFIG_DEFAULT;
 
       setClub(fallbackClub);
+      const fallbackTiming=readClubTiming(fallbackClub);
+      setStartHour(fallbackTiming.startHour);
+      setStartMin(fallbackTiming.startMin);
+      setEndHour(fallbackTiming.endHour);
+      setEndMin(fallbackTiming.endMin);
+      setBufferYouth(fallbackTiming.bufferYouth);
+      setBufferAdult(fallbackTiming.bufferAdult);
       setTeamCfg(fallbackTeams);
       setRefs(Array.isArray(localRefs)?localRefs:[]);
       setHistory(Array.isArray(localHistory)?localHistory:[]);
@@ -552,23 +709,40 @@ function App(){
         ]);
         if(cancelled) return;
 
-        const nextClub={
-          ...DEFAULT_CLUB,
-          ...fallbackClub,
-          ...(clubData||{}),
-          id:activeClubId,
-          name:clubData?.name||fallbackClub.name,
-          features:{...(DEFAULT_CLUB.features||{}),...(fallbackClub.features||{}),...(clubData?.features||{})},
-        };
-        const nextTeams=Array.isArray(cfgData)?cfgData:[];
-        const nextPitches=Array.isArray(pitchData)&&pitchData.length?migratePitches(pitchData):PITCHES;
+        const isUnconfiguredWorkspace=
+          !clubData &&
+          (!Array.isArray(cfgData)||cfgData.length===0) &&
+          (!Array.isArray(pitchData)||pitchData.length===0);
+        const nextClub=isUnconfiguredWorkspace
+          ? createUnconfiguredClub(memberClub,activeClubId)
+          : {
+              ...DEFAULT_CLUB,
+              ...fallbackClub,
+              ...(clubData||{}),
+              id:activeClubId,
+              name:clubData?.name||fallbackClub.name,
+              features:{...(DEFAULT_CLUB.features||{}),...(fallbackClub.features||{}),...(clubData?.features||{})},
+            };
+        const nextTeams=isUnconfiguredWorkspace?[]:(Array.isArray(cfgData)?cfgData:[]);
+        const nextPitches=Array.isArray(pitchData)&&pitchData.length
+          ? migratePitches(pitchData)
+          : isUnconfiguredWorkspace
+            ? []
+            : PITCHES;
         const nextClosures=Array.isArray(closureData)?closureData:[];
 
         setClub(nextClub);
+        const nextTiming=readClubTiming(nextClub);
+        setStartHour(nextTiming.startHour);
+        setStartMin(nextTiming.startMin);
+        setEndHour(nextTiming.endHour);
+        setEndMin(nextTiming.endMin);
+        setBufferYouth(nextTiming.bufferYouth);
+        setBufferAdult(nextTiming.bufferAdult);
         setHistory(Array.isArray(histData)?histData:[]);
         setRefs(Array.isArray(refData)?refData:[]);
         setTeamCfg(nextTeams);
-        setPitchCfg(nextPitches.length?nextPitches:PITCHES);
+        setPitchCfg(isUnconfiguredWorkspace?[]:(nextPitches.length?nextPitches:PITCHES));
         setPitchClosures(nextClosures);
         setTestSat(remoteTestSat.length?remoteTestSat:generateTestFixtures({dayKey:"saturday",seed:"ground-control-saturday",scenario:"standard",club:nextClub,teams:nextTeams}));
         setTestSun(remoteTestSun.length?remoteTestSun:generateTestFixtures({dayKey:"sunday",seed:"ground-control-sunday",scenario:"standard",club:nextClub,teams:nextTeams}));
@@ -964,6 +1138,17 @@ const { resetAll } = useOperationsActions({
 
 return(
   <MatchdayScopeProvider scope={matchdayScope} setScope={setMatchdayScope}>
+  <CustomerOnboardingWizard
+    open={onboardingOpen}
+    onboarding={onboarding}
+    status={onboardingStatus}
+    initialDraft={onboardingInitialDraft}
+    currentClub={club}
+    canClose={!onboarding.required}
+    onClose={()=>setOnboardingOpen(false)}
+    onSaveProgress={saveOnboardingProgress}
+    onComplete={handleCompleteOnboarding}
+  />
   <ProductShell
     mainPage={mainPage}
     setMainPage={setMainPage}
@@ -1356,6 +1541,11 @@ return(
             activeClubId={activeClubId}
             activeMembership={activeMembership}
             workspaceAccess={workspaceAccess}
+            onboarding={onboarding}
+            onboardingStatus={onboardingStatus}
+            onboardingError={onboardingError}
+            onOpenOnboarding={handleOpenOnboarding}
+            onRefreshOnboarding={refreshOnboarding}
             authSession={authSession}
             refreshClubAccess={refreshClubAccess}
             setHistory={setHistory}
