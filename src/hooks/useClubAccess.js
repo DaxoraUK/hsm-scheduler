@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { getUserScopedItem, setUserScopedItem } from "../lib/storage/tenantStorage.js";
+import { isRecoverableAccessVerificationError } from "../lib/errors/recovery.js";
 
 const ACTIVE_CLUB_KEY = "selected";
 const INVITE_QUERY_KEY = "club_invite";
@@ -32,11 +33,13 @@ export function useClubAccess(authSession) {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [canBootstrap, setCanBootstrap] = useState(false);
+  const verifiedAccessRef = useRef({ userId: "", memberships: [], activeClubId: "" });
 
   const userId = authSession?.user?.id || "";
 
   const refresh = useCallback(async () => {
     if (!authSession?.access_token || !userId) {
+      verifiedAccessRef.current = { userId: "", memberships: [], activeClubId: "" };
       setMemberships([]);
       setActiveClubId("");
       setStatus("idle");
@@ -51,7 +54,13 @@ export function useClubAccess(authSession) {
       return [];
     }
 
-    setStatus("loading");
+    const verifiedAccess = verifiedAccessRef.current;
+    const hasVerifiedAccess = verifiedAccess.userId === userId
+      && Boolean(verifiedAccess.activeClubId)
+      && verifiedAccess.memberships.length > 0;
+
+    // Background revalidation must not close an already verified workspace.
+    setStatus(hasVerifiedAccess ? "ready" : "loading");
     setError("");
 
     try {
@@ -72,6 +81,7 @@ export function useClubAccess(authSession) {
       setMemberships(nextMemberships);
 
       if (!nextMemberships.length) {
+        verifiedAccessRef.current = { userId: "", memberships: [], activeClubId: "" };
         const bootstrap = await DB.getBootstrapStatus();
         setCanBootstrap(Boolean(bootstrap?.can_bootstrap));
         setActiveClubId("");
@@ -90,11 +100,32 @@ export function useClubAccess(authSession) {
       const selected = nextMemberships.find((membership) => membership.clubId === savedClubId)
         || nextMemberships[0];
 
+      verifiedAccessRef.current = {
+        userId,
+        memberships: nextMemberships,
+        activeClubId: selected.clubId,
+      };
       setActiveClubId(selected.clubId);
       setUserScopedItem(userId, ACTIVE_CLUB_KEY, selected.clubId);
       setStatus("ready");
       return nextMemberships;
     } catch (loadError) {
+      const verified = verifiedAccessRef.current;
+      const canKeepVerifiedWorkspace = verified.userId === userId
+        && Boolean(verified.activeClubId)
+        && verified.memberships.length > 0
+        && isRecoverableAccessVerificationError(loadError);
+
+      if (canKeepVerifiedWorkspace) {
+        setMemberships(verified.memberships);
+        setActiveClubId(verified.activeClubId);
+        setCanBootstrap(false);
+        setStatus("ready");
+        setError("");
+        return verified.memberships;
+      }
+
+      verifiedAccessRef.current = { userId: "", memberships: [], activeClubId: "" };
       setMemberships([]);
       setActiveClubId("");
       setCanBootstrap(false);
@@ -111,6 +142,7 @@ export function useClubAccess(authSession) {
   const selectClub = useCallback((clubId) => {
     const next = memberships.find((membership) => membership.clubId === clubId);
     if (!next || !userId) return false;
+    verifiedAccessRef.current = { userId, memberships, activeClubId: next.clubId };
     setActiveClubId(next.clubId);
     setUserScopedItem(userId, ACTIVE_CLUB_KEY, next.clubId);
     setStatus("ready");
@@ -152,10 +184,12 @@ export function useClubAccess(authSession) {
     if (!authSession?.access_token || typeof window === "undefined") return undefined;
 
     const verifyAccess = () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       if (typeof document === "undefined" || document.visibilityState === "visible") refresh();
     };
 
     window.addEventListener("focus", verifyAccess);
+    window.addEventListener("online", verifyAccess);
     document?.addEventListener?.("visibilitychange", verifyAccess);
 
     const interval = activeMembership?.accessMode === "support"
@@ -164,6 +198,7 @@ export function useClubAccess(authSession) {
 
     return () => {
       window.removeEventListener("focus", verifyAccess);
+      window.removeEventListener("online", verifyAccess);
       document?.removeEventListener?.("visibilitychange", verifyAccess);
       if (interval) window.clearInterval(interval);
     };
