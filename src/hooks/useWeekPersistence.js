@@ -2,6 +2,10 @@ import { useCallback } from "react";
 import { isSupaConfigured, DB } from "../lib/supabase.js";
 import { toast } from "sonner";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
+import { getParkingCapacity } from "../lib/domain/clubDomain.js";
+import { getParkingSettings } from "../lib/intelligence/parking/parkingService.js";
+import { weatherService } from "../lib/services/weatherService.js";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 function splitFixtures(fixtures = [], dayKey) {
   const decorated = decorateFixturesForDay(fixtures, dayKey);
@@ -12,6 +16,77 @@ function splitFixtures(fixtures = [], dayKey) {
     postponed: decorated.filter((game) => game.status === "postponed"),
     cancelled: decorated.filter((game) => game.status === "cancelled"),
   };
+}
+
+function attachWeatherExposure(fixture = {}, exposure = null, forecast = null) {
+  if (!exposure?.risk?.key) return fixture;
+  return {
+    ...fixture,
+    weatherRisk: exposure.risk.key,
+    weather: {
+      provider: forecast?.provider || forecast?.source || "Connected feed",
+      updatedAt: forecast?.updatedAt || new Date().toISOString(),
+      forecastTime: exposure.forecastTime || exposure.time || null,
+      conditions: exposure.conditions || null,
+      temperatureC: exposure.temperatureC ?? null,
+      windMph: exposure.windMph ?? null,
+      rainProbability: exposure.rainProbability ?? null,
+      rainfallMm: exposure.rainfallMm ?? null,
+      risk: exposure.risk,
+    },
+  };
+}
+
+export async function captureWeatherSnapshots(days = [], club = {}, service = weatherService) {
+  const config = service.getConfiguration(club);
+  if (!config.enabled || !config.postcode) return days;
+
+  return Promise.all(days.map(async (day) => {
+    if (!day?.hasRun || !day?.date || !day?.scheduled?.length) return day;
+    const controller = typeof AbortController === "undefined" ? null : new AbortController();
+    const timeout = controller ? setTimeout(() => controller.abort(), 3500) : null;
+    try {
+      const forecast = await service.getForecast({
+        postcode: config.postcode,
+        date: day.date,
+        fixtures: day.scheduled,
+        signal: controller?.signal,
+      });
+      const snapshot = calculateWeatherIntelligence({
+        club,
+        fixtures: day.scheduled,
+        dateLabel: day.dateLabel || day.label,
+        forecastSource: forecast,
+        connectionStatus: forecast?.cacheStatus === "stale" ? "stale" : "success",
+        connectionError: forecast?.warning || null,
+      });
+      const exposureById = new Map(
+        (snapshot.fixtureExposure || []).map((exposure) => [String(exposure.id), exposure])
+      );
+      const scheduled = day.scheduled.map((fixture, index) => {
+        const key = String(fixture.id || fixture.fixtureId || `weather-fixture-${index}`);
+        const exposure = exposureById.get(key) || snapshot.fixtureExposure?.[index] || null;
+        return attachWeatherExposure(fixture, exposure, forecast);
+      });
+      return {
+        ...day,
+        scheduled,
+        weatherSnapshot: {
+          provider: snapshot.provider,
+          updatedAt: snapshot.updatedAt,
+          overallRisk: snapshot.overallRisk,
+          forecast: snapshot.forecast,
+          metrics: snapshot.metrics,
+          cacheStatus: forecast?.cacheStatus || "live",
+        },
+      };
+    } catch {
+      // Saving the operational record must not fail because a forecast is unavailable.
+      return day;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }));
 }
 
 function buildFixtureDaySnapshots({
@@ -95,6 +170,8 @@ export function useWeekPersistence({
   setDbStatus,
   activeClubId = "",
   canPublish = true,
+  onSyncFailure,
+  onSyncSuccess,
 }) {
   const saveWeek = useCallback(async () => {
     if (!canPublish) {
@@ -103,7 +180,7 @@ export function useWeekPersistence({
       });
       return false;
     }
-    const snapshots = buildFixtureDaySnapshots({
+    const baseSnapshots = buildFixtureDaySnapshots({
       fixtureDays,
       satDate,
       sunDate,
@@ -118,6 +195,7 @@ export function useWeekPersistence({
       midweekHasRun,
       midweekFinal,
     });
+    const snapshots = await captureWeatherSnapshots(baseSnapshots, club);
     const publishedDays = snapshots.filter((day) => day.hasRun);
     if (!publishedDays.length) return;
 
@@ -126,6 +204,8 @@ export function useWeekPersistence({
     const sunday = byKey.sunday || { scheduled: [], postponed: [], cancelled: [] };
     const midweek = byKey.midweek || { scheduled: [], postponed: [], cancelled: [] };
 
+    const parkingSettings = getParkingSettings(club);
+    const parkingCapacity = getParkingCapacity(club, 0);
     const entry = {
       id: Date.now(),
       dateLabel:
@@ -136,7 +216,14 @@ export function useWeekPersistence({
             : midweekDateLabel || "Midweek",
       date: saturday.hasRun || sunday.hasRun ? satDate || undefined : midweekDate || undefined,
       savedAt: new Date().toISOString(),
-      carParkSpaces: Number(club.carParkSpaces ?? 0),
+      carParkSpaces: parkingCapacity,
+      parking: {
+        enabled: parkingSettings.enabled,
+        capacity: parkingCapacity,
+        maxConcurrent: parkingSettings.maxConcurrent,
+        pressureThresholdPct: parkingSettings.parkingPressureThresholdPct,
+        avgCars: parkingSettings.avgCars,
+      },
 
       // Canonical v2 history model.
       fixtureDays: publishedDays,
@@ -155,20 +242,26 @@ export function useWeekPersistence({
 
     const updated = [entry, ...history].slice(0, 20);
 
+    let cloudSaved = true;
+    const publishToCloud = () => DB.saveHistoryEntry(activeClubId, entry);
+
     if (isSupaConfigured() && activeClubId) {
       setDbStatus("saving");
       try {
-        await DB.saveHistoryEntry(activeClubId, entry);
+        await publishToCloud();
         setDbStatus("connected");
+        onSyncSuccess?.();
         toast.success("Matchweek published", {
           description: publishedDays
             .map((day) => `${day.label}: ${day.scheduled.length}`)
             .join(". "),
         });
       } catch (error) {
+        cloudSaved = false;
         setDbStatus("error");
+        onSyncFailure?.(error, publishToCloud);
         toast.error("Saved on this device only", {
-          description: error?.message || "Cloud sync failed. Retry before using another device.",
+          description: error?.message || "Cloud sync failed. Use Retry sync before using another device.",
         });
       }
     } else {
@@ -178,6 +271,7 @@ export function useWeekPersistence({
     }
 
     setHistory(updated);
+    return cloudSaved;
   }, [
     mode,
     satDate,
@@ -205,6 +299,8 @@ export function useWeekPersistence({
     setDbStatus,
     activeClubId,
     canPublish,
+    onSyncFailure,
+    onSyncSuccess,
   ]);
 
   return { saveWeek };

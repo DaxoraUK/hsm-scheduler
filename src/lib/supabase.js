@@ -186,11 +186,16 @@ export const Auth = {
       refreshPromise = Auth.refreshSession(current.refresh_token)
         .then((refreshed) => {
           if (!refreshed?.access_token) {
-            Auth.clearSession();
-            throw new SupabaseRequestError(refreshed?.error || "Your session has expired", {
-              status: refreshed?.status || 401,
-              code: "SESSION_EXPIRED",
-            });
+            const status = Number(refreshed?.status || 0);
+            const authenticationRejected = status === 400 || status === 401 || status === 403;
+            if (authenticationRejected) Auth.clearSession();
+            throw new SupabaseRequestError(
+              refreshed?.error || (authenticationRejected ? "Your session has expired" : "The secure session could not be refreshed"),
+              {
+                status,
+                code: authenticationRejected ? "SESSION_EXPIRED" : "SESSION_REFRESH_FAILED",
+              }
+            );
           }
           Auth.saveSession(refreshed);
           return refreshed;

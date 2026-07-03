@@ -4,6 +4,7 @@ import {
   createSupportReference,
   getSessionRefreshDelay,
   getSyncBanner,
+  isRecoverableAccessVerificationError,
 } from "../../src/lib/errors/recovery.js";
 
 describe("production recovery and status model", () => {
@@ -53,6 +54,22 @@ describe("production recovery and status model", () => {
     expect(getSyncBanner({ online: true, dbStatus: "connected", sessionStatus: "refreshing" })).toMatchObject({
       kind: "refreshing",
     });
+  });
+
+
+  test("keeps an already verified workspace open during transient access-check failures", () => {
+    expect(isRecoverableAccessVerificationError(new TypeError("Failed to fetch"), { online: false })).toBe(true);
+    expect(isRecoverableAccessVerificationError({ status: 503, message: "Service unavailable" }, { online: true })).toBe(true);
+    expect(isRecoverableAccessVerificationError({ status: 401, code: "AUTH_REQUIRED" }, { online: true })).toBe(false);
+    expect(isRecoverableAccessVerificationError({ status: 403, code: "CLUB_ACCESS_DENIED" }, { online: true })).toBe(false);
+  });
+
+  test("club access revalidation preserves verified state while offline", () => {
+    const source = readFileSync(new URL("../../src/hooks/useClubAccess.js", import.meta.url), "utf8");
+    expect(source).toContain("verifiedAccessRef");
+    expect(source).toContain("isRecoverableAccessVerificationError(loadError)");
+    expect(source).toContain('window.addEventListener("online", verifyAccess)');
+    expect(source).toContain('setStatus(hasVerifiedAccess ? "ready" : "loading")');
   });
 
   test("the application root is protected by the branded error boundary", () => {

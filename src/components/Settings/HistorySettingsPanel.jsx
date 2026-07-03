@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CalendarDays, History, RotateCcw, Trash2 } from "lucide-react";
 import { DB, isSupaConfigured } from "../../lib/supabase.js";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import {
   Notice,
   SecondaryButton,
@@ -22,6 +23,8 @@ export default function HistorySettingsPanel({
   activeClubId = "",
 }) {
   const [deleteError, setDeleteError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const totalFixtures = history.reduce((sum, week) => sum + countFixtures(week), 0);
   const latest = history[0] || null;
 
@@ -31,18 +34,22 @@ export default function HistorySettingsPanel({
     setDayTab?.("saturday");
   };
 
-  const deleteWeek = async (week) => {
-    const confirmed = window.confirm(`Delete ${week.dateLabel || "this saved matchweek"}?`);
-    if (!confirmed) return;
+  const deleteWeek = async () => {
+    const week = pendingDelete;
+    if (!week || deleting) return;
     setDeleteError("");
+    setDeleting(true);
 
     try {
       if (isSupaConfigured() && activeClubId) {
         await DB.deleteHistory(activeClubId, week.id);
       }
       setHistory?.((current) => current.filter((entry) => entry.id !== week.id));
+      setPendingDelete(null);
     } catch (error) {
       setDeleteError(error?.message || "The saved matchweek could not be deleted.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -83,7 +90,7 @@ export default function HistorySettingsPanel({
                   <td className="px-4 py-4 text-sm font-black text-slate-700">{(week.sunScheduled || []).length}</td>
                   <td className="px-4 py-4 text-sm font-black text-slate-700">{(week.midweekScheduled || []).length}</td>
                   <td className="px-4 py-4 text-sm font-black text-slate-700">{(week.postponedGames || []).length || week.postponed || 0}</td>
-                  <td className="px-4 py-4"><div className="flex gap-2"><SecondaryButton icon={RotateCcw} onClick={() => loadWeek(week)}>Load Saturday</SecondaryButton><SecondaryButton icon={Trash2} onClick={() => deleteWeek(week)}>Delete</SecondaryButton></div></td>
+                  <td className="px-4 py-4"><div className="flex gap-2"><SecondaryButton icon={RotateCcw} onClick={() => loadWeek(week)}>Load Saturday</SecondaryButton><SecondaryButton icon={Trash2} onClick={() => setPendingDelete(week)}>Delete</SecondaryButton></div></td>
                 </tr>
               ))}
             </tbody>
@@ -92,6 +99,16 @@ export default function HistorySettingsPanel({
       )}
 
       <div className="mt-5"><Notice tone="warning">Loading a saved matchweek replaces the current Saturday schedule. Use a configuration backup before major changes to club setup.</Notice></div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete saved matchweek?"
+        description={`${pendingDelete?.dateLabel || "This matchweek"} will be removed from the club history and cannot be restored from Ground Control.`}
+        confirmLabel="Delete matchweek"
+        busy={deleting}
+        onCancel={() => !deleting && setPendingDelete(null)}
+        onConfirm={deleteWeek}
+      />
     </SettingsPanel>
   );
 }

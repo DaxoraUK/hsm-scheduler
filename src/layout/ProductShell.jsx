@@ -1,21 +1,56 @@
+import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
+import { useConnectivity } from "../hooks/useConnectivity.js";
+import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
 
 import {
-  LayoutDashboard,
   CalendarDays,
-  MessageSquareText,
   ChartNoAxesCombined,
-  FileText,
-  Settings,
   Clock3,
+  CloudAlert,
   Eye,
+  FileText,
+  LayoutDashboard,
   LogOut,
+  Menu,
+  MessageSquareText,
+  RefreshCw,
+  Settings,
+  WifiOff,
+  X,
 } from "lucide-react";
+
+function NavigationItems({ items, mainPage, onNavigate }) {
+  return (
+    <nav className="space-y-1 overflow-y-auto pr-1" aria-label="Primary navigation">
+      {items.map(([key, label, Icon, target]) => {
+        const active = mainPage === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-current={active ? "page" : undefined}
+            onClick={() => onNavigate(key, target)}
+            className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${
+              active
+                ? "bg-white/[0.08] text-white"
+                : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
+            }`}
+          >
+            {active ? <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-emerald-400" /> : null}
+            <Icon size={19} strokeWidth={2.5} className={active ? "text-emerald-400" : "text-slate-500"} />
+            <span>{label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export default function ProductShell({
   children,
@@ -40,10 +75,16 @@ export default function ProductShell({
   activeClubId = "",
   activeMembership = null,
   workspaceAccess = null,
+  dbStatus = "connected",
+  syncError = "",
+  sessionStatus = "active",
+  onRetrySync,
   onClubChange,
   onEndSupportAccess,
   onSignOut,
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { online } = useConnectivity();
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
 
   const navItems = [
@@ -55,143 +96,112 @@ export default function ProductShell({
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
   ].filter(([key]) => key !== "settings" || workspaceAccess?.canManageSettings);
 
-  const satCount = satHasRun
-    ? satFinal.filter((game) => game.status !== "postponed").length
-    : 0;
+  const navigate = (key, target) => {
+    nav.goTo(target, {
+      day: key === "operations" ? getDayTabFromScope(matchdayScope) : undefined,
+      scroll: false,
+    });
+    setMobileOpen(false);
+  };
 
-  const sunCount = sunHasRun
-    ? sunFinal.filter((game) => game.status !== "postponed").length
-    : 0;
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = (event) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", close);
+    };
+  }, [mobileOpen]);
 
+  const satCount = satHasRun ? satFinal.filter((game) => game.status !== "postponed").length : 0;
+  const sunCount = sunHasRun ? sunFinal.filter((game) => game.status !== "postponed").length : 0;
   const midweekCount = midweekEnabled && midweekHasRun
     ? midweekFinal.filter((game) => game.status !== "postponed").length
     : 0;
 
-  const readinessPct =
-    matchdayScope === MATCHDAY_SCOPES.MIDWEEK
-      ? midweekReadiness?.pct ?? 0
-      : readiness?.pct ?? 0;
+  const readinessPct = matchdayScope === MATCHDAY_SCOPES.MIDWEEK
+    ? midweekReadiness?.pct ?? 0
+    : readiness?.pct ?? 0;
 
-  const workspaceStatus =
-    readinessPct >= 90
-      ? `${getMatchdayScopeLabel(matchdayScope)} Ready`
-      : readinessPct >= 70
-        ? "Almost Ready"
-        : "Needs Attention";
+  const workspaceStatus = readinessPct >= 90
+    ? `${getMatchdayScopeLabel(matchdayScope)} Ready`
+    : readinessPct >= 70
+      ? "Almost Ready"
+      : "Needs Attention";
+
+  const syncBanner = getSyncBanner({ online, dbStatus, syncError, sessionStatus });
+
+  const workspaceCard = (
+    <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Workspace</div>
+      <div className="mt-3 truncate text-sm font-black text-white">{club.name}</div>
+      <div className="mt-1 text-xs font-bold text-slate-500">{getMatchdayScopeLabel(matchdayScope)} view</div>
+      <div className={`mt-4 grid gap-2 ${midweekEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
+        {["Saturday", "Sunday", ...(midweekEnabled ? ["Midweek"] : [])].map((label, index) => (
+          <div key={label} className="rounded-2xl bg-white/[0.04] p-2.5">
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-600">{label}</div>
+            <div className="mt-1 text-lg font-black text-white">{[satCount, sunCount, midweekCount][index]}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" /> {workspaceStatus}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-[80] lg:hidden">
+          <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside className="relative flex h-full w-[min(88vw,340px)] flex-col border-r border-slate-800 bg-[#050816] px-5 py-5 text-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <GroundControlBrand />
+              <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="mt-7 border-t border-slate-800 pt-5">
+              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Operations</div>
+              <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
+            </div>
+            <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
+          </aside>
+        </div>
+      ) : null}
+
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-slate-800 bg-[#050816] px-5 py-5 text-white lg:flex lg:flex-col">
-          <div className="mb-8">
-            <GroundControlBrand />
-          </div>
-
+          <div className="mb-8"><GroundControlBrand /></div>
           <div className="flex flex-1 flex-col">
             <div className="border-t border-slate-800 pt-5">
-              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">
-                Operations
-              </div>
-
-              <nav className="space-y-1 overflow-y-auto pr-1">
-                {navItems.map(([key, label, Icon, target]) => {
-                  const active = mainPage === key;
-
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => {
-                        nav.goTo(target, {
-                          day: key === "operations" ? getDayTabFromScope(matchdayScope) : undefined,
-                          scroll: false,
-                        });
-                      }}
-                      className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${
-                        active
-                          ? "bg-white/[0.06] text-white"
-                          : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
-                      }`}
-                    >
-                      {active && (
-                        <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-emerald-400" />
-                      )}
-
-                      <Icon
-                        size={19}
-                        strokeWidth={2.5}
-                        className={active ? "text-emerald-400" : "text-slate-500"}
-                      />
-
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-              </nav>
+              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Operations</div>
+              <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
             </div>
-
-            <div className="mt-auto border-t border-slate-800 pt-4">
-              <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-3">
-                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">
-                  Workspace
-                </div>
-
-                <div className="mt-3 text-sm font-black text-white">
-                  {club.name}
-                </div>
-
-                <div className="mt-1 text-xs font-bold text-slate-500">
-                  {getMatchdayScopeLabel(matchdayScope)} view
-                </div>
-
-                <div className={`mt-4 grid gap-2 ${midweekEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
-                  <div className="rounded-2xl bg-white/[0.04] p-2.5">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
-                      Saturday
-                    </div>
-                    <div className="mt-1 text-lg font-black text-white">
-                      {satCount}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/[0.04] p-2.5">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
-                      Sunday
-                    </div>
-                    <div className="mt-1 text-lg font-black text-white">
-                      {sunCount}
-                    </div>
-                  </div>
-
-                  {midweekEnabled ? (
-                    <div className="rounded-2xl bg-white/[0.04] p-2.5">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-600">
-                        Midweek
-                      </div>
-                      <div className="mt-1 text-lg font-black text-white">
-                        {midweekCount}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  {workspaceStatus}
-                </div>
-              </div>
-            </div>
+            <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
           </div>
         </aside>
 
-        <div className="flex min-h-screen flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-6 border-b border-slate-200 bg-white/90 px-8 backdrop-blur-xl">
-            <HeaderSearch
-              setMainPage={setMainPage}
-              setDayTab={setDayTab}
-              setNavigationTarget={setNavigationTarget}
-              canOpenSettings={Boolean(workspaceAccess?.canManageSettings)}
-            />
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <button type="button" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 lg:hidden">
+                <Menu size={21} />
+              </button>
+              <div className="hidden min-w-0 flex-1 md:block">
+                <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} setNavigationTarget={setNavigationTarget} canOpenSettings={Boolean(workspaceAccess?.canManageSettings)} />
+              </div>
+              <div className="min-w-0 md:hidden">
+                <div className="truncate text-sm font-black text-slate-950">Ground Control</div>
+                <div className="truncate text-[11px] font-bold text-slate-500">{club?.name}</div>
+              </div>
+            </div>
             <HeaderProfile
               user={authSession?.user}
               clubName={club?.name}
@@ -200,44 +210,51 @@ export default function ProductShell({
               activeRole={workspaceAccess?.role || activeMembership?.role || "viewer"}
               workspaceAccess={workspaceAccess}
               onClubChange={onClubChange}
-              onOpenSettings={(settingsTab = "overview") => {
-                nav.goToSettings({ settingsTab, scroll: false });
-              }}
+              onOpenSettings={(settingsTab = "overview") => nav.goToSettings({ settingsTab, scroll: false })}
               onSignOut={onSignOut}
             />
           </header>
 
+          {syncBanner?.kind === "offline" ? (
+            <div role="status" className="flex flex-col gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex items-start gap-3">
+                <WifiOff className="mt-0.5 shrink-0 text-amber-700" size={18} />
+                <div><div className="text-sm font-black">{syncBanner.title}</div><div className="text-xs font-semibold text-amber-800">{syncBanner.message}</div></div>
+              </div>
+            </div>
+          ) : syncBanner?.kind === "error" ? (
+            <div role="alert" className="flex flex-col gap-3 border-b border-rose-200 bg-rose-50 px-4 py-3 text-rose-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex items-start gap-3">
+                <CloudAlert className="mt-0.5 shrink-0 text-rose-700" size={19} />
+                <div><div className="text-sm font-black">{syncBanner.title}</div><div className="text-xs font-semibold text-rose-800">{syncBanner.message}</div></div>
+              </div>
+              {onRetrySync ? <button type="button" onClick={onRetrySync} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 shadow-sm hover:bg-rose-100"><RefreshCw size={14} /> Retry sync</button> : null}
+            </div>
+          ) : syncBanner?.kind === "refreshing" ? (
+            <div role="status" className="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-800 sm:px-6"><RefreshCw className="animate-spin" size={14} /> {syncBanner.title}</div>
+          ) : null}
+
           {workspaceAccess?.isSupport ? (
-            <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-6 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Eye size={18} /></span>
-                <div>
-                  <div className="text-sm font-black">Read-only Daxora support session</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-800">
-                    <span>Every view remains attributed to the signed-in support account.</span>
-                    {workspaceAccess.supportExpiresAt ? <span className="inline-flex items-center gap-1"><Clock3 size={13} /> Expires {new Date(workspaceAccess.supportExpiresAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span> : null}
-                  </div>
-                </div>
+                <div><div className="text-sm font-black">Read-only Daxora support session</div><div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-800"><span>Every view remains attributed to the signed-in support account.</span>{workspaceAccess.supportExpiresAt ? <span className="inline-flex items-center gap-1"><Clock3 size={13} /> Expires {new Date(workspaceAccess.supportExpiresAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span> : null}</div></div>
               </div>
               <button type="button" onClick={onEndSupportAccess} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 shadow-sm hover:bg-emerald-100"><LogOut size={15} /> End support session</button>
             </div>
           ) : workspaceAccess?.isReadOnly ? (
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-6 py-2.5 text-xs font-black text-slate-600"><Eye size={15} /> Read-only viewer access</div>
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-600 sm:px-6"><Eye size={15} /> Read-only viewer access</div>
           ) : null}
 
-          <main className="flex-1 overflow-auto p-8">
-            <div
-              className={workspaceAccess?.isReadOnly ? "pointer-events-none" : ""}
-              inert={workspaceAccess?.isReadOnly || undefined}
-              aria-disabled={workspaceAccess?.isReadOnly || undefined}
-            >
+          <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+            <div className={workspaceAccess?.isReadOnly ? "pointer-events-none" : ""} inert={workspaceAccess?.isReadOnly || undefined} aria-disabled={workspaceAccess?.isReadOnly || undefined}>
               {children}
             </div>
           </main>
         </div>
       </div>
 
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

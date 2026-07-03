@@ -1,5 +1,5 @@
-import React from "react";
-import { CheckCircle2, Info, Save } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckCircle2, CloudAlert, Info, LoaderCircle, Save } from "lucide-react";
 
 export const inputClass =
   "h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100";
@@ -131,16 +131,45 @@ export function SecondaryButton({ children, onClick, disabled = false, type = "b
 }
 
 export function SaveBar({ onSave, saved, label = "Save changes", children }) {
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const clearFailure = () => setFailed(false);
+    window.addEventListener("ground-control-sync-restored", clearFailure);
+    return () => window.removeEventListener("ground-control-sync-restored", clearFailure);
+  }, []);
+
+  const save = async () => {
+    if (saving || typeof onSave !== "function") return;
+    setSaving(true);
+    setFailed(false);
+    try {
+      const result = await onSave();
+      if (result === false) setFailed(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="mt-7 flex flex-col gap-4 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm font-semibold leading-6 text-slate-500">{children}</div>
-      <div className="flex shrink-0 items-center gap-3">
-        {saved ? (
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
+        {failed ? (
+          <span className="inline-flex items-center gap-1.5 text-sm font-black text-rose-700">
+            <CloudAlert size={16} /> Not synced
+          </span>
+        ) : saved ? (
           <span className="inline-flex items-center gap-1.5 text-sm font-black text-emerald-700">
             <CheckCircle2 size={16} /> Saved
           </span>
         ) : null}
-        <PrimaryButton onClick={onSave} icon={Save}>{label}</PrimaryButton>
+        <PrimaryButton onClick={save} disabled={saving} icon={saving ? LoaderCircle : Save} className={saving ? "cursor-wait" : ""}>
+          {saving ? "Saving…" : failed ? "Retry save" : label}
+        </PrimaryButton>
       </div>
     </div>
   );

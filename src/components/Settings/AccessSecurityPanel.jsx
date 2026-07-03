@@ -27,6 +27,7 @@ import {
   MANAGEABLE_MEMBER_ROLES,
 } from "../../lib/security/permissions.js";
 import { useWorkspaceSecurity } from "../../hooks/useWorkspaceSecurity.js";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 
 const ROLE_TONES = {
   owner: "border-amber-200 bg-amber-50 text-amber-800",
@@ -124,6 +125,7 @@ export default function AccessSecurityPanel({
   const [supportDuration, setSupportDuration] = useState("60");
   const [supportReason, setSupportReason] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
   const currentUserId = authSession?.user?.id || "";
   const activeSupport = supportSessions.filter((session) => session.active);
@@ -184,6 +186,22 @@ export default function AccessSecurityPanel({
     } catch {
       window.prompt("Copy this invitation link", inviteLink);
     }
+  };
+
+  const confirmMemberAction = async () => {
+    const pending = pendingConfirmation;
+    if (!pending?.member) return;
+    const member = pending.member;
+    const isTransfer = pending.type === "transfer";
+    const success = await runAction(
+      `${pending.type}-${member.user_id}`,
+      () => isTransfer
+        ? DB.transferClubOwnership(activeClubId, member.user_id)
+        : DB.removeClubMember(activeClubId, member.user_id),
+      isTransfer ? "Club ownership transferred" : "Member access removed",
+      { refreshMemberships: true }
+    );
+    if (success) setPendingConfirmation(null);
   };
 
   const grantSupport = async (event) => {
@@ -313,15 +331,7 @@ export default function AccessSecurityPanel({
                       <button
                         type="button"
                         disabled={Boolean(busyAction)}
-                        onClick={() => {
-                          if (!window.confirm(`Transfer club ownership to ${member.display_name || member.email}? Your role will become Administrator.`)) return;
-                          runAction(
-                            `transfer-${member.user_id}`,
-                            () => DB.transferClubOwnership(activeClubId, member.user_id),
-                            "Club ownership transferred",
-                            { refreshMemberships: true }
-                          );
-                        }}
+                        onClick={() => setPendingConfirmation({ type: "transfer", member })}
                         className="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 hover:bg-amber-100 disabled:opacity-50"
                       >
                         <Crown size={15} /> Transfer
@@ -332,15 +342,7 @@ export default function AccessSecurityPanel({
                       <button
                         type="button"
                         disabled={Boolean(busyAction)}
-                        onClick={() => {
-                          if (!window.confirm(`Remove ${member.display_name || member.email} from this club?`)) return;
-                          runAction(
-                            `remove-${member.user_id}`,
-                            () => DB.removeClubMember(activeClubId, member.user_id),
-                            "Member access removed",
-                            { refreshMemberships: true }
-                          );
-                        }}
+                        onClick={() => setPendingConfirmation({ type: "remove", member })}
                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
                         aria-label="Remove member"
                       >
@@ -479,6 +481,19 @@ export default function AccessSecurityPanel({
           <div className="flex gap-3"><Clock3 className="shrink-0 text-sky-600" size={20} /><div><div className="text-sm font-black text-slate-950">Automatic expiry</div><div className="mt-1 text-xs font-semibold leading-5 text-slate-500">Support access disappears as soon as the approved window ends.</div></div></div>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(pendingConfirmation)}
+        title={pendingConfirmation?.type === "transfer" ? "Transfer club ownership?" : "Remove club member?"}
+        description={pendingConfirmation?.type === "transfer"
+          ? `${pendingConfirmation?.member?.display_name || pendingConfirmation?.member?.email || "This member"} will become the Club Owner. Your account will become an Administrator.`
+          : `${pendingConfirmation?.member?.display_name || pendingConfirmation?.member?.email || "This member"} will immediately lose access to this club workspace.`}
+        confirmLabel={pendingConfirmation?.type === "transfer" ? "Transfer ownership" : "Remove member"}
+        tone={pendingConfirmation?.type === "transfer" ? "warning" : "danger"}
+        busy={Boolean(busyAction)}
+        onCancel={() => !busyAction && setPendingConfirmation(null)}
+        onConfirm={confirmMemberAction}
+      />
     </div>
   );
 }

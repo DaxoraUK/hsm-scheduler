@@ -2,10 +2,9 @@
 // The main application container. Holds all state and handlers,
 // imports logic from lib/ and UI from components/.
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
+import React, { Suspense, lazy, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import AppLayout from "./layout/AppLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
-import ReportsPage from "./pages/ReportsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import OperationsPage from "./pages/OperationsPage.jsx";
 import DayTabs from "./components/Operations/DayTabs.jsx";
@@ -20,10 +19,11 @@ import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
+import { useSessionLifecycle } from "./hooks/useSessionLifecycle.js";
+import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
 import CommunicationsPage from "./pages/CommunicationsPage.jsx";
-import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import { MATCHDAY_SCOPES, getDayTabFromScope, normaliseMatchdayScope } from "./lib/domain/matchdayScope.js";
 import {
@@ -86,6 +86,20 @@ import {
 import { createWorkspaceAccess } from "./lib/security/permissions.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
+
+function LazyPageFallback({ label = "workspace" }) {
+  return (
+    <div className="mx-auto flex min-h-[420px] w-full max-w-[1500px] items-center justify-center px-6 py-12">
+      <div className="rounded-3xl border border-slate-200 bg-white px-8 py-7 text-center shadow-sm">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
+        <div className="mt-4 text-sm font-black text-slate-800">Loading {label}…</div>
+      </div>
+    </div>
+  );
+}
+
 function readClubTiming(club = {}) {
   const timing = club.timingSettings || club.timing || {};
   return {
@@ -133,6 +147,7 @@ function createUnconfiguredClub(memberClub = {}, clubId = "") {
 }
 
 function App(){
+  useGlobalErrorNotifications();
   const [mode,setMode]=useState("test");
   const [productionMode,setProductionMode]=useState(false);
   const [dayTab,setDayTab]=useState("saturday");
@@ -277,6 +292,9 @@ function App(){
   const [teamCfg,setTeamCfg]=useState(TEAM_CONFIG_DEFAULT);
 
   const [dbStatus,setDbStatus]=useState(()=>isSupaConfigured()?"connecting":"disabled");
+  const [syncError,setSyncError]=useState("");
+  const [syncRetryAvailable,setSyncRetryAvailable]=useState(false);
+  const retrySyncRef=useRef(null);
   const [savedTab,setSavedTab]=useState("");
   const [authSession,setAuthSession]=useState(()=>Auth.getSession());
   const [authLoading,setAuthLoading]=useState(true);
@@ -284,6 +302,57 @@ function App(){
   const [workspaceHydrated,setWorkspaceHydrated]=useState(false);
   const [workspaceSecurityError,setWorkspaceSecurityError]=useState("");
   const closureSyncRef=useRef({clubId:"",snapshot:""});
+
+  const reportSyncSuccess=useCallback(()=>{
+    retrySyncRef.current=null;
+    setSyncRetryAvailable(false);
+    setSyncError("");
+    setDbStatus("connected");
+    if(typeof window!=="undefined") window.dispatchEvent(new CustomEvent("ground-control-sync-restored"));
+  },[]);
+
+  const reportSyncFailure=useCallback((error,retry)=>{
+    retrySyncRef.current=typeof retry==="function"?retry:null;
+    setSyncRetryAvailable(typeof retry==="function");
+    setSyncError(error?.message||"Cloud sync failed. Changes remain on this device until sync is restored.");
+    setDbStatus("error");
+  },[]);
+
+  const retryLastSync=useCallback(async()=>{
+    const retry=retrySyncRef.current;
+    if(typeof retry!=="function"){
+      toast.info("Nothing is waiting to sync");
+      return false;
+    }
+    setDbStatus("saving");
+    try{
+      await retry();
+      reportSyncSuccess();
+      toast.success("Cloud sync restored");
+      return true;
+    }catch(error){
+      reportSyncFailure(error,retry);
+      toast.error("Cloud sync is still unavailable",{description:error?.message||"Check the connection and try again."});
+      return false;
+    }
+  },[reportSyncFailure,reportSyncSuccess]);
+
+  const handleSessionExpired=useCallback((message)=>{
+    clearTenantStorageContext();
+    setWorkspaceHydrated(false);
+    setWorkspaceSecurityError("");
+    setMainPage("dashboard");
+    setDayTab("saturday");
+    setSettingsTab("overview");
+    setNavigationTarget(null);
+    toast.error("Secure session ended",{description:message||"Sign in again to continue."});
+  },[]);
+
+  const {status:sessionStatus}=useSessionLifecycle({
+    session:authSession,
+    onSession:setAuthSession,
+    onExpired:handleSessionExpired,
+  });
 
   const {
     memberships,
@@ -564,24 +633,30 @@ function App(){
     tenantSetJson("teamConfig",nextTeamCfg);
     tenantSetJson("referees",nextRefs);
 
+    const performCloudSave=async()=>{
+      const saves=[];
+      if(data.club||["club","workspace","venues","timing"].includes(tab)) saves.push(DB.saveClub(activeClubId,nextClub));
+      if(data.teamCfg||tab==="teams") saves.push(DB.saveTeamCfg(activeClubId,nextTeamCfg));
+      if(data.refs||tab==="refs") saves.push(DB.saveRefs(activeClubId,nextRefs));
+      if(tab==="pitches") saves.push(DB.savePitches(activeClubId,pitchCfg));
+      await Promise.all(saves);
+    };
+
     try{
       if(isSupaConfigured()&&activeClubId){
         setDbStatus("saving");
-        const saves=[];
-        if(data.club||["club","workspace","venues","timing"].includes(tab)) saves.push(DB.saveClub(activeClubId,nextClub));
-        if(data.teamCfg||tab==="teams") saves.push(DB.saveTeamCfg(activeClubId,nextTeamCfg));
-        if(data.refs||tab==="refs") saves.push(DB.saveRefs(activeClubId,nextRefs));
-        if(tab==="pitches") saves.push(DB.savePitches(activeClubId,pitchCfg));
-        await Promise.all(saves);
-        setDbStatus("connected");
+        await performCloudSave();
+        reportSyncSuccess();
       }
       setSavedTab(tab);
-      setTimeout(()=>setSavedTab(""),2500);
+      window.setTimeout(()=>setSavedTab(""),2500);
+      return true;
     }catch(error){
-      setDbStatus("error");
+      reportSyncFailure(error,performCloudSave);
       toast.error("Saved on this device only",{
-        description:error?.message||"Cloud sync failed. Review the workspace connection before continuing.",
+        description:error?.message||"Cloud sync failed. Use Retry sync before working on another device.",
       });
+      return false;
     }
   };
 
@@ -751,7 +826,7 @@ function App(){
         if(activeMembership?.accessMode==="support"&&activeMembership?.supportSessionId){
           await DB.recordSupportWorkspaceOpen(activeClubId,activeMembership.supportSessionId);
         }
-        setDbStatus("connected");
+        reportSyncSuccess();
       }catch(error){
         if(cancelled) return;
         const status=Number(error?.status||0);
@@ -766,7 +841,11 @@ function App(){
           return;
         }
         closureSyncRef.current={clubId:activeClubId,snapshot:JSON.stringify(localClosures)};
-        setDbStatus("error");
+        const retryWorkspaceLoad=async()=>{
+          await DB.ping(activeClubId);
+          window.location.reload();
+        };
+        reportSyncFailure(error,retryWorkspaceLoad);
         toast.error("Cloud workspace unavailable", {
           description: error?.message || "Ground Control is using this club's local cache until the connection is restored.",
         });
@@ -785,6 +864,8 @@ function App(){
     authSession?.user?.id,
     clearMidweekScheduleForDateChange,
     clearWeekendScheduleForDateChange,
+    reportSyncFailure,
+    reportSyncSuccess,
   ]);
 
   useEffect(()=>{if(workspaceHydrated)tenantSetJson("referees",refs);},[refs,workspaceHydrated]);
@@ -803,18 +884,21 @@ function App(){
     if(closureSyncRef.current.clubId===activeClubId&&closureSyncRef.current.snapshot===snapshot) return undefined;
     if(!isSupaConfigured()||!workspaceAccess.canOperate) return undefined;
 
+    const syncClosures=async()=>{
+      await DB.savePitchClosures(activeClubId,pitchClosures);
+      closureSyncRef.current={clubId:activeClubId,snapshot};
+    };
     const timer=window.setTimeout(async()=>{
       try{
-        await DB.savePitchClosures(activeClubId,pitchClosures);
-        closureSyncRef.current={clubId:activeClubId,snapshot};
-        setDbStatus("connected");
+        await syncClosures();
+        reportSyncSuccess();
       }catch(error){
-        setDbStatus("error");
+        reportSyncFailure(error,syncClosures);
         toast.error("Pitch closures saved locally only",{description:error?.message||"Cloud sync failed."});
       }
     },350);
     return()=>window.clearTimeout(timer);
-  },[activeClubId,pitchClosures,workspaceAccess.canOperate,workspaceHydrated]);
+  },[activeClubId,pitchClosures,reportSyncFailure,reportSyncSuccess,workspaceAccess.canOperate,workspaceHydrated]);
 
     useEffect(() => {
       const handler = (event) => {
@@ -1035,6 +1119,8 @@ const { saveWeek } = useWeekPersistence({
   setDbStatus,
   activeClubId,
   canPublish:workspaceAccess.canPublish,
+  onSyncFailure:reportSyncFailure,
+  onSyncSuccess:reportSyncSuccess,
 });
 
 const {
@@ -1171,11 +1257,38 @@ return(
     activeClubId={activeClubId}
     activeMembership={activeMembership}
     workspaceAccess={workspaceAccess}
+    dbStatus={dbStatus}
+    syncError={syncError}
+    sessionStatus={sessionStatus}
+    onRetrySync={syncRetryAvailable?retryLastSync:null}
     onClubChange={handleClubChange}
     onEndSupportAccess={handleEndSupportAccess}
     onSignOut={handleSignOut}
   >
-       <style dangerouslySetInnerHTML={{__html:"@media print{.np{display:none!important}#combined-print,#combined-print *{visibility:visible!important}body{visibility:hidden!important}#combined-print{position:fixed;top:0;left:0;width:100%}}"}}/>
+       <style dangerouslySetInnerHTML={{__html:`
+         @media print {
+           .np { display: none !important; }
+           body[data-print-target="reports"] * { visibility: hidden !important; }
+           body[data-print-target="reports"] #ground-control-report-print,
+           body[data-print-target="reports"] #ground-control-report-print * { visibility: visible !important; }
+           body[data-print-target="reports"] #ground-control-report-print {
+             position: absolute;
+             inset: 0;
+             width: 100%;
+           }
+           body[data-print-target="reports"] #combined-print { display: none !important; }
+           body:not([data-print-target="reports"]) { visibility: hidden !important; }
+           body:not([data-print-target="reports"]) #combined-print,
+           body:not([data-print-target="reports"]) #combined-print * { visibility: visible !important; }
+           body:not([data-print-target="reports"]) #combined-print {
+             position: fixed;
+             top: 0;
+             left: 0;
+             width: 100%;
+           }
+           @page { size: A4 landscape; margin: 12mm; }
+         }
+       `}}/>
 
       <div style={S.body}>
    
@@ -1496,27 +1609,53 @@ return(
     )}
 
     {mainPage === "analytics" && (
-      <AnalyticsPage
-        club={club}
-        history={history}
-        pitchCfg={pitchCfg}
-        teamCfg={teamCfg}
-        refs={refs}
-        closedPitches={closedPitches}
-        satFinal={satFinal}
-        sunFinal={sunFinal}
-        midweekFinal={activeMidweekFinal}
-        satHasRun={satHasRun}
-        sunHasRun={sunHasRun}
-        midweekHasRun={activeMidweekHasRun}
-        midweekEnabled={midweekEnabled}
-        refWarnings={refWarnings}
-      />
+      <Suspense fallback={<LazyPageFallback label="analytics" />}>
+        <AnalyticsPage
+          club={club}
+          history={history}
+          pitchCfg={pitchCfg}
+          teamCfg={teamCfg}
+          refs={refs}
+          closedPitches={closedPitches}
+          satFinal={satFinal}
+          sunFinal={sunFinal}
+          midweekFinal={activeMidweekFinal}
+          satHasRun={satHasRun}
+          sunHasRun={sunHasRun}
+          midweekHasRun={activeMidweekHasRun}
+          midweekEnabled={midweekEnabled}
+          refWarnings={refWarnings}
+        />
+      </Suspense>
     )}
 
     {mainPage === "reports" && (
-    <ReportsPage S={S} hdrStyle={hdrStyle} club={club} />
-)}
+      <Suspense fallback={<LazyPageFallback label="reports" />}>
+        <ReportsPage
+          club={club}
+          history={history}
+          pitchCfg={pitchCfg}
+          teamCfg={teamCfg}
+          refs={refs}
+          satFinal={satFinal}
+          sunFinal={sunFinal}
+          midweekFinal={activeMidweekFinal}
+          satUnresolved={satUnresolved}
+          sunUnresolved={sunUnresolved}
+          midweekUnresolved={activeMidweekUnresolved}
+          satHasRun={satHasRun}
+          sunHasRun={sunHasRun}
+          midweekHasRun={activeMidweekHasRun}
+          satDate={satDate}
+          sunDate={sunDate}
+          midweekDate={midweekDate}
+          satDateLabel={satDateLabel}
+          sunDateLabel={sunDateLabel}
+          midweekDateLabel={midweekDateLabel}
+          midweekEnabled={midweekEnabled}
+        />
+      </Suspense>
+    )}
         {/* ── SETTINGS ── */}
         {mainPage === "settings" && (
           <SettingsPage

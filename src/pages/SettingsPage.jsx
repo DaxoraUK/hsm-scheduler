@@ -48,6 +48,15 @@ export default function SettingsPage(props) {
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
   const midweekEnabled = isMidweekEnabled(club);
   const parkingEnabled = isParkingEnabled(club);
+  const dataStatus = dbStatus === "connected"
+    ? "Connected"
+    : dbStatus === "saving"
+      ? "Saving…"
+      : dbStatus === "error"
+        ? "Sync issue"
+        : dbStatus === "loading" || dbStatus === "connecting"
+          ? "Connecting…"
+          : "Local only";
 
   useEffect(() => {
     if (activeTab !== settingsTab) setSettingsTab?.(activeTab);
@@ -87,7 +96,7 @@ export default function SettingsPage(props) {
             <HeaderMetric label="Mode" value={productionMode ? "Production" : "Development"} icon={ShieldCheck} />
             <HeaderMetric label="Midweek" value={midweekEnabled ? "Enabled" : "Hidden"} icon={Settings2} />
             <HeaderMetric label="Parking" value={parkingEnabled ? "Enabled" : "Off"} icon={Settings2} />
-            <HeaderMetric label="Data" value={dbStatus === "connected" ? "Connected" : "Local"} icon={Database} />
+            <HeaderMetric label="Data" value={dataStatus} icon={Database} />
           </div>
         </div>
       </section>

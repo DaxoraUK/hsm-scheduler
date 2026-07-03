@@ -324,4 +324,27 @@ describe("tenant-scoped browser storage", () => {
     expect(window.localStorage.getItem("hsm_refs")).toBeNull();
     expect(second).toEqual({ migrated: false, keys: [] });
   });
+  test("temporary refresh failures keep the local session for recovery", async () => {
+    const current = Auth.getSession();
+    Auth.saveSession({ ...current, expires_at: Math.floor(Date.now() / 1000) + 10 });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Temporary network failure")));
+
+    await expect(Auth.getValidSession({ forceRefresh: true })).rejects.toMatchObject({
+      code: "SESSION_REFRESH_FAILED",
+    });
+    expect(Auth.getSession()?.access_token).toBe("signed-in-user-jwt");
+  });
+
+  test("an authentication rejection clears the expired local session", async () => {
+    const current = Auth.getSession();
+    Auth.saveSession({ ...current, expires_at: Math.floor(Date.now() / 1000) + 10 });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "invalid refresh token" }, 401)));
+
+    await expect(Auth.getValidSession({ forceRefresh: true })).rejects.toMatchObject({
+      code: "SESSION_EXPIRED",
+      status: 401,
+    });
+    expect(Auth.getSession()).toBeNull();
+  });
+
 });

@@ -11,6 +11,10 @@ import {
   ShieldCheck,
   Sparkles,
   Trophy,
+  UsersRound,
+  Shapes,
+  CloudRain,
+  TriangleAlert,
 } from "lucide-react";
 import PageContainer from "../../components/ui/PageContainer.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
@@ -257,18 +261,23 @@ function KickOffBars({ data }) {
   );
 }
 
-function ParkingLine({ weekly, capacity }) {
+function ParkingLine({ weekly }) {
   const width = 760;
   const height = 250;
   const padding = { left: 42, right: 24, top: 20, bottom: 42 };
-  const maxValue = Math.max(capacity, ...weekly.map((week) => week.parkingPeak), 1);
+  const maxValue = Math.max(
+    ...weekly.map((week) => week.parkingPeak),
+    ...weekly.map((week) => week.parkingCapacity || 0),
+    1
+  );
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const x = (index) =>
     padding.left + (weekly.length <= 1 ? chartWidth / 2 : (index / (weekly.length - 1)) * chartWidth);
   const y = (value) => padding.top + chartHeight - (value / maxValue) * chartHeight;
-  const points = weekly.map((week, index) => `${x(index)},${y(week.parkingPeak)}`).join(" ");
-  const capacityY = y(capacity);
+  const demandPoints = weekly.map((week, index) => `${x(index)},${y(week.parkingPeak)}`).join(" ");
+  const capacityWeeks = weekly.filter((week) => week.parkingEnabled !== false && week.parkingCapacity > 0);
+  const capacityPoints = weekly.map((week, index) => `${x(index)},${y(week.parkingCapacity || 0)}`).join(" ");
 
   return (
     <div className="overflow-x-auto">
@@ -283,24 +292,28 @@ function ParkingLine({ weekly, capacity }) {
             </g>
           );
         })}
-        <line
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={capacityY}
-          y2={capacityY}
-          stroke="#f43f5e"
-          strokeWidth="2"
-          strokeDasharray="7 6"
-        />
-        <text x={width - padding.right} y={Math.max(12, capacityY - 7)} textAnchor="end" fontSize="10" fontWeight="700" fill="#e11d48">
-          {capacity} capacity
-        </text>
+        {capacityWeeks.length > 0 && weekly.length > 1 ? (
+          <polyline points={capacityPoints} fill="none" stroke="#f43f5e" strokeWidth="2" strokeDasharray="7 6" />
+        ) : null}
+        {weekly.length === 1 && capacityWeeks.length ? (
+          <line x1={padding.left} x2={width - padding.right} y1={y(weekly[0].parkingCapacity)} y2={y(weekly[0].parkingCapacity)} stroke="#f43f5e" strokeWidth="2" strokeDasharray="7 6" />
+        ) : null}
+        {capacityWeeks.length ? (
+          <text x={width - padding.right} y={14} textAnchor="end" fontSize="10" fontWeight="700" fill="#e11d48">Saved capacity</text>
+        ) : null}
         {weekly.length > 1 ? (
-          <polyline points={points} fill="none" stroke="#059669" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={demandPoints} fill="none" stroke="#059669" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
         ) : null}
         {weekly.map((week, index) => (
           <g key={week.id}>
-            <circle cx={x(index)} cy={y(week.parkingPeak)} r="6" fill={week.parkingPeak > week.parkingCapacity ? "#f43f5e" : "#10b981"} stroke="white" strokeWidth="3" />
+            <circle
+              cx={x(index)}
+              cy={y(week.parkingPeak)}
+              r="6"
+              fill={week.parkingOver ? "#f43f5e" : week.parkingEnabled === false ? "#94a3b8" : "#10b981"}
+              stroke="white"
+              strokeWidth="3"
+            />
             <text x={x(index)} y={y(week.parkingPeak) - 12} textAnchor="middle" fontSize="11" fontWeight="800" fill="#334155">{week.parkingPeak}</text>
             <text x={x(index)} y={height - 13} textAnchor="middle" fontSize="10" fontWeight="700" fill="#94a3b8">{week.label}</text>
           </g>
@@ -468,10 +481,44 @@ function CoverageBars({ weekly }) {
   );
 }
 
+function RankedPerformance({ data, kind = "team" }) {
+  const max = Math.max(...data.map((item) => item.total), 1);
+  return (
+    <div className="space-y-4">
+      {data.map((item) => (
+        <div key={item.key || item.label}>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-slate-800">{item.label}</div>
+              <div className="mt-1 text-xs font-semibold text-slate-400">
+                {item.delivered} scheduled · {item.postponed} postponed · {item.cancelled} cancelled
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-black text-slate-800">{item.total} fixtures</div>
+              <div className="text-xs font-bold text-slate-400">{item.facilityHours} hours</div>
+            </div>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+            <div className={`h-full rounded-full ${kind === "format" ? "bg-sky-500" : "bg-emerald-500"}`} style={{ width: `${Math.max(3, (item.total / max) * 100)}%` }} />
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] font-black uppercase tracking-[0.13em] text-slate-400">
+            <span>{item.deliveryRate}% delivery</span>
+            <span>{item.officialCoverage}% officials</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...props }) {
   const [period, setPeriod] = useState("all");
   const [matchday, setMatchday] = useState("all");
   const [day, setDay] = useState("matchweek");
+  const [team, setTeam] = useState("all");
+  const [pitch, setPitch] = useState("all");
+  const [format, setFormat] = useState("all");
   const [openPanels, setOpenPanels] = useState(() => new Set());
 
   const dayOptions = midweekEnabled
@@ -481,8 +528,16 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
   const effectiveDay = !midweekEnabled && ["matchweek", "midweek"].includes(day) ? "weekend" : day;
 
   const model = useMemo(
-    () => buildAnalyticsVisualisationModel({ ...props, period, matchday, day: effectiveDay }),
-    [props, period, matchday, effectiveDay]
+    () => buildAnalyticsVisualisationModel({
+      ...props,
+      period,
+      matchday,
+      day: effectiveDay,
+      team,
+      pitch,
+      format,
+    }),
+    [props, period, matchday, effectiveDay, team, pitch, format]
   );
 
   const togglePanel = (id) => {
@@ -519,7 +574,7 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
       />
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SelectControl label="Reporting period" value={period} onChange={changePeriod}>
             {model.filters.periodOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -535,14 +590,29 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectControl>
+          <SelectControl label="Team" value={team} onChange={setTeam}>
+            {model.filters.teamOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </SelectControl>
+          <SelectControl label="Pitch" value={pitch} onChange={setPitch}>
+            {model.filters.pitchOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </SelectControl>
+          <SelectControl label="Format" value={format} onChange={setFormat}>
+            {model.filters.formatOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </SelectControl>
         </div>
       </section>
 
       {!model.hasData ? (
         <EmptyState
           icon={Database}
-          title="No saved matchday data yet"
-          description="Build, publish and save completed matchweeks to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."
+          title={model.savedMatchdays ? "No data matches these filters" : "No saved matchday data yet"}
+          description={model.savedMatchdays ? "Change the reporting period, matchday scope, team, pitch or format filter." : "Build, publish and save completed matchweeks to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."}
         />
       ) : (
         <>
@@ -553,7 +623,7 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               icon={Trophy}
               label="Delivery rate"
               value={`${model.summary.deliveryRate}%`}
-              detail={`${model.summary.delivered} delivered from ${model.summary.total} recorded fixtures`}
+              detail={`${model.summary.delivered} scheduled from ${model.summary.total} recorded outcomes`}
               tone={model.summary.deliveryRate >= 90 ? "success" : "warning"}
             />
             <MetricCard
@@ -574,8 +644,36 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               icon={ShieldCheck}
               label="Officials coverage"
               value={`${model.summary.officialCoverage}%`}
-              detail="Confirmed or accepted appointments"
+              detail={`${model.summary.officialOutstanding} appointments outstanding`}
               tone={model.summary.officialCoverage >= 90 ? "success" : "danger"}
+            />
+            <MetricCard
+              icon={TriangleAlert}
+              label="Unresolved fixtures"
+              value={model.summary.unresolved}
+              detail={`${model.summary.placementRate}% of fixture records have an outcome`}
+              tone={model.summary.unresolved ? "danger" : "success"}
+            />
+            <MetricCard
+              icon={Activity}
+              label="Facility activity"
+              value={`${model.summary.facilityHours} hrs`}
+              detail={`${model.summary.avgFixtures} fixtures per selected matchday`}
+              tone="info"
+            />
+            <MetricCard
+              icon={Car}
+              label="Parking pressure"
+              value={model.summary.parkingOverCapacity}
+              detail={`Peak recorded demand ${model.summary.peakParking} vehicles`}
+              tone={model.summary.parkingOverCapacity ? "danger" : "success"}
+            />
+            <MetricCard
+              icon={CloudRain}
+              label="Weather evidence"
+              value={`${model.summary.weatherCoverage}%`}
+              detail={`${model.summary.weatherHigh} high risk · ${model.summary.weatherWatch} watch`}
+              tone={model.summary.weatherHigh ? "danger" : model.summary.weatherWatch ? "warning" : "neutral"}
             />
           </div>
 
@@ -655,7 +753,7 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
             >
               {model.weekly.some((week) => week.parkingPeak > 0) ? (
                 <>
-                  <ParkingLine weekly={model.weekly} capacity={model.parkingCapacity} />
+                  <ParkingLine weekly={model.weekly} />
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     <div className="rounded-2xl bg-slate-50 p-4">
                       <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Configured capacity</div>
@@ -686,6 +784,60 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               onToggle={togglePanel}
             >
               {model.weekly.length ? <CoverageBars weekly={model.weekly} /> : <ChartEmpty title="No officials trend yet" detail="Confirmed appointments will appear here." />}
+            </Panel>
+
+            <Panel
+              id="team-performance"
+              icon={UsersRound}
+              title="Team activity and delivery"
+              subtitle="Compare fixture volume, delivered hours, postponements and officials coverage by team."
+              badge={`${model.teamPerformance.length} teams`}
+              open={openPanels.has("team-performance")}
+              onToggle={togglePanel}
+            >
+              {model.teamPerformance.length ? <RankedPerformance data={model.teamPerformance} /> : <ChartEmpty title="No team trend yet" detail="Team activity appears after saved matchdays contain fixtures." />}
+            </Panel>
+
+            <Panel
+              id="format-demand"
+              icon={Shapes}
+              title="Format demand"
+              subtitle="Understand how 3v3, 5v5, 7v7, 9v9 and 11v11 activity uses the facility."
+              badge={`${model.formatDistribution.length} formats`}
+              open={openPanels.has("format-demand")}
+              onToggle={togglePanel}
+            >
+              {model.formatDistribution.length ? <RankedPerformance data={model.formatDistribution} kind="format" /> : <ChartEmpty title="No format trend yet" detail="Fixture formats will appear here when they are recorded." />}
+            </Panel>
+
+            <Panel
+              id="weather-evidence"
+              icon={CloudRain}
+              title="Weather evidence coverage"
+              subtitle="Show only weather-risk snapshots actually saved with historical fixture records."
+              badge={`${model.weather.coverage}% captured`}
+              open={openPanels.has("weather-evidence")}
+              onToggle={togglePanel}
+            >
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-5">
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Historical coverage</div>
+                  <div className="mt-2 text-3xl font-black text-slate-950">{model.weather.coverage}%</div>
+                </div>
+                <div className="rounded-2xl bg-rose-50 p-5">
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-rose-500">High-risk fixtures</div>
+                  <div className="mt-2 text-3xl font-black text-rose-800">{model.weather.high}</div>
+                </div>
+                <div className="rounded-2xl bg-amber-50 p-5">
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-600">Watch fixtures</div>
+                  <div className="mt-2 text-3xl font-black text-amber-800">{model.weather.watch}</div>
+                </div>
+              </div>
+              {model.weather.coverage === 0 ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+                  Earlier saved matchdays do not contain weather snapshots. Ground Control does not substitute today's forecast for historical conditions. Future snapshot capture can build this evidence safely.
+                </div>
+              ) : null}
             </Panel>
           </div>
         </>
