@@ -589,6 +589,43 @@ export const DB = {
     }));
   },
 
+  async getClubSubscription(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/get_club_subscription", {
+      target_club_id: id,
+    });
+  },
+
+  async platformSetClubSubscription(clubId, {
+    planCode,
+    status,
+    billingInterval = "monthly",
+    trialEndsAt = null,
+    graceEndsAt = null,
+    currentPeriodEnd = null,
+    cancelAtPeriodEnd = false,
+    billingExempt = false,
+    entitlementOverrides = {},
+    limitOverrides = {},
+    reason = "Manual platform assignment",
+  } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/platform_set_club_subscription", {
+      target_club_id: id,
+      next_plan_code: String(planCode || "core").trim().toLowerCase(),
+      next_status: String(status || "active").trim().toLowerCase(),
+      next_billing_interval: String(billingInterval || "monthly").trim().toLowerCase(),
+      next_trial_ends_at: trialEndsAt,
+      next_grace_ends_at: graceEndsAt,
+      next_current_period_end: currentPeriodEnd,
+      next_cancel_at_period_end: Boolean(cancelAtPeriodEnd),
+      next_billing_exempt: Boolean(billingExempt),
+      next_entitlement_overrides: entitlementOverrides && typeof entitlementOverrides === "object" ? entitlementOverrides : {},
+      next_limit_overrides: limitOverrides && typeof limitOverrides === "object" ? limitOverrides : {},
+      change_reason: String(reason || "Manual platform assignment").trim(),
+    });
+  },
+
   async getClubOnboarding(clubId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/get_club_onboarding", {

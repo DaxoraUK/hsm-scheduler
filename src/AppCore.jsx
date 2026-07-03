@@ -19,6 +19,7 @@ import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
+import { useClubEntitlements } from "./hooks/useClubEntitlements.js";
 import { useSessionLifecycle } from "./hooks/useSessionLifecycle.js";
 import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
@@ -73,6 +74,7 @@ import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
 import WorkspaceAccessGate from "./components/WorkspaceAccessGate.jsx";
 import CustomerOnboardingWizard from "./components/CustomerOnboardingWizard.jsx";
+import SubscriptionGate from "./components/SubscriptionGate.jsx";
 import { toast } from "sonner";
 import {
   clearTenantStorageContext,
@@ -84,6 +86,11 @@ import {
   tenantSetJson,
 } from "./lib/storage/tenantStorage.js";
 import { createWorkspaceAccess } from "./lib/security/permissions.js";
+import {
+  applySubscriptionAccess,
+  canOpenPage,
+  getRequiredEntitlementForPage,
+} from "./lib/subscriptions/entitlements.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
@@ -366,9 +373,21 @@ function App(){
     bootstrapFirstWorkspace,
   }=useClubAccess(authSession);
 
-  const workspaceAccess=useMemo(
+  const roleWorkspaceAccess=useMemo(
     ()=>createWorkspaceAccess(activeMembership),
     [activeMembership]
+  );
+
+  const {
+    subscription,
+    status:subscriptionStatus,
+    error:subscriptionError,
+    refresh:refreshSubscription,
+  }=useClubEntitlements(activeClubId,clubAccessStatus==="ready");
+
+  const workspaceAccess=useMemo(
+    ()=>applySubscriptionAccess(roleWorkspaceAccess,subscription),
+    [roleWorkspaceAccess,subscription]
   );
 
   const [onboardingOpen,setOnboardingOpen]=useState(false);
@@ -396,14 +415,17 @@ function App(){
   },[activeClubId,selectClub]);
 
   useEffect(()=>{
-    if(mainPage==="settings"&&!workspaceAccess.canManageSettings){
+    const subscriptionOwnerRequired=subscription?.isReadOnly&&!workspaceAccess.canManageSubscription;
+    if(mainPage==="settings"&&(!workspaceAccess.canManageSettings||subscriptionOwnerRequired)){
       setMainPage("dashboard");
       setSettingsTab("overview");
-      toast.error("Administrator access required",{
-        description:"Your club role does not include workspace settings.",
+      toast.error(subscriptionOwnerRequired?"Club owner access required":"Administrator access required",{
+        description:subscriptionOwnerRequired
+          ?"Only the club owner can review a restricted subscription."
+          :"Your club role does not include workspace settings.",
       });
     }
-  },[mainPage,workspaceAccess.canManageSettings]);
+  },[mainPage,subscription?.isReadOnly,workspaceAccess.canManageSettings,workspaceAccess.canManageSubscription]);
 
   const [club,setClub]=useState(DEFAULT_CLUB);
   const midweekEnabled=isMidweekEnabled(club);
@@ -1206,6 +1228,19 @@ const { resetAll } = useOperationsActions({
     />
   );
 
+  if(["idle","loading"].includes(subscriptionStatus)) return(
+    <BrandSplash message="Verifying plan access"/>
+  );
+
+  if(subscriptionStatus==="error"||!subscription) return(
+    <WorkspaceAccessGate
+      status="error"
+      error={subscriptionError||"The club subscription could not be verified."}
+      onRetry={refreshSubscription}
+      onSignOut={handleSignOut}
+    />
+  );
+
   if(workspaceSecurityError) return(
     <WorkspaceAccessGate
       status="error"
@@ -1221,6 +1256,13 @@ const { resetAll } = useOperationsActions({
   if(!workspaceHydrated) return(
     <BrandSplash message="Loading secure club workspace"/>
   );
+
+  const requiredPageEntitlement=getRequiredEntitlementForPage(mainPage);
+  const pageEntitled=canOpenPage(subscription,mainPage);
+  const openSubscriptionSettings=()=>{
+    setMainPage("settings");
+    setSettingsTab("subscription");
+  };
 
 return(
   <MatchdayScopeProvider scope={matchdayScope} setScope={setMatchdayScope}>
@@ -1257,6 +1299,7 @@ return(
     activeClubId={activeClubId}
     activeMembership={activeMembership}
     workspaceAccess={workspaceAccess}
+    subscription={subscription}
     dbStatus={dbStatus}
     syncError={syncError}
     sessionStatus={sessionStatus}
@@ -1291,8 +1334,16 @@ return(
        `}}/>
 
       <div style={S.body}>
+
+{!pageEntitled && mainPage !== "settings" && (
+  <SubscriptionGate
+    entitlement={requiredPageEntitlement}
+    subscription={subscription}
+    onOpenSubscription={workspaceAccess.canManageSubscription?openSubscriptionSettings:undefined}
+  />
+)}
    
-{mainPage === "dashboard" && (
+{mainPage === "dashboard" && pageEntitled && (
   <DashboardPage
     setMainPage={setMainPage}
     setDayTab={setDayTab}
@@ -1327,7 +1378,7 @@ return(
   />
 )}
 
-{mainPage==="operations"&& (
+{mainPage==="operations"&&pageEntitled&& (
   <OperationsPage>
         {/* Main tabs */}
 <DayTabs
@@ -1604,11 +1655,11 @@ return(
 
     </OperationsPage>
 )}
-    {mainPage === "communications" && (
+    {mainPage === "communications" && pageEntitled && (
       <CommunicationsPage />
     )}
 
-    {mainPage === "analytics" && (
+    {mainPage === "analytics" && pageEntitled && (
       <Suspense fallback={<LazyPageFallback label="analytics" />}>
         <AnalyticsPage
           club={club}
@@ -1629,7 +1680,7 @@ return(
       </Suspense>
     )}
 
-    {mainPage === "reports" && (
+    {mainPage === "reports" && pageEntitled && (
       <Suspense fallback={<LazyPageFallback label="reports" />}>
         <ReportsPage
           club={club}
@@ -1680,6 +1731,10 @@ return(
             activeClubId={activeClubId}
             activeMembership={activeMembership}
             workspaceAccess={workspaceAccess}
+            subscription={subscription}
+            subscriptionStatus={subscriptionStatus}
+            subscriptionError={subscriptionError}
+            onRefreshSubscription={refreshSubscription}
             onboarding={onboarding}
             onboardingStatus={onboardingStatus}
             onboardingError={onboardingError}

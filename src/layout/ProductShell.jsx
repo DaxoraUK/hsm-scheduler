@@ -7,6 +7,7 @@ import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
+import { canOpenPage } from "../lib/subscriptions/entitlements.js";
 
 import {
   CalendarDays,
@@ -75,6 +76,7 @@ export default function ProductShell({
   activeClubId = "",
   activeMembership = null,
   workspaceAccess = null,
+  subscription = null,
   dbStatus = "connected",
   syncError = "",
   sessionStatus = "active",
@@ -94,7 +96,10 @@ export default function ProductShell({
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
-  ].filter(([key]) => key !== "settings" || workspaceAccess?.canManageSettings);
+  ].filter(([key]) => {
+    if (key === "settings") return workspaceAccess?.canManageSettings;
+    return canOpenPage(subscription, key);
+  });
 
   const navigate = (key, target) => {
     nav.goTo(target, {
@@ -140,7 +145,10 @@ export default function ProductShell({
     <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-3">
       <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Workspace</div>
       <div className="mt-3 truncate text-sm font-black text-white">{club.name}</div>
-      <div className="mt-1 text-xs font-bold text-slate-500">{getMatchdayScopeLabel(matchdayScope)} view</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+        <span>{getMatchdayScopeLabel(matchdayScope)} view</span>
+        {subscription?.planName ? <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-black text-slate-300">{subscription.planName}</span> : null}
+      </div>
       <div className={`mt-4 grid gap-2 ${midweekEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
         {["Saturday", "Sunday", ...(midweekEnabled ? ["Midweek"] : [])].map((label, index) => (
           <div key={label} className="rounded-2xl bg-white/[0.04] p-2.5">
@@ -234,6 +242,23 @@ export default function ProductShell({
             <div role="status" className="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-800 sm:px-6"><RefreshCw className="animate-spin" size={14} /> {syncBanner.title}</div>
           ) : null}
 
+          {subscription?.status === "trialing" ? (
+            <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-900 sm:px-6">
+              <span>{subscription.planName} trial{subscription.trialEndsAt ? ` ends ${subscription.trialEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
+              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-sky-200 bg-white px-3 py-1.5">Review plan</button> : null}
+            </div>
+          ) : subscription?.status === "grace" ? (
+            <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-black text-amber-950 sm:px-6">
+              <span>Subscription grace period{subscription.graceEndsAt ? ` ends ${subscription.graceEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
+              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-amber-200 bg-white px-3 py-1.5">Review plan</button> : null}
+            </div>
+          ) : subscription?.isReadOnly ? (
+            <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black text-rose-950 sm:px-6">
+              <span>{subscription.message || `${subscription.planName} is currently read only.`}</span>
+              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5">Subscription details</button> : null}
+            </div>
+          ) : null}
+
           {workspaceAccess?.isSupport ? (
             <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-start gap-3">
@@ -247,7 +272,11 @@ export default function ProductShell({
           ) : null}
 
           <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-            <div className={workspaceAccess?.isReadOnly ? "pointer-events-none" : ""} inert={workspaceAccess?.isReadOnly || undefined} aria-disabled={workspaceAccess?.isReadOnly || undefined}>
+            <div
+              className={workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
+              inert={workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+              aria-disabled={workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+            >
               {children}
             </div>
           </main>

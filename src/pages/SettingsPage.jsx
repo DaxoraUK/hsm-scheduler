@@ -16,11 +16,13 @@ import DataSettingsPanel from "../components/Settings/DataSettingsPanel.jsx";
 import IntegrationSettingsPanel from "../components/Settings/IntegrationSettingsPanel.jsx";
 import AccessSecurityPanel from "../components/Settings/AccessSecurityPanel.jsx";
 import OnboardingSettingsPanel from "../components/Settings/OnboardingSettingsPanel.jsx";
+import SubscriptionSettingsPanel from "../components/Settings/SubscriptionSettingsPanel.jsx";
 import { isMidweekEnabled, isParkingEnabled } from "../lib/settings/workspaceSettings.js";
 
 const TAB_TITLES = {
   overview: ["Settings overview", "Complete the club setup in a clear order and see what still needs attention."],
   workspace: ["Workspace", "Control optional operating days and keep development tools away from live club users."],
+  subscription: ["Plan & subscription", "Review the club plan, effective entitlements, enforced limits and subscription state."],
   access: ["Access & audit", "Manage club roles, secure invitations, trusted audit history and time-limited support access."],
   onboarding: ["Setup wizard", "Run or review the guided customer onboarding flow for this club workspace."],
   club: ["Club profile", "Maintain the essential organisation details used throughout Ground Control."],
@@ -43,8 +45,9 @@ const LEGACY_REDIRECTS = {
 };
 
 export default function SettingsPage(props) {
-  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus } = props;
-  const activeTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
+  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess } = props;
+  const requestedTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
+  const activeTab = subscription?.isReadOnly && workspaceAccess?.canManageSubscription ? "subscription" : requestedTab;
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
   const midweekEnabled = isMidweekEnabled(club);
   const parkingEnabled = isParkingEnabled(club);
@@ -65,6 +68,7 @@ export default function SettingsPage(props) {
   const renderPanel = () => {
     if (activeTab === "overview") return <SettingsOverviewPanel {...props} />;
     if (activeTab === "workspace") return <WorkspaceSettingsPanel {...props} />;
+    if (activeTab === "subscription") return <SubscriptionSettingsPanel {...props} />;
     if (activeTab === "access") return <AccessSecurityPanel {...props} />;
     if (activeTab === "onboarding") return <OnboardingSettingsPanel {...props} />;
     if (activeTab === "club") return <ClubSettingsPanel {...props} />;

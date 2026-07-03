@@ -2,6 +2,7 @@ import React from "react";
 import { Plus, RotateCcw, Trash2, UsersRound } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
+import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
 import {
   Field,
@@ -87,10 +88,13 @@ export default function TeamSettingsPanel({
   TEAM_CONFIG_DEFAULT = [],
   saveTab,
   savedTab,
+  subscription,
 }) {
   const sites = getSites(club);
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
   const sortedPitches = sortPitches(pitchCfg);
+  const teamLimit = getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS);
+  const canAddTeam = isUnlimitedLimit(teamLimit) || teamCfg.length < teamLimit;
   const counts = teamCfg.reduce((acc, team) => {
     const type = classifyFallback(team);
     acc[type] = (acc[type] || 0) + 1;
@@ -103,7 +107,9 @@ export default function TeamSettingsPanel({
     )));
   };
 
-  const addTeam = () => setTeamCfg((current) => [...current, {
+  const addTeam = () => {
+    if (!canAddTeam) return;
+    setTeamCfg((current) => [...current, {
     name: "New Team",
     teamType: "youth",
     format: "11v11-youth",
@@ -114,6 +120,12 @@ export default function TeamSettingsPanel({
     day: "Saturday",
     gameMins: 70,
   }]);
+  };
+
+  const importTeams = (rows, mode) => setTeamCfg((current) => {
+    const next = mode === "append" ? [...current, ...rows] : rows;
+    return isUnlimitedLimit(teamLimit) ? next : next.slice(0, teamLimit);
+  });
 
   return (
     <SettingsPanel>
@@ -122,11 +134,11 @@ export default function TeamSettingsPanel({
         eyebrow="Matchday setup"
         title="Teams"
         description="Team records feed format suitability, match duration, operating-day defaults and scheduling intelligence."
-        action={<PrimaryButton icon={Plus} onClick={addTeam}>Add team</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} onClick={addTeam} disabled={!canAddTeam}>Add team</PrimaryButton>}
       />
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatTile label="Teams" value={teamCfg.length} tone="green" />
+        <StatTile label="Teams" value={teamCfg.length} detail={isUnlimitedLimit(teamLimit) ? "Unlimited plan limit" : `${teamLimit} plan limit`} tone="green" />
         <StatTile label="Youth" value={counts.youth || 0} tone="blue" />
         <StatTile label="Adult" value={counts.adult || 0} tone="violet" />
         <StatTile label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
@@ -141,9 +153,15 @@ export default function TeamSettingsPanel({
           filename="ground-control-teams"
           templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, ageOrder: 7 }]}
           normaliseRow={(row, index) => normaliseImportedTeam(row, index, primarySite?.id)}
-          onImport={(rows, mode) => setTeamCfg((current) => mode === "append" ? [...current, ...rows] : rows)}
+          onImport={importTeams}
         />
       </div>
+
+      {!canAddTeam ? (
+        <Notice tone="warning" className="mt-5">
+          {subscription?.planName || "The current plan"} allows {teamLimit} teams. Remove a team or review Plan & subscription before adding another.
+        </Notice>
+      ) : null}
 
       <div className="mt-5">
         <Notice tone="info">

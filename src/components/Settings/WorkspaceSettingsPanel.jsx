@@ -12,16 +12,18 @@ import {
 } from "lucide-react";
 import { getWorkspaceFeatures, withWorkspaceFeature } from "../../lib/settings/workspaceSettings.js";
 import { tenantSetItem } from "../../lib/storage/tenantStorage.js";
+import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
 
-function Toggle({ checked, onChange, label }) {
+function Toggle({ checked, onChange, label, disabled = false }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative h-8 w-14 shrink-0 rounded-full transition ${checked ? "bg-emerald-500" : "bg-slate-300"}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
+      disabled={disabled}
+      className={`relative h-8 w-14 shrink-0 rounded-full transition ${checked ? "bg-emerald-500" : "bg-slate-300"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
     >
       <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition ${checked ? "left-7" : "left-1"}`} />
     </button>
@@ -58,14 +60,20 @@ export default function WorkspaceSettingsPanel({
   productionMode,
   setProductionMode,
   setMode,
+  subscription,
 }) {
   const features = getWorkspaceFeatures(club);
+  const parkingIncluded = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE);
+  const midweekIncluded = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING);
+  const analyticsIncluded = hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_CORE);
 
   const updateMidweek = (enabled) => {
+    if (!midweekIncluded) return;
     setClub((current) => withWorkspaceFeature(current, "midweekEnabled", enabled));
   };
 
   const updateParking = (enabled) => {
+    if (!parkingIncluded) return;
     setClub((current) => withWorkspaceFeature(current, "parkingEnabled", enabled));
   };
 
@@ -115,8 +123,8 @@ export default function WorkspaceSettingsPanel({
           icon={Car}
           title="Parking & Arrivals"
           description="Parking capacity, arrival-wave forecasting and parking-safe fixture recommendations."
-          status={features.parkingEnabled ? "Enabled" : "Hidden"}
-          active={features.parkingEnabled}
+          status={!parkingIncluded ? `${subscription?.planName || "Plan"} locked` : features.parkingEnabled ? "Enabled" : "Hidden"}
+          active={parkingIncluded && features.parkingEnabled}
         >
           <div className="flex items-center justify-between gap-5">
             <div>
@@ -125,10 +133,14 @@ export default function WorkspaceSettingsPanel({
                 Turn this off for clubs that do not manage on-site parking. Ground Control will remove parking checks, cards and recommendations without deleting saved capacities or vehicle estimates.
               </div>
             </div>
-            <Toggle checked={features.parkingEnabled} onChange={updateParking} label="Enable Parking and Arrivals" />
+            <Toggle checked={parkingIncluded && features.parkingEnabled} onChange={updateParking} label="Enable Parking and Arrivals" disabled={!parkingIncluded} />
           </div>
 
-          {!features.parkingEnabled ? (
+          {!parkingIncluded ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-5 text-amber-900">
+              Parking intelligence is not included in {subscription?.planName || "the current plan"}. Review Plan & subscription for upgrade options.
+            </div>
+          ) : !features.parkingEnabled ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-sm font-semibold leading-5 text-slate-700">
               Parking is excluded from launch readiness, schedule validation, recommendations and operational workspaces until it is switched back on.
             </div>
@@ -139,8 +151,8 @@ export default function WorkspaceSettingsPanel({
           icon={Clock3}
           title="Midweek Operations"
           description="Weekday fixture scheduling with a dedicated date and evening operating window."
-          status={features.midweekEnabled ? "Enabled" : "Hidden"}
-          active={features.midweekEnabled}
+          status={!midweekIncluded ? `${subscription?.planName || "Plan"} locked` : features.midweekEnabled ? "Enabled" : "Hidden"}
+          active={midweekIncluded && features.midweekEnabled}
         >
           <div className="flex items-center justify-between gap-5">
             <div>
@@ -149,10 +161,14 @@ export default function WorkspaceSettingsPanel({
                 Turning this off removes Midweek from Operations tabs, Mission Control scopes, analytics filters and workspace totals.
               </div>
             </div>
-            <Toggle checked={features.midweekEnabled} onChange={updateMidweek} label="Enable Midweek Operations" />
+            <Toggle checked={midweekIncluded && features.midweekEnabled} onChange={updateMidweek} label="Enable Midweek Operations" disabled={!midweekIncluded} />
           </div>
 
-          {!features.midweekEnabled ? (
+          {!midweekIncluded ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-5 text-amber-900">
+              Midweek operations are not included in {subscription?.planName || "the current plan"}.
+            </div>
+          ) : !features.midweekEnabled ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-5 text-amber-900">
               Existing Midweek data is retained but excluded from active matchweek views until the module is switched back on.
             </div>
@@ -170,7 +186,8 @@ export default function WorkspaceSettingsPanel({
           icon={BarChart3}
           title="Analytics & Funding Evidence"
           description="Operational trends, heatmaps, evidence readiness and reporting."
-          status="Included"
+          status={analyticsIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
+          active={analyticsIncluded}
         />
       </section>
 

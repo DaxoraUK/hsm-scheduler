@@ -1,5 +1,6 @@
 import React from "react";
 import { Car, MapPinned, Plus, Star, Trash2 } from "lucide-react";
+import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import {
   Field,
   Notice,
@@ -87,9 +88,11 @@ function normaliseSites(sites, club = {}) {
   };
 }
 
-export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, saveTab, savedTab }) {
+export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, saveTab, savedTab, subscription }) {
   const sites = getSites(club);
   const primary = sites.find((site) => site.isPrimary) || sites[0];
+  const venueLimit = getEntitlementLimit(subscription, LIMIT_KEYS.VENUES);
+  const canAddSite = isUnlimitedLimit(venueLimit) || sites.length < venueLimit;
   const totalParking = sites.reduce((sum, site) => sum + (Number(site.carParkSpaces) || 0), 0);
 
   const updateSites = (nextSites) => {
@@ -107,6 +110,7 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
   };
 
   const addSite = () => {
+    if (!canAddSite) return;
     const number = sites.length + 1;
     updateSites([...sites, {
       id: `site-${number}`,
@@ -128,15 +132,21 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
           eyebrow="Locations"
           title="Venues & sites"
           description="Every pitch belongs to a site. Accurate postcodes and parking capacity power weather and congestion intelligence."
-          action={<PrimaryButton icon={Plus} onClick={addSite}>Add site</PrimaryButton>}
+          action={<PrimaryButton icon={Plus} onClick={addSite} disabled={!canAddSite}>Add site</PrimaryButton>}
         />
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Sites" value={sites.length} tone="green" />
+          <StatTile label="Sites" value={sites.length} detail={isUnlimitedLimit(venueLimit) ? "Unlimited plan limit" : `${venueLimit} plan limit`} tone="green" />
           <StatTile label="Primary" value={primary?.name || "Unset"} tone="blue" />
           <StatTile label="Parking" value={`${totalParking} spaces`} tone="slate" />
           <StatTile label="Weather location" value={club.weatherPostcode || primary?.postcode || "Missing"} tone={club.weatherPostcode || primary?.postcode ? "blue" : "amber"} />
         </div>
+
+        {!canAddSite ? (
+          <Notice tone="warning" className="mt-5">
+            {subscription?.planName || "The current plan"} allows {venueLimit} venue{venueLimit === 1 ? "" : "s"}. Review Plan & subscription for multi-venue access.
+          </Notice>
+        ) : null}
 
         <div className="mt-6 space-y-4">
           {sites.map((site, index) => (

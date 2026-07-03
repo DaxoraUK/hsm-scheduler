@@ -2,6 +2,7 @@ import React from "react";
 import { Layers3, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
+import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
 import {
   Field,
@@ -78,9 +79,12 @@ export default function PitchSettingsPanel({
   PITCHES = [],
   saveTab,
   savedTab,
+  subscription,
 }) {
   const sites = getSites(club);
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
+  const pitchLimit = getEntitlementLimit(subscription, LIMIT_KEYS.PITCHES);
+  const canAddPitch = isUnlimitedLimit(pitchLimit) || pitchCfg.length < pitchLimit;
   const surfaces = pitchCfg.reduce((acc, pitch) => {
     const surface = inferSurface(pitch);
     acc[surface] = (acc[surface] || 0) + 1;
@@ -97,16 +101,24 @@ export default function PitchSettingsPanel({
     }));
   };
 
-  const addPitch = () => setPitchCfg((current) => [...current, {
-    id: `P${current.length + 1}`,
-    label: `Pitch ${current.length + 1}`,
-    desc: "",
-    format: "",
-    siteId: primarySite?.id || null,
-    surface: "grass",
-    innerOf: null,
-    independent: false,
-  }]);
+  const addPitch = () => {
+    if (!canAddPitch) return;
+    setPitchCfg((current) => [...current, {
+      id: `P${current.length + 1}`,
+      label: `Pitch ${current.length + 1}`,
+      desc: "",
+      format: "",
+      siteId: primarySite?.id || null,
+      surface: "grass",
+      innerOf: null,
+      independent: false,
+    }]);
+  };
+
+  const importPitches = (rows, mode) => setPitchCfg((current) => {
+    const next = mode === "append" ? [...current, ...rows] : rows;
+    return isUnlimitedLimit(pitchLimit) ? next : next.slice(0, pitchLimit);
+  });
 
   return (
     <SettingsPanel>
@@ -115,16 +127,22 @@ export default function PitchSettingsPanel({
         eyebrow="Single source of truth"
         title="Pitch registry"
         description="Formats, surfaces, site allocation and shared-pitch relationships are used by scheduling, validation and analytics. Temporary closures are managed in Operations, not Settings."
-        action={<PrimaryButton icon={Plus} onClick={addPitch}>Add pitch</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} onClick={addPitch} disabled={!canAddPitch}>Add pitch</PrimaryButton>}
       />
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatTile label="Pitches" value={pitchCfg.length} tone="green" />
+        <StatTile label="Pitches" value={pitchCfg.length} detail={isUnlimitedLimit(pitchLimit) ? "Unlimited plan limit" : `${pitchLimit} plan limit`} tone="green" />
         <StatTile label="Grass" value={surfaces.grass || 0} tone="slate" />
         <StatTile label="Artificial" value={(surfaces.astro || 0) + (surfaces["3g"] || 0) + (surfaces["4g"] || 0)} tone="blue" />
         <StatTile label="Independent" value={pitchCfg.filter((pitch) => pitch.independent).length} tone="violet" />
         <StatTile label="Sites" value={new Set(pitchCfg.map((pitch) => pitch.siteId || primarySite?.id)).size} tone="amber" />
       </div>
+
+      {!canAddPitch ? (
+        <Notice tone="warning" className="mt-5">
+          {subscription?.planName || "The current plan"} allows {pitchLimit} pitches. Remove a pitch or review Plan & subscription before adding another.
+        </Notice>
+      ) : null}
 
       <div className="mt-5">
         <SettingsDataActions
@@ -134,7 +152,7 @@ export default function PitchSettingsPanel({
           filename="ground-control-pitches"
           templateRows={[{ id: "P1", label: "Pitch 1", siteId: primarySite?.id || "main-ground", format: "11v11", surface: "grass", innerOf: "", independent: false, desc: "Full-size grass pitch" }]}
           normaliseRow={(row, index) => normaliseImportedPitch(row, index, primarySite?.id)}
-          onImport={(rows, mode) => setPitchCfg((current) => mode === "append" ? [...current, ...rows] : rows)}
+          onImport={importPitches}
         />
       </div>
 
