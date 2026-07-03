@@ -53,7 +53,7 @@ const STATUS = {
   },
 };
 
-export default function SupabaseStatusBar({ dbStatus = "disabled", setDbStatus, setHistory }) {
+export default function SupabaseStatusBar({ dbStatus = "disabled", setDbStatus, activeClubId = "" }) {
   const config = STATUS[dbStatus] || STATUS.disabled;
   const Icon = config.icon || Database;
 
@@ -63,13 +63,16 @@ export default function SupabaseStatusBar({ dbStatus = "disabled", setDbStatus, 
       return;
     }
 
-    setDbStatus?.("loading");
-    const data = await DB.loadHistory();
+    if (!activeClubId) {
+      setDbStatus?.("error");
+      return;
+    }
 
-    if (data) {
-      setHistory?.(data);
+    setDbStatus?.("loading");
+    try {
+      await DB.ping(activeClubId);
       setDbStatus?.("connected");
-    } else {
+    } catch {
       setDbStatus?.("error");
     }
   };

@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { getWorkspaceFeatures, withWorkspaceFeature } from "../../lib/settings/workspaceSettings.js";
+import { tenantSetItem } from "../../lib/storage/tenantStorage.js";
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -71,11 +72,7 @@ export default function WorkspaceSettingsPanel({
   const updateProductionMode = (enabled) => {
     setProductionMode?.(enabled);
     setMode?.(enabled ? "live" : "test");
-    try {
-      window.localStorage.setItem("hsm_production", enabled ? "1" : "0");
-    } catch (error) {
-      // Local persistence is a convenience; the setting still works for this session.
-    }
+    tenantSetItem("productionMode", enabled ? "1" : "0");
   };
 
   const save = () => saveTab?.("workspace", { club });

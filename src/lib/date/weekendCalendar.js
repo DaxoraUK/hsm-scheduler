@@ -1,4 +1,6 @@
-const WEEKEND_STORAGE_KEY = "gc_match_weekend";
+import { tenantGetJson, tenantSetJson } from "../storage/tenantStorage.js";
+
+const WEEKEND_STORAGE_KEY = "matchWeekend";
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function startOfLocalDay(value = new Date()) {
@@ -83,7 +85,7 @@ export function getInitialMatchWeekend(now = new Date()) {
   if (typeof window === "undefined") return current;
 
   try {
-    const saved = JSON.parse(window.localStorage.getItem(WEEKEND_STORAGE_KEY) || "null");
+    const saved = tenantGetJson(WEEKEND_STORAGE_KEY, null);
     const savedSaturday = parseLocalDate(saved?.saturday);
     const savedSunday = parseLocalDate(saved?.sunday);
     const today = startOfLocalDay(now);
@@ -107,10 +109,10 @@ export function persistMatchWeekend(weekend) {
   if (!parseLocalDate(weekend?.saturday) || !parseLocalDate(weekend?.sunday)) return;
 
   try {
-    window.localStorage.setItem(
-      WEEKEND_STORAGE_KEY,
-      JSON.stringify({ saturday: weekend.saturday, sunday: weekend.sunday })
-    );
+    tenantSetJson(WEEKEND_STORAGE_KEY, {
+      saturday: weekend.saturday,
+      sunday: weekend.sunday,
+    });
   } catch (error) {
     // Calendar persistence is a convenience only.
   }

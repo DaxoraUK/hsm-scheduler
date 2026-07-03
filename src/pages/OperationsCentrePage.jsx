@@ -1,3 +1,4 @@
+import { tenantGetJson, tenantSetJson } from "../lib/storage/tenantStorage.js";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -88,17 +89,11 @@ const PRIORITY_STYLES = {
 
 function storageKey(club = {}) {
   const identity = club.id || club.slug || club.name || "default";
-  return `gc_operations_centre_${String(identity).toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+  return `operationsCentre:${String(identity).toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
 function loadStoredState(key) {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch (error) {
-    return null;
-  }
+  return tenantGetJson(key, null);
 }
 
 function formatClock(date) {
@@ -264,11 +259,7 @@ export default function OperationsCentrePage({
 
   useEffect(() => {
     const completed = checks.reduce((map, item) => ({ ...map, [item.id]: item.complete }), {});
-    try {
-      window.localStorage.setItem(key, JSON.stringify({ checks: completed, incidents }));
-    } catch (error) {
-      // Local persistence is a convenience only; the control room remains usable without it.
-    }
+    tenantSetJson(key, { checks: completed, incidents });
   }, [checks, incidents, key]);
 
   const fixtures = useMemo(

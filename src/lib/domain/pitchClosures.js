@@ -1,5 +1,6 @@
-const STORAGE_KEY = "gc_pitch_closures_v2";
-const LEGACY_KEYS = ["hsm_closed_pitches", "hsm_closedpitches", "gc_closed_pitches"];
+import { tenantGetJson, tenantSetJson } from "../storage/tenantStorage.js";
+
+const STORAGE_KEY = "pitchClosures";
 
 function dateOnly(value) {
   const text = String(value || "").trim();
@@ -93,33 +94,14 @@ export function normalisePitchClosures(records = [], fallbackDate = todayDateVal
 }
 
 export function loadPitchClosures() {
-  if (typeof localStorage === "undefined") return [];
-
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return normalisePitchClosures(JSON.parse(stored));
-
-    for (const key of LEGACY_KEYS) {
-      const legacy = localStorage.getItem(key);
-      if (!legacy) continue;
-      const migrated = normalisePitchClosures(JSON.parse(legacy));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
-  } catch (error) {
-    console.warn("Could not load pitch closures", error);
-  }
-
-  return [];
+  return normalisePitchClosures(tenantGetJson(STORAGE_KEY, []));
 }
 
 export function persistPitchClosures(records = []) {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalisePitchClosures(records)));
-  } catch (error) {
-    console.warn("Could not save pitch closures", error);
+  if (!tenantSetJson(STORAGE_KEY, normalisePitchClosures(records))) {
+    return false;
   }
+  return true;
 }
 
 export function isPitchClosureActive(record, activeDate = todayDateValue()) {

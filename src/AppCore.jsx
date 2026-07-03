@@ -2,7 +2,7 @@
 // The main application container. Holds all state and handlers,
 // imports logic from lib/ and UI from components/.
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import AppLayout from "./layout/AppLayout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
@@ -18,6 +18,7 @@ import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
+import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
 import CommunicationsPage from "./pages/CommunicationsPage.jsx";
@@ -51,7 +52,7 @@ import {
 } from "./lib/constants.js";
 
 import { cleanName, isMini, findCfg, scheduleSat, scheduleSun } from "./lib/scheduler.js";
-import { supaFetch, isSupaConfigured, Auth, DB, getSupaKey, setSupaKey } from "./lib/supabase.js";
+import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
@@ -69,18 +70,27 @@ import SunPrintSheet from "./components/SunPrintSheet.jsx";
 import CombinedPrintSheet from "./components/CombinedPrintSheet.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
+import WorkspaceAccessGate from "./components/WorkspaceAccessGate.jsx";
+import { toast } from "sonner";
+import {
+  clearTenantStorageContext,
+  migrateLegacyTenantStorage,
+  setTenantStorageContext,
+  tenantGetItem,
+  tenantGetJson,
+  tenantSetItem,
+  tenantSetJson,
+} from "./lib/storage/tenantStorage.js";
 
 function App(){
   const [mode,setMode]=useState("test");
-  const [productionMode,setProductionMode]=useState(()=>{try{return localStorage.getItem("hsm_production")==="1";}catch(e){return false;}});
+  const [productionMode,setProductionMode]=useState(false);
   const [dayTab,setDayTab]=useState("saturday");
-  const [matchdayScope,setMatchdayScopeState]=useState(()=>{
-    try{return normaliseMatchdayScope(localStorage.getItem("gc_matchday_scope") || MATCHDAY_SCOPES.WEEKEND);}catch(e){return MATCHDAY_SCOPES.WEEKEND;}
-  });
+  const [matchdayScope,setMatchdayScopeState]=useState(MATCHDAY_SCOPES.WEEKEND);
   const setMatchdayScope=useCallback((scope)=>{
     const nextScope=normaliseMatchdayScope(scope);
     setMatchdayScopeState(nextScope);
-    try{localStorage.setItem("gc_matchday_scope",nextScope);}catch(e){}
+    tenantSetItem("matchdayScope",nextScope);
     if([MATCHDAY_SCOPES.SATURDAY,MATCHDAY_SCOPES.SUNDAY,MATCHDAY_SCOPES.MIDWEEK].includes(nextScope)){
       setDayTab(getDayTabFromScope(nextScope));
     }
@@ -135,7 +145,7 @@ function App(){
   const [bufferYouth,setBufferYouth]=useState(DEFAULT_BUFFER_YOUTH);
   const [bufferAdult,setBufferAdult]=useState(DEFAULT_BUFFER_ADULT);
   const [useAstro,setUseAstro]=useState(false);
-  const [pitchClosures,setPitchClosures]=useState(()=>loadPitchClosures());
+  const [pitchClosures,setPitchClosures]=useState([]);
   const [showManual,setShowManual]=useState(false);
   const [showSunManual,setShowSunManual]=useState(false);
   const [showMidweekManual,setShowMidweekManual]=useState(false);
@@ -214,33 +224,43 @@ function App(){
 
   const [refs,setRefs]=useState([]);
   const [history,setHistory]=useState([]);
-  const [teamCfg,setTeamCfg]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_teamcfg");if(s)return JSON.parse(s);}catch(e){}
-    return TEAM_CONFIG_DEFAULT;
-  });
+  const [teamCfg,setTeamCfg]=useState(TEAM_CONFIG_DEFAULT);
 
-  const [supaKey,setSupaKeyState]=useState(()=>getSupaKey());
   const [dbStatus,setDbStatus]=useState(()=>isSupaConfigured()?"connecting":"disabled");
   const [savedTab,setSavedTab]=useState("");
   const [authSession,setAuthSession]=useState(()=>Auth.getSession());
   const [authLoading,setAuthLoading]=useState(true);
   const [minimumSplashComplete,setMinimumSplashComplete]=useState(false);
+  const [workspaceHydrated,setWorkspaceHydrated]=useState(false);
+  const [workspaceSecurityError,setWorkspaceSecurityError]=useState("");
+  const closureSyncRef=useRef({clubId:"",snapshot:""});
 
+  const {
+    memberships,
+    activeMembership,
+    activeClubId,
+    status:clubAccessStatus,
+    error:clubAccessError,
+    canBootstrap,
+    refresh:refreshClubAccess,
+    selectClub,
+    bootstrapFirstWorkspace,
+  }=useClubAccess(authSession);
 
-  const [club,setClub]=useState(()=>{
-    try{
-      const saved=localStorage.getItem("hsm_club");
-      if(saved){
-        const parsed=JSON.parse(saved);
-        return {
-          ...DEFAULT_CLUB,
-          ...parsed,
-          features:{...(DEFAULT_CLUB.features||{}),...(parsed.features||{})},
-        };
-      }
-    }catch(e){}
-    return DEFAULT_CLUB;
-  });
+  useLayoutEffect(()=>{
+    setWorkspaceHydrated(false);
+    setWorkspaceSecurityError("");
+  },[activeClubId]);
+
+  const handleClubChange=useCallback((clubId)=>{
+    if(!clubId||clubId===activeClubId) return false;
+    setWorkspaceHydrated(false);
+    setWorkspaceSecurityError("");
+    clearTenantStorageContext();
+    return selectClub(clubId);
+  },[activeClubId,selectClub]);
+
+  const [club,setClub]=useState(DEFAULT_CLUB);
   const midweekEnabled=isMidweekEnabled(club);
 
   useEffect(()=>{
@@ -251,10 +271,7 @@ function App(){
     }
   },[dayTab,matchdayScope,midweekEnabled,setMatchdayScope]);
 
-  const [pitchCfg,setPitchCfg]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_pitches");if(s){const parsed=JSON.parse(s);if(parsed&&parsed.length>0)return migratePitches(parsed);}}catch(e){}
-    return PITCHES;
-  });
+  const [pitchCfg,setPitchCfg]=useState(PITCHES);
 
   const satClosedPitches=useMemo(
     ()=>getActiveClosedPitchIds(pitchClosures,satDate),
@@ -345,18 +362,9 @@ function App(){
     club,
     teams:teamCfg,
   });
-  const [testSat,setTestSat]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsat");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
-    return defaultTestFixtures("saturday");
-  });
-  const [testSun,setTestSun]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testsun");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
-    return defaultTestFixtures("sunday");
-  });
-  const [testMidweek,setTestMidweek]=useState(()=>{
-    try{const s=localStorage.getItem("hsm_testmidweek");if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){}
-    return defaultTestFixtures("midweek");
-  });
+  const [testSat,setTestSat]=useState(()=>defaultTestFixtures("saturday"));
+  const [testSun,setTestSun]=useState(()=>defaultTestFixtures("sunday"));
+  const [testMidweek,setTestMidweek]=useState(()=>defaultTestFixtures("midweek"));
 
   useEffect(()=>{
     persistMatchWeekend(matchWeekend);
@@ -370,52 +378,49 @@ function App(){
     persistMidweekWindow(midweekWindow);
   },[midweekWindow]);
 
-  const updateSupaKey=(k)=>{
-    const trimmed=k.trim();
-    setSupaKey(trimmed);
-    setSupaKeyState(trimmed);
-    setDbStatus(trimmed.length>20?"connecting":"disabled");
-  };
-
   const saveTab=async(tab,data={})=>{
-    if(data.club) setClub(data.club);
+    const nextClub={...(data.club||club),id:activeClubId||data.club?.id||club?.id};
+    const nextTeamCfg=data.teamCfg||teamCfg;
+    const nextRefs=data.refs||refs;
+
+    if(data.club) setClub(nextClub);
     if(data.teamCfg) setTeamCfg(data.teamCfg);
     if(data.refs) setRefs(data.refs);
-    if(isSupaConfigured()){
-      setDbStatus("saving");
-      await Promise.all([
-        data.club||tab==="club" ? DB.saveClub(data.club||club) : Promise.resolve(),
-        data.teamCfg||tab==="teams" ? DB.saveTeamCfg(data.teamCfg||teamCfg) : Promise.resolve(),
-        data.refs||tab==="refs" ? DB.saveRefs(data.refs||refs) : Promise.resolve(),
-        tab==="pitches" ? DB.savePitches(pitchCfg) : Promise.resolve(),
-      ].filter(Boolean));
-      setDbStatus("connected");
+
+    tenantSetJson("club",nextClub);
+    tenantSetJson("teamConfig",nextTeamCfg);
+    tenantSetJson("referees",nextRefs);
+
+    try{
+      if(isSupaConfigured()&&activeClubId){
+        setDbStatus("saving");
+        const saves=[];
+        if(data.club||["club","workspace","venues","timing"].includes(tab)) saves.push(DB.saveClub(activeClubId,nextClub));
+        if(data.teamCfg||tab==="teams") saves.push(DB.saveTeamCfg(activeClubId,nextTeamCfg));
+        if(data.refs||tab==="refs") saves.push(DB.saveRefs(activeClubId,nextRefs));
+        if(tab==="pitches") saves.push(DB.savePitches(activeClubId,pitchCfg));
+        await Promise.all(saves);
+        await DB.recordAudit(activeClubId,{
+          action:`settings.${tab}.save`,
+          entityType:"settings",
+          entityId:tab,
+          detail:{tab},
+        });
+        setDbStatus("connected");
+      }
+      setSavedTab(tab);
+      setTimeout(()=>setSavedTab(""),2500);
+    }catch(error){
+      setDbStatus("error");
+      toast.error("Saved on this device only",{
+        description:error?.message||"Cloud sync failed. Review the workspace connection before continuing.",
+      });
     }
-    try{localStorage.setItem("hsm_club",JSON.stringify(data.club||club));}catch(e){}
-    try{localStorage.setItem("hsm_teamcfg",JSON.stringify(data.teamCfg||teamCfg));}catch(e){}
-    try{localStorage.setItem("hsm_refs",JSON.stringify(data.refs||refs));}catch(e){}
-    // Audit log
-    if(isSupaConfigured()&&authSession){
-      const user=authSession.user||{};
-      supaFetch("POST","audit_log",[{
-        id:String(Date.now()),
-        data:{
-          action:"save_"+tab,
-          user_email:user.email||"unknown",
-          user_name:(user.user_metadata&&user.user_metadata.display_name)||user.email||"unknown",
-          timestamp:new Date().toISOString(),
-          detail:{tab}
-        }
-      }]);
-    }
-    setSavedTab(tab);
-    setTimeout(()=>setSavedTab(""),2500);
   };
 
   // Club-aware header style - used instead of S.ch() throughout
   const hdrStyle=(bg)=>({background:bg||club.primary,color:"#fff",padding:"10px 16px",fontWeight:600,fontSize:12,display:"flex",alignItems:"center",gap:8});
 
-  // Load from localStorage immediately, Supabase loads via supaKey effect
   // Force live mode in production
   useEffect(()=>{if(productionMode&&mode!=="live")setMode("live");},[productionMode,mode]);
 
@@ -459,52 +464,161 @@ function App(){
   },[]);
 
   useEffect(()=>{
-    // Load localStorage immediately for instant display
-    try{const s=localStorage.getItem("hsm_refs");if(s)setRefs(JSON.parse(s));}catch(e){}
-    try{const s=localStorage.getItem("hsm_history");if(s)setHistory(JSON.parse(s));}catch(e){}
-    // Supabase connection is handled by the supaKey useEffect below
-  },[]);
+    if(!activeClubId||!authSession?.user?.id){
+      setWorkspaceHydrated(false);
+      return undefined;
+    }
 
-  // Always persist to localStorage as backup
-  useEffect(()=>{try{localStorage.setItem("hsm_refs",JSON.stringify(refs));}catch(e){}},[refs]);
-  useEffect(()=>{try{localStorage.setItem("hsm_club",JSON.stringify(club));}catch(e){}},[club]);
-  useEffect(()=>{try{localStorage.setItem("hsm_pitches",JSON.stringify(pitchCfg));}catch(e){}},[pitchCfg]);
-  useEffect(()=>{try{localStorage.setItem("hsm_history",JSON.stringify(history));}catch(e){}},[history]);
-  useEffect(()=>{try{localStorage.setItem("hsm_teamcfg",JSON.stringify(teamCfg));}catch(e){}},[teamCfg]);
-  useEffect(()=>{persistPitchClosures(pitchClosures);},[pitchClosures]);
-
-  // Connect to Supabase on mount and whenever key changes
-  useEffect(()=>{
-    const key = getSupaKey();
-    if(!key||key.length<20){ setDbStatus("disabled"); return; }
-    const connect=async()=>{
+    let cancelled=false;
+    const hydrate=async()=>{
+      setWorkspaceHydrated(false);
+      setWorkspaceSecurityError("");
       setDbStatus("loading");
+      let allowLocalHydration=true;
+
+      setTenantStorageContext({userId:authSession.user.id,clubId:activeClubId});
+      migrateLegacyTenantStorage();
+
+      const memberClub=activeMembership?.club||{};
+      const localClub=tenantGetJson("club",null);
+      const localTeams=tenantGetJson("teamConfig",TEAM_CONFIG_DEFAULT);
+      const localRefs=tenantGetJson("referees",[]);
+      const localHistory=tenantGetJson("history",[]);
+      const localPitches=tenantGetJson("pitches",PITCHES);
+      const safeLocalPitches=Array.isArray(localPitches)&&localPitches.length
+        ? migratePitches(localPitches)
+        : PITCHES;
+      const localClosures=loadPitchClosures();
+      const fallbackClub={
+        ...DEFAULT_CLUB,
+        ...(localClub||{}),
+        id:activeClubId,
+        name:localClub?.name||memberClub.name||DEFAULT_CLUB.name,
+        features:{...(DEFAULT_CLUB.features||{}),...(localClub?.features||{})},
+      };
+      const fallbackTeams=Array.isArray(localTeams)?localTeams:TEAM_CONFIG_DEFAULT;
+
+      setClub(fallbackClub);
+      setTeamCfg(fallbackTeams);
+      setRefs(Array.isArray(localRefs)?localRefs:[]);
+      setHistory(Array.isArray(localHistory)?localHistory:[]);
+      setPitchCfg(safeLocalPitches);
+      setPitchClosures(Array.isArray(localClosures)?localClosures:[]);
+      const nextProductionMode=tenantGetItem("productionMode","0")==="1";
+      setProductionMode(nextProductionMode);
+      setMode(nextProductionMode?"live":"test");
+      setMatchdayScopeState(normaliseMatchdayScope(tenantGetItem("matchdayScope",MATCHDAY_SCOPES.WEEKEND)));
+      setMatchWeekend(getInitialMatchWeekend());
+      setMidweekDateState(getInitialMidweekDate());
+      setMidweekWindow(getInitialMidweekWindow());
+      clearWeekendScheduleForDateChange();
+      clearMidweekScheduleForDateChange();
+
+      const localTestSat=tenantGetJson("testSaturday",null);
+      const localTestSun=tenantGetJson("testSunday",null);
+      const localTestMidweek=tenantGetJson("testMidweek",null);
+      setTestSat(Array.isArray(localTestSat)?localTestSat:generateTestFixtures({dayKey:"saturday",seed:"ground-control-saturday",scenario:"standard",club:fallbackClub,teams:fallbackTeams}));
+      setTestSun(Array.isArray(localTestSun)?localTestSun:generateTestFixtures({dayKey:"sunday",seed:"ground-control-sunday",scenario:"standard",club:fallbackClub,teams:fallbackTeams}));
+      setTestMidweek(Array.isArray(localTestMidweek)?localTestMidweek:generateTestFixtures({dayKey:"midweek",seed:"ground-control-midweek",scenario:"standard",club:fallbackClub,teams:fallbackTeams}));
+
       try{
-        const [histData,refData,cfgData]=await Promise.all([
-          DB.loadHistory(),
-          DB.loadRefs(),
-          DB.loadTeamCfg(),
+        const [histData,refData,cfgData,clubData,pitchData,closureData,remoteTestSat,remoteTestSun,remoteTestMidweek]=await Promise.all([
+          DB.loadHistory(activeClubId),
+          DB.loadRefs(activeClubId),
+          DB.loadTeamCfg(activeClubId),
+          DB.loadClub(activeClubId),
+          DB.loadPitches(activeClubId),
+          DB.loadPitchClosures(activeClubId),
+          DB.loadTestFixtures(activeClubId,"testsat"),
+          DB.loadTestFixtures(activeClubId,"testsun"),
+          DB.loadTestFixtures(activeClubId,"testmidweek"),
         ]);
-        if(histData&&histData.length) setHistory(histData);
-        if(refData&&refData.length) setRefs(refData);
-        if(cfgData&&cfgData.length) setTeamCfg(cfgData);
-        const clubData=await DB.loadClub();
-        if(clubData) setClub(clubData);
-        const pitchData=await DB.loadPitches();
-        if(pitchData&&pitchData.length) setPitchCfg(migratePitches(pitchData));
-        try{
-          const tsRow=await supaFetch("GET","club_config?id=eq.testsat&select=data");
-          if(tsRow&&tsRow.length&&tsRow[0].data&&tsRow[0].data.fixtures&&tsRow[0].data.fixtures.length)setTestSat(tsRow[0].data.fixtures);
-          const tnRow=await supaFetch("GET","club_config?id=eq.testsun&select=data");
-          if(tnRow&&tnRow.length&&tnRow[0].data&&tnRow[0].data.fixtures&&tnRow[0].data.fixtures.length)setTestSun(tnRow[0].data.fixtures);
-          const tmRow=await supaFetch("GET","club_config?id=eq.testmidweek&select=data");
-          if(tmRow&&tmRow.length&&tmRow[0].data&&tmRow[0].data.fixtures&&tmRow[0].data.fixtures.length)setTestMidweek(tmRow[0].data.fixtures);
-        }catch(e){}
+        if(cancelled) return;
+
+        const nextClub={
+          ...DEFAULT_CLUB,
+          ...fallbackClub,
+          ...(clubData||{}),
+          id:activeClubId,
+          name:clubData?.name||fallbackClub.name,
+          features:{...(DEFAULT_CLUB.features||{}),...(fallbackClub.features||{}),...(clubData?.features||{})},
+        };
+        const nextTeams=Array.isArray(cfgData)?cfgData:[];
+        const nextPitches=Array.isArray(pitchData)&&pitchData.length?migratePitches(pitchData):PITCHES;
+        const nextClosures=Array.isArray(closureData)?closureData:[];
+
+        setClub(nextClub);
+        setHistory(Array.isArray(histData)?histData:[]);
+        setRefs(Array.isArray(refData)?refData:[]);
+        setTeamCfg(nextTeams);
+        setPitchCfg(nextPitches.length?nextPitches:PITCHES);
+        setPitchClosures(nextClosures);
+        setTestSat(remoteTestSat.length?remoteTestSat:generateTestFixtures({dayKey:"saturday",seed:"ground-control-saturday",scenario:"standard",club:nextClub,teams:nextTeams}));
+        setTestSun(remoteTestSun.length?remoteTestSun:generateTestFixtures({dayKey:"sunday",seed:"ground-control-sunday",scenario:"standard",club:nextClub,teams:nextTeams}));
+        setTestMidweek(remoteTestMidweek.length?remoteTestMidweek:generateTestFixtures({dayKey:"midweek",seed:"ground-control-midweek",scenario:"standard",club:nextClub,teams:nextTeams}));
+        closureSyncRef.current={clubId:activeClubId,snapshot:JSON.stringify(nextClosures)};
         setDbStatus("connected");
-      }catch(e){ console.error("Supabase connect failed:",e); setDbStatus("error"); }
+      }catch(error){
+        if(cancelled) return;
+        const status=Number(error?.status||0);
+        const failClosed=status>=400&&status<500&&![408,429].includes(status);
+        if(failClosed){
+          allowLocalHydration=false;
+          clearTenantStorageContext();
+          setDbStatus("error");
+          setWorkspaceSecurityError(
+            error?.message||"The selected club membership or database security policy could not be verified."
+          );
+          return;
+        }
+        closureSyncRef.current={clubId:activeClubId,snapshot:JSON.stringify(localClosures)};
+        setDbStatus("error");
+        toast.error("Cloud workspace unavailable", {
+          description: error?.message || "Ground Control is using this club's local cache until the connection is restored.",
+        });
+      }finally{
+        if(!cancelled&&allowLocalHydration) setWorkspaceHydrated(true);
+      }
     };
-    connect();
-  },[supaKey]);
+
+    hydrate();
+    return()=>{cancelled=true;};
+  },[
+    activeClubId,
+    activeMembership?.club?.name,
+    authSession?.user?.id,
+    clearMidweekScheduleForDateChange,
+    clearWeekendScheduleForDateChange,
+  ]);
+
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("referees",refs);},[refs,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("club",club);},[club,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("pitches",pitchCfg);},[pitchCfg,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("history",history);},[history,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("teamConfig",teamCfg);},[teamCfg,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("testSaturday",testSat);},[testSat,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("testSunday",testSun);},[testSun,workspaceHydrated]);
+  useEffect(()=>{if(workspaceHydrated)tenantSetJson("testMidweek",testMidweek);},[testMidweek,workspaceHydrated]);
+
+  useEffect(()=>{
+    if(!workspaceHydrated||!activeClubId) return undefined;
+    persistPitchClosures(pitchClosures);
+    const snapshot=JSON.stringify(pitchClosures);
+    if(closureSyncRef.current.clubId===activeClubId&&closureSyncRef.current.snapshot===snapshot) return undefined;
+    if(!isSupaConfigured()||activeMembership?.role==="viewer") return undefined;
+
+    const timer=window.setTimeout(async()=>{
+      try{
+        await DB.savePitchClosures(activeClubId,pitchClosures);
+        closureSyncRef.current={clubId:activeClubId,snapshot};
+        setDbStatus("connected");
+      }catch(error){
+        setDbStatus("error");
+        toast.error("Pitch closures saved locally only",{description:error?.message||"Cloud sync failed."});
+      }
+    },350);
+    return()=>window.clearTimeout(timer);
+  },[activeClubId,activeMembership?.role,pitchClosures,workspaceHydrated]);
 
     useEffect(() => {
       const handler = (event) => {
@@ -531,9 +645,6 @@ function App(){
         );
       };
     }, []);
-
-  // Auto-save to localStorage only - Supabase saves happen via Save buttons
-  const mountedRef = typeof window !== "undefined" ? ((window)._hsmMounted = (window)._hsmMounted || {refs:false,cfg:false}) : {refs:false,cfg:false};
 
   const makePitchBuffer=(youth,adult)=>{
     const map={};
@@ -706,7 +817,10 @@ const midweekDateIsWeekend=isWeekendDate(midweekDate);
 
 const { saveWeek } = useWeekPersistence({
   mode,
+  satDate,
+  sunDate,
   satDateLabel,
+  sunDateLabel,
   satHasRun,
   satFinal,
   satActive,
@@ -723,7 +837,7 @@ const { saveWeek } = useWeekPersistence({
   history,
   setHistory,
   setDbStatus,
-  authSession,
+  activeClubId,
 });
 
 const {
@@ -750,6 +864,9 @@ const { resetAll } = useOperationsActions({
 
     // Remove the local session first so the secure workspace closes immediately.
     Auth.clearSession();
+    clearTenantStorageContext();
+    setWorkspaceHydrated(false);
+    setWorkspaceSecurityError("");
     setAuthSession(null);
     setMainPage("dashboard");
     setDayTab("saturday");
@@ -772,8 +889,40 @@ const { resetAll } = useOperationsActions({
   if(!authSession) return(
     <LoginScreen
       supaConfigured={isSupaConfigured()}
-      onLogin={session=>{setAuthSession(session);Auth.saveSession(session);}}
+      onLogin={session=>{Auth.saveSession(session);setAuthSession(session);}}
     />
+  );
+
+  if(["idle","loading"].includes(clubAccessStatus)) return(
+    <BrandSplash message="Verifying club access"/>
+  );
+
+  if(clubAccessStatus!=="ready") return(
+    <WorkspaceAccessGate
+      status={clubAccessStatus}
+      error={clubAccessError}
+      canBootstrap={canBootstrap}
+      defaultClubName={DEFAULT_CLUB.name}
+      onBootstrap={bootstrapFirstWorkspace}
+      onRetry={refreshClubAccess}
+      onSignOut={handleSignOut}
+    />
+  );
+
+  if(workspaceSecurityError) return(
+    <WorkspaceAccessGate
+      status="error"
+      error={workspaceSecurityError}
+      onRetry={()=>{
+        setWorkspaceSecurityError("");
+        refreshClubAccess();
+      }}
+      onSignOut={handleSignOut}
+    />
+  );
+
+  if(!workspaceHydrated) return(
+    <BrandSplash message="Loading secure club workspace"/>
   );
 
 return(
@@ -796,6 +945,10 @@ return(
     midweekReadiness={activeMidweekReadiness}
     midweekEnabled={midweekEnabled}
     authSession={authSession}
+    memberships={memberships}
+    activeClubId={activeClubId}
+    activeMembership={activeMembership}
+    onClubChange={handleClubChange}
     onSignOut={handleSignOut}
   >
        <style dangerouslySetInnerHTML={{__html:"@media print{.np{display:none!important}#combined-print,#combined-print *{visibility:visible!important}body{visibility:hidden!important}#combined-print{position:fixed;top:0;left:0;width:100%}}"}}/>
@@ -1161,6 +1314,8 @@ return(
             savedTab={savedTab}
             dbStatus={dbStatus}
             setDbStatus={setDbStatus}
+            activeClubId={activeClubId}
+            activeMembership={activeMembership}
             setHistory={setHistory}
             teamCfg={teamCfg}
             setTeamCfg={setTeamCfg}
@@ -1198,9 +1353,6 @@ return(
             setBufferAdult={setBufferAdult}
             DEFAULT_BUFFER_YOUTH={DEFAULT_BUFFER_YOUTH}
             DEFAULT_BUFFER_ADULT={DEFAULT_BUFFER_ADULT}
-            supaKey={supaKey}
-            setSupaKeyState={setSupaKeyState}
-            updateSupaKey={updateSupaKey}
             hdrStyle={hdrStyle}
             thC={thC}
           />

@@ -1,212 +1,83 @@
-import React from "react";
-import { isSupaConfigured, DB } from "../../lib/supabase.js";
+import React, { useState } from "react";
+import { CheckCircle2, Database, LoaderCircle, ShieldCheck, TriangleAlert } from "lucide-react";
+import { DB, isSupaConfigured, SUPA_URL } from "../../lib/supabase.js";
 
 export default function SupabaseSettingsPanel({
-  S,
-  club,
-  dbStatus,
+  club = {},
+  dbStatus = "disabled",
   setDbStatus,
-  setHistory,
-  supaKey,
-  setSupaKeyState,
-  updateSupaKey,
+  activeClubId = "",
+  activeMembership = null,
 }) {
+  const [message, setMessage] = useState("");
+  const [checking, setChecking] = useState(false);
+  const configured = isSupaConfigured();
+
+  const testConnection = async () => {
+    setChecking(true);
+    setMessage("");
+    setDbStatus?.("loading");
+    try {
+      const workspace = await DB.ping(activeClubId);
+      setDbStatus?.("connected");
+      setMessage(`Secure connection confirmed for ${workspace?.name || club.name || "this club"}.`);
+    } catch (error) {
+      setDbStatus?.("error");
+      setMessage(error?.message || "The secure workspace connection failed.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
   return (
-    <div style={S.card} className="np">
-      <div style={headerStyle(club.primary)}>Supabase Database Integration</div>
-
-      <div style={S.cb}>
-        <div style={{ ...S.ok, marginBottom: 16 }}>
-          <strong>Status:</strong>{" "}
-          {isSupaConfigured()
-            ? "Supabase configured - " + dbStatus
-            : "Anon key not set - paste it below"}
+    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+            <ShieldCheck size={14} /> Tenant-secure database
+          </div>
+          <h2 className="mt-4 text-2xl font-black text-slate-950">Supabase workspace security</h2>
+          <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+            The application connection is supplied by the deployment environment. Club users never enter API keys. Every database request carries the signed-in user token and is restricted by club membership and Row Level Security.
+          </p>
         </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={S.lbl}>Supabase Anon Key</label>
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="password"
-              style={{ ...S.inp, fontFamily: "monospace", fontSize: 11 }}
-              placeholder="Paste your anon key here (eyJ...)"
-              value={supaKey}
-              onChange={(e) => setSupaKeyState(e.target.value)}
-              onBlur={(e) => updateSupaKey(e.target.value)}
-            />
-
-            <button
-              style={{ ...S.btn(club.primary), whiteSpace: "nowrap" }}
-              onClick={async () => {
-                const key = supaKey.trim();
-
-                if (key.length < 20) {
-                  alert("Please paste your Supabase anon key first.");
-                  return;
-                }
-
-                updateSupaKey(key);
-                setDbStatus("loading");
-
-                const data = await DB.loadHistory();
-
-                if (data !== null) {
-                  setHistory(data);
-                  setDbStatus("connected");
-                  alert("Connected! " + data.length + " weeks in history.");
-                } else {
-                  setDbStatus("error");
-                  alert("Connection failed - check the key is correct.");
-                }
-              }}
-            >
-              Test Connection
-            </button>
-          </div>
-
-          <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-            Find this in Supabase - Settings - API - Project API keys - anon/public.
-            Saved to this browser only.
-          </div>
-
-          {isSupaConfigured() && (
-            <div
-              style={{
-                fontSize: 11,
-                color: club.primary,
-                marginTop: 4,
-                fontWeight: 600,
-              }}
-            >
-              Key saved - status: {dbStatus}
-            </div>
-          )}
-        </div>
-
-        <InfoBox club={club} title="Project URL">
-          https://keanexqompimqafhuiow.supabase.co
-        </InfoBox>
-
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 12,
-            background: "#f9f9f9",
-            border: "1px solid #e0e0e0",
-            borderRadius: 6,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 12,
-              marginBottom: 8,
-              color: club.primary,
-            }}
-          >
-            Database Tables Required
-          </div>
-
-          <div style={{ fontSize: 11, marginBottom: 8 }}>
-            Run this in Supabase SQL Editor if not already done:
-          </div>
-
-          <pre
-            style={{
-              fontSize: 10,
-              background: "#1e1e1e",
-              color: "#d4d4d4",
-              padding: 10,
-              borderRadius: 4,
-              overflowX: "auto",
-            }}
-          >
-{`create table history (id text primary key, data jsonb, saved_at timestamptz default now());
-create table refs (id text primary key, data jsonb);
-create table team_config (id text primary key, data jsonb);
-create table club_config (id text primary key, data jsonb);
-create table pitches (id text primary key, data jsonb);
-create table audit_log (id text primary key, data jsonb, created_at timestamptz default now());
-
-alter table history enable row level security;
-alter table refs enable row level security;
-alter table team_config enable row level security;
-alter table club_config enable row level security;
-alter table pitches enable row level security;
-alter table audit_log enable row level security;
-
-create policy "Allow all" on history for all using (true) with check (true);
-create policy "Allow all" on refs for all using (true) with check (true);
-create policy "Allow all" on team_config for all using (true) with check (true);
-create policy "Allow all" on club_config for all using (true) with check (true);
-create policy "Allow all" on pitches for all using (true) with check (true);
-create policy "Allow all" on audit_log for all using (true) with check (true);`}
-          </pre>
-        </div>
-
         <button
-          style={S.btn(club.primary)}
-          onClick={async () => {
-            setDbStatus("loading");
-
-            const data = await DB.loadHistory();
-
-            if (data) {
-              setHistory(data);
-              setDbStatus("connected");
-              alert("Connected! " + data.length + " weeks loaded.");
-            } else {
-              setDbStatus("error");
-              alert("Connection failed - check your key in the source code.");
-            }
-          }}
+          type="button"
+          onClick={testConnection}
+          disabled={!configured || !activeClubId || checking}
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Test Supabase Connection
+          {checking ? <LoaderCircle size={17} className="animate-spin" /> : <Database size={17} />}
+          Verify secure connection
         </button>
       </div>
-    </div>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-3">
+        <StatusTile label="Application configuration" value={configured ? "Configured" : "Missing"} good={configured} />
+        <StatusTile label="Cloud status" value={dbStatus === "connected" ? "Connected" : dbStatus} good={dbStatus === "connected"} />
+        <StatusTile label="Your club role" value={activeMembership?.role || "Unknown"} good={Boolean(activeMembership)} />
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Project endpoint</div>
+        <div className="mt-2 break-all font-mono text-xs font-bold text-slate-700">{SUPA_URL}</div>
+      </div>
+
+      {message ? (
+        <div className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm font-bold ${dbStatus === "connected" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+          {dbStatus === "connected" ? <CheckCircle2 size={19} /> : <TriangleAlert size={19} />}
+          <span>{message}</span>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
-function headerStyle(bg) {
-  return {
-    background: bg,
-    color: "#fff",
-    padding: "10px 16px",
-    fontWeight: 600,
-    fontSize: 12,
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  };
-}
-
-function InfoBox({ club, title, children }) {
+function StatusTile({ label, value, good }) {
   return (
-    <div
-      style={{
-        marginBottom: 16,
-        padding: 12,
-        background: "#f9f9f9",
-        border: "1px solid #e0e0e0",
-        borderRadius: 6,
-      }}
-    >
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: 12,
-          marginBottom: 4,
-          color: club.primary,
-        }}
-      >
-        {title}
-      </div>
-
-      <div style={{ fontFamily: "monospace", fontSize: 11, color: "#555" }}>
-        {children}
-      </div>
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</div>
+      <div className={`mt-2 text-sm font-black capitalize ${good ? "text-emerald-700" : "text-amber-700"}`}>{value}</div>
     </div>
   );
 }

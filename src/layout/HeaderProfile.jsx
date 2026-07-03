@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
+  Building2,
   ChevronDown,
   LogOut,
   Settings,
@@ -23,9 +24,23 @@ function getInitials(name = "") {
   return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+
+function getRoleLabel(role = "viewer") {
+  const labels = {
+    owner: "Club Owner",
+    admin: "Club Administrator",
+    scheduler: "Scheduler",
+    viewer: "Viewer",
+  };
+  return labels[role] || "Club Member";
+}
 export default function HeaderProfile({
   user,
   clubName = "Ground Control",
+  memberships = [],
+  activeClubId = "",
+  activeRole = "viewer",
+  onClubChange,
   onOpenSettings,
   onSignOut,
 }) {
@@ -36,6 +51,7 @@ export default function HeaderProfile({
   const displayName = useMemo(() => getDisplayName(user), [user]);
   const initials = useMemo(() => getInitials(displayName), [displayName]);
   const email = user?.email || "Secure workspace account";
+  const roleLabel = getRoleLabel(activeRole);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -101,7 +117,7 @@ export default function HeaderProfile({
               {displayName}
             </div>
             <div className="max-w-44 truncate text-xs font-bold text-slate-500">
-              Club Administrator
+              {roleLabel}
             </div>
           </div>
 
@@ -128,12 +144,38 @@ export default function HeaderProfile({
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
-                <ShieldCheck size={16} className="text-emerald-300" />
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-black text-white">Secure workspace</div>
-                  <div className="truncate text-[11px] font-semibold text-slate-400">{clubName}</div>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-emerald-300" />
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-black text-white">Secure workspace</div>
+                    <div className="truncate text-[11px] font-semibold text-slate-400">{roleLabel}</div>
+                  </div>
                 </div>
+                {memberships.length > 1 ? (
+                  <label className="mt-3 block">
+                    <span className="sr-only">Select club workspace</span>
+                    <span className="relative block">
+                      <Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-300" />
+                      <select
+                        value={activeClubId}
+                        onChange={(event) => {
+                          setOpen(false);
+                          onClubChange?.(event.target.value);
+                        }}
+                        className="h-10 w-full appearance-none rounded-xl border border-white/10 bg-slate-950/60 pl-9 pr-3 text-xs font-black text-white outline-none"
+                      >
+                        {memberships.map((membership) => (
+                          <option key={membership.clubId} value={membership.clubId}>
+                            {membership.club?.name || "Club workspace"}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                  </label>
+                ) : (
+                  <div className="mt-2 truncate text-[11px] font-semibold text-slate-300">{clubName}</div>
+                )}
               </div>
             </div>
 

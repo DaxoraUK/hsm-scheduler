@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { isSupaConfigured, DB, supaFetch } from "../lib/supabase.js";
+import { isSupaConfigured, DB } from "../lib/supabase.js";
 import { toast } from "sonner";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 
@@ -93,7 +93,7 @@ export function useWeekPersistence({
   history,
   setHistory,
   setDbStatus,
-  authSession,
+  activeClubId = "",
 }) {
   const saveWeek = useCallback(async () => {
     const snapshots = buildFixtureDaySnapshots({
@@ -147,54 +147,44 @@ export function useWeekPersistence({
     };
 
     const updated = [entry, ...history].slice(0, 20);
-    setHistory(updated);
 
-    if (isSupaConfigured()) {
+    if (isSupaConfigured() && activeClubId) {
       setDbStatus("saving");
-      const ok = await DB.saveHistory(updated);
-      setDbStatus(ok ? "connected" : "error");
-
-      if (ok && authSession) {
-        const user = authSession.user || {};
-        supaFetch("POST", "audit_log", [
-          {
-            id: `wk_${Date.now()}`,
-            data: {
-              action: "save_matchweek",
-              user_email: user.email || "unknown",
-              user_name:
-                user.user_metadata?.display_name || user.email || "unknown",
-              timestamp: new Date().toISOString(),
-              detail: {
-                week: entry.dateLabel,
-                fixture_days: publishedDays.map((day) => ({
-                  key: day.key,
-                  date: day.date,
-                  fixtures: day.scheduled.length,
-                  postponed: day.postponed.length,
-                })),
-              },
-            },
+      try {
+        await DB.saveHistoryEntry(activeClubId, entry);
+        await DB.recordAudit(activeClubId, {
+          action: "matchweek.publish",
+          entityType: "matchweek",
+          entityId: entry.id,
+          detail: {
+            week: entry.dateLabel,
+            fixtureDays: publishedDays.map((day) => ({
+              key: day.key,
+              date: day.date,
+              fixtures: day.scheduled.length,
+              postponed: day.postponed.length,
+            })),
           },
-        ]);
-      }
-
-      if (ok) {
+        });
+        setDbStatus("connected");
         toast.success("Matchweek published", {
           description: publishedDays
             .map((day) => `${day.label}: ${day.scheduled.length}`)
             .join(". "),
         });
-      } else {
-        toast.error("Saved locally only", {
-          description: "Supabase sync failed. Please check the connection.",
+      } catch (error) {
+        setDbStatus("error");
+        toast.error("Saved on this device only", {
+          description: error?.message || "Cloud sync failed. Retry before using another device.",
         });
       }
     } else {
       toast.info("Saved locally", {
-        description: "Supabase is not configured. Data is stored on this device only.",
+        description: "Cloud sync is not configured. Data is stored on this device only.",
       });
     }
+
+    setHistory(updated);
   }, [
     mode,
     satDate,
@@ -220,7 +210,7 @@ export function useWeekPersistence({
     history,
     setHistory,
     setDbStatus,
-    authSession,
+    activeClubId,
   ]);
 
   return { saveWeek };

@@ -6,7 +6,8 @@ import {
   createTestDataSeed,
   generateTestFixtures,
 } from "../../lib/testData/testFixtureGenerator.js";
-import { isSupaConfigured, supaFetch } from "../../lib/supabase.js";
+import { DB, isSupaConfigured } from "../../lib/supabase.js";
+import { tenantSetJson } from "../../lib/storage/tenantStorage.js";
 import { isMidweekEnabled } from "../../lib/settings/workspaceSettings.js";
 import {
   Field,
@@ -49,6 +50,7 @@ export default function TestDataSettingsPanel({
   setTestMidweek,
   club = {},
   teamCfg = [],
+  activeClubId = "",
 }) {
   const dayOptions = useMemo(
     () => ALL_DAY_OPTIONS.filter((option) => option.key !== "midweek" || isMidweekEnabled(club)),
@@ -58,6 +60,7 @@ export default function TestDataSettingsPanel({
   const [scenario, setScenario] = useState("standard");
   const [seed, setSeed] = useState("ground-control-demo");
   const [saved, setSaved] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     if (!dayOptions.some((option) => option.key === dayKey)) {
@@ -91,24 +94,31 @@ export default function TestDataSettingsPanel({
   const generateNew = () => generate(createTestDataSeed(dayKey));
 
   const save = async () => {
+    setSaveError("");
+    const storageKey = dayKey === "sunday"
+      ? "testSunday"
+      : dayKey === "midweek"
+        ? "testMidweek"
+        : "testSaturday";
+
+    tenantSetJson(storageKey, list);
+
     try {
-      localStorage.setItem(definition.testStorageKey, JSON.stringify(list));
-    } catch (error) {}
+      if (isSupaConfigured() && activeClubId) {
+        await DB.saveTestFixtures(activeClubId, definition.remoteConfigKey, list);
+        await DB.recordAudit(activeClubId, {
+          action: "test-fixtures.save",
+          entityType: "test-fixtures",
+          entityId: dayKey,
+          detail: { dayKey, fixtureCount: list.length },
+        });
+      }
 
-    if (isSupaConfigured()) {
-      try {
-        await supaFetch("DELETE", `club_config?id=eq.${definition.remoteConfigKey}`);
-        await supaFetch(
-          "POST",
-          "club_config",
-          [{ id: definition.remoteConfigKey, data: { fixtures: list } }],
-          { Prefer: "return=minimal" }
-        );
-      } catch (error) {}
+      setSaved(dayKey);
+      window.setTimeout(() => setSaved(""), 2200);
+    } catch (error) {
+      setSaveError(error?.message || "The demonstration fixtures could not be saved.");
     }
-
-    setSaved(dayKey);
-    window.setTimeout(() => setSaved(""), 2200);
   };
 
   return (
@@ -137,8 +147,9 @@ export default function TestDataSettingsPanel({
         })}
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 space-y-3">
         <Notice tone="warning">Generated fixtures are development records only. A seed recreates the same fixture set, which keeps demonstrations and regression checks repeatable.</Notice>
+        {saveError ? <Notice tone="danger">{saveError}</Notice> : null}
       </div>
 
       <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-5 sm:p-6">

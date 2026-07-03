@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { CalendarDays, History, RotateCcw, Trash2 } from "lucide-react";
 import { DB, isSupaConfigured } from "../../lib/supabase.js";
 import {
@@ -19,7 +19,9 @@ export default function HistorySettingsPanel({
   setSatScheduled,
   setSatHasRun,
   setDayTab,
+  activeClubId = "",
 }) {
+  const [deleteError, setDeleteError] = useState("");
   const totalFixtures = history.reduce((sum, week) => sum + countFixtures(week), 0);
   const latest = history[0] || null;
 
@@ -32,8 +34,22 @@ export default function HistorySettingsPanel({
   const deleteWeek = async (week) => {
     const confirmed = window.confirm(`Delete ${week.dateLabel || "this saved matchweek"}?`);
     if (!confirmed) return;
-    setHistory?.((current) => current.filter((entry) => entry.id !== week.id));
-    if (isSupaConfigured()) await DB.deleteHistory(week.id);
+    setDeleteError("");
+
+    try {
+      if (isSupaConfigured() && activeClubId) {
+        await DB.deleteHistory(activeClubId, week.id);
+        await DB.recordAudit(activeClubId, {
+          action: "history.delete",
+          entityType: "matchweek",
+          entityId: week.id,
+          detail: { dateLabel: week.dateLabel || null },
+        });
+      }
+      setHistory?.((current) => current.filter((entry) => entry.id !== week.id));
+    } catch (error) {
+      setDeleteError(error?.message || "The saved matchweek could not be deleted.");
+    }
   };
 
   return (
@@ -44,6 +60,8 @@ export default function HistorySettingsPanel({
         title="Matchweek history"
         description="Review saved matchweeks and reopen a previous Saturday schedule. History is also the evidence base for trends and funding analytics."
       />
+
+      {deleteError ? <div className="mt-5"><Notice tone="danger">{deleteError}</Notice></div> : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <StatTile label="Saved matchweeks" value={history.length} tone="green" />

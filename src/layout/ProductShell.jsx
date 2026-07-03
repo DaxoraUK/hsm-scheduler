@@ -33,6 +33,10 @@ export default function ProductShell({
   midweekReadiness,
   midweekEnabled = true,
   authSession,
+  memberships = [],
+  activeClubId = "",
+  activeMembership = null,
+  onClubChange,
   onSignOut,
 }) {
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
@@ -181,6 +185,10 @@ export default function ProductShell({
             <HeaderProfile
               user={authSession?.user}
               clubName={club?.name}
+              memberships={memberships}
+              activeClubId={activeClubId}
+              activeRole={activeMembership?.role || "viewer"}
+              onClubChange={onClubChange}
               onOpenSettings={(settingsTab = "overview") => {
                 nav.goToSettings({ settingsTab, scroll: false });
               }}

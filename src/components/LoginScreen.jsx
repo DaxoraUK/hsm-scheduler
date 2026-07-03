@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Auth, getSupaKey, isSupaConfigured, setSupaKey } from "../lib/supabase.js";
+import { Auth, isSupaConfigured } from "../lib/supabase.js";
 import BrandSplash, { GroundControlMark } from "./BrandSplash.jsx";
 import "./authExperience.css";
 
@@ -80,8 +80,7 @@ export default function LoginScreen({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [keyInput, setKeyInput] = useState(() => getSupaKey() || "");
-  const [keySet, setKeySet] = useState(() => isSupaConfigured());
+  const configured = isSupaConfigured();
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -89,26 +88,13 @@ export default function LoginScreen({ onLogin }) {
     setMessage("");
   }
 
-  function saveKey(event) {
-    event.preventDefault();
-    const key = keyInput.trim();
-    if (key.length < 20) {
-      setError("Paste the complete Supabase anon key to connect this workspace.");
-      return;
-    }
-    setSupaKey(key);
-    setKeySet(true);
-    setError("");
-    setMessage("Workspace connected. You can now sign in.");
-  }
-
   async function submit(event) {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    if (!keySet) {
-      setError("Connect the workspace before signing in.");
+    if (!configured) {
+      setError("Ground Control has not been configured by the deployment administrator.");
       return;
     }
     if (!email.trim()) {
@@ -217,10 +203,10 @@ export default function LoginScreen({ onLogin }) {
         <div className="gc-auth-panel">
           <header className="gc-auth-panel-header">
             <div className="gc-auth-secure"><Icon name="shield" /> Secure workspace access</div>
-            <h2>{!keySet ? "Connect Ground Control" : isReset ? "Reset your password" : isSignup ? "Create your account" : "Welcome back"}</h2>
+            <h2>{!configured ? "Deployment configuration required" : isReset ? "Reset your password" : isSignup ? "Create your account" : "Welcome back"}</h2>
             <p className="gc-auth-panel-subtitle">
-              {!keySet
-                ? "Complete the one-time platform connection for this device."
+              {!configured
+                ? "The application environment is missing its Supabase connection. Club users do not enter API keys."
                 : isReset
                   ? "We will send a secure recovery link to your inbox."
                   : isSignup
@@ -229,34 +215,14 @@ export default function LoginScreen({ onLogin }) {
             </p>
           </header>
 
-          {!keySet ? (
-            <form className="gc-auth-setup" onSubmit={saveKey}>
-              {error && <Alert type="error">{error}</Alert>}
-              {message && <Alert type="success">{message}</Alert>}
-
+          {!configured ? (
+            <div className="gc-auth-setup">
+              <Alert type="error">Ground Control is not connected to its deployment environment.</Alert>
               <div className="gc-auth-setup-card">
-                <strong>One-time workspace connection</strong>
-                <p>Your platform administrator provides this key. It is stored only on this device.</p>
+                <strong>Administrator action required</strong>
+                <p>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the deployment environment, then restart the application. These values are configured once for the platform and are never entered by club users.</p>
               </div>
-
-              <label className="gc-auth-field">
-                <span className="gc-auth-field-label">Supabase anon key</span>
-                <span className="gc-auth-input-wrap">
-                  <Icon name="key" />
-                  <input
-                    className="gc-auth-input is-mono"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="eyJ..."
-                    value={keyInput}
-                    onChange={(event) => setKeyInput(event.target.value)}
-                  />
-                </span>
-              </label>
-
-              <button className="gc-auth-submit" type="submit">Connect workspace</button>
-              <div className="gc-auth-key-note">For production deployments this connection can be supplied securely through the environment configuration.</div>
-            </form>
+            </div>
           ) : (
             <>
               {!isReset && (

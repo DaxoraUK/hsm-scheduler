@@ -1,5 +1,7 @@
-const MIDWEEK_DATE_KEY = "gc_midweek_date";
-const MIDWEEK_WINDOW_KEY = "gc_midweek_window";
+import { tenantGetItem, tenantGetJson, tenantSetItem, tenantSetJson } from "../storage/tenantStorage.js";
+
+const MIDWEEK_DATE_KEY = "midweekDate";
+const MIDWEEK_WINDOW_KEY = "midweekWindow";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -45,7 +47,7 @@ export function getCurrentOrNextMidweekDate(now = new Date()) {
 
 export function getInitialMidweekDate(now = new Date()) {
   try {
-    const saved = window.localStorage.getItem(MIDWEEK_DATE_KEY);
+    const saved = tenantGetItem(MIDWEEK_DATE_KEY, null);
     if (parseLocalDateInput(saved)) return saved;
   } catch (error) {
     // Local storage is optional.
@@ -57,7 +59,7 @@ export function getInitialMidweekDate(now = new Date()) {
 export function persistMidweekDate(value) {
   if (!parseLocalDateInput(value)) return;
   try {
-    window.localStorage.setItem(MIDWEEK_DATE_KEY, value);
+    tenantSetItem(MIDWEEK_DATE_KEY, value);
   } catch (error) {
     // Local storage is optional.
   }
@@ -85,7 +87,7 @@ export function getInitialMidweekWindow() {
   const fallback = { start: "18:00", end: "21:30" };
 
   try {
-    const saved = JSON.parse(window.localStorage.getItem(MIDWEEK_WINDOW_KEY) || "null");
+    const saved = tenantGetJson(MIDWEEK_WINDOW_KEY, null);
     if (
       saved &&
       /^\d{2}:\d{2}$/.test(saved.start || "") &&
@@ -102,7 +104,7 @@ export function getInitialMidweekWindow() {
 
 export function persistMidweekWindow(windowValue) {
   try {
-    window.localStorage.setItem(MIDWEEK_WINDOW_KEY, JSON.stringify(windowValue));
+    tenantSetJson(MIDWEEK_WINDOW_KEY, windowValue);
   } catch (error) {
     // Local storage is optional.
   }

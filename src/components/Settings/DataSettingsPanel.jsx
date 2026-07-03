@@ -28,7 +28,7 @@ export default function DataSettingsPanel({
   history = [],
   dbStatus,
   setDbStatus,
-  setHistory,
+  activeClubId = "",
   startHour,
   setStartHour,
   startMin,
@@ -106,7 +106,7 @@ export default function DataSettingsPanel({
           title="Cloud sync status"
           description="Ordinary club users should never need to enter a Supabase key or run database SQL from this screen. Production credentials belong in the deployment environment."
         />
-        <div className="mt-5"><SupabaseStatusBar dbStatus={dbStatus} setDbStatus={setDbStatus} setHistory={setHistory} /></div>
+        <div className="mt-5"><SupabaseStatusBar dbStatus={dbStatus} setDbStatus={setDbStatus} activeClubId={activeClubId} /></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile label="Teams" value={teamCfg.length} tone="green" />
           <StatTile label="Pitches" value={pitchCfg.length} tone="blue" />
@@ -143,9 +143,9 @@ export default function DataSettingsPanel({
       <SettingsPanel>
         <SettingsSectionHeader
           icon={ShieldCheck}
-          eyebrow="Launch requirement"
+          eyebrow="Tenant protection"
           title="Production data controls"
-          description="Before customer onboarding, cloud tables must use club-level row security, audit logging and tested backups. The settings UX no longer exposes insecure ‘allow all’ SQL policies."
+          description="Ground Control expects club-scoped Row Level Security, authenticated user tokens, trusted audit actors and tested backups. The interface never exposes permissive ‘allow all’ policy setup to club users."
         />
       </SettingsPanel>
     </div>

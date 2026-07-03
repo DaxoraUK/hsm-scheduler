@@ -1,8 +1,10 @@
+import { tenantGetJson, tenantSetJson } from "../storage/tenantStorage.js";
+
 import { createPlatformService } from "./serviceRegistry.js";
 
 const POSTCODE_API_BASE = "https://api.postcodes.io/postcodes";
 const OPEN_METEO_FREE_API = "https://api.open-meteo.com/v1/forecast";
-const CACHE_PREFIX = "gc_live_weather_v1:";
+const CACHE_PREFIX = "liveWeather:";
 const FRESH_CACHE_MS = 15 * 60 * 1000;
 const STALE_CACHE_MS = 6 * 60 * 60 * 1000;
 const memoryCache = new Map();
@@ -112,9 +114,8 @@ function readStoredCache(key) {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(`${CACHE_PREFIX}${key}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = tenantGetJson(`${CACHE_PREFIX}${key}`, null);
+    if (!parsed) return null;
     memoryCache.set(key, parsed);
     return parsed;
   } catch (_error) {
@@ -128,7 +129,7 @@ function writeStoredCache(key, payload) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(entry));
+    tenantSetJson(`${CACHE_PREFIX}${key}`, entry);
   } catch (_error) {
     // Weather still works without persistent caching.
   }
