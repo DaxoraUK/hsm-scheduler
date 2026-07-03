@@ -22,6 +22,7 @@ import {
   MessageSquareText,
   RefreshCw,
   Settings,
+  ShieldCheck,
   WifiOff,
   X,
 } from "lucide-react";
@@ -77,6 +78,8 @@ export default function ProductShell({
   activeMembership = null,
   workspaceAccess = null,
   subscription = null,
+  platformContext = null,
+  platformOnly = false,
   dbStatus = "connected",
   syncError = "",
   sessionStatus = "active",
@@ -89,7 +92,7 @@ export default function ProductShell({
   const { online } = useConnectivity();
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
 
-  const navItems = [
+  const workspaceNavItems = platformOnly ? [] : [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
@@ -101,7 +104,16 @@ export default function ProductShell({
     return canOpenPage(subscription, key);
   });
 
+  const navItems = platformContext?.isPlatformStaff
+    ? [...workspaceNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
+    : workspaceNavItems;
+
   const navigate = (key, target) => {
+    if (key === "platform") {
+      setMainPage("platform");
+      setMobileOpen(false);
+      return;
+    }
     nav.goTo(target, {
       day: key === "operations" ? getDayTabFromScope(matchdayScope) : undefined,
       scroll: false,
@@ -141,10 +153,19 @@ export default function ProductShell({
 
   const syncBanner = getSyncBanner({ online, dbStatus, syncError, sessionStatus });
 
-  const workspaceCard = (
+  const workspaceCard = platformOnly ? (
+    <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-4">
+      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Daxora platform</div>
+      <div className="mt-3 text-sm font-black text-white">Internal operations</div>
+      <div className="mt-1 text-xs font-bold text-slate-500">{platformContext?.roleLabel || "Platform staff"}</div>
+      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" /> Secure admin access
+      </div>
+    </div>
+  ) : (
     <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-3">
       <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Workspace</div>
-      <div className="mt-3 truncate text-sm font-black text-white">{club.name}</div>
+      <div className="mt-3 truncate text-sm font-black text-white">{club?.name || "Club workspace"}</div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
         <span>{getMatchdayScopeLabel(matchdayScope)} view</span>
         {subscription?.planName ? <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-black text-slate-300">{subscription.planName}</span> : null}
@@ -176,7 +197,7 @@ export default function ProductShell({
               </button>
             </div>
             <div className="mt-7 border-t border-slate-800 pt-5">
-              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Operations</div>
+              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
               <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
             </div>
             <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
@@ -189,7 +210,7 @@ export default function ProductShell({
           <div className="mb-8"><GroundControlBrand /></div>
           <div className="flex flex-1 flex-col">
             <div className="border-t border-slate-800 pt-5">
-              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Operations</div>
+              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
               <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
             </div>
             <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
@@ -203,20 +224,29 @@ export default function ProductShell({
                 <Menu size={21} />
               </button>
               <div className="hidden min-w-0 flex-1 md:block">
-                <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} setNavigationTarget={setNavigationTarget} canOpenSettings={Boolean(workspaceAccess?.canManageSettings)} />
+                {platformOnly ? (
+                  <div>
+                    <div className="text-sm font-black text-slate-950">Daxora platform operations</div>
+                    <div className="mt-0.5 text-xs font-semibold text-slate-500">Secure administration, subscriptions and support cases</div>
+                  </div>
+                ) : (
+                  <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} setNavigationTarget={setNavigationTarget} canOpenSettings={Boolean(workspaceAccess?.canManageSettings)} />
+                )}
               </div>
               <div className="min-w-0 md:hidden">
                 <div className="truncate text-sm font-black text-slate-950">Ground Control</div>
-                <div className="truncate text-[11px] font-bold text-slate-500">{club?.name}</div>
+                <div className="truncate text-[11px] font-bold text-slate-500">{platformOnly ? "Daxora platform" : club?.name}</div>
               </div>
             </div>
             <HeaderProfile
               user={authSession?.user}
-              clubName={club?.name}
+              clubName={platformOnly ? "Daxora Platform" : club?.name}
               memberships={memberships}
               activeClubId={activeClubId}
               activeRole={workspaceAccess?.role || activeMembership?.role || "viewer"}
               workspaceAccess={workspaceAccess}
+              roleLabelOverride={platformOnly ? platformContext?.roleLabel : ""}
+              platformMode={platformOnly}
               onClubChange={onClubChange}
               onOpenSettings={(settingsTab = "overview") => nav.goToSettings({ settingsTab, scroll: false })}
               onSignOut={onSignOut}
@@ -242,40 +272,44 @@ export default function ProductShell({
             <div role="status" className="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-800 sm:px-6"><RefreshCw className="animate-spin" size={14} /> {syncBanner.title}</div>
           ) : null}
 
-          {subscription?.status === "trialing" ? (
-            <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-900 sm:px-6">
-              <span>{subscription.planName} trial{subscription.trialEndsAt ? ` ends ${subscription.trialEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
-              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-sky-200 bg-white px-3 py-1.5">Review plan</button> : null}
-            </div>
-          ) : subscription?.status === "grace" ? (
-            <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-black text-amber-950 sm:px-6">
-              <span>Subscription grace period{subscription.graceEndsAt ? ` ends ${subscription.graceEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
-              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-amber-200 bg-white px-3 py-1.5">Review plan</button> : null}
-            </div>
-          ) : subscription?.isReadOnly ? (
-            <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black text-rose-950 sm:px-6">
-              <span>{subscription.message || `${subscription.planName} is currently read only.`}</span>
-              {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5">Subscription details</button> : null}
-            </div>
+          {!platformOnly ? (
+            subscription?.status === "trialing" ? (
+              <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-900 sm:px-6">
+                <span>{subscription.planName} trial{subscription.trialEndsAt ? ` ends ${subscription.trialEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
+                {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-sky-200 bg-white px-3 py-1.5">Review plan</button> : null}
+              </div>
+            ) : subscription?.status === "grace" ? (
+              <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-black text-amber-950 sm:px-6">
+                <span>Subscription grace period{subscription.graceEndsAt ? ` ends ${subscription.graceEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
+                {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-amber-200 bg-white px-3 py-1.5">Review plan</button> : null}
+              </div>
+            ) : subscription?.isReadOnly ? (
+              <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black text-rose-950 sm:px-6">
+                <span>{subscription.message || `${subscription.planName} is currently read only.`}</span>
+                {workspaceAccess?.canManageSubscription ? <button type="button" onClick={() => nav.goToSettings({ settingsTab: "subscription", scroll: false })} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5">Subscription details</button> : null}
+              </div>
+            ) : null
           ) : null}
 
-          {workspaceAccess?.isSupport ? (
-            <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Eye size={18} /></span>
-                <div><div className="text-sm font-black">Read-only Daxora support session</div><div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-800"><span>Every view remains attributed to the signed-in support account.</span>{workspaceAccess.supportExpiresAt ? <span className="inline-flex items-center gap-1"><Clock3 size={13} /> Expires {new Date(workspaceAccess.supportExpiresAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span> : null}</div></div>
+          {!platformOnly ? (
+            workspaceAccess?.isSupport ? (
+              <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Eye size={18} /></span>
+                  <div><div className="text-sm font-black">Read-only Daxora support session</div><div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-800"><span>Every view remains attributed to the signed-in support account.</span>{workspaceAccess.supportExpiresAt ? <span className="inline-flex items-center gap-1"><Clock3 size={13} /> Expires {new Date(workspaceAccess.supportExpiresAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span> : null}</div></div>
+                </div>
+                <button type="button" onClick={onEndSupportAccess} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 shadow-sm hover:bg-emerald-100"><LogOut size={15} /> End support session</button>
               </div>
-              <button type="button" onClick={onEndSupportAccess} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 shadow-sm hover:bg-emerald-100"><LogOut size={15} /> End support session</button>
-            </div>
-          ) : workspaceAccess?.isReadOnly ? (
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-600 sm:px-6"><Eye size={15} /> Read-only viewer access</div>
+            ) : workspaceAccess?.isReadOnly ? (
+              <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-600 sm:px-6"><Eye size={15} /> Read-only viewer access</div>
+            ) : null
           ) : null}
 
           <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
             <div
-              className={workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
-              inert={workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
-              aria-disabled={workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+              className={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
+              inert={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+              aria-disabled={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
             >
               {children}
             </div>

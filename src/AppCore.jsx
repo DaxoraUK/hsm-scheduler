@@ -21,6 +21,7 @@ import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
 import { useClubEntitlements } from "./hooks/useClubEntitlements.js";
 import { useSessionLifecycle } from "./hooks/useSessionLifecycle.js";
+import { usePlatformOperator } from "./hooks/usePlatformOperator.js";
 import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
@@ -95,6 +96,7 @@ import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
+const PlatformAdminPage = lazy(() => import("./pages/PlatformAdminPage.jsx"));
 
 function LazyPageFallback({ label = "workspace" }) {
   return (
@@ -362,6 +364,13 @@ function App(){
   });
 
   const {
+    context:platformContext,
+    status:platformStatus,
+    error:platformError,
+    refresh:refreshPlatformContext,
+  }=usePlatformOperator(authSession);
+
+  const {
     memberships,
     activeMembership,
     activeClubId,
@@ -413,6 +422,23 @@ function App(){
     clearTenantStorageContext();
     return selectClub(clubId);
   },[activeClubId,selectClub]);
+
+  const handlePlatformOpenClub=useCallback(async(clubId)=>{
+    if(!clubId) return false;
+    const nextMemberships=await refreshClubAccess();
+    const accessible=nextMemberships.find((membership)=>membership.clubId===clubId);
+    if(!accessible) return false;
+    setWorkspaceHydrated(false);
+    setWorkspaceSecurityError("");
+    clearTenantStorageContext();
+    const selected=selectClub(clubId,nextMemberships);
+    if(selected){
+      setMainPage("dashboard");
+      setSettingsTab("overview");
+      setNavigationTarget(null);
+    }
+    return selected;
+  },[refreshClubAccess,selectClub]);
 
   useEffect(()=>{
     const subscriptionOwnerRequired=subscription?.isReadOnly&&!workspaceAccess.canManageSubscription;
@@ -1212,6 +1238,44 @@ const { resetAll } = useOperationsActions({
     />
   );
 
+  if(["idle","loading"].includes(platformStatus)) return(
+    <BrandSplash message="Verifying account access"/>
+  );
+
+  if(clubAccessStatus!=="ready"&&platformContext.isPlatformStaff) return(
+    <ProductShell
+      mainPage="platform"
+      setMainPage={setMainPage}
+      setDayTab={setDayTab}
+      setSettingsTab={setSettingsTab}
+      setNavigationTarget={setNavigationTarget}
+      club={{name:"Daxora Platform"}}
+      authSession={authSession}
+      memberships={memberships}
+      activeClubId={activeClubId}
+      activeMembership={activeMembership}
+      platformContext={platformContext}
+      platformOnly
+      dbStatus={dbStatus}
+      syncError={syncError}
+      sessionStatus={sessionStatus}
+      onRetrySync={syncRetryAvailable?retryLastSync:null}
+      onClubChange={handleClubChange}
+      onSignOut={handleSignOut}
+    >
+      <Suspense fallback={<LazyPageFallback label="Daxora administration" />}>
+        <PlatformAdminPage
+          platformContext={platformContext}
+          platformStatus={platformStatus}
+          platformError={platformError}
+          onRefreshPlatformContext={refreshPlatformContext}
+          memberships={memberships}
+          onOpenClub={handlePlatformOpenClub}
+        />
+      </Suspense>
+    </ProductShell>
+  );
+
   if(["idle","loading"].includes(clubAccessStatus)) return(
     <BrandSplash message="Verifying club access"/>
   );
@@ -1300,6 +1364,7 @@ return(
     activeMembership={activeMembership}
     workspaceAccess={workspaceAccess}
     subscription={subscription}
+    platformContext={platformContext}
     dbStatus={dbStatus}
     syncError={syncError}
     sessionStatus={sessionStatus}
@@ -1704,6 +1769,18 @@ return(
           sunDateLabel={sunDateLabel}
           midweekDateLabel={midweekDateLabel}
           midweekEnabled={midweekEnabled}
+        />
+      </Suspense>
+    )}
+    {mainPage === "platform" && platformContext.isPlatformStaff && (
+      <Suspense fallback={<LazyPageFallback label="Daxora administration" />}>
+        <PlatformAdminPage
+          platformContext={platformContext}
+          platformStatus={platformStatus}
+          platformError={platformError}
+          onRefreshPlatformContext={refreshPlatformContext}
+          memberships={memberships}
+          onOpenClub={handlePlatformOpenClub}
         />
       </Suspense>
     )}

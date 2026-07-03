@@ -626,6 +626,76 @@ export const DB = {
     });
   },
 
+  async getPlatformOperatorContext() {
+    return supaFetch("POST", "rpc/get_platform_operator_context", {});
+  },
+
+  async platformListClubs({ search = "", status = "", plan = "", limit = 50, offset = 0 } = {}) {
+    return supaFetch("POST", "rpc/platform_list_clubs", {
+      search_text: String(search || "").trim(),
+      status_filter: String(status || "").trim().toLowerCase(),
+      plan_filter: String(plan || "").trim().toLowerCase(),
+      page_size: Math.max(1, Math.min(Number(limit) || 50, 100)),
+      page_offset: Math.max(0, Number(offset) || 0),
+    });
+  },
+
+  async platformGetClubDetail(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/platform_get_club_detail", {
+      target_club_id: id,
+    });
+  },
+
+  async platformUpdateClubStatus(clubId, status, reason) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/platform_update_club_status", {
+      target_club_id: id,
+      next_status: String(status || "").trim().toLowerCase(),
+      change_reason: String(reason || "").trim(),
+    });
+  },
+
+  async platformListSupportCases({ clubId = null, status = "", limit = 100 } = {}) {
+    return supaFetch("POST", "rpc/platform_list_support_cases", {
+      target_club_id: clubId || null,
+      status_filter: String(status || "").trim().toLowerCase(),
+      result_limit: Math.max(1, Math.min(Number(limit) || 100, 200)),
+    });
+  },
+
+  async platformGetSupportCase(caseId) {
+    return supaFetch("POST", "rpc/platform_get_support_case", {
+      target_case_id: String(caseId || "").trim(),
+    });
+  },
+
+  async platformCreateSupportCase(clubId, { subject, description = "", priority = "normal", requesterEmail = "" } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/platform_create_support_case", {
+      target_club_id: id,
+      case_subject: String(subject || "").trim(),
+      case_description: String(description || "").trim(),
+      case_priority: String(priority || "normal").trim().toLowerCase(),
+      requester_email: String(requesterEmail || "").trim() || null,
+    });
+  },
+
+  async platformUpdateSupportCase(caseId, { status = null, priority = null, note = null } = {}) {
+    return supaFetch("POST", "rpc/platform_update_support_case", {
+      target_case_id: String(caseId || "").trim(),
+      next_status: status ? String(status).trim().toLowerCase() : null,
+      next_priority: priority ? String(priority).trim().toLowerCase() : null,
+      update_note: note ? String(note).trim() : null,
+    });
+  },
+
+  async platformListActivity(limit = 50) {
+    return supaFetch("POST", "rpc/platform_list_activity", {
+      result_limit: Math.max(1, Math.min(Number(limit) || 50, 100)),
+    });
+  },
+
   async getClubOnboarding(clubId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/get_club_onboarding", {

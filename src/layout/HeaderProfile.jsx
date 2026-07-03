@@ -34,6 +34,8 @@ export default function HeaderProfile({
   activeClubId = "",
   activeRole = "viewer",
   workspaceAccess = null,
+  roleLabelOverride = "",
+  platformMode = false,
   onClubChange,
   onOpenSettings,
   onSignOut,
@@ -45,7 +47,7 @@ export default function HeaderProfile({
   const displayName = useMemo(() => getDisplayName(user), [user]);
   const initials = useMemo(() => getInitials(displayName), [displayName]);
   const email = user?.email || "Secure workspace account";
-  const roleLabel = getRoleLabel(activeRole);
+  const roleLabel = roleLabelOverride || getRoleLabel(activeRole);
   const canOpenSettings = Boolean(workspaceAccess?.canManageSettings);
   const canViewAccess = Boolean(workspaceAccess?.canViewAudit);
 
@@ -148,7 +150,7 @@ export default function HeaderProfile({
                     <div className="truncate text-[11px] font-semibold text-slate-400">{roleLabel}</div>
                   </div>
                 </div>
-                {memberships.length > 1 ? (
+                {!platformMode && memberships.length > 1 ? (
                   <label className="mt-3 block">
                     <span className="sr-only">Select club workspace</span>
                     <span className="relative block">
@@ -176,7 +178,14 @@ export default function HeaderProfile({
             </div>
 
             <div className="p-2">
-              {canViewAccess ? (
+              {platformMode ? (
+                <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                  <div className="text-sm font-black text-slate-900">Daxora platform access</div>
+                  <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                    Internal administration and support tooling. Operational club data still requires owner-approved support access.
+                  </div>
+                </div>
+              ) : canViewAccess ? (
                 <button
                   type="button"
                   role="menuitem"

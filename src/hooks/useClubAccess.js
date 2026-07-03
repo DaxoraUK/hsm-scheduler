@@ -139,10 +139,12 @@ export function useClubAccess(authSession) {
     refresh();
   }, [refresh]);
 
-  const selectClub = useCallback((clubId) => {
-    const next = memberships.find((membership) => membership.clubId === clubId);
+  const selectClub = useCallback((clubId, availableMemberships = memberships) => {
+    const candidates = Array.isArray(availableMemberships) ? availableMemberships : memberships;
+    const next = candidates.find((membership) => membership.clubId === clubId);
     if (!next || !userId) return false;
-    verifiedAccessRef.current = { userId, memberships, activeClubId: next.clubId };
+    verifiedAccessRef.current = { userId, memberships: candidates, activeClubId: next.clubId };
+    setMemberships(candidates);
     setActiveClubId(next.clubId);
     setUserScopedItem(userId, ACTIVE_CLUB_KEY, next.clubId);
     setStatus("ready");
