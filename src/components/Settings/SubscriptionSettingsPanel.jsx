@@ -150,7 +150,7 @@ export default function SubscriptionSettingsPanel({
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Plan catalogue</div><h3 className="mt-2 text-2xl font-black text-slate-950">Ground Control packages</h3><p className="mt-2 text-sm font-semibold text-slate-500">Pricing is shown for commercial planning. Live self-service billing is connected in the billing phase.</p></div>
+          <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Plan catalogue</div><h3 className="mt-2 text-2xl font-black text-slate-950">Ground Control packages</h3><p className="mt-2 text-sm font-semibold text-slate-500">Pricing is shown for commercial planning. Secure self-service billing is managed from Billing & legal when the launch configuration is ready.</p></div>
           <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">Owner view only</div>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">

@@ -9,6 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { getRoleLabel } from "../lib/security/permissions.js";
+import ProfileDialog from "../components/profile/ProfileDialog.jsx";
 
 function getDisplayName(user) {
   return (
@@ -28,7 +29,8 @@ function getInitials(name = "") {
 
 
 export default function HeaderProfile({
-  user,
+  session = null,
+  user: userProp = null,
   clubName = "Ground Control",
   memberships = [],
   activeClubId = "",
@@ -38,10 +40,13 @@ export default function HeaderProfile({
   platformMode = false,
   onClubChange,
   onOpenSettings,
+  onProfileUpdated,
   onSignOut,
 }) {
+  const user = session?.user || userProp;
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef(null);
 
   const displayName = useMemo(() => getDisplayName(user), [user]);
@@ -178,6 +183,21 @@ export default function HeaderProfile({
             </div>
 
             <div className="p-2">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setOpen(false); setProfileOpen(true); }}
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <UserRound size={18} strokeWidth={2.3} />
+                </span>
+                <span>
+                  <span className="block text-sm font-black text-slate-900">My profile</span>
+                  <span className="block text-xs font-semibold text-slate-500">Change the name shown across Ground Control</span>
+                </span>
+              </button>
+
               {platformMode ? (
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
                   <div className="text-sm font-black text-slate-900">Daxora platform access</div>
@@ -255,6 +275,12 @@ export default function HeaderProfile({
           </div>
         )}
       </div>
+      <ProfileDialog
+        open={profileOpen}
+        session={session || { user }}
+        onClose={() => setProfileOpen(false)}
+        onUpdated={onProfileUpdated}
+      />
     </div>
   );
 }

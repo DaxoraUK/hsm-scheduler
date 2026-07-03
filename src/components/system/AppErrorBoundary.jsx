@@ -1,8 +1,9 @@
 import React from "react";
 import { AlertTriangle, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
-import { Auth } from "../../lib/supabase.js";
+import { Auth, DB } from "../../lib/supabase.js";
 import { clearTenantStorageContext } from "../../lib/storage/tenantStorage.js";
 import { createSupportReference } from "../../lib/errors/recovery.js";
+import { buildClientEvent, getClientReleaseMetadata, isClientTelemetryEnabled } from "../../lib/monitoring/clientTelemetry.js";
 
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -20,6 +21,24 @@ export default class AppErrorBoundary extends React.Component {
       componentStack: info?.componentStack,
       reference: this.state.reference,
     });
+
+    if (isClientTelemetryEnabled() && Auth.getSession()?.access_token) {
+      const releaseMetadata = getClientReleaseMetadata();
+      DB.recordClientEvent(buildClientEvent({
+        level: "error",
+        category: "application_crash",
+        message: error?.message || "Ground Control application crash",
+        reference: this.state.reference,
+        route: typeof window === "undefined" ? "" : window.location.pathname,
+        ...releaseMetadata,
+        context: {
+          errorName: error?.name || "Error",
+          componentStack: info?.componentStack || "",
+        },
+      })).catch((telemetryError) => {
+        console.warn("Ground Control telemetry could not be recorded", telemetryError);
+      });
+    }
   }
 
   reload = () => {

@@ -256,6 +256,36 @@ async function authenticatedRequest(method, path, body, extraHeaders, retry) {
 export const supaFetch = async (method, path, body = null, extraHeaders = {}) =>
   authenticatedRequest(method, path, body, extraHeaders, true);
 
+async function invokeEdgeFunction(functionName, body = {}) {
+  if (!isSupaConfigured()) {
+    throw new SupabaseRequestError("Supabase is not configured", { code: "SUPABASE_NOT_CONFIGURED", path: functionName });
+  }
+  const session = await Auth.getValidSession();
+  if (!session?.access_token) {
+    throw new SupabaseRequestError("Sign in again to continue", { status: 401, code: "AUTH_REQUIRED", path: functionName });
+  }
+
+  const response = await fetch(`${SUPA_URL}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: {
+      apikey: getSupaKey(),
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const payload = await readResponse(response);
+  if (!response.ok) {
+    throw new SupabaseRequestError(responseError(payload, `Billing request failed (${response.status})`), {
+      status: response.status,
+      code: payload?.code || "EDGE_FUNCTION_FAILED",
+      details: payload,
+      path: functionName,
+    });
+  }
+  return payload;
+}
+
 function requireClubId(clubId) {
   const value = String(clubId || "").trim();
   if (!value) {
@@ -315,6 +345,26 @@ async function replaceCollection(clubId, collection, records) {
 }
 
 export const DB = {
+  async updateMyProfile(displayName) {
+    return supaFetch("POST", "rpc/update_my_profile", {
+      next_display_name: String(displayName || "").trim(),
+    });
+  },
+
+  async recordClientEvent(event = {}) {
+    return supaFetch("POST", "rpc/record_client_event", {
+      target_club_id: event.clubId || null,
+      event_level: String(event.level || "error").trim().toLowerCase(),
+      event_category: String(event.category || "manual_report").trim().toLowerCase(),
+      event_message: String(event.message || "Unexpected client error").trim(),
+      event_reference: String(event.reference || "").trim() || null,
+      event_route: String(event.route || "").trim() || null,
+      app_release: String(event.release || "").trim() || null,
+      app_environment: String(event.environment || "").trim() || null,
+      event_context: event.context && typeof event.context === "object" ? event.context : {},
+    });
+  },
+
   async listMemberships() {
     const session = await Auth.getValidSession();
     if (!session?.user?.id) {
@@ -596,6 +646,37 @@ export const DB = {
     });
   },
 
+  async getBillingLegalStatus(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/get_billing_legal_status", {
+      target_club_id: id,
+    });
+  },
+
+  async acceptBillingLegalDocuments(clubId, documents, authorityConfirmed = false) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/accept_billing_legal_documents", {
+      target_club_id: id,
+      accepted_documents: documents && typeof documents === "object" ? documents : {},
+      authority_confirmed: Boolean(authorityConfirmed),
+      browser_user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
+    });
+  },
+
+  async createCheckoutSession(clubId, planCode, billingInterval = "monthly") {
+    const id = requireClubId(clubId);
+    return invokeEdgeFunction("create-checkout-session", {
+      clubId: id,
+      planCode: String(planCode || "").trim().toLowerCase(),
+      billingInterval: String(billingInterval || "monthly").trim().toLowerCase(),
+    });
+  },
+
+  async createBillingPortal(clubId) {
+    const id = requireClubId(clubId);
+    return invokeEdgeFunction("create-billing-portal", { clubId: id });
+  },
+
   async platformSetClubSubscription(clubId, {
     planCode,
     status,
@@ -693,6 +774,75 @@ export const DB = {
   async platformListActivity(limit = 50) {
     return supaFetch("POST", "rpc/platform_list_activity", {
       result_limit: Math.max(1, Math.min(Number(limit) || 50, 100)),
+    });
+  },
+
+  async platformGetPilotLaunchReadiness() {
+    return supaFetch("POST", "rpc/platform_get_pilot_launch_readiness", {});
+  },
+
+  async platformUpdateLaunchGate({ code, status, evidence = "", ownerLabel = "", dueDate = null } = {}) {
+    return supaFetch("POST", "rpc/platform_update_launch_gate", {
+      gate_code: String(code || "").trim(),
+      next_status: String(status || "not_started").trim().toLowerCase(),
+      next_evidence: String(evidence || "").trim(),
+      next_owner_label: String(ownerLabel || "").trim(),
+      next_due_date: dueDate || null,
+    });
+  },
+
+  async platformUpsertPilot(pilot = {}) {
+    const id = requireClubId(pilot.clubId);
+    return supaFetch("POST", "rpc/platform_upsert_pilot", {
+      target_club_id: id,
+      next_stage: String(pilot.stage || "candidate").trim().toLowerCase(),
+      next_health: String(pilot.health || "on_track").trim().toLowerCase(),
+      next_coordinator_user_id: pilot.coordinatorUserId || null,
+      next_target_start_date: pilot.targetStartDate || null,
+      next_target_review_date: pilot.targetReviewDate || null,
+      next_notes: String(pilot.notes || "").trim(),
+      next_checklist: pilot.checklist && typeof pilot.checklist === "object" ? pilot.checklist : {},
+    });
+  },
+
+  async platformResolveClientEvent(eventId, note = "") {
+    return supaFetch("POST", "rpc/platform_resolve_client_event", {
+      target_event_id: String(eventId || "").trim(),
+      resolution_note: String(note || "").trim(),
+    });
+  },
+
+  async platformGetBillingReadiness() {
+    return supaFetch("POST", "rpc/platform_get_billing_readiness", {});
+  },
+
+  async platformUpdateLegalSettings(settings = {}) {
+    return supaFetch("POST", "rpc/platform_update_legal_settings", {
+      next_legal_name: String(settings.legalName || "").trim(),
+      next_trading_name: String(settings.tradingName || "Daxora").trim(),
+      next_service_address: String(settings.serviceAddress || "").trim(),
+      next_website_url: String(settings.websiteUrl || "").trim(),
+      next_support_email: String(settings.supportEmail || "").trim(),
+      next_privacy_email: String(settings.privacyEmail || "").trim(),
+      next_governing_law: String(settings.governingLaw || "England and Wales").trim(),
+      next_stripe_mode: String(settings.stripeMode || "disabled").trim().toLowerCase(),
+      next_tax_status: String(settings.taxStatus || "not_configured").trim().toLowerCase(),
+      next_vat_number: String(settings.vatNumber || "").trim() || null,
+      next_invoice_prefix: String(settings.invoicePrefix || "DAX").trim(),
+    });
+  },
+
+  async platformPublishLegalDocument(document = {}) {
+    return supaFetch("POST", "rpc/platform_publish_legal_document", {
+      document_code: String(document.code || "").trim().toLowerCase(),
+      next_version: String(document.version || "").trim(),
+      next_title: String(document.title || "").trim(),
+      next_category: String(document.category || "commercial").trim().toLowerCase(),
+      next_document_url: String(document.documentUrl || "").trim(),
+      next_content_hash: String(document.contentHash || "").trim(),
+      next_required_for_checkout: Boolean(document.requiredForCheckout),
+      next_status: String(document.status || "draft").trim().toLowerCase(),
+      next_effective_at: document.effectiveAt || null,
     });
   },
 

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgePoundSterling,
+  ReceiptText,
   Building2,
   CheckCircle2,
   CirclePause,
@@ -14,6 +15,7 @@ import {
   LockKeyhole,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
   ShieldCheck,
   TicketCheck,
@@ -24,6 +26,8 @@ import {
 import { toast } from "sonner";
 
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
+import PlatformBillingLegalPanel from "../components/PlatformBillingLegalPanel.jsx";
+import PlatformPilotLaunchPanel from "../components/PlatformPilotLaunchPanel.jsx";
 import { DB } from "../lib/supabase.js";
 import {
   CASE_PRIORITIES,
@@ -44,6 +48,8 @@ import {
 const PANEL_TABS = Object.freeze([
   ["clubs", "Clubs", Building2],
   ["cases", "Support cases", LifeBuoy],
+  ["billing", "Billing & legal", ReceiptText],
+  ["launch", "Pilot & launch", Rocket],
   ["activity", "Platform activity", Activity],
 ]);
 
@@ -638,6 +644,14 @@ export default function PlatformAdminPage({
             )}
           </section>
         </div>
+      ) : null}
+
+      {tab === "billing" ? (
+        <PlatformBillingLegalPanel isPlatformAdmin={platformContext.isPlatformAdmin} />
+      ) : null}
+
+      {tab === "launch" ? (
+        <PlatformPilotLaunchPanel clubs={clubs} isPlatformAdmin={platformContext.isPlatformAdmin} />
       ) : null}
 
       {tab === "activity" ? (

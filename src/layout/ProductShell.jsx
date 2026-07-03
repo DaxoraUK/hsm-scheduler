@@ -86,6 +86,7 @@ export default function ProductShell({
   onRetrySync,
   onClubChange,
   onEndSupportAccess,
+  onProfileUpdated,
   onSignOut,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -239,7 +240,7 @@ export default function ProductShell({
               </div>
             </div>
             <HeaderProfile
-              user={authSession?.user}
+              session={authSession}
               clubName={platformOnly ? "Daxora Platform" : club?.name}
               memberships={memberships}
               activeClubId={activeClubId}
@@ -249,6 +250,7 @@ export default function ProductShell({
               platformMode={platformOnly}
               onClubChange={onClubChange}
               onOpenSettings={(settingsTab = "overview") => nav.goToSettings({ settingsTab, scroll: false })}
+              onProfileUpdated={onProfileUpdated}
               onSignOut={onSignOut}
             />
           </header>

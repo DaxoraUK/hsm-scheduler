@@ -1,33 +1,36 @@
-# Patch contents — Daxora Admin and Support Tooling
+# Ground Control Pilot and Launch Readiness Patch
 
-This archive contains only files changed for this phase.
-
-## Application
+## Changed application files
 
 - `src/AppCore.jsx`
-- `src/hooks/useClubAccess.js`
-- `src/hooks/usePlatformOperator.js`
-- `src/layout/HeaderProfile.jsx`
 - `src/layout/ProductShell.jsx`
-- `src/lib/platform/adminModel.js`
-- `src/lib/supabase.js`
+- `src/layout/HeaderProfile.jsx`
 - `src/pages/PlatformAdminPage.jsx`
+- `src/lib/supabase.js`
+- `src/components/system/AppErrorBoundary.jsx`
+- `src/hooks/useGlobalErrorNotifications.js`
 
-## Supabase
+## New application files
 
-- `supabase/migrations/202607030005_admin_support_tooling.sql`
-- `supabase/tests/admin_support_tooling.sql`
+- `src/components/profile/ProfileDialog.jsx`
+- `src/components/PlatformPilotLaunchPanel.jsx`
+- `src/lib/profile/profileModel.js`
+- `src/lib/platform/pilotModel.js`
+- `src/lib/monitoring/clientTelemetry.js`
 
-## Regression tests
+## Database and verification
 
-- `tests/regression/admin-support-model.test.js`
-- `tests/regression/admin-support-repository.test.js`
-- `tests/regression/admin-support-tooling-migration.test.js`
+- `supabase/migrations/202607030007_pilot_launch_readiness.sql`
+- `supabase/tests/pilot_launch_readiness.sql`
+- `tests/regression/profile-pilot-launch.test.js`
+- `tests/regression/client-telemetry.test.js`
+- `tests/regression/pilot-launch-migration.test.js`
 
-## Documentation
+## Operational documentation
 
-- `docs/ADMIN_SUPPORT_TOOLING_IMPLEMENTATION.md`
-- `docs/ADMIN_SUPPORT_TOOLING_ROLLOUT.md`
-- `PATCH_CONTENTS.md`
-
-No `.env`, keys, `node_modules`, `dist`, `.git`, package lock replacement or service-role credential is included.
+- `.env.production.example`
+- `docs/PILOT_LAUNCH_READINESS_IMPLEMENTATION.md`
+- `docs/PILOT_LAUNCH_READINESS_ROLLOUT.md`
+- `docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`
+- `docs/PILOT_OPERATIONS_RUNBOOK.md`
+- `docs/INCIDENT_RESPONSE_RUNBOOK.md`

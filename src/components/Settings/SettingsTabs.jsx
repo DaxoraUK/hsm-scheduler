@@ -1,6 +1,7 @@
 import React from "react";
 import {
   BadgePoundSterling,
+  ReceiptText,
   Building2,
   CalendarClock,
   Database,
@@ -23,6 +24,7 @@ const TAB_GROUPS = [
       ["overview", "Overview", LayoutGrid],
       ["workspace", "Workspace", Gauge],
       ["subscription", "Plan & subscription", BadgePoundSterling],
+      ["billing", "Billing & legal", ReceiptText],
       ["onboarding", "Setup wizard", Rocket],
       ["access", "Access & audit", ShieldCheck],
     ],
@@ -60,7 +62,7 @@ export default function SettingsTabs({ settingsTab, setSettingsTab, productionMo
     tabs: group.tabs.filter(([key]) => {
       if (subscription?.isReadOnly && key !== "subscription") return false;
       if (productionMode && key === "testdata") return false;
-      if (key === "subscription" && !workspaceAccess?.canManageSubscription) return false;
+      if (["subscription", "billing"].includes(key) && !workspaceAccess?.canManageSubscription) return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
       if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;
       return true;

@@ -20,6 +20,7 @@ import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
 import { useClubEntitlements } from "./hooks/useClubEntitlements.js";
+import { useBillingReadiness } from "./hooks/useBillingReadiness.js";
 import { useSessionLifecycle } from "./hooks/useSessionLifecycle.js";
 import { usePlatformOperator } from "./hooks/usePlatformOperator.js";
 import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
@@ -398,6 +399,32 @@ function App(){
     ()=>applySubscriptionAccess(roleWorkspaceAccess,subscription),
     [roleWorkspaceAccess,subscription]
   );
+
+  const {
+    billing,
+    status:billingStatus,
+    error:billingError,
+    refresh:refreshBilling,
+  }=useBillingReadiness(
+    activeClubId,
+    clubAccessStatus==="ready"&&roleWorkspaceAccess.role==="owner"
+  );
+
+  useEffect(()=>{
+    if(typeof window==="undefined") return;
+    const url=new URL(window.location.href);
+    const billingResult=url.searchParams.get("billing");
+    if(!billingResult) return;
+    url.searchParams.delete("billing");
+    window.history.replaceState({},"",`${url.pathname}${url.search}${url.hash}`);
+    if(billingResult==="success"){
+      Promise.all([refreshSubscription(),refreshBilling()]).finally(()=>{
+        toast.success("Billing setup completed",{description:"Ground Control is refreshing the subscription from Stripe."});
+      });
+    }else if(billingResult==="cancelled"){
+      toast.info("Checkout cancelled",{description:"No subscription change was applied."});
+    }
+  },[refreshBilling,refreshSubscription]);
 
   const [onboardingOpen,setOnboardingOpen]=useState(false);
   const {
@@ -1190,6 +1217,14 @@ const { resetAll } = useOperationsActions({
   const sh=String(startHour).padStart(2,"0")+":"+String(startMin).padStart(2,"0");
   const eh=String(endHour).padStart(2,"0")+":"+String(endMin).padStart(2,"0");
 
+  const handleProfileUpdated=useCallback((nextSession)=>{
+    if(!nextSession?.access_token||!nextSession?.user) return;
+    Auth.saveSession(nextSession);
+    setAuthSession(nextSession);
+    refreshPlatformContext?.();
+    refreshClubAccess?.();
+  },[refreshClubAccess,refreshPlatformContext]);
+
   const handleSignOut=useCallback(async()=>{
     const accessToken=authSession?.access_token;
 
@@ -1261,6 +1296,7 @@ const { resetAll } = useOperationsActions({
       sessionStatus={sessionStatus}
       onRetrySync={syncRetryAvailable?retryLastSync:null}
       onClubChange={handleClubChange}
+      onProfileUpdated={handleProfileUpdated}
       onSignOut={handleSignOut}
     >
       <Suspense fallback={<LazyPageFallback label="Daxora administration" />}>
@@ -1370,6 +1406,7 @@ return(
     sessionStatus={sessionStatus}
     onRetrySync={syncRetryAvailable?retryLastSync:null}
     onClubChange={handleClubChange}
+    onProfileUpdated={handleProfileUpdated}
     onEndSupportAccess={handleEndSupportAccess}
     onSignOut={handleSignOut}
   >
@@ -1812,6 +1849,10 @@ return(
             subscriptionStatus={subscriptionStatus}
             subscriptionError={subscriptionError}
             onRefreshSubscription={refreshSubscription}
+            billing={billing}
+            billingStatus={billingStatus}
+            billingError={billingError}
+            onRefreshBilling={refreshBilling}
             onboarding={onboarding}
             onboardingStatus={onboardingStatus}
             onboardingError={onboardingError}
