@@ -1,3 +1,4 @@
+import { isParkingEnabled } from "../settings/workspaceSettings.js";
 /**
  * Club Domain
  *
@@ -13,6 +14,24 @@ function asArray(value) {
 function safeNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function firstDefinedParkingValue(source = {}) {
+  const candidates = [
+    source.carParkSpaces,
+    source.parkingSpaces,
+    source.parkingCapacity,
+    source.capacity,
+    source.spaces,
+  ];
+
+  return candidates.find(
+    (value) => value !== null && value !== undefined && value !== ""
+  );
+}
+
+function normaliseParkingCapacity(value, fallback = 0) {
+  return Math.max(0, safeNumber(value, fallback));
 }
 
 export function getClubName(club = {}) {
@@ -44,8 +63,13 @@ export function getClubSites(club = {}) {
       name: site.name || site.label || `Site ${index + 1}`,
       postcode: site.postcode || site.weatherPostcode || site.venuePostcode || "",
       weatherPostcode: site.weatherPostcode || site.postcode || "",
-      isPrimary: Boolean(site.isPrimary || site.primary),
-      parkingCapacity: safeNumber(site.parkingCapacity || site.spaces || site.carParkSpaces, 0),
+      isPrimary: Boolean(
+        site.isPrimary ||
+        site.primary ||
+        site.id === club?.primarySiteId ||
+        (!club?.primarySiteId && index === 0)
+      ),
+      parkingCapacity: normaliseParkingCapacity(firstDefinedParkingValue(site), 0),
       facilities: asArray(site.facilities),
       raw: site,
     }));
@@ -58,7 +82,7 @@ export function getClubSites(club = {}) {
       postcode: club?.weatherPostcode || club?.postcode || club?.venuePostcode || "",
       weatherPostcode: club?.weatherPostcode || club?.postcode || club?.venuePostcode || "",
       isPrimary: true,
-      parkingCapacity: safeNumber(club?.parkingCapacity || club?.carParkSpaces, 0),
+      parkingCapacity: normaliseParkingCapacity(firstDefinedParkingValue(club), 0),
       facilities: asArray(club?.facilities),
       raw: club,
     },
@@ -88,12 +112,20 @@ export function getWeatherPostcode(club = {}) {
 
 export function getParkingCapacity(club = {}, fallback = 0) {
   const primary = getPrimarySite(club);
-  const capacity = safeNumber(
-    club?.parkingCapacity || club?.carParkSpaces || primary?.parkingCapacity || fallback,
+  const primaryValue = firstDefinedParkingValue(primary?.raw || primary || {});
+
+  // Site-level configuration is canonical. An explicit zero means the venue
+  // has not been configured yet and must not be replaced by a stale legacy
+  // club-level value.
+  if (primaryValue !== undefined) {
+    return normaliseParkingCapacity(primaryValue, fallback);
+  }
+
+  const clubValue = firstDefinedParkingValue(club);
+  return normaliseParkingCapacity(
+    clubValue !== undefined ? clubValue : fallback,
     fallback
   );
-
-  return Number.isFinite(capacity) ? capacity : 0;
 }
 
 export function getClubPitches(club = {}, fallbackPitches = []) {
@@ -137,7 +169,7 @@ export function createClubDomain({
     readiness: {
       hasSites: sites.length > 0,
       hasWeatherPostcode: Boolean(getWeatherPostcode(club)),
-      hasParkingCapacity: getParkingCapacity(club) > 0,
+      hasParkingCapacity: !isParkingEnabled(club) || getParkingCapacity(club) > 0,
       hasTeams: normalisedTeams.length > 0,
       hasPitches: normalisedPitches.length > 0,
     },

@@ -155,7 +155,18 @@ export function calculateOperationsIntelligence({
     }));
   }
 
-  if (parking.isOverCapacity) {
+  if (parking.enabled !== false && !parking.configured) {
+    insights.push(buildInsight({
+      id: "parking-configuration",
+      severity: "attention",
+      domain: "parking",
+      title: "Parking capacity needs configuring",
+      detail: "Parking & Arrivals is enabled but the primary venue capacity is set to zero.",
+      guidance: "Set the venue capacity or switch Parking & Arrivals off in Workspace settings.",
+      metric: "Setup",
+      target: "parkingIntelligence",
+    }));
+  } else if (parking.enabled !== false && parking.isOverCapacity) {
     insights.push(buildInsight({
       id: "parking-over-capacity",
       severity: "critical",
@@ -166,7 +177,7 @@ export function calculateOperationsIntelligence({
       metric: `${parking.utilisation}% peak`,
       target: "parkingIntelligence",
     }));
-  } else if (parking.isHighPressure || parking.isOverConcurrentLimit) {
+  } else if (parking.enabled !== false && (parking.isHighPressure || parking.isOverConcurrentLimit)) {
     insights.push(buildInsight({
       id: "parking-pressure",
       severity: "attention",
@@ -287,7 +298,9 @@ export function calculateOperationsIntelligence({
       severity: "healthy",
       domain: "communications",
       title: "Matchday is ready for final communications",
-      detail: "No major operational risks were detected from fixtures, parking, officials, rules or weather setup.",
+      detail: parking.enabled === false
+        ? "No major operational risks were detected from fixtures, officials, rules or weather setup."
+        : "No major operational risks were detected from fixtures, parking, officials, rules or weather setup.",
       guidance: "Review coach messages and publish the weekend schedule.",
       metric: "Ready",
       target: "coachMessages",
@@ -316,7 +329,8 @@ export function calculateOperationsIntelligence({
     metrics: {
       ...metrics,
       activeFixtures: games.length,
-      parkingPeak: parking.utilisation || 0,
+      parkingEnabled: parking.enabled !== false,
+      parkingPeak: parking.enabled === false ? 0 : parking.utilisation || 0,
       missingOfficials,
       busiestKickoff: biggestCluster?.time || "—",
       busiestPitch: busiestPitch?.pitch || "—",

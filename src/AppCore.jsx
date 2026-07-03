@@ -819,6 +819,9 @@ return(
     satHasRun={satHasRun}
     sunHasRun={sunHasRun}
     midweekHasRun={activeMidweekHasRun}
+    satDate={satDate}
+    sunDate={sunDate}
+    midweekDate={midweekDate}
     readiness={readiness}
     midweekReadiness={activeMidweekReadiness}
     midweekEnabled={midweekEnabled}

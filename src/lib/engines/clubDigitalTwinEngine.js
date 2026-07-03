@@ -248,18 +248,32 @@ export function buildClubDigitalTwin({
       summary: closedPitchIds.size ? "Review" : "Ready",
       detail: `${activePitches.length}/${pitches.length} pitches open across ${sites.length} site${sites.length === 1 ? "" : "s"}.`,
     }),
-    domain({
-      id: "parking",
-      label: "Parking",
-      score: parking.healthScore,
-      status: parking.isOverCapacity ? "danger" : parking.isHighPressure || parking.isOverConcurrentLimit ? "warning" : "success",
-      summary: parking.isOverCapacity ? "Action" : parking.isHighPressure || parking.isOverConcurrentLimit ? "Review" : "Ready",
-      detail: parking.capacity
-        ? parking.scope === "weekend-peak"
-          ? `${parking.utilisation}% weekend peak on ${parking.peakDayLabel || "the busiest day"} at ${parking.peakTime}.`
-          : `${parking.utilisation}% peak use at ${parking.peakTime}.`
-        : "Parking capacity is not configured.",
-    }),
+    ...(parking.enabled === false
+      ? []
+      : [domain({
+          id: "parking",
+          label: "Parking",
+          score: parking.healthScore,
+          status: !parking.configured
+            ? "warning"
+            : parking.isOverCapacity
+              ? "danger"
+              : parking.isHighPressure || parking.isOverConcurrentLimit
+                ? "warning"
+                : "success",
+          summary: !parking.configured
+            ? "Configure"
+            : parking.isOverCapacity
+              ? "Action"
+              : parking.isHighPressure || parking.isOverConcurrentLimit
+                ? "Review"
+                : "Ready",
+          detail: parking.capacity
+            ? parking.scope === "weekend-peak"
+              ? `${parking.utilisation}% weekend peak on ${parking.peakDayLabel || "the busiest day"} at ${parking.peakTime}.`
+              : `${parking.utilisation}% peak use at ${parking.peakTime}.`
+            : "Parking capacity is not configured.",
+        })]),
     domain({
       id: "officials",
       label: "Officials",
@@ -305,9 +319,10 @@ export function buildClubDigitalTwin({
       fixturesScheduled: activeFixtures.length,
       officialsAssigned: officials.metrics.confirmed,
       officialsRequired: officials.metrics.fixtures,
-      parkingPeakCars: parking.peakCars,
+      parkingEnabled: parking.enabled !== false,
+      parkingPeakCars: parking.enabled === false ? 0 : parking.peakCars,
       parkingCapacity: parking.capacity,
-      parkingUtilisation: parking.utilisation,
+      parkingUtilisation: parking.enabled === false ? 0 : parking.utilisation,
       parkingPeakDay: parking.peakDayLabel || parking.dayLabel || "Matchday",
       parkingPeakTime: parking.peakTime,
       parkingScope: parking.scope || "single-day",

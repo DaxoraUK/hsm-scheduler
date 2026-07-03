@@ -9,6 +9,8 @@ import {
   getSuitablePitchesForFixture,
 } from "../intelligence/pitch/pitchService.js";
 import { getFixtureParkingImpact, getMatchdayParkingImpact } from "./parkingEngine.js";
+import { getSuggestionWindowForFixture } from "../intelligence/scheduling/kickOffRules.js";
+import { isParkingEnabled } from "../settings/workspaceSettings.js";
 
 function getTimeSortScore(time, currentTime) {
   const timeMins = timeToMinutes(time);
@@ -25,7 +27,8 @@ function getConflictTitle(type) {
   if (type === "referee_clash") return "Official unavailable";
   if (type === "pitch_clash") return "Move cannot be completed";
   if (type === "pitch_unsuitable") return "Pitch not suitable";
-  if (type === "parking_concurrency") return "Parking capacity risk";
+  if (type === "parking_capacity") return "Parking over capacity";
+  if (type === "parking_concurrency") return "Parking control limit exceeded";
   return "Operational conflict";
 }
 
@@ -50,8 +53,8 @@ function getConflictAction(type) {
     return "Choose a pitch configured for this fixture format.";
   }
 
-  if (type === "parking_concurrency") {
-    return "Use a parking-safe kick-off or pitch recommendation. Ground Control will only show fixes that pass all operational checks.";
+  if (type === "parking_capacity" || type === "parking_concurrency") {
+    return "Use a parking-safe kick-off or pitch recommendation. Ground Control will only show alternatives that pass the relevant operational checks.";
   }
 
   return "Review the suggested alternatives before applying this change.";
@@ -73,14 +76,30 @@ function getTimingWindow({ club = {}, start, end } = {}) {
 
   const endMins =
     timeToMinutes(end) ??
-    (Number.isFinite(Number(club.endHour))
-      ? Number(club.endHour) * 60 + Number(club.endMin || 0)
-      : null) ??
-    11 * 60 + 30;
+    timeToMinutes(club.adultEndTime || club.adultLatestKickOff || club.latestAdultKickOff) ??
+    17 * 60;
 
   return {
     startMins,
     endMins,
+  };
+}
+
+function getFixtureTimingWindow({ fixture = {}, club = {}, start, end } = {}) {
+  const globalWindow = getTimingWindow({ club, start, end });
+  const fixtureWindow = getSuggestionWindowForFixture({ fixture, club });
+  const fixtureStartMins = timeToMinutes(fixtureWindow.start);
+  const fixtureEndMins = timeToMinutes(fixtureWindow.end);
+
+  return {
+    startMins:
+      fixtureStartMins == null
+        ? globalWindow.startMins
+        : Math.max(globalWindow.startMins, fixtureStartMins),
+    endMins:
+      fixtureEndMins == null
+        ? globalWindow.endMins
+        : Math.min(globalWindow.endMins, fixtureEndMins),
   };
 }
 
@@ -176,6 +195,53 @@ function scoreRecommendation({ current = {}, patch = {}, parking = {}, pitchCfg 
   if (patch.pitchId === current.pitchId) score += 5;
 
   return Math.max(1, Math.min(100, score));
+}
+
+function getRiskSlotCount(snapshot = {}, field) {
+  return Array.isArray(snapshot?.[field]) ? snapshot[field].length : 0;
+}
+
+function parkingRiskWorsens(before = {}, after = {}) {
+  if (!before.isOverCapacity && after.isOverCapacity) return true;
+  if (!before.isOverConcurrentLimit && after.isOverConcurrentLimit) return true;
+  if (!before.isHighPressure && after.isHighPressure) return true;
+
+  if (
+    getRiskSlotCount(after, "overCapacitySlots") >
+    getRiskSlotCount(before, "overCapacitySlots")
+  ) {
+    return true;
+  }
+
+  if (
+    getRiskSlotCount(after, "overConcurrentSlots") >
+    getRiskSlotCount(before, "overConcurrentSlots")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function parkingControlsResolved(snapshot = {}) {
+  return (
+    !snapshot.isOverCapacity &&
+    !snapshot.isOverConcurrentLimit &&
+    !snapshot.isHighPressure
+  );
+}
+
+function describeParkingOutcome(parking = {}) {
+  const beforePct = Number(parking.before?.percentage || 0);
+  const afterPct = Number(parking.after?.percentage || 0);
+  const afterLabel = parking.after?.label ? ` at ${parking.after.label}` : "";
+  const resolved = parkingControlsResolved(parking.after);
+
+  const outcome = resolved
+    ? "Parking returns within configured controls."
+    : "Parking pressure improves but still needs operational review.";
+
+  return `Matchday peak parking ${beforePct}% → ${afterPct}%${afterLabel}. ${outcome} Pitch, official and timing checks pass.`;
 }
 
 function validateCandidate({
@@ -412,9 +478,15 @@ export function getValidatedFixRecommendations({
   const current = fixtures[fixtureIndex];
 
   if (!current) return [];
+  if (allowParkingImprovement && !isParkingEnabled(club)) return [];
 
   const workingFixture = { ...current, ...basePatch };
-  const { startMins, endMins } = getTimingWindow({ club, start, end });
+  const { startMins, endMins } = getFixtureTimingWindow({
+    fixture: workingFixture,
+    club,
+    start,
+    end,
+  });
 
   if (startMins == null || endMins == null) return [];
 
@@ -423,7 +495,11 @@ export function getValidatedFixRecommendations({
     pitchCfg,
   }).filter((pitch) => !closedPitches.includes(pitch.id));
 
-  const currentPitch = pitchCfg.find((pitch) => pitch.id === workingFixture.pitchId);
+  const currentPitch = pitchCfg.find(
+    (pitch) =>
+      pitch.id === workingFixture.pitchId &&
+      !closedPitches.includes(pitch.id)
+  );
   const candidatePitches = [currentPitch, ...suitablePitches]
     .filter(Boolean)
     .filter(
@@ -485,6 +561,12 @@ export function getValidatedFixRecommendations({
 
       if (allowParkingImprovement && carDelta < minimumCarReduction) continue;
       if (allowParkingImprovement && percentDelta <= 0 && carDelta <= 0) continue;
+      if (
+        allowParkingImprovement &&
+        parkingRiskWorsens(parking.before, parking.after)
+      ) {
+        continue;
+      }
 
       const score = scoreRecommendation({ current, patch, parking, pitchCfg });
       const fixtureTitle = [current.homeTeam || current.team || current.fixture, current.awayTeam]
@@ -502,10 +584,10 @@ export function getValidatedFixRecommendations({
           : describePatch(patch, current),
         actionTitle: describePatch(patch, current),
         detail: allowParkingImprovement
-          ? `Move kick-off ${current.koTime || "TBC"} → ${patch.koTime || current.koTime}. Matchday peak parking ${parking.before.percentage}% → ${parking.after.percentage}%${parking.after.label ? ` at ${parking.after.label}` : ""}. No pitch, official or timing clashes created.`
+          ? describeParkingOutcome(parking)
           : parking.before.percentage > 0
-            ? `Parking ${parking.before.percentage}% → ${parking.after.percentage}%. No pitch, official or timing clashes created.`
-            : "No pitch, official or timing clashes created.",
+            ? `Parking ${parking.before.percentage}% → ${parking.after.percentage}%. Pitch, official, parking and timing checks pass.`
+            : "Pitch, official, parking and timing checks pass.",
         patch,
         score,
         validation,
@@ -515,7 +597,7 @@ export function getValidatedFixRecommendations({
         parkingAfter: parking.after,
         reduction: Math.max(0, carDelta),
         percentReduction: Math.max(0, percentDelta),
-        resolvesParking: parking.after.estimatedCars <= Number(club?.carParkSpaces || 57),
+        resolvesParking: parkingControlsResolved(parking.after),
       });
     }
   }

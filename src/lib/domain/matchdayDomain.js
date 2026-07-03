@@ -250,10 +250,24 @@ export function getMatchdayPitchById(matchday = {}, pitchId) {
 export function getMatchdayParkingCapacity(matchday = {}, fallback = 0) {
   const parking = asObject(matchday.parking);
   const club = asObject(matchday.club);
-  return safeNumber(
-    parking.capacity || parking.parkingCapacity || club.parkingCapacity || club.carParkSpaces,
-    fallback
+  const primarySite = Array.isArray(club.sites)
+    ? club.sites.find((site) => site?.isPrimary || site?.id === club.primarySiteId) || club.sites[0]
+    : null;
+  const candidates = [
+    parking.capacity,
+    parking.parkingCapacity,
+    primarySite?.carParkSpaces,
+    primarySite?.parkingSpaces,
+    primarySite?.parkingCapacity,
+    club.carParkSpaces,
+    club.parkingSpaces,
+    club.parkingCapacity,
+  ];
+  const value = candidates.find(
+    (candidate) => candidate !== null && candidate !== undefined && candidate !== ""
   );
+
+  return Math.max(0, safeNumber(value, fallback));
 }
 
 export default createMatchdayDomain;

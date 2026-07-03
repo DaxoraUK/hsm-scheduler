@@ -13,7 +13,7 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
-import { isMidweekEnabled } from "../../lib/settings/workspaceSettings.js";
+import { isMidweekEnabled, isParkingEnabled } from "../../lib/settings/workspaceSettings.js";
 
 function SetupCard({ icon: Icon, eyebrow, title, description, status, tone = "ready", metrics = [], onClick }) {
   const toneClasses = {
@@ -72,6 +72,7 @@ export default function SettingsOverviewPanel({
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
   const integrations = Object.values(club.integrations || {}).filter((integration) => integration?.enabled).length;
   const midweekEnabled = isMidweekEnabled(club);
+  const parkingEnabled = isParkingEnabled(club);
   const hasVenue = Boolean(primarySite?.venue || primarySite?.name || club.venue);
   const hasPostcode = Boolean(primarySite?.postcode || club.postcode || club.weatherPostcode);
   const hasScheduling = Number.isFinite(Number(startHour)) && Number.isFinite(Number(endHour));
@@ -125,10 +126,13 @@ export default function SettingsOverviewPanel({
           icon={Gauge}
           eyebrow="Workspace"
           title="Modules & environment"
-          description="Choose whether Midweek is visible and keep development tools away from live club staff."
+          description="Choose whether Midweek and Parking are visible and keep development tools away from live club staff."
           status={productionMode ? "Production" : "Development"}
           tone={productionMode ? "ready" : "attention"}
-          metrics={[{ label: "Midweek", value: midweekEnabled ? "On" : "Off" }]}
+          metrics={[
+            { label: "Midweek", value: midweekEnabled ? "On" : "Off" },
+            { label: "Parking", value: parkingEnabled ? "On" : "Off" },
+          ]}
           onClick={() => setSettingsTab("workspace")}
         />
 

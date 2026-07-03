@@ -1,17 +1,43 @@
 import { AVG_CARS } from "../../constants.js";
+import { getParkingCapacity } from "../../domain/clubDomain.js";
+import { isParkingEnabled } from "../../settings/workspaceSettings.js";
 import {
   getFixtureDuration,
   isFixtureActive,
   timeToMinutes,
 } from "../../engines/validationEngine.js";
-import { getSuggestionWindowForFixture, isKickOffAllowedForFixture } from "../scheduling/kickOffRules.js";
+function numberOrFallback(value, fallback) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nonNegativeNumber(value, fallback = 0) {
+  return Math.max(0, numberOrFallback(value, fallback));
+}
 
 export function getParkingSettings(club = {}) {
+  const enabled = isParkingEnabled(club);
+  const carParkSpaces = getParkingCapacity(club, 0);
+  const maxConcurrent = nonNegativeNumber(club.maxConcurrent, 3);
+  const parkingPressureThresholdPct = Math.min(
+    100,
+    nonNegativeNumber(club.parkingPressureThresholdPct, 85)
+  );
+
   return {
-    carParkSpaces: Number(club.carParkSpaces || 57),
-    maxConcurrent: Number(club.maxConcurrent || 3),
-    parkingPressureThresholdPct: Number(club.parkingPressureThresholdPct || 85),
-    avgCars: club.avgCars || AVG_CARS,
+    enabled,
+    configured: enabled && carParkSpaces > 0,
+    carParkSpaces,
+    maxConcurrent,
+    parkingPressureThresholdPct,
+    avgCars: {
+      ...AVG_CARS,
+      ...(club.avgCars || {}),
+    },
     pitchParkingImpact: club.pitchParkingImpact || club.pitchParkingOverrides || {},
   };
 }
@@ -28,11 +54,16 @@ function getPitchForFixture(fixture = {}, pitchCfg = []) {
 }
 
 export function pitchAffectsParking(fixture = {}, pitchCfg = [], club = {}) {
+  const settings = getParkingSettings(club);
+
+  if (!settings.enabled) {
+    return false;
+  }
+
   if (typeof fixture.affectsParking === "boolean") {
     return fixture.affectsParking;
   }
 
-  const settings = getParkingSettings(club);
   const pitchId = fixture.pitchId;
 
   if (
@@ -50,6 +81,9 @@ export function pitchAffectsParking(fixture = {}, pitchCfg = [], club = {}) {
 
   return true;
 }
+
+// Backwards-compatible alias for legacy parking chart components.
+export const fixtureAffectsParking = pitchAffectsParking;
 
 export function getFixtureWindow(fixture = {}) {
   const koMins =
@@ -93,11 +127,15 @@ export function getEstimatedCarsForFixture(fixture = {}, club = {}, pitchCfg = [
   const settings = getParkingSettings(club);
   const format = getFixtureFormat(fixture);
 
-  return (
-    fixture.carEstimate ||
-    settings.avgCars?.[format] ||
-    settings.avgCars?.[String(format).toLowerCase()] ||
-    AVG_CARS?.[format] ||
+  const explicitEstimate = numberOrFallback(fixture.carEstimate, null);
+  if (explicitEstimate != null) {
+    return Math.max(0, explicitEstimate);
+  }
+
+  return nonNegativeNumber(
+    settings.avgCars?.[format] ??
+      settings.avgCars?.[String(format).toLowerCase()] ??
+      AVG_CARS?.[format],
     8
   );
 }
@@ -164,13 +202,21 @@ export function getParkingLoad({
     estimatedCars,
     proposedCars,
     percentage,
-    overCapacity: estimatedCars > settings.carParkSpaces,
+    overCapacity:
+      settings.enabled && settings.configured && estimatedCars > settings.carParkSpaces,
     overConcurrentLimit:
-      affectsParking && overlappingFixtures.length + 1 > settings.maxConcurrent,
+      settings.enabled &&
+      affectsParking &&
+      settings.maxConcurrent > 0 &&
+      overlappingFixtures.length + 1 > settings.maxConcurrent,
   };
 }
 
-function getScheduleBounds(fixtures = [], fallbackStartMins = 8 * 60) {
+function getScheduleBounds(
+  fixtures = [],
+  fallbackStartMins = 8 * 60,
+  slotMins = 15
+) {
   const activeWindows = fixtures
     .filter(isFixtureActive)
     .map(getFixtureWindow)
@@ -187,8 +233,9 @@ function getScheduleBounds(fixtures = [], fallbackStartMins = 8 * 60) {
   const latest = Math.max(...activeWindows.map((window) => window.end));
 
   return {
-    start: Math.floor(Math.min(earliest, fallbackStartMins) / 30) * 30,
-    end: Math.ceil(Math.max(latest, 15 * 60) / 30) * 30,
+    start:
+      Math.floor(Math.min(earliest, fallbackStartMins) / slotMins) * slotMins,
+    end: Math.ceil(Math.max(latest, 15 * 60) / slotMins) * slotMins,
   };
 }
 
@@ -197,10 +244,11 @@ export function analyseParkingPressure({
   club = {},
   pitchCfg = [],
   startMins = 8 * 60,
-  slotMins = 30,
+  slotMins = 15,
 } = {}) {
+  const safeSlotMins = Math.max(5, nonNegativeNumber(slotMins, 15));
   const settings = getParkingSettings(club);
-  const bounds = getScheduleBounds(fixtures, startMins);
+  const bounds = getScheduleBounds(fixtures, startMins, safeSlotMins);
   const activeFixtures = fixtures.filter(isFixtureActive);
   const parkingFixtures = activeFixtures.filter((fixture) =>
     pitchAffectsParking(fixture, pitchCfg, club)
@@ -211,7 +259,7 @@ export function analyseParkingPressure({
 
   const slots = [];
 
-  for (let mins = bounds.start; mins <= bounds.end; mins += slotMins) {
+  for (let mins = bounds.start; mins <= bounds.end; mins += safeSlotMins) {
     const activeAtSlot = activeFixtures.filter((fixture) => {
       const window = getFixtureWindow(fixture);
       return window && window.start <= mins && window.end > mins;
@@ -245,9 +293,13 @@ export function analyseParkingPressure({
       exemptFixtureCount: exemptAtSlot.length,
       estimatedCars,
       occupancyPct,
-      overCapacity: estimatedCars > settings.carParkSpaces,
-      overConcurrentLimit: parkingAtSlot.length > settings.maxConcurrent,
-      highPressure: occupancyPct >= settings.parkingPressureThresholdPct,
+      overCapacity:
+        settings.enabled && settings.configured && estimatedCars > settings.carParkSpaces,
+      overConcurrentLimit:
+        settings.enabled && settings.maxConcurrent > 0 && parkingAtSlot.length > settings.maxConcurrent,
+      highPressure:
+        settings.enabled && settings.configured &&
+        occupancyPct >= settings.parkingPressureThresholdPct,
     });
   }
 
@@ -272,16 +324,19 @@ export function analyseParkingPressure({
     return cars > max ? cars : max;
   }, 0);
 
-  const safeBySpaces = maxEstimatedCarsPerCurrentLimit
-    ? Math.max(1, Math.floor(settings.carParkSpaces / maxEstimatedCarsPerCurrentLimit))
-    : settings.maxConcurrent;
+  const safeBySpaces =
+    settings.carParkSpaces > 0 && maxEstimatedCarsPerCurrentLimit > 0
+      ? Math.max(1, Math.floor(settings.carParkSpaces / maxEstimatedCarsPerCurrentLimit))
+      : settings.maxConcurrent;
 
   const suggestedMaxConcurrent = Math.max(
     1,
-    Math.min(settings.maxConcurrent, safeBySpaces)
+    safeBySpaces || settings.maxConcurrent || 1
   );
 
   return {
+    enabled: settings.enabled,
+    configured: settings.configured,
     settings,
     slots,
     peakSlot,
@@ -296,153 +351,13 @@ export function analyseParkingPressure({
     isHighPressure: highPressureSlots.length > 0,
     suggestedMaxConcurrent,
     canIncreaseConcurrentLimit:
+      settings.enabled &&
+      settings.configured &&
+      settings.maxConcurrent > 0 &&
+      suggestedMaxConcurrent > settings.maxConcurrent &&
       peakSlot &&
       peakSlot.estimatedCars < settings.carParkSpaces &&
-      busiestByGames &&
-      busiestByGames.fixtureCount >= settings.maxConcurrent,
+      !overCapacitySlots.length &&
+      !highPressureSlots.length,
   };
-}
-
-function buildCandidateWithTime(fixture = {}, koMins) {
-  const duration = getFixtureDuration({
-    ...fixture,
-    koMins,
-    endMins: null,
-  });
-
-  return {
-    ...fixture,
-    koTime: minutesToTime(koMins),
-    koMins,
-    endMins: koMins + duration,
-  };
-}
-
-function getPeakParkingFixtures(analysis = {}) {
-  return analysis.peakSlot?.parkingFixtures || [];
-}
-
-export function getParkingRecommendations({
-  fixtures = [],
-  club = {},
-  pitchCfg = [],
-  start = "08:30",
-  end = "17:00",
-  interval = 15,
-  limit = 4,
-} = {}) {
-  const analysis = analyseParkingPressure({ fixtures, club, pitchCfg });
-  const peak = analysis.peakSlot;
-
-  if (!peak || (!analysis.isOverCapacity && !analysis.isHighPressure && !analysis.isOverConcurrentLimit)) {
-    return [];
-  }
-
-  const startMins = timeToMinutes(start);
-  const endMins = timeToMinutes(end);
-
-  if (startMins == null || endMins == null) return [];
-
-  const recommendations = [];
-  const peakCars = peak.estimatedCars || 0;
-  const peakPct = peak.occupancyPct || 0;
-  const peakFixtures = getPeakParkingFixtures(analysis);
-
-  peakFixtures.forEach((fixture) => {
-    const fixtureIndex = fixtures.indexOf(fixture);
-    if (fixtureIndex < 0) return;
-
-    let bestTime = null;
-    const window = getSuggestionWindowForFixture({ fixture, club });
-    const fixtureStartMins = timeToMinutes(window.start) ?? startMins;
-    const fixtureEndMins = timeToMinutes(window.end) ?? endMins;
-
-    for (let mins = fixtureStartMins; mins <= fixtureEndMins; mins += interval) {
-      if (mins === fixture.koMins) continue;
-
-      const candidateKoTime = minutesToTime(mins);
-      if (!isKickOffAllowedForFixture({ fixture, koTime: candidateKoTime, club })) continue;
-
-      const candidateFixtures = fixtures.map((item, index) =>
-        index === fixtureIndex ? buildCandidateWithTime(item, mins) : item
-      );
-
-      const candidateAnalysis = analyseParkingPressure({
-        fixtures: candidateFixtures,
-        club,
-        pitchCfg,
-      });
-
-      const newPeak = candidateAnalysis.peakSlot?.estimatedCars || 0;
-      const newPct = candidateAnalysis.peakSlot?.occupancyPct || 0;
-      const reduction = peakCars - newPeak;
-
-      if (reduction <= 0) continue;
-
-      const candidate = {
-        type: "time",
-        fixtureIndex,
-        fixture,
-        title: `Move ${fixture.homeTeam || "fixture"} to ${candidateKoTime}`,
-        detail: `Reduces peak parking from ${peakPct}% to ${newPct}%.`,
-        koTime: candidateKoTime,
-        koMins: mins,
-        endMins: buildCandidateWithTime(fixture, mins).endMins,
-        reduction,
-        score: reduction * 10 - Math.abs((fixture.koMins || 0) - mins) / 15,
-      };
-
-      if (!bestTime || candidate.score > bestTime.score) {
-        bestTime = candidate;
-      }
-    }
-
-    if (bestTime) recommendations.push(bestTime);
-
-    const fixtureFormat = getFixtureFormat(fixture);
-    const exemptPitch = pitchCfg.find(
-      (pitch) =>
-        pitch.id !== fixture.pitchId &&
-        pitch.affectsParking === false &&
-        (!fixtureFormat || pitch.format === fixtureFormat)
-    );
-
-    if (exemptPitch) {
-      const candidateFixtures = fixtures.map((item, index) =>
-        index === fixtureIndex
-          ? {
-              ...item,
-              pitchId: exemptPitch.id,
-              pitchLabel: exemptPitch.label || exemptPitch.id,
-            }
-          : item
-      );
-      const candidateAnalysis = analyseParkingPressure({
-        fixtures: candidateFixtures,
-        club,
-        pitchCfg,
-      });
-      const newPeak = candidateAnalysis.peakSlot?.estimatedCars || 0;
-      const newPct = candidateAnalysis.peakSlot?.occupancyPct || 0;
-      const reduction = peakCars - newPeak;
-
-      if (reduction > 0) {
-        recommendations.push({
-          type: "pitch",
-          fixtureIndex,
-          fixture,
-          title: `Move ${fixture.homeTeam || "fixture"} to ${exemptPitch.label || exemptPitch.id}`,
-          detail: `This pitch is configured as parking-exempt. Peak parking drops from ${peakPct}% to ${newPct}%.`,
-          pitchId: exemptPitch.id,
-          pitchLabel: exemptPitch.label || exemptPitch.id,
-          reduction,
-          score: reduction * 12,
-        });
-      }
-    }
-  });
-
-  return recommendations
-    .sort((a, b) => b.score - a.score || b.reduction - a.reduction)
-    .slice(0, limit);
 }

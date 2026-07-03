@@ -14,7 +14,7 @@ import TestDataSettingsPanel from "../components/Settings/TestDataSettingsPanel.
 import HistorySettingsPanel from "../components/Settings/HistorySettingsPanel.jsx";
 import DataSettingsPanel from "../components/Settings/DataSettingsPanel.jsx";
 import IntegrationSettingsPanel from "../components/Settings/IntegrationSettingsPanel.jsx";
-import { isMidweekEnabled } from "../lib/settings/workspaceSettings.js";
+import { isMidweekEnabled, isParkingEnabled } from "../lib/settings/workspaceSettings.js";
 
 const TAB_TITLES = {
   overview: ["Settings overview", "Complete the club setup in a clear order and see what still needs attention."],
@@ -43,6 +43,7 @@ export default function SettingsPage(props) {
   const activeTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
   const midweekEnabled = isMidweekEnabled(club);
+  const parkingEnabled = isParkingEnabled(club);
 
   useEffect(() => {
     if (activeTab !== settingsTab) setSettingsTab?.(activeTab);
@@ -76,9 +77,10 @@ export default function SettingsPage(props) {
             <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500 sm:text-base">{subtitle}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:min-w-[420px]">
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[560px] lg:grid-cols-4">
             <HeaderMetric label="Mode" value={productionMode ? "Production" : "Development"} icon={ShieldCheck} />
             <HeaderMetric label="Midweek" value={midweekEnabled ? "Enabled" : "Hidden"} icon={Settings2} />
+            <HeaderMetric label="Parking" value={parkingEnabled ? "Enabled" : "Off"} icon={Settings2} />
             <HeaderMetric label="Data" value={dbStatus === "connected" ? "Connected" : "Local"} icon={Database} />
           </div>
         </div>

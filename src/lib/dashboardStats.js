@@ -45,46 +45,32 @@ export function getParkingStats({
   startMins,
   slotMins,
   scope = "auto",
-  peakCars = 0,
-  carCap = 57,
 } = {}) {
-  const hasFixtures = Array.isArray(fixtures) && fixtures.length > 0;
-
-  if (hasFixtures) {
-    const parking = getParkingSummary({ fixtures, club, pitchCfg, startMins, slotMins, scope });
-
-    return {
-      peakCars: parking.peakCars,
-      carCap: parking.capacity,
-      capacity: parking.capacity,
-      pct: parking.utilisation,
-      utilisation: parking.utilisation,
-      peakTime: parking.peakTime,
-      status: parking.statusKey,
-      statusLabel: parking.statusLabel,
-      healthScore: parking.healthScore,
-      overCapacity: parking.isOverCapacity,
-      isHighPressure: parking.isHighPressure,
-      summary: parking.headline,
-      detail: parking.detail,
-    };
-  }
-
-  const pct = carCap ? Math.round((peakCars / carCap) * 100) : 0;
+  const parking = getParkingSummary({
+    fixtures: Array.isArray(fixtures) ? fixtures : [],
+    club,
+    pitchCfg,
+    startMins,
+    slotMins,
+    scope,
+  });
 
   return {
-    peakCars,
-    carCap,
-    capacity: carCap,
-    pct,
-    utilisation: pct,
-    peakTime: "Pending",
-    status: pct > 100 ? "critical" : pct >= 85 ? "watch" : "healthy",
-    statusLabel: pct > 100 ? "Over capacity" : pct >= 85 ? "Watch" : "Healthy",
-    healthScore: pct > 100 ? 35 : pct >= 85 ? 70 : 100,
-    overCapacity: pct > 100,
-    isHighPressure: pct >= 85,
-    summary: peakCars ? `${peakCars}/${carCap} spaces` : "Parking pending",
-    detail: peakCars ? `${pct}% peak use.` : "Parking forecast will update after schedule build.",
+    enabled: parking.enabled !== false,
+    configured: parking.configured === true,
+    peakCars: parking.peakCars,
+    carCap: parking.capacity,
+    capacity: parking.capacity,
+    pct: parking.utilisation,
+    utilisation: parking.utilisation,
+    peakTime: parking.peakTime,
+    status: parking.statusKey,
+    statusLabel: parking.statusLabel,
+    healthScore: parking.healthScore,
+    overCapacity: parking.isOverCapacity,
+    isHighPressure: parking.isHighPressure,
+    isOverConcurrentLimit: parking.isOverConcurrentLimit,
+    summary: parking.headline,
+    detail: parking.detail,
   };
 }

@@ -52,7 +52,7 @@ function getSites(club = {}) {
     venue: club.venue || "",
     postcode: String(club.postcode || club.weatherPostcode || "").toUpperCase(),
     isPrimary: true,
-    carParkSpaces: Number(club.carParkSpaces || 0),
+    carParkSpaces: Number(club.carParkSpaces ?? 0),
     weatherEnabled: true,
     notes: "Primary matchday site",
   }];
@@ -83,7 +83,7 @@ function normaliseSites(sites, club = {}) {
     venue: primary?.venue || club.venue || "",
     postcode: primary?.postcode || club.postcode || "",
     weatherPostcode: weatherSite?.postcode || primary?.postcode || club.weatherPostcode || "",
-    carParkSpaces: primary?.carParkSpaces || club.carParkSpaces || 0,
+    carParkSpaces: Number(primary?.carParkSpaces ?? club.carParkSpaces ?? 0),
   };
 }
 

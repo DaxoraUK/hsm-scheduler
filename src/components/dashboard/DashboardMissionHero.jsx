@@ -19,6 +19,7 @@ export default function DashboardMissionHero({
   totalSteps = 6,
   nextAction,
   weatherLocation,
+  weatherStatus,
   onContinue,
   scopeLabel = "Weekend",
 }) {
@@ -147,7 +148,7 @@ export default function DashboardMissionHero({
             <MiniStat label="Saturday" value={satCount} />
             <MiniStat label="Sunday" value={sunCount} />
             {midweekEnabled ? <MiniStat label="Midweek" value={midweekCount} /> : null}
-            <MiniStat label="Weather" value={weatherLocation ? "Ready" : "Set postcode"} />
+            <MiniStat label="Weather" value={weatherStatus || (weatherLocation ? "Ready" : "Set postcode")} />
             <div className={`h-full [&>div]:h-full ${midweekEnabled ? "col-span-1 sm:col-span-2" : "col-span-2"}`}>
               <MiniStat
                 label="Club"

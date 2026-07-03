@@ -28,7 +28,7 @@ export default function DashboardInsightGrid({
     !scheduleBuilt,
     fixtureIssues > 0,
     refereeOutstanding > 0,
-    parkingStats?.overCapacity,
+    parkingStats?.enabled !== false && (!parkingStats?.configured || parkingStats?.overCapacity),
     !communicationsReady,
   ].filter(Boolean).length;
 

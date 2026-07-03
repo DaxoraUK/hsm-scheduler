@@ -129,7 +129,7 @@ export function useWeekPersistence({
             : midweekDateLabel || "Midweek",
       date: saturday.hasRun || sunday.hasRun ? satDate || undefined : midweekDate || undefined,
       savedAt: new Date().toISOString(),
-      carParkSpaces: club.carParkSpaces || 57,
+      carParkSpaces: Number(club.carParkSpaces ?? 0),
 
       // Canonical v2 history model.
       fixtureDays: publishedDays,

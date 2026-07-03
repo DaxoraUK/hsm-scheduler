@@ -2,6 +2,7 @@ import React from "react";
 import {
   BarChart3,
   CalendarDays,
+  Car,
   CheckCircle2,
   Clock3,
   Gauge,
@@ -63,6 +64,10 @@ export default function WorkspaceSettingsPanel({
     setClub((current) => withWorkspaceFeature(current, "midweekEnabled", enabled));
   };
 
+  const updateParking = (enabled) => {
+    setClub((current) => withWorkspaceFeature(current, "parkingEnabled", enabled));
+  };
+
   const updateProductionMode = (enabled) => {
     setProductionMode?.(enabled);
     setMode?.(enabled ? "live" : "test");
@@ -108,6 +113,30 @@ export default function WorkspaceSettingsPanel({
           description="Saturday and Sunday scheduling, resources, intelligence and communications."
           status="Core"
         />
+
+        <ModuleCard
+          icon={Car}
+          title="Parking & Arrivals"
+          description="Parking capacity, arrival-wave forecasting and parking-safe fixture recommendations."
+          status={features.parkingEnabled ? "Enabled" : "Hidden"}
+          active={features.parkingEnabled}
+        >
+          <div className="flex items-center justify-between gap-5">
+            <div>
+              <div className="text-sm font-black text-slate-900">Use parking intelligence</div>
+              <div className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+                Turn this off for clubs that do not manage on-site parking. Ground Control will remove parking checks, cards and recommendations without deleting saved capacities or vehicle estimates.
+              </div>
+            </div>
+            <Toggle checked={features.parkingEnabled} onChange={updateParking} label="Enable Parking and Arrivals" />
+          </div>
+
+          {!features.parkingEnabled ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-sm font-semibold leading-5 text-slate-700">
+              Parking is excluded from launch readiness, schedule validation, recommendations and operational workspaces until it is switched back on.
+            </div>
+          ) : null}
+        </ModuleCard>
 
         <ModuleCard
           icon={Clock3}

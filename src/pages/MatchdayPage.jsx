@@ -45,6 +45,7 @@ import { buildRecommendationCentre } from "../lib/engines/recommendationCentreEn
 import { calculateOperationsIntelligence } from "../lib/engines/operationsIntelligenceEngine.js";
 import { calculateOfficialsReadiness, findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
+import useLiveWeather from "../hooks/useLiveWeather.js";
 
 const WORKSPACES = [
   {
@@ -345,6 +346,12 @@ export default function MatchdayPage({
     [final]
   );
 
+  const liveWeather = useLiveWeather({
+    club: clubWithTiming,
+    date: matchdayDate,
+    fixtures: active,
+  });
+
   const unresolved = suppliedUnresolved ?? (isSunday ? props.sunUnresolved || [] : props.satUnresolved || []);
   const scheduled = suppliedScheduled ?? (isSunday ? props.sunScheduled || [] : props.satScheduled || []);
   const setScheduled = suppliedSetScheduled || (isSunday ? props.setSunScheduled : props.setSatScheduled);
@@ -438,7 +445,10 @@ export default function MatchdayPage({
     club: clubWithTiming,
     fixtures: final,
     dateLabel,
-  }), [clubWithTiming, dateLabel, final]);
+    forecastSource: liveWeather.data,
+    connectionStatus: liveWeather.status,
+    connectionError: liveWeather.error,
+  }), [clubWithTiming, dateLabel, final, liveWeather.data, liveWeather.error, liveWeather.status]);
 
   const recommendationCentre = useMemo(() => buildRecommendationCentre({
     fixtures: final,
@@ -756,8 +766,14 @@ export default function MatchdayPage({
         badge: weatherIntelligence?.location || "Weather",
         status: weatherIntelligence.status,
         label: weatherIntelligence.label,
-        filter: weatherIntelligence.status === "warning" ? "warnings" : "ready",
-        render: () => <WeatherIntelligenceCard weather={weatherIntelligence} />,
+        filter: weatherIntelligence.status === "danger" ? "issues" : weatherIntelligence.status === "warning" ? "warnings" : "ready",
+        render: () => (
+          <WeatherIntelligenceCard
+            weather={weatherIntelligence}
+            onRefresh={liveWeather.refresh}
+            refreshing={liveWeather.isLoading}
+          />
+        ),
       },
       {
         id: "coachMessages",
@@ -804,7 +820,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, liveWeather.isLoading, liveWeather.refresh, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
 
 
   const navigationSection = useMemo(() => {

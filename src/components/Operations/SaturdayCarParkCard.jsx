@@ -16,7 +16,7 @@ export default function SaturdayCarParkCard({
 }) {
   if (!satHasRun) return null;
 
-  const capacity = club.carParkSpaces || 57;
+  const capacity = Math.max(0, Number(club.carParkSpaces ?? 0));
 
   const applyParkingRecommendation = (fixtureIndex, patch = {}) => {
     if (typeof onOverride !== "function") return;

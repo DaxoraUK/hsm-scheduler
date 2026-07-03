@@ -44,6 +44,7 @@ function Analytics({history,club=DEFAULT_CLUB}){
   const maxDensity=Math.max(...densityEntries.map(e=>e.count+e.sun),1);
 
   // Car park utilisation over season
+  const configuredCapacity=Math.max(0,Number(club.carParkSpaces ?? 0));
   const carparkEntries=history.map(w=>{
     let peak=0;
     const allGames=[...(w.scheduled||[]),...(w.sunScheduled||[])];
@@ -52,9 +53,9 @@ function Analytics({history,club=DEFAULT_CLUB}){
       const cars=allGames.filter(g=>g.koMins<=t&&g.endMins>t).reduce((s,g)=>s+((club.avgCars&&club.avgCars[g.cfg?.format])||AVG_CARS[g.cfg?.format]||8),0);
       if(cars>peak)peak=cars;
     });
-    return{label:w.dateLabel,peak,capacity:w.carParkSpaces||club.carParkSpaces||57};
+    return{label:w.dateLabel,peak,capacity:Math.max(0,Number(w.carParkSpaces ?? configuredCapacity))};
   }).reverse();
-  const maxCars=Math.max(...carparkEntries.map(e=>e.peak),...carparkEntries.map(e=>e.capacity));
+  const maxCars=Math.max(...carparkEntries.map(e=>e.peak),...carparkEntries.map(e=>e.capacity),1);
 
   // Pitch rotation - games per pitch per week heatmap
   const pitchIds=[...new Set(history.flatMap(w=>(w.scheduled||[]).map(g=>g.pitchId)))].filter(Boolean);
@@ -191,13 +192,15 @@ function Analytics({history,club=DEFAULT_CLUB}){
         {carparkEntries.length===0?<div style={{fontSize:12,color:"#aaa"}}>No data yet.</div>:(
           <div>
             <div style={{position:"relative",height:BAR_H+16,marginBottom:4}}>
-              <div style={{position:"absolute",top:Math.round((1-(club.carParkSpaces||57)/maxCars)*BAR_H),left:0,right:0,borderTop:"2px dashed #922B21",zIndex:2}}>
-                <span style={{position:"absolute",right:0,top:-14,fontSize:9,color:"#922B21",fontWeight:700,background:"#fff",padding:"0 3px"}}>{(club.carParkSpaces||57)} capacity</span>
-              </div>
+              {configuredCapacity>0?(
+                <div style={{position:"absolute",top:Math.round((1-configuredCapacity/maxCars)*BAR_H),left:0,right:0,borderTop:"2px dashed #922B21",zIndex:2}}>
+                  <span style={{position:"absolute",right:0,top:-14,fontSize:9,color:"#922B21",fontWeight:700,background:"#fff",padding:"0 3px"}}>{configuredCapacity} capacity</span>
+                </div>
+              ):null}
               <div style={{display:"flex",alignItems:"flex-end",gap:4,height:BAR_H,position:"relative",zIndex:1}}>
                 {carparkEntries.map((w,i)=>{
                   const h=Math.round((w.peak/maxCars)*BAR_H);
-                  const col=w.peak>(w.capacity||(club.carParkSpaces||57))?A_OVER:w.peak>(w.capacity||(club.carParkSpaces||57))*0.85?A_WARN:A_OK;
+                  const col=w.capacity<=0?A_WARN:w.peak>w.capacity?A_OVER:w.peak>w.capacity*0.85?A_WARN:A_OK;
                   return(
                     <div key={i} title={w.label+": peak ~"+w.peak+" cars"} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,height:"100%",justifyContent:"flex-end"}}>
                       <div style={{fontSize:8,color:col,fontWeight:700}}>{w.peak}</div>
@@ -211,7 +214,7 @@ function Analytics({history,club=DEFAULT_CLUB}){
               {carparkEntries.map((w,i)=><div key={i} style={{flex:1,fontSize:7,color:"#aaa",textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.label.split(" ").slice(1,3).join(" ")}</div>)}
             </div>
             <div style={{fontSize:11,color:"#888",marginTop:6}}>
-              Weeks over capacity: <strong style={{color:A_OVER}}>{carparkEntries.filter(w=>w.peak>(w.capacity||(club.carParkSpaces||57))).length}</strong> of {carparkEntries.length}.
+              {configuredCapacity>0?<>Weeks over capacity: <strong style={{color:A_OVER}}>{carparkEntries.filter(w=>w.capacity>0&&w.peak>w.capacity).length}</strong> of {carparkEntries.length}. </>:<>Parking capacity not configured. </>}
               Season peak: <strong style={{color:A_OK}}>{Math.max(...carparkEntries.map(w=>w.peak))} cars</strong>.
             </div>
           </div>

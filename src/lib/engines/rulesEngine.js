@@ -4,7 +4,7 @@ import {
   pitchSuitabilityRule,
 } from "../intelligence/pitch/pitchRules.js";
 import { refereeClashRule } from "../intelligence/officials/officialRules.js";
-import { parkingConcurrencyRule } from "../intelligence/parking/parkingRules.js";
+import { parkingCapacityRule, parkingConcurrencyRule } from "../intelligence/parking/parkingRules.js";
 import { getKickOffRuleFailure } from "../intelligence/scheduling/kickOffRules.js";
 
 const SCHEDULE_FIELDS = ["pitchId", "pitchLabel", "koTime", "koMins", "endMins"];
@@ -95,6 +95,12 @@ export function getOfficialRules({ fixtures = [], fixtureIndex, next = {}, refs 
 
 export function getParkingRules({ fixtures = [], fixtureIndex, next = {}, club = {}, pitchCfg = [] } = {}) {
   return [
+    {
+      id: "parking.capacity",
+      stage: "parking",
+      source: "parkingSettings",
+      run: () => parkingCapacityRule({ fixtures, fixtureIndex, next, club, pitchCfg }),
+    },
     {
       id: "parking.concurrency",
       stage: "parking",

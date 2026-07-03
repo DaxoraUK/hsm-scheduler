@@ -17,6 +17,8 @@ export function buildMissionControlWorkflow({
   pitchCount = 0,
   closedPitchCount = 0,
   refereeOutstanding = 0,
+  parkingEnabled = true,
+  parkingConfigured = true,
   parkingPercent = 0,
   parkingCapacity = 0,
   parkingOverCapacity = false,
@@ -57,15 +59,25 @@ export function buildMissionControlWorkflow({
       required: true,
       action: WORKFLOW_ACTIONS.OFFICIALS,
     },
-    {
-      key: "parking",
-      title: "Review parking pressure",
-      detail: scheduleBuilt
-        ? `${parkingPercent}% projected peak against ${parkingCapacity} spaces.`
-        : "Parking forecast will update after schedule build.",
-      status: !scheduleBuilt ? "pending" : parkingOverCapacity ? "warning" : "complete",
-      action: WORKFLOW_ACTIONS.PARKING,
-    },
+    ...(parkingEnabled
+      ? [{
+          key: "parking",
+          title: parkingConfigured ? "Review parking pressure" : "Configure parking",
+          detail: !parkingConfigured
+            ? "Set the primary venue parking capacity before using parking readiness."
+            : scheduleBuilt
+              ? `${parkingPercent}% projected peak against ${parkingCapacity} spaces.`
+              : "Parking forecast will update after schedule build.",
+          status: !parkingConfigured
+            ? "warning"
+            : !scheduleBuilt
+              ? "pending"
+              : parkingOverCapacity
+                ? "warning"
+                : "complete",
+          action: WORKFLOW_ACTIONS.PARKING,
+        }]
+      : []),
     {
       key: "messages",
       title: "Prepare coach messages",
@@ -98,6 +110,8 @@ export function getMissionState({
   scheduleBuilt = false,
   fixtureIssues = 0,
   refereeOutstanding = 0,
+  parkingEnabled = true,
+  parkingConfigured = true,
   parkingOverCapacity = false,
   communicationsReady = false,
 } = {}) {
@@ -110,7 +124,11 @@ export function getMissionState({
     };
   }
 
-  if (fixtureIssues > 0 || parkingOverCapacity || refereeOutstanding > 0) {
+  if (
+    fixtureIssues > 0 ||
+    (parkingEnabled && (!parkingConfigured || parkingOverCapacity)) ||
+    refereeOutstanding > 0
+  ) {
     return {
       tone: "warning",
       label: "Action Required",
@@ -132,6 +150,8 @@ export function getMissionState({
     tone: "success",
     label: "Weekend Ready",
     title: "Ready to publish",
-    detail: "Fixtures, ground status, officials, parking and communications are ready.",
+    detail: parkingEnabled
+      ? "Fixtures, ground status, officials, parking and communications are ready."
+      : "Fixtures, ground status, officials and communications are ready.",
   };
 }

@@ -34,6 +34,7 @@ export const DEFAULT_CLUB = {
   maxConcurrent: 3,
   features: {
     midweekEnabled: true,
+    parkingEnabled: true,
   },
   avgCars: {"3v3":8,"5v5":12,"7v7":16,"9v9":20,"11v11-youth":28,"11v11-small":28,"11v11":36},
 };

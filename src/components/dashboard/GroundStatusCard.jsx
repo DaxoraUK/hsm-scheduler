@@ -22,8 +22,10 @@ export default function GroundStatusCard({
   const closed = closedPitches.length;
   const open = Math.max(total - closed, 0);
   const allOpen = closed === 0;
+  const parkingEnabled = parkingStats?.enabled !== false;
+  const parkingConfigured = parkingStats?.configured === true;
   const parkingPct = parkingStats?.pct ?? 0;
-  const parkingOk = !parkingStats?.overCapacity;
+  const parkingOk = parkingConfigured && !parkingStats?.overCapacity;
 
   return (
     <section className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
@@ -36,7 +38,9 @@ export default function GroundStatusCard({
             {allOpen ? "All pitches open" : `${closed} pitch${closed === 1 ? "" : "es"} closed`}
           </h2>
           <p className="mt-2 max-w-xl text-base font-semibold leading-7 text-slate-500">
-            Pitches, parking and venue readiness at a glance.
+            {parkingEnabled
+              ? "Pitches, parking and venue readiness at a glance."
+              : "Pitches and venue readiness at a glance."}
           </p>
         </div>
 
@@ -54,7 +58,15 @@ export default function GroundStatusCard({
       <div className="flex flex-1 flex-col p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <StatusTile icon={ShieldCheck} label="Pitches" value={`${open}/${total || 0}`} detail="Available" tone={allOpen ? "success" : "warning"} />
-          <StatusTile icon={Car} label="Parking" value={parkingStats ? `${parkingPct}%` : "Pending"} detail="Peak use" tone={parkingOk ? "success" : "warning"} />
+          {parkingEnabled ? (
+            <StatusTile
+              icon={Car}
+              label="Parking"
+              value={parkingConfigured ? `${parkingPct}%` : "Setup"}
+              detail={parkingConfigured ? "Peak use" : "Capacity required"}
+              tone={parkingOk ? "success" : "warning"}
+            />
+          ) : null}
           <StatusTile icon={MapPin} label="Sites" value="Primary" detail="Venue active" tone="success" />
           <StatusTile icon={DoorOpen} label="Facilities" value="Open" detail="Default status" tone="success" />
         </div>

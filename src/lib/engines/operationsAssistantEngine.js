@@ -85,7 +85,19 @@ export function getOperationsAssistant({
     }));
   }
 
-  if (parking.isOverCapacity) {
+  if (parking.enabled !== false && !parking.configured) {
+    actions.push(createPlatformAction({
+      domain: "parking",
+      type: "parking_configuration",
+      title: "Configure parking",
+      detail: "Set the primary venue parking capacity or switch Parking & Arrivals off in Workspace settings.",
+      severity: "attention",
+      priority: 89,
+      workspace: "settings",
+      card: "venues",
+      cta: "Open settings",
+    }));
+  } else if (parking.enabled !== false && parking.isOverCapacity) {
     actions.push(createPlatformAction({
       domain: "parking",
       type: "parking_over_capacity",
@@ -97,7 +109,7 @@ export function getOperationsAssistant({
       card: "parkingIntelligence",
       cta: "Open parking",
     }));
-  } else if (parking.isHighPressure || parking.isOverConcurrentLimit) {
+  } else if (parking.enabled !== false && (parking.isHighPressure || parking.isOverConcurrentLimit)) {
     actions.push(createPlatformAction({
       domain: "parking",
       type: "parking_watch",
@@ -192,7 +204,7 @@ export function getOperationsAssistant({
       review: attentionCount + watchCount,
       warningCount: attentionCount + watchCount,
       actionCount: actionSummary.actions.length,
-      parkingPeak: parking.utilisation,
+      parkingPeak: parking.enabled === false ? 0 : parking.utilisation,
     },
     parking,
     debug: {

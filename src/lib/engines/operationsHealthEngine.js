@@ -52,6 +52,7 @@ function getOverallStatus(score, hasDanger, hasWarning) {
 }
 
 function mapParkingStatus(parking = {}) {
+  if (parking.enabled === false) return "neutral";
   if (!parking.capacity) return "warning";
   if (parking.isOverCapacity || parking.utilisation > 100) return "danger";
   if (parking.isHighPressure || parking.isOverConcurrentLimit || parking.utilisation >= 85) return "warning";
@@ -95,11 +96,14 @@ export function calculateOperationsHealth({
     pitchCfg,
   });
 
+  const parkingEnabled = parking.enabled !== false;
   const capacity = parking.capacity;
   const peakParkingLoad = parking.peakCars;
   const parkingUtilisation = parking.utilisation;
   const parkingStatus = mapParkingStatus(parking);
-  const totalEstimatedCars = activeFixtures.reduce((total, fixture) => total + estimateFixtureCars(fixture, club), 0);
+  const totalEstimatedCars = parkingEnabled
+    ? activeFixtures.reduce((total, fixture) => total + estimateFixtureCars(fixture, club), 0)
+    : 0;
 
   const fixtureIssues = [];
   const fixtureActions = [];
@@ -141,7 +145,9 @@ export function calculateOperationsHealth({
 
   const parkingIssues = [];
   const parkingActions = [];
-  if (!capacity) {
+  if (!parkingEnabled) {
+    // Parking is intentionally excluded for this club.
+  } else if (!capacity) {
     parkingIssues.push("Parking capacity has not been set.");
     parkingActions.push("Set car park capacity in venue or club settings.");
   } else if (parking.isOverCapacity || parkingUtilisation > 100) {
@@ -156,7 +162,7 @@ export function calculateOperationsHealth({
     parkingActions.push("Review Parking Intelligence before publishing.");
   }
 
-  const parkingScore = !capacity ? 65 : toNumber(parking.healthScore, 100);
+  const parkingScore = !parkingEnabled ? 100 : !capacity ? 65 : toNumber(parking.healthScore, 100);
 
   const communicationIssues = [];
   const communicationActions = [];
@@ -195,15 +201,17 @@ export function calculateOperationsHealth({
       issues: officialIssues,
       actions: officialActions,
     }),
-    scoreDomain({
-      id: "parking",
-      label: "Parking",
-      score: parkingScore,
-      status: parkingStatus,
-      summary: capacity ? `${parkingUtilisation}% peak use.` : "Capacity not set.",
-      issues: parkingIssues,
-      actions: parkingActions,
-    }),
+    ...(parkingEnabled
+      ? [scoreDomain({
+          id: "parking",
+          label: "Parking",
+          score: parkingScore,
+          status: parkingStatus,
+          summary: capacity ? `${parkingUtilisation}% peak use.` : "Capacity not set.",
+          issues: parkingIssues,
+          actions: parkingActions,
+        })]
+      : []),
     scoreDomain({
       id: "communications",
       label: "Communications",
@@ -249,6 +257,7 @@ export function calculateOperationsHealth({
       officialConflicts: officialConflictCount,
       closedPitches: closedPitchCount,
       pitchCount,
+      parkingEnabled,
       parkingCapacity: capacity,
       totalEstimatedCars,
       peakParkingLoad,

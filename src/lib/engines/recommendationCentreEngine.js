@@ -84,7 +84,16 @@ export function buildRecommendationCentre({
     }));
   }
 
-  if (parking.isOverCapacity) {
+  if (parking.enabled !== false && !parking.configured) {
+    actions.push(createRecommendationAction({
+      domain: "parking",
+      severity: "attention",
+      priority: 91,
+      title: "Configure parking",
+      description: "Set the primary venue parking capacity or switch Parking & Arrivals off in Workspace settings.",
+      metadata: { parking },
+    }));
+  } else if (parking.enabled !== false && parking.isOverCapacity) {
     actions.push(createRecommendationAction({
       domain: "parking",
       severity: "critical",
@@ -93,7 +102,7 @@ export function buildRecommendationCentre({
       description: `Peak demand is ${parking.utilisation}% at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
       metadata: { parking },
     }));
-  } else if (parking.isHighPressure) {
+  } else if (parking.enabled !== false && (parking.isHighPressure || parking.isOverConcurrentLimit)) {
     actions.push(createRecommendationAction({
       domain: "parking",
       severity: "watch",

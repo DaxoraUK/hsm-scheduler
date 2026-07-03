@@ -8,6 +8,7 @@ import {
   Droplets,
   MapPin,
   RadioTower,
+  RefreshCw,
   ShieldCheck,
   ThermometerSun,
   TriangleAlert,
@@ -24,7 +25,20 @@ function riskTone(status) {
 function statusVariant(status) {
   if (status === "danger") return "danger";
   if (status === "warning") return "warning";
+  if (status === "neutral") return "neutral";
   return "success";
+}
+
+function formatUpdatedAt(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function CheckIcon({ status }) {
@@ -64,7 +78,7 @@ function PriorityBadge({ priority }) {
   );
 }
 
-export default function WeatherIntelligenceCard({ weather }) {
+export default function WeatherIntelligenceCard({ weather, onRefresh, refreshing = false }) {
   const forecast = weather?.forecast || {};
   const riskWindows = weather?.riskWindows || [];
   const actions = weather?.actions || [];
@@ -90,7 +104,20 @@ export default function WeatherIntelligenceCard({ weather }) {
             </p>
           </div>
         </div>
-        <StatusChip variant={statusVariant(weather?.status)}>{weather?.label || "Ready"}</StatusChip>
+        <div className="flex shrink-0 items-center gap-2">
+          {onRefresh && weather?.connectionStatus !== "disabled" ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing || !weather?.hasLocation}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-black text-slate-700 shadow-sm transition hover:border-sky-200 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw size={15} strokeWidth={2.5} className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+          ) : null}
+          <StatusChip variant={statusVariant(weather?.status)}>{weather?.label || "Ready"}</StatusChip>
+        </div>
       </div>
 
       <div className={`mt-6 rounded-3xl border p-5 ${cardTone}`}>
@@ -218,8 +245,20 @@ export default function WeatherIntelligenceCard({ weather }) {
         <div className="flex items-center gap-2">
           <MapPin size={15} strokeWidth={2.5} /> {weather?.venueName || "Club ground"} · {weather?.dateLabel || "Matchday"}
         </div>
-        <div>
-          {weather?.updatedAt ? `Updated ${weather.updatedAt}` : "Forecast values only appear when real provider data is supplied"}
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+          <span>
+            {weather?.updatedAt ? `Updated ${formatUpdatedAt(weather.updatedAt)}` : "Forecast values only appear when real provider data is supplied"}
+          </span>
+          {weather?.forecastAvailable ? (
+            <a
+              href="https://open-meteo.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="font-black underline decoration-sky-400/50 underline-offset-2 hover:text-sky-950"
+            >
+              Weather data by Open-Meteo.com
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

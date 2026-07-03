@@ -1,5 +1,6 @@
 export const DEFAULT_WORKSPACE_FEATURES = Object.freeze({
   midweekEnabled: true,
+  parkingEnabled: true,
 });
 
 export function getWorkspaceFeatures(club = {}) {
@@ -9,11 +10,16 @@ export function getWorkspaceFeatures(club = {}) {
     ...DEFAULT_WORKSPACE_FEATURES,
     ...features,
     midweekEnabled: features.midweekEnabled !== false,
+    parkingEnabled: features.parkingEnabled !== false,
   };
 }
 
 export function isMidweekEnabled(club = {}) {
   return getWorkspaceFeatures(club).midweekEnabled;
+}
+
+export function isParkingEnabled(club = {}) {
+  return getWorkspaceFeatures(club).parkingEnabled;
 }
 
 export function withWorkspaceFeature(club = {}, feature, enabled) {

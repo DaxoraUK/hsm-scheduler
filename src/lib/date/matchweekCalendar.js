@@ -14,8 +14,22 @@ export function toLocalDateInputValue(date = new Date()) {
 export function parseLocalDateInput(value) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
 }
 
 export function getCurrentOrNextMidweekDate(now = new Date()) {
@@ -97,5 +111,13 @@ export function persistMidweekWindow(windowValue) {
 export function timeValueToMinutes(value, fallback = 0) {
   const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return fallback;
-  return Number(match[1]) * 60 + Number(match[2]);
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return fallback;
+  }
+
+  return hours * 60 + minutes;
 }

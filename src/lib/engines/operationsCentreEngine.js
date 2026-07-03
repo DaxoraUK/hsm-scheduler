@@ -92,6 +92,7 @@ function domain({ id, label, status = "neutral", score, headline, detail, metric
 }
 
 function getParkingStatus(parking = {}) {
+  if (parking.enabled === false) return "neutral";
   if (!parking.capacity) return "warning";
   if (parking.isOverCapacity || parking.utilisation > 100) return "danger";
   if (parking.isHighPressure || parking.isOverConcurrentLimit || parking.utilisation >= 85) return "warning";
@@ -372,7 +373,7 @@ export function buildOperationsCentreSnapshot({
   const domains = [
     fixtureDomain,
     pitchDomain,
-    parkingDomain,
+    ...(parking.enabled === false ? [] : [parkingDomain]),
     officialsDomain,
     weatherDomain,
     communicationsDomain,
@@ -410,7 +411,8 @@ export function buildOperationsCentreSnapshot({
       closedPitches: pitchDomain.data.closed,
       officialsConfirmed: officials.metrics.confirmed,
       officialsFixtures: officials.metrics.fixtures,
-      parkingUtilisation: parking.utilisation,
+      parkingEnabled: parking.enabled !== false,
+      parkingUtilisation: parking.enabled === false ? 0 : parking.utilisation,
     },
   };
 }

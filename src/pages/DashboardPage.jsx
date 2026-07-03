@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import PageContainer from "../components/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
@@ -14,6 +14,8 @@ import { buildMissionControlWorkflow, getMissionState, WORKFLOW_ACTIONS } from "
 import { createNavigationController } from "../lib/navigation/index.js";
 import { useMatchdayScope } from "../lib/context/MatchdayScopeContext.jsx";
 import { getDayTabFromScope, getMatchdayScopeLabel, getScopedMatchdayData, MATCHDAY_SCOPES, normaliseMatchdayScope } from "../lib/domain/matchdayScope.js";
+import useLiveWeather from "../hooks/useLiveWeather.js";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 import {
   CalendarDays,
@@ -42,6 +44,9 @@ export default function DashboardPage({
   satHasRun,
   sunHasRun,
   midweekHasRun,
+  satDate,
+  sunDate,
+  midweekDate,
   readiness,
   midweekReadiness,
   refWarnings = 0,
@@ -88,9 +93,18 @@ export default function DashboardPage({
     };
   }, [actionsOpen]);
 
-  const satActive = satFinal.filter((game) => game.status !== "postponed");
-  const sunActive = sunFinal.filter((game) => game.status !== "postponed");
-  const midweekActive = midweekFinal.filter((game) => game.status !== "postponed");
+  const satActive = useMemo(
+    () => satFinal.filter((game) => game.status !== "postponed"),
+    [satFinal]
+  );
+  const sunActive = useMemo(
+    () => sunFinal.filter((game) => game.status !== "postponed"),
+    [sunFinal]
+  );
+  const midweekActive = useMemo(
+    () => midweekFinal.filter((game) => game.status !== "postponed"),
+    [midweekFinal]
+  );
 
   const scopedMatchday = getScopedMatchdayData({
     scope: matchdayScope,
@@ -124,7 +138,46 @@ export default function DashboardPage({
     (scopedMatchday.includeMidweek ? midweekConflicts.length + midweekUnresolved.length : 0);
 
   const communicationsReady = scheduleBuilt && totalFixtures > 0;
-  const weatherLocation = getWeatherLocation(club);
+  const weatherSelection = useMemo(() => {
+    const candidates = [];
+    const add = (label, date, fixtures) => {
+      if (date) candidates.push({ label, date, fixtures });
+    };
+
+    if (matchdayScope === MATCHDAY_SCOPES.SATURDAY) add("Saturday", satDate, satActive);
+    else if (matchdayScope === MATCHDAY_SCOPES.SUNDAY) add("Sunday", sunDate, sunActive);
+    else if (matchdayScope === MATCHDAY_SCOPES.MIDWEEK) add("Midweek", midweekDate, midweekActive);
+    else {
+      if (matchdayScope === MATCHDAY_SCOPES.MATCHWEEK) add("Midweek", midweekDate, midweekActive);
+      add("Saturday", satDate, satActive);
+      add("Sunday", sunDate, sunActive);
+    }
+
+    const sorted = candidates.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const today = getUkTodayIso();
+    return sorted.find((candidate) => candidate.date >= today) || sorted.at(-1) || {
+      label: "Matchday",
+      date: satDate || sunDate || midweekDate,
+      fixtures: [],
+    };
+  }, [matchdayScope, midweekActive, midweekDate, satActive, satDate, sunActive, sunDate]);
+  const weatherDate = weatherSelection.date;
+  const weatherFixtures = weatherSelection.fixtures;
+  const weatherScopeLabel = weatherSelection.label;
+  const liveWeather = useLiveWeather({
+    club,
+    date: weatherDate,
+    fixtures: weatherFixtures,
+  });
+  const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
+    club,
+    fixtures: weatherFixtures,
+    dateLabel: `${weatherScopeLabel}${weatherDate ? ` · ${weatherDate}` : ""}`,
+    forecastSource: liveWeather.data,
+    connectionStatus: liveWeather.status,
+    connectionError: liveWeather.error,
+  }), [club, liveWeather.data, liveWeather.error, liveWeather.status, weatherDate, weatherFixtures, weatherScopeLabel]);
+  const weatherLocation = liveWeather.config?.postcode || getWeatherLocation(club);
 
   const reviewItems = [
     !scheduleBuilt
@@ -331,6 +384,7 @@ export default function DashboardPage({
         totalSteps={workflowSteps.length}
         nextAction={nextAction}
         weatherLocation={weatherLocation}
+        weatherStatus={liveWeather.isLoading ? "Connecting" : weatherIntelligence.label}
         scopeLabel={getMatchdayScopeLabel(matchdayScope)}
         onContinue={nextAction?.onClick || (() => nav.goToOperations({ day: navigationDay }))}
 />
@@ -373,8 +427,12 @@ export default function DashboardPage({
           },
           {
             label: "Weather",
-            status: weatherLocation ? "success" : "warning",
-            detail: weatherLocation || "Set postcode",
+            status: weatherIntelligence.status,
+            detail: liveWeather.isLoading
+              ? "Connecting"
+              : weatherIntelligence.forecastAvailable
+                ? weatherIntelligence.forecast?.conditions || "Live"
+                : weatherIntelligence.label,
             onClick: () => nav.goToWeather({ day: navigationDay }),
           },
           {
@@ -421,6 +479,9 @@ export default function DashboardPage({
           <DashboardWeatherCard
             club={club}
             weatherLocation={weatherLocation}
+            weather={weatherIntelligence}
+            onRefresh={liveWeather.refresh}
+            refreshing={liveWeather.isLoading}
             setMainPage={setMainPage}
           />
         </div>
@@ -483,6 +544,17 @@ function CommandMenuItem({ icon: Icon, title, subtitle, onClick }) {
   );
 }
 
+
+function getUkTodayIso() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 function getWeatherLocation(club) {
   return (

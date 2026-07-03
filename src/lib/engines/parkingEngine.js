@@ -63,7 +63,32 @@ function hasMultipleDayGroups(fixtures = []) {
   return Object.keys(groupFixturesByDay(fixtures)).length > 1;
 }
 
-function getStatus({ utilisation = 0, overCapacity = false, overConcurrent = false } = {}) {
+function getStatus({
+  enabled = true,
+  utilisation = 0,
+  overCapacity = false,
+  overConcurrent = false,
+  capacityConfigured = true,
+  pressureThresholdPct = 85,
+} = {}) {
+  if (!enabled) {
+    return {
+      key: "disabled",
+      label: "Off",
+      variant: "neutral",
+      score: 100,
+    };
+  }
+
+  if (!capacityConfigured) {
+    return {
+      key: "configure",
+      label: "Configure",
+      variant: "warning",
+      score: 60,
+    };
+  }
+
   if (overCapacity || utilisation > 100) {
     return {
       key: "critical",
@@ -73,7 +98,7 @@ function getStatus({ utilisation = 0, overCapacity = false, overConcurrent = fal
     };
   }
 
-  if (overConcurrent || utilisation >= 85) {
+  if (overConcurrent || utilisation >= pressureThresholdPct) {
     return {
       key: "watch",
       label: "Watch",
@@ -108,12 +133,17 @@ function analyseSingleScope({ fixtures = [], club = {}, pitchCfg = [], startMins
   const peakFixtures = peakSlot?.parkingFixtures || [];
   const activeFixtures = analysis.parkingFixtures || [];
   const status = getStatus({
+    enabled: settings.enabled,
     utilisation,
     overCapacity: analysis.isOverCapacity,
     overConcurrent: analysis.isOverConcurrentLimit,
+    capacityConfigured: capacity > 0,
+    pressureThresholdPct: settings.parkingPressureThresholdPct,
   });
 
   return {
+    enabled: settings.enabled,
+    configured: settings.configured,
     scope: scopeLabel,
     capacity,
     peakCars,
@@ -131,7 +161,7 @@ function analyseSingleScope({ fixtures = [], club = {}, pitchCfg = [], startMins
     healthScore: status.score,
     isOverCapacity: analysis.isOverCapacity || utilisation > 100,
     isOverConcurrentLimit: analysis.isOverConcurrentLimit,
-    isHighPressure: analysis.isHighPressure || utilisation >= 85,
+    isHighPressure: analysis.isHighPressure,
     overCapacitySlots: analysis.overCapacitySlots || [],
     overConcurrentSlots: analysis.overConcurrentSlots || [],
     highPressureSlots: analysis.highPressureSlots || [],
@@ -155,9 +185,13 @@ function mergeWeekendSnapshot(daySnapshots = []) {
   })[0];
 
   const status = getStatus({
+    enabled: highestPeak.enabled,
     utilisation: highestPeak.utilisation,
     overCapacity: highestPeak.isOverCapacity,
     overConcurrent: highestPeak.isOverConcurrentLimit,
+    capacityConfigured: highestPeak.capacity > 0,
+    pressureThresholdPct:
+      highestPeak.analysis?.settings?.parkingPressureThresholdPct || 85,
   });
 
   return {
@@ -206,6 +240,17 @@ export function getParkingSnapshot({
       })
     );
 
+    if (!daySnapshots.length) {
+      return analyseSingleScope({
+        fixtures: [],
+        club,
+        pitchCfg,
+        startMins,
+        slotMins,
+        scopeLabel: "weekend",
+      });
+    }
+
     return mergeWeekendSnapshot(daySnapshots);
   }
 
@@ -228,14 +273,18 @@ export function getParkingSummary(args = {}) {
   return {
     ...snapshot,
     headline:
-      snapshot.capacity <= 0
-        ? "Parking capacity not configured"
+      !snapshot.enabled
+        ? "Parking is switched off"
+        : snapshot.capacity <= 0
+          ? "Parking capacity not configured"
         : snapshot.peakCars <= 0
           ? "No parking demand yet"
           : `${snapshot.peakCars}/${snapshot.capacity} spaces at ${snapshot.peakTime}`,
     detail:
-      snapshot.capacity <= 0
-        ? "Add parking capacity in Settings before reviewing parking readiness."
+      !snapshot.enabled
+        ? "Parking is excluded from readiness, validation and recommendations."
+        : snapshot.capacity <= 0
+          ? "Add parking capacity in Settings before reviewing parking readiness."
         : `${snapshot.utilisation}% peak use based on the ${scopeLabel}.`,
   };
 }

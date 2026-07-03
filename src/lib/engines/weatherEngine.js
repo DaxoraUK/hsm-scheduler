@@ -332,8 +332,17 @@ function buildRiskWindows(exposures = []) {
   });
 }
 
-function buildActions({ hasLocation, forecast, overallRisk, exposures, missingPostcodeSites } = {}) {
+function buildActions({ hasLocation, forecast, overallRisk, exposures, missingPostcodeSites, connectionStatus, connectionError } = {}) {
   const actions = [];
+
+  if (connectionStatus === "disabled") {
+    return [{
+      id: "weather-enable-site",
+      priority: "low",
+      title: "Weather intelligence is switched off",
+      detail: "Enable weather for the venue in Settings when live matchday forecasting is required.",
+    }];
+  }
 
   if (!hasLocation) {
     actions.push({
@@ -345,12 +354,35 @@ function buildActions({ hasLocation, forecast, overallRisk, exposures, missingPo
   }
 
   if (hasLocation && !forecast.available) {
-    actions.push({
-      id: "weather-connect-provider",
-      priority: "medium",
-      title: "Connect a live forecast provider",
-      detail: "The venue is ready, but no live weather data is currently available to assess fixture risk.",
-    });
+    if (connectionStatus === "loading" || connectionStatus === "refreshing") {
+      actions.push({
+        id: "weather-provider-loading",
+        priority: "low",
+        title: "Live forecast is connecting",
+        detail: "Ground Control is resolving the venue postcode and loading the hourly matchday forecast.",
+      });
+    } else if (connectionStatus === "out_of_range") {
+      actions.push({
+        id: "weather-date-range",
+        priority: "medium",
+        title: "Select a date inside the live forecast window",
+        detail: connectionError || "Live forecasts are available from today up to 15 days ahead.",
+      });
+    } else if (connectionStatus === "error") {
+      actions.push({
+        id: "weather-provider-error",
+        priority: "medium",
+        title: "Retry the live forecast",
+        detail: connectionError || "The weather provider could not be reached. Check the connection and try again.",
+      });
+    } else {
+      actions.push({
+        id: "weather-connect-provider",
+        priority: "medium",
+        title: "Connect a live forecast provider",
+        detail: "The venue is ready, but no live weather data is currently available to assess fixture risk.",
+      });
+    }
   }
 
   if (missingPostcodeSites?.length) {
@@ -438,12 +470,15 @@ function formatMetric(value, suffix = "", fallback = "—") {
   return value == null ? fallback : `${Math.round(value)}${suffix}`;
 }
 
-export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } = {}) {
+export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "", forecastSource = null, connectionStatus = "idle", connectionError = null } = {}) {
   const sites = getSites(club);
   const primarySite = getPrimarySite(club, sites);
   const enabledSites = sites.filter((site) => site.weatherEnabled !== false);
+  const source = forecastSource || extractForecastSource(club, primarySite);
+  const sourcePostcode = normalisePostcode(source?.location?.postcode || source?.postcode || "");
   const primaryWeatherPostcode = normalisePostcode(
-    club.weatherPostcode ||
+    sourcePostcode ||
+      club.weatherPostcode ||
       primarySite?.weatherPostcode ||
       primarySite?.postcode ||
       club.groundPostcode ||
@@ -468,7 +503,6 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
   const multiSite = sites.length > 1;
   const location = primaryWeatherPostcode || clubPostcode || "Not set";
   const venueName = primarySite?.name || club.groundName || club.venue || club.name || "Club ground";
-  const source = extractForecastSource(club, primarySite);
   const forecastData = normaliseForecast(source);
   const overallRisk = forecastData.available ? getRiskLevel(forecastData) : {
     key: "unknown",
@@ -481,20 +515,36 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
   const riskWindows = buildRiskWindows(exposures);
   const highRiskFixtures = exposures.filter((item) => item.risk.key === "high");
   const watchFixtures = exposures.filter((item) => item.risk.key === "medium");
-  const warnings = [
+  const warnings = connectionStatus === "disabled" ? 0 : [
     !hasLocation,
     !clubPostcode,
     missingPostcodeSites.length > 0,
     !forecastData.available,
+    connectionStatus === "error" || connectionStatus === "out_of_range" || connectionStatus === "stale",
     highRiskFixtures.length > 0,
     watchFixtures.length > 0,
   ].filter(Boolean).length;
 
   let status = "success";
   let label = "Ready";
-  if (!hasLocation || !forecastData.available || watchFixtures.length || missingPostcodeSites.length) {
+  if (connectionStatus === "disabled") {
+    status = "neutral";
+    label = "Off";
+  } else if (!hasLocation) {
     status = "warning";
-    label = !forecastData.available ? "Forecast needed" : "Watch";
+    label = "Configure";
+  } else if ((connectionStatus === "loading" || connectionStatus === "refreshing") && !forecastData.available) {
+    status = "warning";
+    label = "Connecting";
+  } else if (connectionStatus === "out_of_range" && !forecastData.available) {
+    status = "warning";
+    label = "Date unavailable";
+  } else if (connectionStatus === "error" && !forecastData.available) {
+    status = "warning";
+    label = "Forecast error";
+  } else if (!forecastData.available || watchFixtures.length || missingPostcodeSites.length || connectionStatus === "stale") {
+    status = "warning";
+    label = !forecastData.available ? "Forecast needed" : connectionStatus === "stale" ? "Cached" : "Watch";
   }
   if (highRiskFixtures.length || overallRisk.key === "high") {
     status = "danger";
@@ -503,7 +553,9 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
 
   const setupPenalty = (!hasLocation ? 35 : 0) + (!forecastData.available ? 30 : 0) + (missingPostcodeSites.length ? 10 : 0);
   const riskPenalty = highRiskFixtures.length * 8 + watchFixtures.length * 3 + (overallRisk.key === "high" ? 15 : overallRisk.key === "medium" ? 7 : 0);
-  const score = Math.max(0, 100 - setupPenalty - Math.min(35, riskPenalty));
+  const score = connectionStatus === "disabled"
+    ? 100
+    : Math.max(0, 100 - setupPenalty - Math.min(35, riskPenalty));
 
   const checks = [
     {
@@ -517,10 +569,18 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
     {
       id: "weather-provider",
       label: "Forecast feed",
-      status: forecastData.available ? "ok" : "warn",
-      message: forecastData.available
-        ? `${forecastData.provider} data is available for operational assessment.`
-        : "No live forecast feed is connected yet. Ground Control will not invent weather conditions.",
+      status: forecastData.available || connectionStatus === "disabled" ? "ok" : "warn",
+      message: connectionStatus === "disabled"
+        ? "Weather intelligence is switched off for this venue."
+        : forecastData.available
+          ? `${forecastData.provider} data is available for operational assessment${connectionStatus === "stale" ? " from the latest cached refresh" : ""}.`
+          : connectionStatus === "loading" || connectionStatus === "refreshing"
+          ? "Connecting to the live forecast provider now."
+          : connectionStatus === "out_of_range"
+            ? connectionError || "The selected date is outside the live forecast window."
+            : connectionStatus === "error"
+              ? connectionError || "The live forecast provider could not be reached."
+              : "No live forecast feed is connected yet. Ground Control will not invent weather conditions.",
     },
     {
       id: "multi-site",
@@ -540,14 +600,36 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
     overallRisk,
     exposures,
     missingPostcodeSites,
+    connectionStatus,
+    connectionError,
   });
 
-  const decision = !hasLocation
+  const decision = connectionStatus === "disabled"
     ? {
-        headline: "Set the venue location before relying on weather intelligence",
-        detail: "Ground Control needs a postcode to connect forecasts to the correct site.",
+        headline: "Weather intelligence is switched off",
+        detail: "Enable weather for a venue in Settings when live matchday forecasting is required.",
       }
-    : !forecastData.available
+    : !hasLocation
+      ? {
+          headline: "Set the venue location before relying on weather intelligence",
+          detail: "Ground Control needs a postcode to connect forecasts to the correct site.",
+        }
+      : (connectionStatus === "loading" || connectionStatus === "refreshing") && !forecastData.available
+        ? {
+            headline: "Connecting the live matchday forecast",
+            detail: "The venue postcode is being resolved before hourly rain, wind and temperature data is assessed.",
+          }
+        : connectionStatus === "out_of_range" && !forecastData.available
+          ? {
+              headline: "The selected date is outside the live forecast window",
+              detail: connectionError || "Choose a matchday from today up to 15 days ahead.",
+            }
+          : connectionStatus === "error" && !forecastData.available
+            ? {
+                headline: "Live weather could not be loaded",
+                detail: connectionError || "Retry the forecast connection before relying on weather guidance.",
+              }
+            : !forecastData.available
       ? {
           headline: "Venue ready — live forecast still required",
           detail: "The location is configured, but there is no provider data to assess rain, wind, frost or heat risk.",
@@ -584,6 +666,8 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
     warnings,
     provider: forecastData.provider,
     forecastAvailable: forecastData.available,
+    connectionStatus,
+    connectionError,
     updatedAt: forecastData.updatedAt,
     overallRisk,
     decision,
@@ -617,7 +701,7 @@ export function getWeatherSnapshot({ club = {}, fixtures = [], dateLabel = "" } 
       source: "weatherEngine.getWeatherSnapshot",
       calculation: forecastData.available
         ? "location readiness plus supplied forecast risk assessment"
-        : "location readiness only; no forecast provider data supplied",
+        : `location readiness only; forecast connection status is ${connectionStatus}`,
     },
   };
 }

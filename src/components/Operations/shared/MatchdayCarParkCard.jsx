@@ -12,14 +12,17 @@ function clamp(value, min = 0, max = 100) {
 }
 
 function getStatusVariant(analysis) {
+  if ((analysis.settings?.carParkSpaces || 0) <= 0) return "warning";
   if (analysis.isOverCapacity) return "danger";
-  if (analysis.isHighPressure || (analysis.peakSlot?.occupancyPct || 0) >= 85) return "warning";
+  if (analysis.isOverConcurrentLimit || analysis.isHighPressure) return "warning";
   return "success";
 }
 
 function getStatusLabel(analysis) {
+  if ((analysis.settings?.carParkSpaces || 0) <= 0) return "Configure";
   if (analysis.isOverCapacity) return "Over capacity";
-  if (analysis.isHighPressure || (analysis.peakSlot?.occupancyPct || 0) >= 85) return "High pressure";
+  if (analysis.isOverConcurrentLimit) return "Concurrency risk";
+  if (analysis.isHighPressure) return "High pressure";
   return "Healthy";
 }
 
@@ -32,10 +35,15 @@ function getHealthLabel(percentage) {
 
 function getHealthScore(analysis) {
   const occupancy = analysis.peakSlot?.occupancyPct || 0;
+  const threshold = analysis.settings?.parkingPressureThresholdPct || 85;
 
+  if ((analysis.settings?.carParkSpaces || 0) <= 0) return 60;
   if (!analysis.peakSlot) return 100;
   if (analysis.isOverCapacity) return clamp(100 - (occupancy - 100) * 2, 20, 55);
-  if (occupancy >= 85) return clamp(100 - (occupancy - 80), 70, 84);
+  if (analysis.isOverConcurrentLimit) return clamp(72 - Math.max(0, occupancy - 60) * 0.25, 55, 72);
+  if (analysis.isHighPressure || occupancy >= threshold) {
+    return clamp(100 - Math.max(0, occupancy - (threshold - 5)), 70, 84);
+  }
 
   return clamp(100 - Math.max(0, occupancy - 65) * 0.4, 86, 100);
 }
@@ -134,6 +142,64 @@ function ParkingHealthBar({ score }) {
   );
 }
 
+function getTimelineDisplaySlots(slots = []) {
+  const buckets = new Map();
+
+  slots.forEach((slot) => {
+    const mins = Number(slot.mins);
+    const bucket = Number.isFinite(mins) ? Math.floor(mins / 30) * 30 : slot.label;
+    const current = buckets.get(bucket);
+
+    if (
+      !current ||
+      Number(slot.estimatedCars || 0) > Number(current.estimatedCars || 0)
+    ) {
+      buckets.set(bucket, slot);
+    }
+  });
+
+  return [...buckets.values()].sort(
+    (a, b) => Number(a.mins || 0) - Number(b.mins || 0)
+  );
+}
+
+function formatPressureWindows(slots = []) {
+  if (!slots.length) return "the identified pressure window";
+
+  const sorted = [...slots].sort(
+    (a, b) => Number(a.mins || 0) - Number(b.mins || 0)
+  );
+  const interval = 15;
+  const groups = [];
+
+  sorted.forEach((slot) => {
+    const current = groups[groups.length - 1];
+    const last = current?.[current.length - 1];
+
+    if (
+      !current ||
+      !last ||
+      Number(slot.mins || 0) - Number(last.mins || 0) > interval
+    ) {
+      groups.push([slot]);
+      return;
+    }
+
+    current.push(slot);
+  });
+
+  return groups
+    .slice(0, 3)
+    .map((group) => {
+      const first = group[0];
+      const last = group[group.length - 1];
+      return first.label === last.label
+        ? first.label
+        : `${first.label}–${last.label}`;
+    })
+    .join(", ");
+}
+
 function ParkingTimeline({ slots = [], capacity }) {
   if (!slots.length) {
     return (
@@ -143,7 +209,7 @@ function ParkingTimeline({ slots = [], capacity }) {
     );
   }
 
-  const visibleSlots = slots.filter((_, index) => index % 2 === 0);
+  const visibleSlots = getTimelineDisplaySlots(slots);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -169,7 +235,7 @@ function ParkingTimeline({ slots = [], capacity }) {
               : "bg-emerald-500";
 
           return (
-            <div key={slot.label} className="flex min-w-0 flex-col items-center gap-2">
+            <div key={`${slot.mins}-${slot.label}`} className="flex min-w-0 flex-col items-center gap-2">
               <div className={`text-[10px] font-black ${isPeak ? "text-slate-950" : "text-slate-400"}`}>
                 {slot.estimatedCars}
               </div>
@@ -224,10 +290,12 @@ function ParkingPeakStory({ analysis, capacity }) {
             Parking Peak
           </div>
           <div className="mt-2 text-4xl font-black tracking-tight text-slate-950">
-            {peak.occupancyPct}%
+            {capacity > 0 ? `${peak.occupancyPct}%` : "—"}
           </div>
           <div className="mt-1 text-sm font-bold text-slate-500">
-            {peak.estimatedCars}/{capacity} spaces at {peak.label}
+            {capacity > 0
+              ? `${peak.estimatedCars}/${capacity} spaces at ${peak.label}`
+              : `${peak.estimatedCars} estimated cars at ${peak.label}; capacity not set`}
           </div>
           {getPeakFixtureNames(peak) ? (
             <div className="mt-4 rounded-2xl border border-white bg-white p-4 text-sm font-bold leading-6 text-slate-600 shadow-sm">
@@ -242,10 +310,26 @@ function ParkingPeakStory({ analysis, capacity }) {
 }
 
 function ParkingMessage({ analysis }) {
+  if ((analysis.settings?.carParkSpaces || 0) <= 0) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+        Parking capacity is not configured. Add the available spaces in Settings before relying on parking readiness or fixture-move recommendations.
+      </div>
+    );
+  }
+
   if (analysis.isOverCapacity) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold leading-6 text-red-900">
-        Parking is projected to exceed capacity at {analysis.overCapacitySlots.map((slot) => slot.label).join(", ")}. Spread kick-offs, reduce concurrent fixtures, or open overflow parking.
+        Parking is projected to exceed capacity during {formatPressureWindows(analysis.overCapacitySlots)}. Spread kick-offs, reduce concurrent fixtures, or open overflow parking.
+      </div>
+    );
+  }
+
+  if (analysis.isOverConcurrentLimit) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+        Parking demand is within the physical space limit, but the configured concurrent-game control is exceeded during {formatPressureWindows(analysis.overConcurrentSlots)}. Spread kick-offs or review the control limit only after checking access, officials and safeguarding.
       </div>
     );
   }
@@ -261,7 +345,7 @@ function ParkingMessage({ analysis }) {
   if (analysis.canIncreaseConcurrentLimit) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold leading-6 text-emerald-900">
-        Parking remains within capacity. More concurrent games may be possible if pitch suitability and officials also allow it.
+        Parking remains within capacity. A control limit of up to {analysis.suggestedMaxConcurrent} concurrent parking-impact games may be possible, but only after checking access, officials and safeguarding.
       </div>
     );
   }
@@ -560,13 +644,15 @@ export default function MatchdayCarParkCard({
   closedPitches = [],
   startHour = 8,
   startMin = 30,
-  endHour = 11,
-  endMin = 30,
   day = "Matchday",
   onOverride,
 }) {
   const startMins = startHour * 60 + startMin;
-  const youthEndTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
+  const recommendationEndTime =
+    club?.adultEndTime ||
+    club?.adultLatestKickOff ||
+    club?.latestAdultKickOff ||
+    "17:00";
 
   const parkingSnapshot = useMemo(
     () =>
@@ -614,7 +700,7 @@ export default function MatchdayCarParkCard({
         closedPitches,
         club,
         start: `${String(startHour).padStart(2, "0")}:${String(startMin).padStart(2, "0")}`,
-        end: youthEndTime,
+        end: recommendationEndTime,
         interval: 15,
         limit: 3,
         allowParkingImprovement: true,
@@ -635,8 +721,15 @@ export default function MatchdayCarParkCard({
       });
     });
 
-    return recommendations.sort((a, b) => Number(b.score || 0) - Number(a.score || 0)).slice(0, 4);
-  }, [analysis, club, closedPitches, endHour, endMin, pitchCfg, satFinal, startHour, startMin, youthEndTime]);
+    return recommendations
+      .sort(
+        (a, b) =>
+          Number(b.reduction || 0) - Number(a.reduction || 0) ||
+          Number(b.percentReduction || 0) - Number(a.percentReduction || 0) ||
+          Number(b.score || 0) - Number(a.score || 0)
+      )
+      .slice(0, 4);
+  }, [analysis, club, closedPitches, pitchCfg, recommendationEndTime, satFinal, startHour, startMin]);
 
   const peak = analysis.peakSlot;
   const healthScore = getHealthScore(analysis);

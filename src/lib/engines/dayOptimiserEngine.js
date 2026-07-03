@@ -1,5 +1,6 @@
 import { getValidatedFixRecommendations } from "./recommendationEngine.js";
 import { validateFixtureUpdate } from "./validationEngine.js";
+import { isParkingEnabled } from "../settings/workspaceSettings.js";
 
 function getFixtureTitle(fixture = {}) {
   return [fixture.homeTeam || fixture.team || fixture.fixture, fixture.awayTeam]
@@ -51,6 +52,7 @@ export function calculateDayOptimisation({
   maxMoves = 4,
 } = {}) {
   const activeFixtures = fixtures.filter((fixture) => fixture?.status !== "postponed");
+  const parkingEnabled = isParkingEnabled(club);
 
   if (!activeFixtures.length) {
     return {
@@ -150,7 +152,9 @@ export function calculateDayOptimisation({
     score,
     summary: hasMoves
       ? `${accepted.length} validated move${accepted.length === 1 ? "" : "s"} can improve matchday flow without creating new clashes.`
-      : "No validated parking or scheduling improvements are currently needed.",
+      : parkingEnabled
+        ? "No validated parking or scheduling improvements are currently needed."
+        : "No validated scheduling improvements are currently needed.",
     moves: accepted,
     metrics: {
       activeFixtures: activeFixtures.length,

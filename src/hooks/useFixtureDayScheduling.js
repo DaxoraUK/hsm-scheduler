@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { AVG_CARS } from "../lib/constants.js";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
+import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -31,31 +31,6 @@ function buildPitchConflicts(active = [], pitchCfg = []) {
   }
 
   return conflicts;
-}
-
-function calculatePeakCars(active = [], club = {}) {
-  const games = active.filter(
-    (game) => game.koMins != null && game.endMins != null
-  );
-  if (!games.length) return 0;
-
-  let peak = 0;
-  const cars = club.avgCars || AVG_CARS;
-
-  for (let mins = 0; mins < 24 * 60; mins += 15) {
-    const current = games
-      .filter((game) => game.koMins <= mins && game.endMins > mins)
-      .reduce(
-        (sum, game) =>
-          sum +
-          (cars?.[game.cfg?.format] || AVG_CARS[game.cfg?.format] || 8),
-        0
-      );
-
-    peak = Math.max(peak, current);
-  }
-
-  return peak;
 }
 
 export function useFixtureDayScheduling({
@@ -109,13 +84,23 @@ export function useFixtureDayScheduling({
     [active, pitchCfg]
   );
 
-  const peakCars = useMemo(
-    () => calculatePeakCars(active, club),
-    [active, club]
+  const parkingSnapshot = useMemo(
+    () =>
+      getParkingSnapshot({
+        fixtures: active,
+        club,
+        pitchCfg,
+      }),
+    [active, club, pitchCfg]
   );
 
-  const carCap = Number(club.carParkSpaces || 57);
-  const parkingOver = peakCars > carCap;
+  const parkingEnabled = parkingSnapshot.enabled !== false;
+  const peakCars = parkingSnapshot.peakCars;
+  const carCap = parkingSnapshot.capacity;
+  const parkingConfigured = parkingEnabled && carCap > 0;
+  const parkingOver =
+    parkingSnapshot.isOverCapacity ||
+    parkingSnapshot.isOverConcurrentLimit;
 
   const readiness = useMemo(() => {
     const checks = [
@@ -125,12 +110,18 @@ export function useFixtureDayScheduling({
         okText: "No clashes detected",
         badText: `${conflicts.length} pitch clash${conflicts.length === 1 ? "" : "es"} detected`,
       },
-      {
-        key: "parking",
-        ok: !parkingOver,
-        okText: "Parking monitored",
-        badText: `Parking over capacity (${peakCars}/${carCap})`,
-      },
+      ...(parkingEnabled
+        ? [{
+            key: "parking",
+            ok: parkingConfigured && !parkingOver,
+            okText: "Parking monitored",
+            badText: !parkingConfigured
+              ? "Parking capacity not configured"
+              : parkingSnapshot.isOverCapacity
+                ? `Parking over capacity (${peakCars}/${carCap})`
+                : `Parking concurrency limit exceeded (${parkingSnapshot.peakSlot?.fixtureCount || 0}/${parkingSnapshot.analysis?.settings?.maxConcurrent || 0})`,
+          }]
+        : []),
       {
         key: "officials",
         ok: officialWarnings === 0,
@@ -151,7 +142,17 @@ export function useFixtureDayScheduling({
       pct: checks.length ? Math.round((passed / checks.length) * 100) : 0,
       allReady: passed === checks.length,
     };
-  }, [conflicts, parkingOver, peakCars, carCap, officialWarnings, unresolved]);
+  }, [
+    conflicts,
+    parkingEnabled,
+    parkingConfigured,
+    parkingOver,
+    parkingSnapshot,
+    peakCars,
+    carCap,
+    officialWarnings,
+    unresolved,
+  ]);
 
   return {
     dayKey: key,
@@ -163,6 +164,8 @@ export function useFixtureDayScheduling({
     peakCars,
     carCap,
     parkingOver,
+    parkingEnabled,
+    parkingSnapshot,
     readiness,
 
     // Compatibility aliases for older components while the UI is consolidated.

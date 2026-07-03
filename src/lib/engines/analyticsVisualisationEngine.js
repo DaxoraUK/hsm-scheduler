@@ -309,7 +309,7 @@ export function buildAnalyticsVisualisationModel({
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const selectedEntries = filterEntries(entries, period, matchday);
-  const capacity = number(club.carParkSpaces, 57);
+  const capacity = Math.max(0, number(club.carParkSpaces, 0));
 
   const weekly = selectedEntries.map((entry) => {
     const fixtures = entryFixtures(entry.raw, day);
