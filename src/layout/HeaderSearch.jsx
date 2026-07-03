@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { createNavigationController, resolveSearchNavigation } from "../lib/navigation/index.js";
 
-export default function HeaderSearch({ setMainPage, setDayTab, setNavigationTarget }) {
+export default function HeaderSearch({ setMainPage, setDayTab, setNavigationTarget, canOpenSettings = true }) {
   const [query, setQuery] = useState("");
 
   const performSearch = () => {
@@ -12,6 +12,12 @@ export default function HeaderSearch({ setMainPage, setDayTab, setNavigationTarg
 
     const match = resolveSearchNavigation(q);
     if (match) {
+      if (String(match.target || "").startsWith("settings") && !canOpenSettings) {
+        toast.error("Administrator access required", {
+          description: "Your role does not include club settings.",
+        });
+        return;
+      }
       const nav = createNavigationController({ setMainPage, setDayTab, setNavigationTarget });
       nav.goTo(match.target, match.options);
       return;

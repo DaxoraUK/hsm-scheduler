@@ -94,8 +94,15 @@ export function useWeekPersistence({
   setHistory,
   setDbStatus,
   activeClubId = "",
+  canPublish = true,
 }) {
   const saveWeek = useCallback(async () => {
+    if (!canPublish) {
+      toast.error("Read-only access", {
+        description: "Your club role cannot publish or save matchweeks.",
+      });
+      return false;
+    }
     const snapshots = buildFixtureDaySnapshots({
       fixtureDays,
       satDate,
@@ -152,20 +159,6 @@ export function useWeekPersistence({
       setDbStatus("saving");
       try {
         await DB.saveHistoryEntry(activeClubId, entry);
-        await DB.recordAudit(activeClubId, {
-          action: "matchweek.publish",
-          entityType: "matchweek",
-          entityId: entry.id,
-          detail: {
-            week: entry.dateLabel,
-            fixtureDays: publishedDays.map((day) => ({
-              key: day.key,
-              date: day.date,
-              fixtures: day.scheduled.length,
-              postponed: day.postponed.length,
-            })),
-          },
-        });
         setDbStatus("connected");
         toast.success("Matchweek published", {
           description: publishedDays
@@ -211,6 +204,7 @@ export function useWeekPersistence({
     setHistory,
     setDbStatus,
     activeClubId,
+    canPublish,
   ]);
 
   return { saveWeek };

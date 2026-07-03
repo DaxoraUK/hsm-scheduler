@@ -20,6 +20,7 @@ const TAB_GROUPS = [
     tabs: [
       ["overview", "Overview", LayoutGrid],
       ["workspace", "Workspace", Gauge],
+      ["access", "Access & audit", ShieldCheck],
     ],
   },
   {
@@ -49,10 +50,14 @@ const TAB_GROUPS = [
   },
 ];
 
-export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode }) {
+export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess }) {
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
-    tabs: group.tabs.filter(([key]) => !(productionMode && key === "testdata")),
+    tabs: group.tabs.filter(([key]) => {
+      if (productionMode && key === "testdata") return false;
+      if (key === "access" && !workspaceAccess?.canViewAudit) return false;
+      return true;
+    }),
   })).filter((group) => group.tabs.length);
 
   return (

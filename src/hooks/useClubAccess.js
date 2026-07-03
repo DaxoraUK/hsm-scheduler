@@ -3,6 +3,28 @@ import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { getUserScopedItem, setUserScopedItem } from "../lib/storage/tenantStorage.js";
 
 const ACTIVE_CLUB_KEY = "selected";
+const INVITE_QUERY_KEY = "club_invite";
+
+function readInviteToken() {
+  if (typeof window === "undefined") return "";
+  try {
+    return new URL(window.location.href).searchParams.get(INVITE_QUERY_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function clearInviteToken() {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(INVITE_QUERY_KEY)) return;
+    url.searchParams.delete(INVITE_QUERY_KEY);
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // A malformed browser URL must not prevent normal workspace access.
+  }
+}
 
 export function useClubAccess(authSession) {
   const [memberships, setMemberships] = useState([]);
@@ -33,7 +55,20 @@ export function useClubAccess(authSession) {
     setError("");
 
     try {
-      const nextMemberships = await DB.listMemberships();
+      let nextMemberships = await DB.listMemberships();
+      const inviteToken = readInviteToken();
+
+      if (inviteToken) {
+        try {
+          await DB.acceptClubInvitation(inviteToken);
+          clearInviteToken();
+          nextMemberships = await DB.listMemberships();
+        } catch (inviteError) {
+          if (!nextMemberships.length) throw inviteError;
+          setError(inviteError?.message || "The club invitation could not be accepted.");
+        }
+      }
+
       setMemberships(nextMemberships);
 
       if (!nextMemberships.length) {
@@ -100,6 +135,39 @@ export function useClubAccess(authSession) {
     () => memberships.find((membership) => membership.clubId === activeClubId) || null,
     [activeClubId, memberships]
   );
+
+  useEffect(() => {
+    const expiresAt = activeMembership?.supportExpiresAt;
+    if (!expiresAt) return undefined;
+    const delay = new Date(expiresAt).getTime() - Date.now() + 500;
+    if (!Number.isFinite(delay) || delay <= 0) {
+      refresh();
+      return undefined;
+    }
+    const timer = window.setTimeout(refresh, Math.min(delay, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [activeMembership?.supportExpiresAt, refresh]);
+
+  useEffect(() => {
+    if (!authSession?.access_token || typeof window === "undefined") return undefined;
+
+    const verifyAccess = () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener("focus", verifyAccess);
+    document?.addEventListener?.("visibilitychange", verifyAccess);
+
+    const interval = activeMembership?.accessMode === "support"
+      ? window.setInterval(refresh, 30_000)
+      : null;
+
+    return () => {
+      window.removeEventListener("focus", verifyAccess);
+      document?.removeEventListener?.("visibilitychange", verifyAccess);
+      if (interval) window.clearInterval(interval);
+    };
+  }, [activeMembership?.accessMode, authSession?.access_token, refresh]);
 
   return {
     memberships,

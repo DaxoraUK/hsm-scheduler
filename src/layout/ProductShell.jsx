@@ -12,6 +12,9 @@ import {
   ChartNoAxesCombined,
   FileText,
   Settings,
+  Clock3,
+  Eye,
+  LogOut,
 } from "lucide-react";
 
 export default function ProductShell({
@@ -36,7 +39,9 @@ export default function ProductShell({
   memberships = [],
   activeClubId = "",
   activeMembership = null,
+  workspaceAccess = null,
   onClubChange,
+  onEndSupportAccess,
   onSignOut,
 }) {
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
@@ -48,7 +53,7 @@ export default function ProductShell({
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
-  ];
+  ].filter(([key]) => key !== "settings" || workspaceAccess?.canManageSettings);
 
   const satCount = satHasRun
     ? satFinal.filter((game) => game.status !== "postponed").length
@@ -181,13 +186,19 @@ export default function ProductShell({
 
         <div className="flex min-h-screen flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-6 border-b border-slate-200 bg-white/90 px-8 backdrop-blur-xl">
-            <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} />
+            <HeaderSearch
+              setMainPage={setMainPage}
+              setDayTab={setDayTab}
+              setNavigationTarget={setNavigationTarget}
+              canOpenSettings={Boolean(workspaceAccess?.canManageSettings)}
+            />
             <HeaderProfile
               user={authSession?.user}
               clubName={club?.name}
               memberships={memberships}
               activeClubId={activeClubId}
-              activeRole={activeMembership?.role || "viewer"}
+              activeRole={workspaceAccess?.role || activeMembership?.role || "viewer"}
+              workspaceAccess={workspaceAccess}
               onClubChange={onClubChange}
               onOpenSettings={(settingsTab = "overview") => {
                 nav.goToSettings({ settingsTab, scroll: false });
@@ -196,7 +207,33 @@ export default function ProductShell({
             />
           </header>
 
-          <main className="flex-1 overflow-auto p-8">{children}</main>
+          {workspaceAccess?.isSupport ? (
+            <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-6 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Eye size={18} /></span>
+                <div>
+                  <div className="text-sm font-black">Read-only Daxora support session</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-800">
+                    <span>Every view remains attributed to the signed-in support account.</span>
+                    {workspaceAccess.supportExpiresAt ? <span className="inline-flex items-center gap-1"><Clock3 size={13} /> Expires {new Date(workspaceAccess.supportExpiresAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span> : null}
+                  </div>
+                </div>
+              </div>
+              <button type="button" onClick={onEndSupportAccess} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 shadow-sm hover:bg-emerald-100"><LogOut size={15} /> End support session</button>
+            </div>
+          ) : workspaceAccess?.isReadOnly ? (
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-6 py-2.5 text-xs font-black text-slate-600"><Eye size={15} /> Read-only viewer access</div>
+          ) : null}
+
+          <main className="flex-1 overflow-auto p-8">
+            <div
+              className={workspaceAccess?.isReadOnly ? "pointer-events-none" : ""}
+              inert={workspaceAccess?.isReadOnly || undefined}
+              aria-disabled={workspaceAccess?.isReadOnly || undefined}
+            >
+              {children}
+            </div>
+          </main>
         </div>
       </div>
 

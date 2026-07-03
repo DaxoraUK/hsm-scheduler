@@ -107,41 +107,55 @@ begin
   end if;
 end $$;
 
-insert into public.history (club_id, id, data)
-select club_a, 'rls-user-a-own-write', '{"allowed":true}'::jsonb
-from gc_rls_test_context;
+select public.save_matchweek_history(
+  (select club_a from gc_rls_test_context),
+  'rls-user-a-own-write',
+  '{"allowed":true,"fixtureDays":[]}'::jsonb,
+  now()
+);
 
 do $$
 declare
   affected integer;
 begin
   begin
-    insert into public.history (club_id, id, data)
-    select club_b, 'rls-user-a-cross-insert', '{"allowed":false}'::jsonb
-    from gc_rls_test_context;
-
-    raise exception 'RLS failure: User A inserted a Club B history row';
+    perform public.save_matchweek_history(
+      (select club_b from gc_rls_test_context),
+      'rls-user-a-cross-insert',
+      '{"allowed":false,"fixtureDays":[]}'::jsonb,
+      now()
+    );
+    raise exception 'RLS failure: User A inserted a Club B history row through the audited RPC';
   exception
-    when insufficient_privilege or check_violation then
-      null;
+    when insufficient_privilege or check_violation then null;
   end;
 
-  update public.history
-  set data = '{"tampered":true}'::jsonb
-  where club_id = (select club_b from gc_rls_test_context)
-    and id = 'rls-seed-b';
-  get diagnostics affected = row_count;
-  if affected <> 0 then
-    raise exception 'RLS failure: User A updated Club B history';
-  end if;
+  begin
+    update public.history
+    set data = '{"tampered":true}'::jsonb
+    where club_id = (select club_b from gc_rls_test_context)
+      and id = 'rls-seed-b';
+    get diagnostics affected = row_count;
+    if affected <> 0 then
+      raise exception 'RLS failure: User A updated Club B history';
+    end if;
+    raise exception 'Audit failure: direct history update was not blocked';
+  exception
+    when insufficient_privilege or check_violation then null;
+  end;
 
-  delete from public.history
-  where club_id = (select club_b from gc_rls_test_context)
-    and id = 'rls-seed-b';
-  get diagnostics affected = row_count;
-  if affected <> 0 then
-    raise exception 'RLS failure: User A deleted Club B history';
-  end if;
+  begin
+    delete from public.history
+    where club_id = (select club_b from gc_rls_test_context)
+      and id = 'rls-seed-b';
+    get diagnostics affected = row_count;
+    if affected <> 0 then
+      raise exception 'RLS failure: User A deleted Club B history';
+    end if;
+    raise exception 'Audit failure: direct history delete was not blocked';
+  exception
+    when insufficient_privilege or check_violation then null;
+  end;
 
   begin
     insert into public.club_memberships (club_id, user_id, role, status)
@@ -218,21 +232,25 @@ begin
   end if;
 end $$;
 
-insert into public.history (club_id, id, data)
-select club_b, 'rls-user-b-own-write', '{"allowed":true}'::jsonb
-from gc_rls_test_context;
+select public.save_matchweek_history(
+  (select club_b from gc_rls_test_context),
+  'rls-user-b-own-write',
+  '{"allowed":true,"fixtureDays":[]}'::jsonb,
+  now()
+);
 
 do $$
 begin
   begin
-    insert into public.history (club_id, id, data)
-    select club_a, 'rls-user-b-cross-insert', '{"allowed":false}'::jsonb
-    from gc_rls_test_context;
-
-    raise exception 'RLS failure: User B inserted a Club A history row';
+    perform public.save_matchweek_history(
+      (select club_a from gc_rls_test_context),
+      'rls-user-b-cross-insert',
+      '{"allowed":false,"fixtureDays":[]}'::jsonb,
+      now()
+    );
+    raise exception 'RLS failure: User B inserted a Club A history row through the audited RPC';
   exception
-    when insufficient_privilege or check_violation then
-      null;
+    when insufficient_privilege or check_violation then null;
   end;
 end $$;
 
@@ -249,5 +267,5 @@ begin
   end if;
 end $$;
 
-select 'PASS: cross-club select, insert, update, delete and membership boundaries are isolated' as result;
+select 'PASS: cross-club reads, audited RPC writes and direct mutation boundaries are isolated' as result;
 rollback;

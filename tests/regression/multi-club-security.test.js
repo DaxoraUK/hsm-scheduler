@@ -75,64 +75,59 @@ describe("authenticated Supabase repository", () => {
     expect(options.headers.Authorization).not.toContain(ANON_KEY);
   });
 
-  test("all history deletion paths include both club and record filters", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, 204));
+  test("history deletion uses the guarded, server-audited RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(true));
     vi.stubGlobal("fetch", fetchMock);
 
     await DB.deleteHistory(CLUB_A, "week-42");
 
     const [url, options] = fetchMock.mock.calls[0];
-    expect(options.method).toBe("DELETE");
-    expect(url).toContain(`club_id=eq.${CLUB_A}`);
-    expect(url).toContain("id=eq.week-42");
-    expect(url).not.toContain("id=not.is.null");
+    expect(options.method).toBe("POST");
+    expect(url).toContain("/rest/v1/rpc/delete_matchweek_history");
+    expect(JSON.parse(options.body)).toEqual({
+      target_club_id: CLUB_A,
+      history_id: "week-42",
+    });
   });
 
-  test("history upserts carry tenant ownership and use a compound conflict key", async () => {
+  test("matchweek publication uses the guarded, server-audited RPC", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, 204));
     vi.stubGlobal("fetch", fetchMock);
 
-    await DB.saveHistoryEntry(CLUB_A, {
+    const entry = {
       id: "2026-07-04",
       savedAt: "2026-07-03T18:00:00.000Z",
       fixtures: [],
-    });
+    };
+    await DB.saveHistoryEntry(CLUB_A, entry);
 
     const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toContain("history?on_conflict=club_id,id");
-    expect(JSON.parse(options.body)).toEqual([
-      expect.objectContaining({
-        club_id: CLUB_A,
-        id: "2026-07-04",
-      }),
-    ]);
+    expect(url).toContain("/rest/v1/rpc/save_matchweek_history");
+    expect(JSON.parse(options.body)).toEqual({
+      target_club_id: CLUB_A,
+      history_id: "2026-07-04",
+      history_data: entry,
+      history_saved_at: "2026-07-03T18:00:00.000Z",
+    });
   });
 
-  test("audit requests never accept a browser-supplied actor identity", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse("event-id"));
+  test("the browser repository cannot submit free-form audit identities or actions", () => {
+    expect(DB.recordAudit).toBeUndefined();
+  });
+
+  test("test fixture writes also use a guarded audited RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(1));
     vi.stubGlobal("fetch", fetchMock);
 
-    await DB.recordAudit(CLUB_A, {
-      action: "settings.club.save",
-      entityType: "settings",
-      entityId: "club",
-      detail: { changed: true },
-      actorUserId: "attacker-controlled-id",
-      actorEmail: "spoofed@example.test",
-    });
+    await DB.saveTestFixtures(CLUB_A, "testsat", [{ id: "fixture-1" }]);
 
     const [url, options] = fetchMock.mock.calls[0];
-    const body = JSON.parse(options.body);
-    expect(url).toContain("/rest/v1/rpc/record_audit_event");
-    expect(body).toEqual({
+    expect(url).toContain("/rest/v1/rpc/save_test_fixtures");
+    expect(JSON.parse(options.body)).toEqual({
       target_club_id: CLUB_A,
-      event_action: "settings.club.save",
-      entity_type: "settings",
-      entity_id: "club",
-      event_detail: { changed: true },
+      config_key: "testsat",
+      fixtures: [{ id: "fixture-1" }],
     });
-    expect(JSON.stringify(body)).not.toContain("attacker-controlled-id");
-    expect(JSON.stringify(body)).not.toContain("spoofed@example.test");
   });
 
   test("rejects database access when no signed-in session exists", async () => {
@@ -147,23 +142,110 @@ describe("authenticated Supabase repository", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("excludes memberships whose club metadata is hidden or inactive", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse([
-        { club_id: CLUB_A, role: "owner", status: "active", created_at: "2026-07-03T09:00:00Z" },
-        { club_id: CLUB_B, role: "owner", status: "active", created_at: "2026-07-03T09:01:00Z" },
-      ]))
-      .mockResolvedValueOnce(jsonResponse([
-        { id: CLUB_A, organisation_id: "org-a", name: "Club A", slug: "club-a", status: "active" },
-      ]));
+  test("loads membership and time-limited support workspaces through one guarded RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([
+      {
+        club_id: CLUB_A,
+        organisation_id: "org-a",
+        club_name: "Club A",
+        club_slug: "club-a",
+        club_status: "active",
+        role: "owner",
+        access_mode: "membership",
+        read_only: false,
+      },
+      {
+        club_id: CLUB_B,
+        organisation_id: "org-b",
+        club_name: "Club B",
+        club_slug: "club-b",
+        club_status: "active",
+        role: "support",
+        access_mode: "support",
+        read_only: true,
+        support_session_id: "support-session",
+        support_expires_at: "2026-07-03T12:00:00Z",
+      },
+    ]));
     vi.stubGlobal("fetch", fetchMock);
 
     const memberships = await DB.listMemberships();
 
-    expect(memberships).toHaveLength(1);
-    expect(memberships[0]).toMatchObject({ clubId: CLUB_A, role: "owner" });
+    expect(memberships).toHaveLength(2);
+    expect(memberships[0]).toMatchObject({ clubId: CLUB_A, role: "owner", accessMode: "membership", readOnly: false });
+    expect(memberships[1]).toMatchObject({
+      clubId: CLUB_B,
+      role: "support",
+      accessMode: "support",
+      readOnly: true,
+      supportSessionId: "support-session",
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/list_accessible_workspaces");
   });
 
+
+  test("club invitations are created and accepted only through guarded RPCs", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "invite-1", token: "single-use-token" }))
+      .mockResolvedValueOnce(jsonResponse({ club_id: CLUB_A, role: "scheduler" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await DB.createClubInvitation(CLUB_A, {
+      email: "scheduler@example.test",
+      role: "scheduler",
+      expiryHours: 72,
+    });
+    await DB.acceptClubInvitation("single-use-token");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/create_club_invitation");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      target_club_id: CLUB_A,
+      invite_email: "scheduler@example.test",
+      invite_role: "scheduler",
+      expiry_hours: 72,
+    });
+    expect(fetchMock.mock.calls[1][0]).toContain("/rest/v1/rpc/accept_club_invitation");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      invitation_token: "single-use-token",
+    });
+  });
+
+  test("membership administration uses guarded RPCs rather than direct table writes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null, 204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await DB.updateClubMemberRole(CLUB_A, USER_ID, "scheduler");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain("/rest/v1/rpc/update_club_member_role");
+    expect(JSON.parse(options.body)).toEqual({
+      target_club_id: CLUB_A,
+      target_user_id: USER_ID,
+      next_role: "scheduler",
+    });
+    expect(url).not.toContain("club_memberships?");
+  });
+
+  test("support access requests are time-limited RPC calls with no service key in the browser", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "session-1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await DB.grantSupportAccess(CLUB_A, {
+      email: "support@daxora.test",
+      durationMinutes: 60,
+      reason: "Investigate fixture import",
+    });
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain("/rest/v1/rpc/grant_support_access");
+    expect(options.headers.Authorization).toBe("Bearer signed-in-user-jwt");
+    expect(JSON.parse(options.body)).toEqual({
+      target_club_id: CLUB_A,
+      support_email: "support@daxora.test",
+      duration_minutes: 60,
+      support_reason: "Investigate fixture import",
+    });
+  });
   test("fails closed when the selected club is hidden by RLS", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);

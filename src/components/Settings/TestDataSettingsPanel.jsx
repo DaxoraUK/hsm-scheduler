@@ -106,12 +106,6 @@ export default function TestDataSettingsPanel({
     try {
       if (isSupaConfigured() && activeClubId) {
         await DB.saveTestFixtures(activeClubId, definition.remoteConfigKey, list);
-        await DB.recordAudit(activeClubId, {
-          action: "test-fixtures.save",
-          entityType: "test-fixtures",
-          entityId: dayKey,
-          detail: { dayKey, fixtureCount: list.length },
-        });
       }
 
       setSaved(dayKey);

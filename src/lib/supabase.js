@@ -263,21 +263,30 @@ function encodeFilter(value) {
   return encodeURIComponent(String(value));
 }
 
-function normaliseMembership(row, clubsById) {
-  const club = clubsById.get(row.club_id) || {};
+function normaliseWorkspaceAccess(row = {}) {
+  const clubId = row.club_id || row.clubId || "";
+  const accessMode = row.access_mode || row.accessMode || "membership";
   return {
-    clubId: row.club_id,
-    role: row.role,
-    status: row.status,
-    joinedAt: row.created_at,
+    clubId,
+    role: row.role || (accessMode === "support" ? "support" : "viewer"),
+    status: row.status || "active",
+    joinedAt: row.granted_at || row.joinedAt || row.created_at || null,
+    accessMode,
+    readOnly: Boolean(row.read_only ?? row.readOnly ?? accessMode === "support"),
+    supportSessionId: row.support_session_id || row.supportSessionId || null,
+    supportExpiresAt: row.support_expires_at || row.supportExpiresAt || null,
     club: {
-      id: club.id || row.club_id,
-      organisationId: club.organisation_id || null,
-      name: club.name || "Club workspace",
-      slug: club.slug || "",
-      status: club.status || "active",
+      id: clubId,
+      organisationId: row.organisation_id || row.organisationId || null,
+      name: row.club_name || row.clubName || "Club workspace",
+      slug: row.club_slug || row.clubSlug || "",
+      status: row.club_status || row.clubStatus || "active",
     },
   };
+}
+
+function asArray(payload) {
+  return Array.isArray(payload) ? payload : [];
 }
 
 async function loadRows(table, clubId, { order = "id.asc" } = {}) {
@@ -303,25 +312,14 @@ async function replaceCollection(clubId, collection, records) {
 export const DB = {
   async listMemberships() {
     const session = await Auth.getValidSession();
-    const userId = session?.user?.id;
-    if (!userId) throw new SupabaseRequestError("Authenticated user details are unavailable", { code: "AUTH_USER_MISSING" });
+    if (!session?.user?.id) {
+      throw new SupabaseRequestError("Authenticated user details are unavailable", { code: "AUTH_USER_MISSING" });
+    }
 
-    const memberships = await supaFetch(
-      "GET",
-      `club_memberships?select=club_id,role,status,created_at&user_id=eq.${encodeFilter(userId)}&status=eq.active&order=created_at.asc`
-    );
-    const rows = Array.isArray(memberships) ? memberships : [];
-    if (!rows.length) return [];
-
-    const clubIds = rows.map((row) => row.club_id).filter(Boolean);
-    const clubs = await supaFetch(
-      "GET",
-      `clubs?select=id,organisation_id,name,slug,status&id=in.(${clubIds.map(encodeFilter).join(",")})`
-    );
-    const clubsById = new Map((Array.isArray(clubs) ? clubs : []).map((club) => [club.id, club]));
-    return rows
-      .filter((row) => clubsById.has(row.club_id))
-      .map((row) => normaliseMembership(row, clubsById));
+    const accessRows = await supaFetch("POST", "rpc/list_accessible_workspaces", {});
+    return asArray(accessRows)
+      .map(normaliseWorkspaceAccess)
+      .filter((membership) => membership.clubId && membership.club.status === "active");
   },
 
   async getBootstrapStatus() {
@@ -451,17 +449,12 @@ export const DB = {
   async saveHistoryEntry(clubId, entry) {
     const id = requireClubId(clubId);
     if (!entry?.id) throw new SupabaseRequestError("History entry requires an id", { code: "INVALID_HISTORY_ENTRY" });
-    return supaFetch(
-      "POST",
-      "history?on_conflict=club_id,id",
-      [{
-        club_id: id,
-        id: String(entry.id),
-        data: entry,
-        saved_at: entry.savedAt || new Date().toISOString(),
-      }],
-      { Prefer: "resolution=merge-duplicates,return=minimal" }
-    );
+    return supaFetch("POST", "rpc/save_matchweek_history", {
+      target_club_id: id,
+      history_id: String(entry.id),
+      history_data: entry,
+      history_saved_at: entry.savedAt || new Date().toISOString(),
+    });
   },
 
   async saveHistory(clubId, entries) {
@@ -472,33 +465,123 @@ export const DB = {
 
   async saveTestFixtures(clubId, configKey, fixtures) {
     const id = requireClubId(clubId);
-    const key = String(configKey || "").trim();
-    return supaFetch(
-      "POST",
-      "club_config?on_conflict=club_id,id",
-      [{ club_id: id, id: key, data: { fixtures: Array.isArray(fixtures) ? fixtures : [] } }],
-      { Prefer: "resolution=merge-duplicates,return=minimal" }
-    );
+    return supaFetch("POST", "rpc/save_test_fixtures", {
+      target_club_id: id,
+      config_key: String(configKey || "").trim(),
+      fixtures: Array.isArray(fixtures) ? fixtures : [],
+    });
   },
 
   async deleteHistory(clubId, historyId) {
     const id = requireClubId(clubId);
-    return supaFetch(
-      "DELETE",
-      `history?club_id=eq.${encodeFilter(id)}&id=eq.${encodeFilter(historyId)}`,
-      null,
-      { Prefer: "return=minimal" }
-    );
-  },
-
-  async recordAudit(clubId, { action, entityType = null, entityId = null, detail = {} } = {}) {
-    const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/record_audit_event", {
+    return supaFetch("POST", "rpc/delete_matchweek_history", {
       target_club_id: id,
-      event_action: String(action || "unknown"),
-      entity_type: entityType,
-      entity_id: entityId === null || entityId === undefined ? null : String(entityId),
-      event_detail: detail || {},
+      history_id: String(historyId),
     });
   },
+
+  async listClubMembers(clubId) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_club_members", { target_club_id: id }));
+  },
+
+  async listClubInvitations(clubId) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_club_invitations", { target_club_id: id }));
+  },
+
+  async createClubInvitation(clubId, { email, role = "viewer", expiryHours = 72 } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_club_invitation", {
+      target_club_id: id,
+      invite_email: String(email || "").trim(),
+      invite_role: String(role || "viewer").trim(),
+      expiry_hours: Number(expiryHours) || 72,
+    });
+  },
+
+  async revokeClubInvitation(clubId, invitationId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/revoke_club_invitation", {
+      target_club_id: id,
+      invitation_id: invitationId,
+    });
+  },
+
+  async acceptClubInvitation(token) {
+    return supaFetch("POST", "rpc/accept_club_invitation", {
+      invitation_token: String(token || "").trim(),
+    });
+  },
+
+  async updateClubMemberRole(clubId, userId, role) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/update_club_member_role", {
+      target_club_id: id,
+      target_user_id: userId,
+      next_role: role,
+    });
+  },
+
+  async removeClubMember(clubId, userId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/remove_club_member", {
+      target_club_id: id,
+      target_user_id: userId,
+    });
+  },
+
+  async transferClubOwnership(clubId, userId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/transfer_club_ownership", {
+      target_club_id: id,
+      new_owner_user_id: userId,
+    });
+  },
+
+  async listSupportSessions(clubId) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_support_access_sessions", { target_club_id: id }));
+  },
+
+  async grantSupportAccess(clubId, { email, durationMinutes = 60, reason } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/grant_support_access", {
+      target_club_id: id,
+      support_email: String(email || "").trim(),
+      duration_minutes: Number(durationMinutes) || 60,
+      support_reason: String(reason || "").trim(),
+    });
+  },
+
+  async revokeSupportAccess(clubId, supportSessionId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/revoke_support_access", {
+      target_club_id: id,
+      support_session_id: supportSessionId,
+    });
+  },
+
+  async endOwnSupportSession(supportSessionId) {
+    return supaFetch("POST", "rpc/end_own_support_session", {
+      support_session_id: supportSessionId,
+    });
+  },
+
+  async recordSupportWorkspaceOpen(clubId, supportSessionId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/record_support_workspace_open", {
+      target_club_id: id,
+      support_session_id: supportSessionId,
+    });
+  },
+
+  async listAuditEvents(clubId, limit = 50) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_audit_events", {
+      target_club_id: id,
+      result_limit: Math.max(1, Math.min(Number(limit) || 50, 100)),
+    }));
+  },
+
 };

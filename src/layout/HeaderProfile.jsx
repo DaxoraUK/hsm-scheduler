@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { getRoleLabel } from "../lib/security/permissions.js";
 
 function getDisplayName(user) {
   return (
@@ -25,21 +26,14 @@ function getInitials(name = "") {
 }
 
 
-function getRoleLabel(role = "viewer") {
-  const labels = {
-    owner: "Club Owner",
-    admin: "Club Administrator",
-    scheduler: "Scheduler",
-    viewer: "Viewer",
-  };
-  return labels[role] || "Club Member";
-}
+
 export default function HeaderProfile({
   user,
   clubName = "Ground Control",
   memberships = [],
   activeClubId = "",
   activeRole = "viewer",
+  workspaceAccess = null,
   onClubChange,
   onOpenSettings,
   onSignOut,
@@ -52,6 +46,8 @@ export default function HeaderProfile({
   const initials = useMemo(() => getInitials(displayName), [displayName]);
   const email = user?.email || "Secure workspace account";
   const roleLabel = getRoleLabel(activeRole);
+  const canOpenSettings = Boolean(workspaceAccess?.canManageSettings);
+  const canViewAccess = Boolean(workspaceAccess?.canViewAudit);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -180,35 +176,50 @@ export default function HeaderProfile({
             </div>
 
             <div className="p-2">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => openSettings("overview")}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                  <UserRound size={18} strokeWidth={2.3} />
-                </span>
-                <span>
-                  <span className="block text-sm font-black text-slate-900">Account & security</span>
-                  <span className="block text-xs font-semibold text-slate-500">Review your access and workspace status</span>
-                </span>
-              </button>
+              {canViewAccess ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openSettings("access")}
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                    <UserRound size={18} strokeWidth={2.3} />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-black text-slate-900">Access & audit</span>
+                    <span className="block text-xs font-semibold text-slate-500">Review members, roles and secure activity</span>
+                  </span>
+                </button>
+              ) : (
+                <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                  <div className="text-sm font-black text-slate-900">{roleLabel} access</div>
+                  <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                    {workspaceAccess?.isSupport
+                      ? "This support session is read-only and time-limited."
+                      : workspaceAccess?.isReadOnly
+                        ? "You can review this workspace but cannot make changes."
+                        : "You can operate matchdays without changing club administration."}
+                  </div>
+                </div>
+              )}
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => openSettings("club")}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                  <Settings size={18} strokeWidth={2.3} />
-                </span>
-                <span>
-                  <span className="block text-sm font-black text-slate-900">Workspace settings</span>
-                  <span className="block text-xs font-semibold text-slate-500">Manage club details and configuration</span>
-                </span>
-              </button>
+              {canOpenSettings ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openSettings("club")}
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                    <Settings size={18} strokeWidth={2.3} />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-black text-slate-900">Workspace settings</span>
+                    <span className="block text-xs font-semibold text-slate-500">Manage club details and configuration</span>
+                  </span>
+                </button>
+              ) : null}
             </div>
 
             <div className="border-t border-slate-100 p-2">

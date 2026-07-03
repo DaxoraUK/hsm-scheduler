@@ -81,6 +81,7 @@ import {
   tenantSetItem,
   tenantSetJson,
 } from "./lib/storage/tenantStorage.js";
+import { createWorkspaceAccess } from "./lib/security/permissions.js";
 
 function App(){
   const [mode,setMode]=useState("test");
@@ -247,6 +248,11 @@ function App(){
     bootstrapFirstWorkspace,
   }=useClubAccess(authSession);
 
+  const workspaceAccess=useMemo(
+    ()=>createWorkspaceAccess(activeMembership),
+    [activeMembership]
+  );
+
   useLayoutEffect(()=>{
     setWorkspaceHydrated(false);
     setWorkspaceSecurityError("");
@@ -259,6 +265,16 @@ function App(){
     clearTenantStorageContext();
     return selectClub(clubId);
   },[activeClubId,selectClub]);
+
+  useEffect(()=>{
+    if(mainPage==="settings"&&!workspaceAccess.canManageSettings){
+      setMainPage("dashboard");
+      setSettingsTab("overview");
+      toast.error("Administrator access required",{
+        description:"Your club role does not include workspace settings.",
+      });
+    }
+  },[mainPage,workspaceAccess.canManageSettings]);
 
   const [club,setClub]=useState(DEFAULT_CLUB);
   const midweekEnabled=isMidweekEnabled(club);
@@ -379,6 +395,13 @@ function App(){
   },[midweekWindow]);
 
   const saveTab=async(tab,data={})=>{
+    if(!workspaceAccess.canManageSettings){
+      toast.error("Administrator access required",{
+        description:"Your role cannot change club settings.",
+      });
+      return false;
+    }
+
     const nextClub={...(data.club||club),id:activeClubId||data.club?.id||club?.id};
     const nextTeamCfg=data.teamCfg||teamCfg;
     const nextRefs=data.refs||refs;
@@ -400,12 +423,6 @@ function App(){
         if(data.refs||tab==="refs") saves.push(DB.saveRefs(activeClubId,nextRefs));
         if(tab==="pitches") saves.push(DB.savePitches(activeClubId,pitchCfg));
         await Promise.all(saves);
-        await DB.recordAudit(activeClubId,{
-          action:`settings.${tab}.save`,
-          entityType:"settings",
-          entityId:tab,
-          detail:{tab},
-        });
         setDbStatus("connected");
       }
       setSavedTab(tab);
@@ -557,6 +574,9 @@ function App(){
         setTestSun(remoteTestSun.length?remoteTestSun:generateTestFixtures({dayKey:"sunday",seed:"ground-control-sunday",scenario:"standard",club:nextClub,teams:nextTeams}));
         setTestMidweek(remoteTestMidweek.length?remoteTestMidweek:generateTestFixtures({dayKey:"midweek",seed:"ground-control-midweek",scenario:"standard",club:nextClub,teams:nextTeams}));
         closureSyncRef.current={clubId:activeClubId,snapshot:JSON.stringify(nextClosures)};
+        if(activeMembership?.accessMode==="support"&&activeMembership?.supportSessionId){
+          await DB.recordSupportWorkspaceOpen(activeClubId,activeMembership.supportSessionId);
+        }
         setDbStatus("connected");
       }catch(error){
         if(cancelled) return;
@@ -586,6 +606,8 @@ function App(){
   },[
     activeClubId,
     activeMembership?.club?.name,
+    activeMembership?.accessMode,
+    activeMembership?.supportSessionId,
     authSession?.user?.id,
     clearMidweekScheduleForDateChange,
     clearWeekendScheduleForDateChange,
@@ -605,7 +627,7 @@ function App(){
     persistPitchClosures(pitchClosures);
     const snapshot=JSON.stringify(pitchClosures);
     if(closureSyncRef.current.clubId===activeClubId&&closureSyncRef.current.snapshot===snapshot) return undefined;
-    if(!isSupaConfigured()||activeMembership?.role==="viewer") return undefined;
+    if(!isSupaConfigured()||!workspaceAccess.canOperate) return undefined;
 
     const timer=window.setTimeout(async()=>{
       try{
@@ -618,7 +640,7 @@ function App(){
       }
     },350);
     return()=>window.clearTimeout(timer);
-  },[activeClubId,activeMembership?.role,pitchClosures,workspaceHydrated]);
+  },[activeClubId,pitchClosures,workspaceAccess.canOperate,workspaceHydrated]);
 
     useEffect(() => {
       const handler = (event) => {
@@ -838,6 +860,7 @@ const { saveWeek } = useWeekPersistence({
   setHistory,
   setDbStatus,
   activeClubId,
+  canPublish:workspaceAccess.canPublish,
 });
 
 const {
@@ -880,6 +903,20 @@ const { resetAll } = useOperationsActions({
     // Also revoke the remote session when a token is available.
     if(accessToken) await Auth.signOut(accessToken);
   },[authSession]);
+
+  const handleEndSupportAccess=useCallback(async()=>{
+    const sessionId=activeMembership?.supportSessionId;
+    if(!sessionId) return;
+    try{
+      await DB.endOwnSupportSession(sessionId);
+      clearTenantStorageContext();
+      setWorkspaceHydrated(false);
+      await refreshClubAccess();
+      toast.success("Support session ended");
+    }catch(error){
+      toast.error("Support session could not be ended",{description:error?.message});
+    }
+  },[activeMembership?.supportSessionId,refreshClubAccess]);
 
   // Auth gate
   if(authLoading||!minimumSplashComplete) return(
@@ -948,7 +985,9 @@ return(
     memberships={memberships}
     activeClubId={activeClubId}
     activeMembership={activeMembership}
+    workspaceAccess={workspaceAccess}
     onClubChange={handleClubChange}
+    onEndSupportAccess={handleEndSupportAccess}
     onSignOut={handleSignOut}
   >
        <style dangerouslySetInnerHTML={{__html:"@media print{.np{display:none!important}#combined-print,#combined-print *{visibility:visible!important}body{visibility:hidden!important}#combined-print{position:fixed;top:0;left:0;width:100%}}"}}/>
@@ -1316,6 +1355,9 @@ return(
             setDbStatus={setDbStatus}
             activeClubId={activeClubId}
             activeMembership={activeMembership}
+            workspaceAccess={workspaceAccess}
+            authSession={authSession}
+            refreshClubAccess={refreshClubAccess}
             setHistory={setHistory}
             teamCfg={teamCfg}
             setTeamCfg={setTeamCfg}

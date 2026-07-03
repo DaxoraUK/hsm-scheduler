@@ -39,12 +39,6 @@ export default function HistorySettingsPanel({
     try {
       if (isSupaConfigured() && activeClubId) {
         await DB.deleteHistory(activeClubId, week.id);
-        await DB.recordAudit(activeClubId, {
-          action: "history.delete",
-          entityType: "matchweek",
-          entityId: week.id,
-          detail: { dateLabel: week.dateLabel || null },
-        });
       }
       setHistory?.((current) => current.filter((entry) => entry.id !== week.id));
     } catch (error) {

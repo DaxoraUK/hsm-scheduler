@@ -14,11 +14,13 @@ import TestDataSettingsPanel from "../components/Settings/TestDataSettingsPanel.
 import HistorySettingsPanel from "../components/Settings/HistorySettingsPanel.jsx";
 import DataSettingsPanel from "../components/Settings/DataSettingsPanel.jsx";
 import IntegrationSettingsPanel from "../components/Settings/IntegrationSettingsPanel.jsx";
+import AccessSecurityPanel from "../components/Settings/AccessSecurityPanel.jsx";
 import { isMidweekEnabled, isParkingEnabled } from "../lib/settings/workspaceSettings.js";
 
 const TAB_TITLES = {
   overview: ["Settings overview", "Complete the club setup in a clear order and see what still needs attention."],
   workspace: ["Workspace", "Control optional operating days and keep development tools away from live club users."],
+  access: ["Access & audit", "Manage club roles, secure invitations, trusted audit history and time-limited support access."],
   club: ["Club profile", "Maintain the essential organisation details used throughout Ground Control."],
   venues: ["Venues & sites", "Configure grounds, postcodes, parking capacity and weather locations."],
   timing: ["Scheduling rules", "Set operating windows, pitch changeover buffers and concurrent-game limits."],
@@ -52,6 +54,7 @@ export default function SettingsPage(props) {
   const renderPanel = () => {
     if (activeTab === "overview") return <SettingsOverviewPanel {...props} />;
     if (activeTab === "workspace") return <WorkspaceSettingsPanel {...props} />;
+    if (activeTab === "access") return <AccessSecurityPanel {...props} />;
     if (activeTab === "club") return <ClubSettingsPanel {...props} />;
     if (activeTab === "venues") return <VenueSettingsPanel {...props} />;
     if (activeTab === "timing") return <TimingSettingsPanel {...props} />;
