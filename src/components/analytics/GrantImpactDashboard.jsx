@@ -27,6 +27,7 @@ import PageHeader from "@/ui/PageHeader.jsx";
 import Card from "@/ui/Card.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
+import FundingWorkspacePanel from "./FundingWorkspacePanel.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";
 import { inferGrantHomeNation } from "../../lib/grants/grantMatchingEngine.js";
 
@@ -215,25 +216,6 @@ function EvidenceMatrix({ framework }) {
   );
 }
 
-function ReadinessCard({ item }) {
-  const tone = TONE[item.status] || TONE.info;
-  return (
-    <div className={`rounded-[24px] border p-5 ${tone.surface}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{item.label}</div>
-          <div className={`mt-3 text-2xl font-black ${tone.text}`}>{item.display}</div>
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${tone.icon}`}>
-          {item.id === "operational" ? <Database size={19} /> : item.id === "eligibility" ? <ShieldCheck size={19} /> : item.id === "documents" ? <FileCheck2 size={19} /> : <Target size={19} />}
-        </div>
-      </div>
-      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{item.detail}</p>
-      {item.value != null ? <ProgressBar value={item.value} tone={tone.bar} className="mt-4" /> : null}
-    </div>
-  );
-}
-
 function FundingOpportunityCard({ programme }) {
   return (
     <article className="flex h-full flex-col rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -393,11 +375,14 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         </div>
       </section>
 
-      <Card eyebrow="Project readiness" title="Four separate readiness checks" subtitle="Ground Control avoids one misleading grant-readiness percentage. Operational evidence is scored; eligibility, documents and the project case need explicit club input.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {model.funding.readiness.map((item) => <ReadinessCard key={item.id} item={item} />)}
-        </div>
-      </Card>
+      <FundingWorkspacePanel
+        clubId={props.activeClubId}
+        canManage={props.workspaceAccess ? props.workspaceAccess.canManageSettings : true}
+        club={props.club}
+        model={model}
+        projectType={projectType}
+        onProjectTypeChange={setProjectType}
+      />
 
       <Card
         eyebrow="Verified opportunities"

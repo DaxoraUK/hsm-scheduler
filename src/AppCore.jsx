@@ -1809,6 +1809,8 @@ return(
           midweekHasRun={activeMidweekHasRun}
           midweekEnabled={midweekEnabled}
           refWarnings={refWarnings}
+          activeClubId={activeClubId}
+          workspaceAccess={workspaceAccess}
         />
       </Suspense>
     )}
