@@ -14,7 +14,6 @@ import {
   DoorOpen,
   FlagTriangleRight,
   HeartPulse,
-  MapPin,
   Megaphone,
   Plus,
   RadioTower,
@@ -87,6 +86,20 @@ const PRIORITY_STYLES = {
   normal: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
+const HERO_STATUS_STYLES = {
+  danger: "border-rose-300/30 bg-rose-300/10 text-rose-200",
+  warning: "border-amber-300/30 bg-amber-300/10 text-amber-200",
+  success: "border-emerald-300/30 bg-emerald-300/10 text-emerald-200",
+};
+
+const SCOPE_PRESENTATION = {
+  [MATCHDAY_SCOPES.MATCHWEEK]: { title: "Matchweek Operations", noun: "matchweek" },
+  [MATCHDAY_SCOPES.WEEKEND]: { title: "Weekend Operations", noun: "weekend" },
+  [MATCHDAY_SCOPES.MIDWEEK]: { title: "Midweek Operations", noun: "midweek" },
+  [MATCHDAY_SCOPES.SATURDAY]: { title: "Saturday Operations", noun: "Saturday plan" },
+  [MATCHDAY_SCOPES.SUNDAY]: { title: "Sunday Operations", noun: "Sunday plan" },
+};
+
 function storageKey(club = {}) {
   const identity = club.id || club.slug || club.name || "default";
   return `operationsCentre:${String(identity).toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
@@ -130,15 +143,19 @@ function WeekendCalendarControl({
   onUseCurrentWeekend,
 }) {
   return (
-    <div className="flex w-full flex-col gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 sm:w-auto sm:flex-row sm:items-center">
-      <label className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-white/[0.05] px-3 py-2 sm:min-w-[300px]">
-        <CalendarClock size={18} className="shrink-0 text-emerald-300" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Match weekend
+    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+      <label className="flex min-w-0 flex-1 flex-col gap-3 rounded-2xl bg-slate-50 p-3 sm:flex-row sm:items-center">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200">
+            <CalendarClock size={18} />
           </span>
-          <span className="mt-0.5 block truncate text-xs font-black text-slate-200">
-            {satDateLabel} — {sunDateLabel}
+          <span className="min-w-0">
+            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              Match weekend
+            </span>
+            <span className="mt-0.5 block truncate text-sm font-black text-slate-800">
+              {satDateLabel} — {sunDateLabel}
+            </span>
           </span>
         </span>
         <input
@@ -146,22 +163,23 @@ function WeekendCalendarControl({
           value={satDate}
           onChange={(event) => onWeekendChange?.(event.target.value)}
           aria-label="Select match weekend"
-          className="h-9 w-[138px] shrink-0 rounded-lg border border-white/10 bg-[#101a2b] px-2 text-xs font-black text-white outline-none transition [color-scheme:dark] focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/10"
+          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 sm:w-[150px]"
         />
       </label>
 
-      <button
-        type="button"
-        onClick={onUseCurrentWeekend}
-        disabled={isCurrentWeekend}
-        className={`h-11 rounded-xl px-3 text-xs font-black transition ${
-          isCurrentWeekend
-            ? "cursor-default bg-emerald-300/10 text-emerald-300"
-            : "bg-white/[0.06] text-slate-200 hover:bg-white/[0.1] hover:text-white"
-        }`}
-      >
-        {isCurrentWeekend ? "Live weekend" : "Use current weekend"}
-      </button>
+      {isCurrentWeekend ? (
+        <span className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 px-4 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">
+          Current weekend
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={onUseCurrentWeekend}
+          className="h-10 shrink-0 rounded-xl bg-slate-900 px-4 text-xs font-black text-white transition hover:bg-slate-800"
+        >
+          Use current weekend
+        </button>
+      )}
     </div>
   );
 }
@@ -173,15 +191,19 @@ function MidweekCalendarControl({
   onUseCurrentMidweekDate,
 }) {
   return (
-    <div className="flex w-full flex-col gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 sm:w-auto sm:flex-row sm:items-center">
-      <label className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-white/[0.05] px-3 py-2 sm:min-w-[300px]">
-        <CalendarClock size={18} className="shrink-0 text-emerald-300" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Midweek fixture date
+    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+      <label className="flex min-w-0 flex-1 flex-col gap-3 rounded-2xl bg-slate-50 p-3 sm:flex-row sm:items-center">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-cyan-700 shadow-sm ring-1 ring-slate-200">
+            <CalendarClock size={18} />
           </span>
-          <span className="mt-0.5 block truncate text-xs font-black text-slate-200">
-            {midweekDateLabel}
+          <span className="min-w-0">
+            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              Midweek fixture date
+            </span>
+            <span className="mt-0.5 block truncate text-sm font-black text-slate-800">
+              {midweekDateLabel}
+            </span>
           </span>
         </span>
         <input
@@ -189,14 +211,14 @@ function MidweekCalendarControl({
           value={midweekDate}
           onChange={(event) => onMidweekChange?.(event.target.value)}
           aria-label="Select midweek fixture date"
-          className="h-9 w-[138px] shrink-0 rounded-lg border border-white/10 bg-[#101a2b] px-2 text-xs font-black text-white outline-none transition [color-scheme:dark] focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/10"
+          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 sm:w-[150px]"
         />
       </label>
 
       <button
         type="button"
         onClick={onUseCurrentMidweekDate}
-        className="h-11 rounded-xl bg-white/[0.06] px-3 text-xs font-black text-slate-200 transition hover:bg-white/[0.1] hover:text-white"
+        className="h-10 shrink-0 rounded-xl bg-slate-900 px-4 text-xs font-black text-white transition hover:bg-slate-800"
       >
         Use current weekday
       </button>
@@ -367,6 +389,10 @@ export default function OperationsCentrePage({
   };
 
   const openTarget = (target) => {
+    if (target === "priorityQueue") {
+      document.getElementById("operations-centre-priority-actions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     if (target === "siteChecks") {
       document.getElementById("operations-centre-site-checks")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
@@ -384,103 +410,174 @@ export default function OperationsCentrePage({
     onOpenArea?.(target, targetDay);
   };
 
+  const scopePresentation = SCOPE_PRESENTATION[scope] || SCOPE_PRESENTATION[MATCHDAY_SCOPES.WEEKEND];
+  const heroStatusClass = HERO_STATUS_STYLES[snapshot.status] || HERO_STATUS_STYLES.warning;
+  const HeroStatusIcon = snapshot.status === "success" ? CheckCircle2 : AlertTriangle;
+  const openActionCount = snapshot.metrics.openActions;
+  const criticalIncidentCount = snapshot.metrics.criticalIncidents;
+  const heroSummary = !scheduleBuilt
+    ? `Build the ${scopePresentation.noun} schedule to activate live operational control.`
+    : criticalIncidentCount > 0
+      ? `${criticalIncidentCount} critical incident${criticalIncidentCount === 1 ? " requires" : "s require"} immediate attention.`
+      : openActionCount > 0
+        ? `${openActionCount} item${openActionCount === 1 ? " needs" : "s need"} attention in the selected ${scopePresentation.noun}.`
+        : `No open operational actions in the selected ${scopePresentation.noun}.`;
+
+  const primaryAction = !scheduleBuilt
+    ? { label: `Build ${scopePresentation.noun} schedule`, target: "actionBar" }
+    : criticalIncidentCount > 0
+      ? {
+          label: `Review ${criticalIncidentCount} critical incident${criticalIncidentCount === 1 ? "" : "s"}`,
+          target: "incidents",
+        }
+      : openActionCount > 0
+        ? { label: `Review ${openActionCount} action${openActionCount === 1 ? "" : "s"}`, target: "priorityQueue" }
+        : { label: "Open command timeline", target: "timeline" };
+
+  const runPrimaryAction = () => {
+    if (primaryAction.target === "timeline") {
+      onOpenTimeline?.();
+      return;
+    }
+    openTarget(primaryAction.target);
+  };
+
   return (
     <div className="space-y-5">
       <section className="relative overflow-hidden rounded-[30px] border border-slate-800 bg-[#07101f] text-white shadow-xl shadow-slate-950/10">
         <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
         <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
 
-        <div className="relative p-6 sm:p-8">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div className="relative p-6 sm:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-emerald-300">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] ${heroStatusClass}`}>
+                  <HeroStatusIcon size={14} />
+                  {snapshot.label}
                 </span>
-                Live Operations Centre
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
+                  Operations Centre
+                </span>
               </div>
 
               <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
-                Run the matchday from one control room.
+                {scopePresentation.title}
               </h2>
-              <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300 sm:text-base">
-                Fixtures, pitches, parking, officials, weather, people and incidents — one live operating picture for {club.name || "the club"}.
+              <p className="mt-2 text-sm font-black text-slate-300 sm:text-base">{dateLabel}</p>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-400">
+                {heroSummary}
               </p>
-
-              <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold text-slate-300">
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2">
-                  <RadioTower size={15} className="text-emerald-300" />
-                  {formatClock(now)}
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2">
-                  <MapPin size={15} className="text-slate-400" />
-                  {formatDate(now)}
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-slate-400">
-                  {dateLabel}
-                </span>
-              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:min-w-[620px]">
-              <HeroMetric label="Control score" value={`${snapshot.score}%`} detail={snapshot.label} />
-              <HeroMetric label="Active fixtures" value={snapshot.metrics.fixtures} detail={`${snapshot.metrics.postponed} postponed`} />
-              <HeroMetric label="Open actions" value={snapshot.metrics.openActions} detail="Priority queue" />
-              <HeroMetric label="Incidents" value={snapshot.metrics.openIncidents} detail={snapshot.metrics.criticalIncidents ? `${snapshot.metrics.criticalIncidents} critical` : "No critical"} />
+            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-300">
+                <RadioTower size={18} />
+              </span>
+              <span>
+                <span className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Live control clock</span>
+                <span className="mt-0.5 block text-lg font-black text-white">{formatClock(now)}</span>
+                <span className="block text-[11px] font-bold text-slate-400">{formatDate(now)}</span>
+              </span>
             </div>
           </div>
 
-          <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="inline-flex w-full rounded-2xl border border-white/10 bg-black/20 p-1 sm:w-auto">
-              {[
-                ...(midweekEnabled ? [[MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"]] : []),
-                [MATCHDAY_SCOPES.WEEKEND, "Weekend"],
-                ...(midweekEnabled ? [[MATCHDAY_SCOPES.MIDWEEK, "Midweek"]] : []),
-                [MATCHDAY_SCOPES.SATURDAY, "Saturday"],
-                [MATCHDAY_SCOPES.SUNDAY, "Sunday"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setScope(value)}
-                  className={`flex-1 rounded-xl px-4 py-2 text-xs font-black transition sm:flex-none ${
-                    scope === value ? "bg-white text-slate-950 shadow" : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <HeroMetric label="Operational readiness" value={`${snapshot.score}%`} detail={snapshot.label} />
+            <HeroMetric label="Fixtures" value={snapshot.metrics.fixtures} detail={`${snapshot.metrics.postponed} postponed`} />
+            <HeroMetric
+              label="Open actions"
+              value={snapshot.metrics.openActions}
+              detail={snapshot.metrics.openActions ? "Priority queue" : "Queue clear"}
+            />
+            <HeroMetric
+              label="Critical incidents"
+              value={snapshot.metrics.criticalIncidents}
+              detail={snapshot.metrics.openIncidents ? `${snapshot.metrics.openIncidents} total open` : "No critical incidents"}
+            />
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-bold leading-5 text-slate-400">
+              {snapshot.metrics.openActions
+                ? `${snapshot.metrics.openActions} prioritised action${snapshot.metrics.openActions === 1 ? "" : "s"} in the control queue.`
+                : "The control queue is clear for this scope."}
             </div>
-
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              {scope === MATCHDAY_SCOPES.MIDWEEK ? (
-                <MidweekCalendarControl
-                  midweekDate={midweekDate}
-                  midweekDateLabel={midweekDateLabel}
-                  onMidweekChange={onMidweekChange}
-                  onUseCurrentMidweekDate={onUseCurrentMidweekDate}
-                />
-              ) : (
-                <WeekendCalendarControl
-                  satDate={satDate}
-                  satDateLabel={satDateLabel}
-                  sunDateLabel={sunDateLabel}
-                  isCurrentWeekend={isCurrentWeekend}
-                  onWeekendChange={onWeekendChange}
-                  onUseCurrentWeekend={onUseCurrentWeekend}
-                />
-              )}
-
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
-                onClick={onOpenTimeline}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white transition hover:bg-white/[0.1]"
+                onClick={runPrimaryAction}
+                className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-emerald-300 px-5 text-sm font-black text-slate-950 transition hover:bg-emerald-200"
               >
-                Open command timeline
+                {primaryAction.label}
                 <ArrowRight size={16} />
               </button>
+              {primaryAction.target !== "timeline" && (
+                <button
+                  type="button"
+                  onClick={onOpenTimeline}
+                  className="inline-flex h-11 items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-sm font-black text-slate-200 transition hover:bg-white/[0.1] hover:text-white"
+                >
+                  Open timeline
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Operations scope and dates" className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-1 rounded-2xl bg-slate-100 p-1">
+            {[
+              ...(midweekEnabled ? [[MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"]] : []),
+              [MATCHDAY_SCOPES.WEEKEND, "Weekend"],
+              ...(midweekEnabled ? [[MATCHDAY_SCOPES.MIDWEEK, "Midweek"]] : []),
+              [MATCHDAY_SCOPES.SATURDAY, "Saturday"],
+              [MATCHDAY_SCOPES.SUNDAY, "Sunday"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setScope(value)}
+                className={`min-w-[92px] flex-1 rounded-xl px-4 py-2.5 text-xs font-black transition sm:flex-none ${
+                  scope === value
+                    ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200"
+                    : "text-slate-500 hover:bg-white/70 hover:text-slate-900"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className={`grid gap-3 border-t border-slate-100 pt-3 ${scope === MATCHDAY_SCOPES.MATCHWEEK ? "xl:grid-cols-2" : ""}`}>
+            {scope === MATCHDAY_SCOPES.MATCHWEEK && midweekEnabled && (
+              <MidweekCalendarControl
+                midweekDate={midweekDate}
+                midweekDateLabel={midweekDateLabel}
+                onMidweekChange={onMidweekChange}
+                onUseCurrentMidweekDate={onUseCurrentMidweekDate}
+              />
+            )}
+
+            {scope === MATCHDAY_SCOPES.MIDWEEK ? (
+              <MidweekCalendarControl
+                midweekDate={midweekDate}
+                midweekDateLabel={midweekDateLabel}
+                onMidweekChange={onMidweekChange}
+                onUseCurrentMidweekDate={onUseCurrentMidweekDate}
+              />
+            ) : (
+              <WeekendCalendarControl
+                satDate={satDate}
+                satDateLabel={satDateLabel}
+                sunDateLabel={sunDateLabel}
+                isCurrentWeekend={isCurrentWeekend}
+                onWeekendChange={onWeekendChange}
+                onUseCurrentWeekend={onUseCurrentWeekend}
+              />
+            )}
           </div>
         </div>
       </section>
@@ -525,7 +622,7 @@ export default function OperationsCentrePage({
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+      <section id="operations-centre-priority-actions" className="grid scroll-mt-6 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>

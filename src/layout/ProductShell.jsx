@@ -27,9 +27,9 @@ import {
   X,
 } from "lucide-react";
 
-function NavigationItems({ items, mainPage, onNavigate }) {
+function NavigationItems({ items, mainPage, onNavigate, className = "" }) {
   return (
-    <nav className="space-y-1 overflow-y-auto pr-1" aria-label="Primary navigation">
+    <nav className={`space-y-1 ${className}`} aria-label="Primary navigation">
       {items.map(([key, label, Icon, target]) => {
         const active = mainPage === key;
         return (
@@ -38,7 +38,7 @@ function NavigationItems({ items, mainPage, onNavigate }) {
             type="button"
             aria-current={active ? "page" : undefined}
             onClick={() => onNavigate(key, target)}
-            className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${
+            className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-left text-sm font-bold transition ${
               active
                 ? "bg-white/[0.08] text-white"
                 : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
@@ -155,32 +155,43 @@ export default function ProductShell({
   const syncBanner = getSyncBanner({ online, dbStatus, syncError, sessionStatus });
 
   const workspaceCard = platformOnly ? (
-    <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-4">
-      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Daxora platform</div>
-      <div className="mt-3 text-sm font-black text-white">Internal operations</div>
-      <div className="mt-1 text-xs font-bold text-slate-500">{platformContext?.roleLabel || "Platform staff"}</div>
-      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" /> Secure admin access
+    <div className="rounded-2xl border border-slate-800 bg-white/[0.04] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">Daxora platform</div>
+        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
       </div>
+      <div className="mt-2 text-sm font-black text-white">Internal operations</div>
+      <div className="mt-1 text-xs font-bold text-slate-500">{platformContext?.roleLabel || "Platform staff"}</div>
     </div>
   ) : (
-    <div className="rounded-3xl border border-slate-800 bg-white/[0.04] p-3">
-      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">Workspace</div>
-      <div className="mt-3 truncate text-sm font-black text-white">{club?.name || "Club workspace"}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
-        <span>{getMatchdayScopeLabel(matchdayScope)} view</span>
-        {subscription?.planName ? <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-black text-slate-300">{subscription.planName}</span> : null}
+    <div className="rounded-2xl border border-slate-800 bg-white/[0.04] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">Workspace</div>
+        {subscription?.planName ? (
+          <span className="shrink-0 rounded-full bg-white/[0.07] px-2 py-0.5 text-[10px] font-black text-slate-300">
+            {subscription.planName}
+          </span>
+        ) : null}
       </div>
-      <div className={`mt-4 grid gap-2 ${midweekEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
-        {["Saturday", "Sunday", ...(midweekEnabled ? ["Midweek"] : [])].map((label, index) => (
-          <div key={label} className="rounded-2xl bg-white/[0.04] p-2.5">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-600">{label}</div>
-            <div className="mt-1 text-lg font-black text-white">{[satCount, sunCount, midweekCount][index]}</div>
+      <div className="mt-2 truncate text-sm font-black text-white">{club?.name || "Club workspace"}</div>
+      <div className="mt-1 flex items-center gap-2 text-xs font-bold text-slate-500">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+        <span className="truncate">{workspaceStatus}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2" aria-label={`${getMatchdayScopeLabel(matchdayScope)} fixture totals`}>
+        {[
+          ["Sat", satCount],
+          ["Sun", sunCount],
+          ...(midweekEnabled ? [["Mid", midweekCount]] : []),
+        ].map(([label, count]) => (
+          <div key={label} className="inline-flex items-center gap-1.5 rounded-xl bg-white/[0.05] px-2.5 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+            <span className="text-xs font-black text-white">{count}</span>
           </div>
         ))}
-      </div>
-      <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-black text-emerald-300">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" /> {workspaceStatus}
+        <div className="ml-auto self-center text-[10px] font-black uppercase tracking-wide text-slate-600">
+          {getMatchdayScopeLabel(matchdayScope)}
+        </div>
       </div>
     </div>
   );
@@ -190,31 +201,29 @@ export default function ProductShell({
       {mobileOpen ? (
         <div className="fixed inset-0 z-[80] lg:hidden">
           <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="relative flex h-full w-[min(88vw,340px)] flex-col border-r border-slate-800 bg-[#050816] px-5 py-5 text-white shadow-2xl">
+          <aside className="gc-sidebar-scroll relative h-full w-[min(88vw,340px)] overflow-y-auto border-r border-slate-800 bg-[#050816] px-5 py-5 text-white shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <GroundControlBrand />
               <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white">
                 <X size={20} />
               </button>
             </div>
-            <div className="mt-7 border-t border-slate-800 pt-5">
+            <div className="mt-5">{workspaceCard}</div>
+            <div className="mt-5 border-t border-slate-800 pt-5">
               <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
               <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
             </div>
-            <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
           </aside>
         </div>
       ) : null}
 
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-slate-800 bg-[#050816] px-5 py-5 text-white lg:flex lg:flex-col">
-          <div className="mb-8"><GroundControlBrand /></div>
-          <div className="flex flex-1 flex-col">
-            <div className="border-t border-slate-800 pt-5">
-              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
-              <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
-            </div>
-            <div className="mt-auto border-t border-slate-800 pt-4">{workspaceCard}</div>
+        <aside className="gc-sidebar-scroll sticky top-0 hidden h-screen w-[280px] shrink-0 overflow-y-auto border-r border-slate-800 bg-[#050816] px-5 py-5 text-white lg:block">
+          <div className="mb-5"><GroundControlBrand /></div>
+          <div>{workspaceCard}</div>
+          <div className="mt-5 border-t border-slate-800 pt-5">
+            <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
+            <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
           </div>
         </aside>
 

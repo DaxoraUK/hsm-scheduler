@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -6,6 +6,8 @@ import {
   Sparkles,
   SlidersHorizontal,
 } from "lucide-react";
+import { toast } from "sonner";
+import ConfirmDialog from "../../../ui/ConfirmDialog.jsx";
 import { FORMAT_COMPAT } from "../../../lib/constants.js";
 import { cleanName, findCfg } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
@@ -225,10 +227,14 @@ export default function MatchdayUnresolvedCard({
   scheduled = [],
   setScheduled,
   setUnresolved,
+  readOnly = false,
 }) {
+  const [pendingOverride, setPendingOverride] = useState(null);
+
   if (unresolved.length === 0) return null;
 
   const resolveFixture = ({ fixture, index, patch, cfg, overridden = false }) => {
+    if (readOnly) return;
     const koMins =
       patch.koMins != null ? patch.koMins : timeToMinutes(patch.koTime);
     const duration = getDuration(cfg);
@@ -252,15 +258,55 @@ export default function MatchdayUnresolvedCard({
     setUnresolved((previous) => previous.filter((_, fixtureIndex) => fixtureIndex !== index));
   };
 
+  const completeManualAssignment = ({ fixture, index, ov, cfg, koMins, endMins, clash = null }) => {
+    const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
+
+    resolveFixture({
+      fixture,
+      index,
+      cfg,
+      overridden: Boolean(clash),
+      patch: {
+        ...ov,
+        pitchLabel: selectedPitch?.label || ov.pitchId,
+        koMins,
+        endMins,
+      },
+    });
+
+    setPendingOverride(null);
+
+    if (clash) {
+      toast.success("Fixture assigned with override", {
+        description: "The pitch conflict remains recorded for operational review.",
+      });
+    }
+  };
+
   const confirmManualAssignment = ({ fixture, index }) => {
+    if (readOnly) return;
     const ov = overrides[9000 + index] || {};
 
-    if (!ov.pitchId) return alert("Please select a pitch first.");
-    if (!ov.koTime) return alert("Please set a KO time.");
+    if (!ov.pitchId) {
+      toast.error("Select a pitch first", {
+        description: "Choose a suitable open pitch before confirming the fixture.",
+      });
+      return;
+    }
+
+    if (!ov.koTime) {
+      toast.error("Set a kick-off time", {
+        description: "Choose an allowed kick-off time before confirming the fixture.",
+      });
+      return;
+    }
 
     if (closedPitches.includes(ov.pitchId)) {
       const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
-      return alert(`${selectedPitch?.label || ov.pitchId} is closed. Please choose another pitch.`);
+      toast.error(`${selectedPitch?.label || ov.pitchId} is closed`, {
+        description: "Choose another pitch or reopen it from the Resources workspace.",
+      });
+      return;
     }
 
     const koMins = timeToMinutes(ov.koTime);
@@ -273,7 +319,10 @@ export default function MatchdayUnresolvedCard({
     });
 
     if (koRuleFailure) {
-      return alert(`${koRuleFailure.title}: ${koRuleFailure.detail}`);
+      toast.error(koRuleFailure.title, {
+        description: koRuleFailure.detail,
+      });
+      return;
     }
 
     const duration = getDuration(cfg);
@@ -288,27 +337,11 @@ export default function MatchdayUnresolvedCard({
     });
 
     if (clash) {
-      const proceed = window.confirm(
-        `Conflict: ${cleanName(clash.homeTeam, club.name)} is already using this or a linked pitch at ${clash.koTime}.\n\nAssign anyway as an override?`
-      );
-
-      if (!proceed) return;
+      setPendingOverride({ fixture, index, ov, cfg, koMins, endMins, clash });
+      return;
     }
 
-    const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
-
-    resolveFixture({
-      fixture,
-      index,
-      cfg,
-      overridden: !!clash,
-      patch: {
-        ...ov,
-        pitchLabel: selectedPitch?.label || ov.pitchId,
-        koMins,
-        endMins,
-      },
-    });
+    completeManualAssignment({ fixture, index, ov, cfg, koMins, endMins });
   };
 
   return (
@@ -332,6 +365,11 @@ export default function MatchdayUnresolvedCard({
       </div>
 
       <div className="space-y-5 p-6">
+        {readOnly ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-900">
+            Schedule locked · unresolved fixtures remain visible, but assignment controls are disabled.
+          </div>
+        ) : null}
         {unresolved.map((fixture, index) => {
           const cfg = findCfg(fixture.homeTeam, teamCfg);
           const suggestions = buildResolutionSuggestions({
@@ -383,6 +421,7 @@ export default function MatchdayUnresolvedCard({
                       <button
                         type="button"
                         key={`${suggestion.pitchId}-${suggestion.koTime}`}
+                        disabled={readOnly}
                         onClick={() =>
                           resolveFixture({
                             fixture,
@@ -397,7 +436,7 @@ export default function MatchdayUnresolvedCard({
                             },
                           })
                         }
-                        className="rounded-3xl border border-emerald-200 bg-white p-4 text-left transition hover:bg-emerald-50"
+                        className="rounded-3xl border border-emerald-200 bg-white p-4 text-left transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>
@@ -457,6 +496,7 @@ export default function MatchdayUnresolvedCard({
                     </label>
 
                     <select
+                      disabled={readOnly}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                       onChange={(event) => onOverride(9000 + index, "pitchId", event.target.value)}
                     >
@@ -476,6 +516,7 @@ export default function MatchdayUnresolvedCard({
 
                     <input
                       type="time"
+                      disabled={readOnly}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                       onChange={(event) => onOverride(9000 + index, "koTime", event.target.value)}
                     />
@@ -483,8 +524,9 @@ export default function MatchdayUnresolvedCard({
 
                   <button
                     type="button"
+                    disabled={readOnly}
                     onClick={() => confirmManualAssignment({ fixture, index })}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-800"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <MapPin size={16} />
                     Confirm Assignment
@@ -495,6 +537,32 @@ export default function MatchdayUnresolvedCard({
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingOverride)}
+        eyebrow="Manual override"
+        title="Assign despite pitch conflict?"
+        description="This fixture overlaps another booking on the selected pitch or one of its linked playing areas. The override will remain visible for operational review."
+        confirmLabel="Assign with override"
+        cancelLabel="Choose another slot"
+        tone="danger"
+        initialFocus="cancel"
+        onCancel={() => setPendingOverride(null)}
+        onConfirm={() => pendingOverride && completeManualAssignment(pendingOverride)}
+      >
+        <div className="grid gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-bold text-rose-700">Existing fixture</span>
+            <span className="text-right font-black text-rose-950">
+              {pendingOverride ? cleanName(pendingOverride.clash?.homeTeam, club.name) : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-rose-200 pt-2">
+            <span className="font-bold text-rose-700">Current kick-off</span>
+            <span className="font-black text-rose-950">{pendingOverride?.clash?.koTime || "TBC"}</span>
+          </div>
+        </div>
+      </ConfirmDialog>
     </section>
   );
 }

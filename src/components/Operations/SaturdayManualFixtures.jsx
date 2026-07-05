@@ -12,6 +12,7 @@ export default function SaturdayManualFixtures({
   setShowManual,
   satManual = [],
   setSatManual,
+  readOnly = false,
   teamCfg,
   cleanName,
 }) {
@@ -29,14 +30,15 @@ export default function SaturdayManualFixtures({
       <button
         type="button"
         onClick={() => setShowManual((previous) => !previous)}
-        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:bg-white"
+        disabled={readOnly}
+        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         <div>
           <div className="text-sm font-black text-slate-900">
-            {showManual ? "Hide manual fixture form" : "Add manual fixture"}
+            {readOnly ? "Schedule locked" : showManual ? "Hide manual fixture form" : "Add manual fixture"}
           </div>
           <div className="mt-1 text-sm font-medium text-slate-500">
-            Use this for friendlies, cup games, rearranged fixtures or late additions.
+            {readOnly ? "Unlock the matchday before adding or removing fixtures." : "Use this for friendlies, cup games, rearranged fixtures or late additions."}
           </div>
         </div>
 
@@ -49,7 +51,7 @@ export default function SaturdayManualFixtures({
         </div>
       </button>
 
-      {showManual && (
+      {showManual && !readOnly && (
         <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
@@ -93,6 +95,7 @@ export default function SaturdayManualFixtures({
               </div>
 
               <SecondaryButton
+                disabled={readOnly}
                 onClick={() =>
                   setSatManual((previous) =>
                     previous.filter((_, itemIndex) => itemIndex !== index)

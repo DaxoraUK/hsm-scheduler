@@ -223,7 +223,7 @@ export function calculateOperationsHealth({
     }),
   ];
 
-  const platformHealth = calculatePlatformHealth({ domains });
+  const platformHealth = calculatePlatformHealth({ operationsHealth: { domains } });
   const overallScore = platformHealth.score;
   const hasDanger = domains.some((domain) => domain.status === "danger");
   const hasWarning = domains.some((domain) => domain.status === "warning");

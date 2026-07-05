@@ -13,8 +13,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import PageContainer from "@/ui/PageContainer.jsx";
-import PageHeader from "@/ui/PageHeader.jsx";
+import PageContainer from "../ui/PageContainer.jsx";
+import PageHeader from "../ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import ReportDocument from "../components/reports/ReportDocument.jsx";
@@ -87,10 +87,13 @@ export default function ReportsPage({
   sunDateLabel = "Sunday",
   midweekDateLabel = "Midweek",
   midweekEnabled = true,
+  navigationTarget = null,
+  clearNavigationTarget,
 }) {
   const [reportType, setReportType] = useState("operations");
   const [selectedSource, setSelectedSource] = useState("current");
   const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
+  const [pendingAutoPrint, setPendingAutoPrint] = useState(false);
 
   const current = useMemo(() => ({
     satFinal,
@@ -173,6 +176,36 @@ export default function ReportsPage({
     window.print();
     window.setTimeout(cleanup, 1500);
   };
+
+  useEffect(() => {
+    if (!navigationTarget || navigationTarget.target !== "reports") return;
+
+    const nextType = REPORT_TYPES.some((item) => item.id === navigationTarget.reportType)
+      ? navigationTarget.reportType
+      : "fixtures";
+    const allowedScopes = REPORT_SCOPES.map((item) => item.value);
+    const requestedScope = allowedScopes.includes(navigationTarget.scope)
+      ? navigationTarget.scope
+      : midweekEnabled ? "matchweek" : "weekend";
+    const nextScope = !midweekEnabled && ["matchweek", "midweek"].includes(requestedScope)
+      ? "weekend"
+      : requestedScope;
+
+    setSelectedSource(navigationTarget.source || "current");
+    setReportType(nextType);
+    setScope(nextScope);
+    setPendingAutoPrint(Boolean(navigationTarget.autoPrint));
+    clearNavigationTarget?.();
+  }, [clearNavigationTarget, midweekEnabled, navigationTarget]);
+
+  useEffect(() => {
+    if (!pendingAutoPrint || !model.hasData) return undefined;
+    const timer = window.setTimeout(() => {
+      printReport();
+      setPendingAutoPrint(false);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [model.hasData, pendingAutoPrint]);
 
   const scopeOptions = midweekEnabled
     ? REPORT_SCOPES

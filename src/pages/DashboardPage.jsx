@@ -4,7 +4,6 @@ import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.j
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
 import DashboardWorkflowCard from "../components/dashboard/DashboardWorkflowCard.jsx";
 import DashboardWeatherCard from "../components/dashboard/DashboardWeatherCard.jsx";
-import DashboardInsightGrid from "../components/dashboard/DashboardInsightGrid.jsx";
 import GroundStatusCard from "../components/dashboard/GroundStatusCard.jsx";
 import WeekendTimelineCard from "../components/dashboard/WeekendTimelineCard.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
@@ -16,6 +15,9 @@ import { useMatchdayScope } from "../lib/context/MatchdayScopeContext.jsx";
 import { getDayTabFromScope, getMatchdayScopeLabel, getScopedMatchdayData, MATCHDAY_SCOPES, normaliseMatchdayScope } from "../lib/domain/matchdayScope.js";
 import useLiveWeather from "../hooks/useLiveWeather.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
+import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
+import { readMatchdayLock } from "../lib/operations/matchdayLock.js";
+import { toast } from "sonner";
 
 import {
   CalendarDays,
@@ -26,6 +28,10 @@ import {
   Settings,
   ArrowRight,
   Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  X,
 } from "lucide-react";
 
 export default function DashboardPage({
@@ -35,6 +41,13 @@ export default function DashboardPage({
   matchdayScope: matchdayScopeProp,
   setMatchdayScope: setMatchdayScopeProp,
   saveWeek,
+  mode = "test",
+  runSatTest,
+  runSatLive,
+  runSunTest,
+  runSunLive,
+  runMidweekTest,
+  runMidweekLive,
   club,
   history = [],
   pitchCfg = [],
@@ -67,6 +80,9 @@ export default function DashboardPage({
   const [selectedFixture, setSelectedFixture] = useState(null);
   const nav = createNavigationController({ setMainPage, setDayTab, setNavigationTarget });
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [buildOpen, setBuildOpen] = useState(false);
+  const [buildSelection, setBuildSelection] = useState({ saturday: true, sunday: true, midweek: true });
+  const [buildingMatchweek, setBuildingMatchweek] = useState(false);
   const actionsRef = useRef(null);
 
   useEffect(() => {
@@ -122,6 +138,7 @@ export default function DashboardPage({
   const refereeStats = getRefereeStats({
     fixtures: scopedMatchday.activeFixtures,
   });
+  const officialConflicts = findOfficialConflicts(scopedMatchday.activeFixtures);
 
   const parkingStats = getParkingStats({
     fixtures: scopedMatchday.activeFixtures,
@@ -138,6 +155,103 @@ export default function DashboardPage({
     (scopedMatchday.includeMidweek ? midweekConflicts.length + midweekUnresolved.length : 0);
 
   const communicationsReady = scheduleBuilt && totalFixtures > 0;
+
+  const buildDays = useMemo(() => [
+    {
+      id: "saturday",
+      label: "Saturday",
+      date: satDate,
+      enabled: mode === "test" || Boolean(satDate),
+      hasRun: Boolean(satHasRun),
+      currentCount: satActive.length,
+      run: mode === "test" ? runSatTest : runSatLive,
+    },
+    {
+      id: "sunday",
+      label: "Sunday",
+      date: sunDate,
+      enabled: mode === "test" || Boolean(sunDate),
+      hasRun: Boolean(sunHasRun),
+      currentCount: sunActive.length,
+      run: mode === "test" ? runSunTest : runSunLive,
+    },
+    ...(midweekEnabled ? [{
+      id: "midweek",
+      label: "Midweek",
+      date: midweekDate,
+      enabled: mode === "test" || Boolean(midweekDate),
+      hasRun: Boolean(midweekHasRun),
+      currentCount: midweekActive.length,
+      run: mode === "test" ? runMidweekTest : runMidweekLive,
+    }] : []),
+  ].map((item) => ({
+    ...item,
+    locked: readMatchdayLock({ clubId: club?.id || club?.name, day: item.id, date: item.date }),
+  })), [
+    club?.id,
+    midweekActive.length,
+    midweekDate,
+    midweekEnabled,
+    midweekHasRun,
+    mode,
+    runMidweekLive,
+    runMidweekTest,
+    runSatLive,
+    runSatTest,
+    runSunLive,
+    runSunTest,
+    satActive.length,
+    satDate,
+    satHasRun,
+    sunActive.length,
+    sunDate,
+    sunHasRun,
+  ]);
+
+  const needsMatchweekBuild = buildDays.some((item) => item.enabled && !item.hasRun);
+
+  const openBuildMatchweek = () => {
+    setBuildSelection(Object.fromEntries(buildDays.map((item) => [item.id, item.enabled])));
+    setBuildOpen(true);
+  };
+
+  const buildSelectedMatchweek = async () => {
+    const selected = buildDays.filter((item) => item.enabled && buildSelection[item.id]);
+    if (!selected.length) {
+      toast.error("Select at least one matchday");
+      return;
+    }
+
+    const locked = selected.filter((item) => item.locked);
+    if (locked.length) {
+      toast.error("Unlock the schedule first", {
+        description: `${locked.map((item) => item.label).join(", ")} ${locked.length === 1 ? "is" : "are"} locked in Operations.`,
+      });
+      return;
+    }
+
+    setBuildingMatchweek(true);
+    try {
+      for (const item of selected) {
+        if (typeof item.run !== "function") continue;
+        await Promise.resolve(item.run());
+      }
+      toast.success("Matchweek build complete", {
+        description: `${selected.map((item) => item.label).join(", ")} sent to Operations for review.`,
+      });
+      setBuildOpen(false);
+      setMatchdayScope(midweekEnabled ? MATCHDAY_SCOPES.MATCHWEEK : MATCHDAY_SCOPES.WEEKEND);
+      setMainPage("operations");
+      setDayTab("centre");
+      setNavigationTarget?.(null);
+    } catch (error) {
+      toast.error("Matchweek build failed", {
+        description: error?.message || "Review the fixture sources and try again.",
+      });
+    } finally {
+      setBuildingMatchweek(false);
+    }
+  };
   const weatherSelection = useMemo(() => {
     const candidates = [];
     const add = (label, date, fixtures) => {
@@ -206,6 +320,16 @@ export default function DashboardPage({
           onClick: () => nav.goToFixtures({ day: navigationDay }),
         }
       : null,
+    officialConflicts.length > 0
+      ? {
+          key: "official-clashes",
+          title: "Resolve official clashes",
+          detail: `${officialConflicts.length} overlapping official ${officialConflicts.length === 1 ? "assignment needs" : "assignments need"} attention.`,
+          area: "Officials",
+          severity: "danger",
+          onClick: () => nav.goToOfficials({ day: navigationDay }),
+        }
+      : null,
     refereeStats.outstanding > 0
       ? {
           key: "officials",
@@ -243,6 +367,7 @@ export default function DashboardPage({
     scheduleBuilt,
     fixtureIssues,
     refereeOutstanding: refereeStats.outstanding,
+    officialConflicts: officialConflicts.length,
     parkingOverCapacity: parkingStats.overCapacity,
     communicationsReady,
   });
@@ -254,6 +379,7 @@ export default function DashboardPage({
     pitchCount: pitchCfg.length,
     closedPitchCount: closedPitches.length,
     refereeOutstanding: refereeStats.outstanding,
+    officialConflicts: officialConflicts.length,
     parkingPercent: parkingStats.pct,
     parkingCapacity: parkingStats.carCap,
     parkingOverCapacity: parkingStats.overCapacity,
@@ -286,6 +412,81 @@ export default function DashboardPage({
     onClick: workflowActionMap[workflowModel.nextAction?.action],
   };
   const completedSteps = workflowModel.completedSteps;
+
+  const heroIssues = [
+    !scheduleBuilt
+      ? {
+          key: "schedule",
+          label: "Schedule build required",
+          detail: "Build the selected matchdays before readiness checks can complete.",
+          count: 1,
+          severity: "warning",
+        }
+      : null,
+    fixtureIssues > 0
+      ? {
+          key: "fixtures",
+          label: `${fixtureIssues} fixture ${fixtureIssues === 1 ? "issue" : "issues"}`,
+          detail: "Resolve pitch clashes or fixtures that still need assignment.",
+          count: fixtureIssues,
+          severity: "danger",
+        }
+      : null,
+    officialConflicts.length > 0
+      ? {
+          key: "official-clashes",
+          label: `${officialConflicts.length} official ${officialConflicts.length === 1 ? "clash" : "clashes"}`,
+          detail: "One or more officials are assigned to overlapping fixtures.",
+          count: officialConflicts.length,
+          severity: "danger",
+        }
+      : null,
+    refereeStats.outstanding > 0
+      ? {
+          key: "official-confirmations",
+          label: `${refereeStats.outstanding} confirmation${refereeStats.outstanding === 1 ? "" : "s"} outstanding`,
+          detail: "Official assignments still need confirmation.",
+          count: refereeStats.outstanding,
+          severity: "warning",
+        }
+      : null,
+    parkingStats.overCapacity
+      ? {
+          key: "parking",
+          label: `Parking forecast at ${parkingStats.pct}%`,
+          detail: "Peak vehicle demand is above the configured venue capacity.",
+          count: 1,
+          severity: "danger",
+        }
+      : null,
+  ].filter(Boolean);
+
+  const heroIssueCount = heroIssues.reduce(
+    (sum, item) => sum + Math.max(1, Number(item.count) || 1),
+    0
+  );
+
+  const heroNextAction = needsMatchweekBuild
+    ? { title: "Build Matchweek" }
+    : nextAction?.action === WORKFLOW_ACTIONS.OFFICIALS && officialConflicts.length
+      ? { ...nextAction, title: `Review ${officialConflicts.length} official ${officialConflicts.length === 1 ? "clash" : "clashes"}` }
+      : nextAction?.action === WORKFLOW_ACTIONS.OFFICIALS && refereeStats.outstanding
+        ? { ...nextAction, title: `Review ${refereeStats.outstanding} official ${refereeStats.outstanding === 1 ? "issue" : "issues"}` }
+        : nextAction;
+
+  const heroWeather = {
+    available: weatherIntelligence.forecastAvailable,
+    status: weatherIntelligence.status,
+    label: weatherIntelligence.label,
+    scopeLabel: weatherScopeLabel,
+    date: weatherDate,
+    headline: weatherIntelligence.decision?.headline,
+    conditions: weatherIntelligence.forecast?.conditions,
+    temperature: weatherIntelligence.forecast?.temperature,
+    rain: weatherIntelligence.forecast?.rain,
+    wind: weatherIntelligence.forecast?.wind,
+    detail: weatherIntelligence.decision?.detail,
+  };
 
   const commandMenu = (
     <div className="relative" ref={actionsRef}>
@@ -382,12 +583,21 @@ export default function DashboardPage({
         midweekEnabled={midweekEnabled}
         completedSteps={completedSteps}
         totalSteps={workflowSteps.length}
-        nextAction={nextAction}
-        weatherLocation={weatherLocation}
-        weatherStatus={liveWeather.isLoading ? "Connecting" : weatherIntelligence.label}
+        nextAction={heroNextAction}
+        issueItems={heroIssues}
+        issueCount={heroIssueCount}
+        weather={heroWeather}
         scopeLabel={getMatchdayScopeLabel(matchdayScope)}
-        onContinue={nextAction?.onClick || (() => nav.goToOperations({ day: navigationDay }))}
-/>
+        onContinue={needsMatchweekBuild ? openBuildMatchweek : (nextAction?.onClick || (() => nav.goToOperations({ day: navigationDay })))}
+        secondaryAction={{
+          label: "Open Operations",
+          onClick: () => {
+            setMainPage("operations");
+            setDayTab("centre");
+            setNavigationTarget?.(null);
+          },
+        }}
+      />
 
       <DashboardStatusStrip
         actionsMenu={commandMenu}
@@ -415,8 +625,12 @@ export default function DashboardPage({
           },
           {
             label: "Officials",
-            status: refereeStats.outstanding ? "warning" : "success",
-            detail: refereeStats.outstanding ? `${refereeStats.outstanding} required` : "Clear",
+            status: officialConflicts.length ? "danger" : refereeStats.outstanding ? "warning" : "success",
+            detail: officialConflicts.length
+              ? `${officialConflicts.length} clash${officialConflicts.length === 1 ? "" : "es"}`
+              : refereeStats.outstanding
+                ? `${refereeStats.outstanding} required`
+                : "Clear",
             onClick: () => nav.goToOfficials({ day: navigationDay }),
           },
           {
@@ -442,17 +656,6 @@ export default function DashboardPage({
             onClick: () => nav.goToCommunications(),
           },
         ]}
-      />
-
-      <DashboardInsightGrid
-        totalFixtures={totalFixtures}
-        pitchCount={pitchCfg.length}
-        closedPitchCount={closedPitches.length}
-        scheduleBuilt={scheduleBuilt}
-        fixtureIssues={fixtureIssues}
-        refereeOutstanding={refereeStats.outstanding}
-        parkingStats={parkingStats}
-        communicationsReady={communicationsReady}
       />
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.08fr_0.92fr]">
@@ -519,7 +722,95 @@ export default function DashboardPage({
         club={club}
         onClose={() => setSelectedFixture(null)}
       />
+
+      <BuildMatchweekDialog
+        open={buildOpen}
+        mode={mode}
+        days={buildDays}
+        selection={buildSelection}
+        building={buildingMatchweek}
+        onSelectionChange={(id, checked) => setBuildSelection((current) => ({ ...current, [id]: checked }))}
+        onClose={() => !buildingMatchweek && setBuildOpen(false)}
+        onBuild={buildSelectedMatchweek}
+      />
     </PageContainer>
+  );
+}
+
+function BuildMatchweekDialog({
+  open,
+  mode,
+  days = [],
+  selection = {},
+  building = false,
+  onSelectionChange,
+  onClose,
+  onBuild,
+}) {
+  if (!open) return null;
+
+  const selectedDays = days.filter((item) => item.enabled && selection[item.id]);
+  const replacesExisting = selectedDays.some((item) => item.hasRun);
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <button type="button" className="absolute inset-0" aria-label="Close matchweek builder" onClick={onClose} />
+      <section className="relative z-10 w-full max-w-2xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 bg-slate-950 px-6 py-6 text-white">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Mission Control</div>
+            <h2 className="mt-2 text-2xl font-black">Build the matchweek</h2>
+            <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-300">
+              Select every day that should be generated. Ground Control will build them in sequence and open the Operations Centre for review.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} disabled={building} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50">
+            <X size={19} />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-6">
+          {days.map((item) => (
+            <label key={item.id} className={`flex items-start gap-4 rounded-2xl border p-4 transition ${item.enabled ? "cursor-pointer border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40" : "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"}`}>
+              <input
+                type="checkbox"
+                checked={Boolean(selection[item.id] && item.enabled)}
+                disabled={!item.enabled || building}
+                onChange={(event) => onSelectionChange?.(item.id, event.target.checked)}
+                className="mt-1 h-5 w-5 shrink-0 accent-emerald-600"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-base font-black text-slate-950">{item.label}</span>
+                  {item.locked ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-rose-700">Locked</span> : null}
+                  {item.hasRun ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800">Existing schedule</span> : null}
+                </span>
+                <span className="mt-1 block text-sm font-semibold text-slate-500">
+                  {mode === "test" ? "Uses the configured test fixture set." : item.date ? `Fixture date ${item.date}.` : "Set a fixture date in Operations before building."}
+                  {item.hasRun ? ` ${item.currentCount} active fixture${item.currentCount === 1 ? "" : "s"} currently recorded.` : ""}
+                </span>
+              </span>
+              {item.enabled && !item.locked ? <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-600" /> : <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-600" />}
+            </label>
+          ))}
+
+          {replacesExisting ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+              <AlertTriangle size={19} className="mt-0.5 shrink-0" />
+              <p className="text-sm font-bold leading-6">Selected days with an existing unlocked schedule will be rebuilt. Locked days cannot be replaced.</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-5 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} disabled={building} className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={onBuild} disabled={building || selectedDays.length === 0} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 text-sm font-black text-white shadow-lg shadow-emerald-950/10 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {building ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+            {building ? "Building matchweek…" : replacesExisting ? "Rebuild selected days" : "Build selected days"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

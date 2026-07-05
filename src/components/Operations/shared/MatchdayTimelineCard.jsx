@@ -56,12 +56,12 @@ export default function MatchdayTimelineCard({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <div className="min-w-[940px]">
+            <div className="min-w-[860px]">
               <div
                 className={`grid border-b border-slate-100 ${
                   isCompact
-                    ? "grid-cols-[130px_1fr] gap-3 pb-2"
-                    : "grid-cols-[150px_1fr] gap-4 pb-3"
+                    ? "grid-cols-[145px_1fr] gap-3 pb-2"
+                    : "grid-cols-[175px_1fr] gap-4 pb-3"
                 }`}
               >
                 <div />
@@ -92,16 +92,16 @@ export default function MatchdayTimelineCard({
                       key={pitch.id}
                       className={`grid items-center ${
                         isCompact
-                          ? "grid-cols-[130px_1fr] gap-3"
-                          : "grid-cols-[150px_1fr] gap-4"
+                          ? "grid-cols-[145px_1fr] gap-3"
+                          : "grid-cols-[175px_1fr] gap-4"
                       }`}
                     >
-                      <div>
-                        <div className="text-sm font-black text-slate-800">
-                          {pitch.label}
+                      <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <div className="truncate text-[13px] font-extrabold leading-5 tracking-tight text-slate-900">
+                          {formatPitchLabel(pitch.label || pitch.id)}
                         </div>
-                        <div className="text-xs font-bold text-slate-400">
-                          {getPitchDisplayFormat(pitch)}
+                        <div className="mt-0.5 truncate text-[11px] font-bold leading-4 text-slate-500">
+                          {formatPitchFormat(getPitchDisplayFormat(pitch))}
                         </div>
                       </div>
 
@@ -230,3 +230,22 @@ function formatTime(totalMins) {
 
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
+function formatPitchLabel(value) {
+  return String(value || "Pitch")
+    .replace(/[.·,:;\-\s]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatPitchFormat(value) {
+  const text = String(value || "Unconfigured")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text
+    .split(" ")
+    .map((part) => (/^\d+v\d+$/i.test(part) ? part.toLowerCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .join(" ");
+}
+

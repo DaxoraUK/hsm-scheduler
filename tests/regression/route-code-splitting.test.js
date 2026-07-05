@@ -30,18 +30,16 @@ describe("route-level code splitting", () => {
 
   test("does not restore eager page imports", () => {
     routeModules.forEach((moduleName) => {
-      expect(appCoreSource).not.toMatch(
-        new RegExp(`import ${moduleName} from`)
-      );
+      expect(appCoreSource).not.toMatch(new RegExp(`import ${moduleName} from`));
     });
   });
 
-  test("defers optional onboarding and print UI", () => {
+  test("defers optional onboarding and subscription UI", () => {
     expect(appCoreSource).toContain(
       'const CustomerOnboardingWizard = lazy(() => import("./components/CustomerOnboardingWizard.jsx"));'
     );
     expect(appCoreSource).toContain(
-      'const CombinedPrintSheet = lazy(() => import("./components/CombinedPrintSheet.jsx"));'
+      'const SubscriptionGate = lazy(() => import("./components/SubscriptionGate.jsx"));'
     );
     expect(appCoreSource).toContain("{onboardingOpen && (");
   });

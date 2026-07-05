@@ -1,6 +1,8 @@
 import React from "react";
 import { CheckCircle2, Route, Sparkles, TrendingDown } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
+import PrimaryButton from "@/ui/PrimaryButton.jsx";
+import SecondaryButton from "@/ui/SecondaryButton.jsx";
 
 function Metric({ label, value }) {
   return (
@@ -11,9 +13,15 @@ function Metric({ label, value }) {
   );
 }
 
-export default function DayOptimiserCard({ optimisation }) {
+export default function DayOptimiserCard({
+  optimisation,
+  onApplyMove,
+  onApplyAll,
+  readOnly = false,
+}) {
   const moves = optimisation?.moves || [];
   const metrics = optimisation?.metrics || {};
+  const canApply = !readOnly && typeof onApplyMove === "function";
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -29,9 +37,16 @@ export default function DayOptimiserCard({ optimisation }) {
             {optimisation?.summary || "Ground Control will surface the best validated matchday improvements here."}
           </p>
         </div>
-        <StatusChip variant={optimisation?.status === "warning" ? "warning" : optimisation?.status === "danger" ? "danger" : "success"}>
-          Score {optimisation?.score ?? 100}%
-        </StatusChip>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip variant={optimisation?.status === "warning" ? "warning" : optimisation?.status === "danger" ? "danger" : "success"}>
+            Score {optimisation?.score ?? 100}%
+          </StatusChip>
+          {moves.length && typeof onApplyAll === "function" ? (
+            <PrimaryButton onClick={onApplyAll} disabled={readOnly}>
+              <Sparkles size={16} /> Apply all validated moves
+            </PrimaryButton>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-4">
@@ -54,9 +69,14 @@ export default function DayOptimiserCard({ optimisation }) {
                   <div className="mt-1 text-sm font-bold text-slate-600">{move.summary}</div>
                   {move.detail ? <p className="mt-2 text-sm font-semibold leading-6 text-amber-900">{move.detail}</p> : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-amber-800 ring-1 ring-amber-200">
-                  <TrendingDown size={14} strokeWidth={2.8} />
-                  {Math.round(Number(move.percentReduction || 0))}% peak improvement
+                <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                  <div className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-amber-800 ring-1 ring-amber-200">
+                    <TrendingDown size={14} strokeWidth={2.8} />
+                    {Math.round(Number(move.percentReduction || 0))}% peak improvement
+                  </div>
+                  <SecondaryButton onClick={() => onApplyMove?.(move)} disabled={!canApply}>
+                    <CheckCircle2 size={16} /> Apply this move
+                  </SecondaryButton>
                 </div>
               </div>
             </div>

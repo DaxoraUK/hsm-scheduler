@@ -94,7 +94,6 @@ const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"));
 const PlatformAdminPage = lazy(() => import("./pages/PlatformAdminPage.jsx"));
-const CombinedPrintSheet = lazy(() => import("./components/CombinedPrintSheet.jsx"));
 
 function LazyPageFallback({ label = "workspace" }) {
   return (
@@ -1367,6 +1366,20 @@ const { resetAll } = useOperationsActions({
     setSettingsTab("subscription");
   };
 
+  const openCurrentReport=({day="matchweek",reportType="fixtures",autoPrint=false}={})=>{
+    const scope=String(day||"matchweek").toLowerCase();
+    setNavigationTarget({
+      target:"reports",
+      page:"reports",
+      source:"current",
+      scope,
+      reportType,
+      autoPrint:Boolean(autoPrint),
+      createdAt:Date.now(),
+    });
+    setMainPage("reports");
+  };
+
 return(
   <MatchdayScopeProvider scope={matchdayScope} setScope={setMatchdayScope}>
   {onboardingOpen && (
@@ -1428,16 +1441,6 @@ return(
              inset: 0;
              width: 100%;
            }
-           body[data-print-target="reports"] #combined-print { display: none !important; }
-           body:not([data-print-target="reports"]) { visibility: hidden !important; }
-           body:not([data-print-target="reports"]) #combined-print,
-           body:not([data-print-target="reports"]) #combined-print * { visibility: visible !important; }
-           body:not([data-print-target="reports"]) #combined-print {
-             position: fixed;
-             top: 0;
-             left: 0;
-             width: 100%;
-           }
            @page { size: A4 landscape; margin: 12mm; }
          }
        `}}/>
@@ -1463,6 +1466,13 @@ return(
     matchdayScope={matchdayScope}
     setMatchdayScope={setMatchdayScope}
     saveWeek={saveWeek}
+    mode={mode}
+    runSatTest={runSatTest}
+    runSatLive={runSatLive}
+    runSunTest={runSunTest}
+    runSunLive={runSunLive}
+    runMidweekTest={runMidweekTest}
+    runMidweekLive={runMidweekLive}
     club={club}
     history={history}
     pitchCfg={pitchCfg}
@@ -1527,6 +1537,8 @@ return(
     setSatDate={setSatDate}
     runSatTest={runSatTest}
     runSatLive={runSatLive}
+    onPrintReport={() => openCurrentReport({day:"saturday",reportType:"fixtures",autoPrint:true})}
+    onPublish={() => setMainPage("communications")}
     showManual={showManual}
     setShowManual={setShowManual}
     satManual={satManual}
@@ -1590,6 +1602,8 @@ return(
             setSunDate={setSunDate}
             runSunTest={runSunTest}
             runSunLive={runSunLive}
+            onPrintReport={() => openCurrentReport({day:"sunday",reportType:"fixtures",autoPrint:true})}
+            onPublish={() => setMainPage("communications")}
             showSunManual={showSunManual}
             setShowSunManual={setShowSunManual}
             sunManual={sunManual}
@@ -1650,6 +1664,8 @@ return(
             useCurrentMidweekDate={useCurrentMidweekDate}
             runMidweekTest={runMidweekTest}
             runMidweekLive={runMidweekLive}
+            onPrintReport={() => openCurrentReport({day:"midweek",reportType:"fixtures",autoPrint:true})}
+            onPublish={() => setMainPage("communications")}
             showMidweekManual={showMidweekManual}
             setShowMidweekManual={setShowMidweekManual}
             midweekManual={midweekManual}
@@ -1821,6 +1837,8 @@ return(
           sunDateLabel={sunDateLabel}
           midweekDateLabel={midweekDateLabel}
           midweekEnabled={midweekEnabled}
+          navigationTarget={navigationTarget}
+          clearNavigationTarget={clearNavigationTarget}
         />
       </Suspense>
     )}
@@ -1924,26 +1942,6 @@ return(
         </div>
       </div>
 
-      <div className="hidden print:block">
-      {satHasRun && satFinal.length > 0 && (
-        <Suspense fallback={null}>
-        <CombinedPrintSheet
-          satGames={satFinal}
-          sunGames={sunHasRun ? sunFinal : []}
-          sunScheduled={sunHasRun}
-          satDateLabel={mode === "test" ? "Test Matchday" : satDateLabel}
-          sunDateLabel={mode === "test" ? "Test Sunday" : sunDateLabel}
-          useAstro={useAstro}
-          refWarnings={refWarnings}
-          startHour={startHour}
-          startMin={startMin}
-          endHour={endHour}
-          endMin={endMin}
-          club={club}
-        />
-        </Suspense>
-      )}
-    </div>
   </ProductShell>
   </MatchdayScopeProvider>
   );

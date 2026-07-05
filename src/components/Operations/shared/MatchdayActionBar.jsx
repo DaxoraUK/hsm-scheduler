@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Lock,
+  LockOpen,
   MapPinned,
   Play,
   Printer,
@@ -15,7 +16,16 @@ import SecondaryButton from "@/ui/SecondaryButton.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 import { getMatchdayHealth } from "../../../lib/operationsEngine.js";
 
-function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches }) {
+function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked }) {
+  if (isLocked) {
+    return {
+      label: "Schedule locked",
+      detail: "The approved plan is read only. Unlock it before rebuilding or applying fixture changes.",
+      variant: "success",
+      icon: Lock,
+    };
+  }
+
   if (!hasRun) {
     return {
       label: "Build the schedule",
@@ -90,6 +100,12 @@ export default function MatchdayActionBar({
   closedPitches = [],
   allowArtificial,
   setAllowArtificial,
+  isLocked = false,
+  onToggleLock,
+  onPrint,
+  onPublish,
+  onOptimise,
+  optimisationCount = 0,
 }) {
   const needsReview = unresolvedCount > 0 || refWarnings > 0;
 
@@ -103,7 +119,7 @@ export default function MatchdayActionBar({
 
   const pitchCapacity = matchdayHealth.pitchCapacity;
   const buildSchedule = mode === "test" ? runTest : runLive;
-  const nextAction = getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches });
+  const nextAction = getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const NextIcon = nextAction.icon;
   const buildLabel = mode === "test" ? `Run ${day} Test` : `Fetch ${day} Fixtures`;
 
@@ -127,10 +143,10 @@ export default function MatchdayActionBar({
 
           <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[470px]">
             <StatusChip
-              variant={hasRun ? (needsReview ? "warning" : "success") : "neutral"}
+              variant={isLocked ? "success" : hasRun ? (needsReview ? "warning" : "success") : "neutral"}
               className="w-full border-white/10 shadow-none"
             >
-              {hasRun ? (needsReview ? "Review Required" : "Ready") : "Not Run"}
+              {isLocked ? "Locked" : hasRun ? (needsReview ? "Review Required" : "Ready") : "Not Run"}
             </StatusChip>
 
             <StatusChip variant="neutral" className="w-full border-white/10 shadow-none">
@@ -165,23 +181,24 @@ export default function MatchdayActionBar({
             </div>
 
             <StatusChip variant={nextAction.variant} size="lg">
-              Guided
+              {isLocked ? "Approved" : "Guided"}
             </StatusChip>
           </div>
 
           <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center">
-            <PrimaryButton onClick={buildSchedule} className="w-full lg:w-auto">
+            <PrimaryButton onClick={buildSchedule} disabled={isLocked} className="w-full lg:w-auto">
               <Play size={17} />
-              {buildLabel}
+              {isLocked ? "Unlock to rebuild" : buildLabel}
             </PrimaryButton>
 
             {typeof setAllowArtificial === "function" && (
-              <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm">
+              <label className={`flex min-h-12 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                 <span>Allow artificial surfaces</span>
                 <input
                   type="checkbox"
                   checked={Boolean(allowArtificial)}
                   onChange={(event) => setAllowArtificial(event.target.checked)}
+                  disabled={isLocked}
                   className="h-5 w-5 accent-emerald-600"
                 />
               </label>
@@ -190,51 +207,36 @@ export default function MatchdayActionBar({
         </div>
 
         <div className="grid gap-3">
-          <WorkflowStep
-            number="1"
-            title="Build"
-            detail="Fetch or run test fixtures and let the engine create the plan."
-            active={!hasRun}
-          />
-          <WorkflowStep
-            number="2"
-            title="Review"
-            detail="Check unresolved fixtures, pitch pressure, officials and recommendations."
-            active={hasRun && needsReview}
-          />
-          <WorkflowStep
-            number="3"
-            title="Publish"
-            detail="Save the week, print schedules and prepare coach communications."
-            active={hasRun && !needsReview}
-          />
+          <WorkflowStep number="1" title="Build" detail="Fetch or run test fixtures and let the engine create the plan." active={!hasRun && !isLocked} />
+          <WorkflowStep number="2" title="Review" detail="Check unresolved fixtures, pitch pressure, officials and recommendations." active={hasRun && needsReview && !isLocked} />
+          <WorkflowStep number="3" title={isLocked ? "Locked" : "Publish"} detail={isLocked ? "The approved fixture plan is protected from schedule changes." : "Save the week, print schedules and prepare coach communications."} active={isLocked || (hasRun && !needsReview)} />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3 border-t border-slate-200 bg-white px-6 py-5 sm:px-7">
-        <SecondaryButton onClick={saveWeek}>
+        <SecondaryButton onClick={saveWeek} disabled={!hasRun}>
           <Save size={17} />
           Save Week
         </SecondaryButton>
 
-        <SecondaryButton onClick={() => window.print()}>
+        <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}>
           <Printer size={17} />
-          Print
+          Print current report
         </SecondaryButton>
 
-        <SecondaryButton>
+        <SecondaryButton onClick={onPublish} disabled={!hasRun}>
           <Send size={17} />
-          Publish
+          Open Communications
         </SecondaryButton>
 
-        <SecondaryButton>
-          <Lock size={17} />
-          Lock
+        <SecondaryButton onClick={onToggleLock} disabled={!hasRun || fixtureCount === 0}>
+          {isLocked ? <LockOpen size={17} /> : <Lock size={17} />}
+          {isLocked ? "Unlock" : "Lock Schedule"}
         </SecondaryButton>
 
-        <SecondaryButton>
+        <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}>
           <Sparkles size={17} />
-          Optimise
+          {optimisationCount > 0 ? `Review ${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}
         </SecondaryButton>
       </div>
     </section>

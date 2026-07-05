@@ -1,4 +1,5 @@
 import React from "react";
+import { toast } from "sonner";
 
 export default function SaturdayEmptyState({
   S,
@@ -53,7 +54,9 @@ export default function SaturdayEmptyState({
           onClick={() => {
             setTeamCfg(TEAM_CONFIG_DEFAULT);
             setPitchCfg(PITCHES);
-            alert("Teams and pitches reset to defaults. Run the test schedule again.");
+            toast.success("Teams and pitches reset", {
+              description: "Run the test schedule again to rebuild the matchday.",
+            });
           }}
         >
           Reset Teams and Pitches Now

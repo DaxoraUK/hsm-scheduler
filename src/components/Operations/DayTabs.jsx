@@ -2,11 +2,11 @@ import React from "react";
 
 export default function DayTabs({ dayTab, setDayTab, midweekEnabled = true }) {
   const tabs = [
-    ["centre", "Operations Centre", "Live matchday control room"],
-    ["saturday", "Saturday", "Primary matchday"],
-    ["sunday", "Sunday", "Secondary matchday"],
-    ...(midweekEnabled ? [["midweek", "Midweek", "Any weekday fixture date"]] : []),
-    ["timeline", "Timeline", "Operational command view"],
+    ["centre", "Operations Centre", "Cross-day readiness and exceptions"],
+    ["saturday", "Saturday", "Saturday fixtures and resources"],
+    ["sunday", "Sunday", "Sunday fixtures and resources"],
+    ...(midweekEnabled ? [["midweek", "Midweek", "Weekday fixtures and evening windows"]] : []),
+    ["timeline", "Timeline", "Combined matchweek sequence"],
   ];
 
   return (

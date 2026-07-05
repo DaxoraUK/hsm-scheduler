@@ -35,8 +35,9 @@ import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.j
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import MatchdayGuidanceCard from "../components/Operations/shared/MatchdayGuidanceCard.jsx";
 import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
-import CollapsibleCard from "@/ui/CollapsibleCard.jsx";
-import StatusChip from "@/ui/StatusChip.jsx";
+import CollapsibleCard from "../ui/CollapsibleCard.jsx";
+import StatusChip from "../ui/StatusChip.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
@@ -46,6 +47,8 @@ import { calculateOperationsIntelligence } from "../lib/engines/operationsIntell
 import { calculateOfficialsReadiness, findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
 import useLiveWeather from "../hooks/useLiveWeather.js";
+import { readMatchdayLock, writeMatchdayLock } from "../lib/operations/matchdayLock.js";
+import { toast } from "sonner";
 
 const WORKSPACES = [
   {
@@ -322,6 +325,18 @@ export default function MatchdayPage({
         : props.satDate
   );
 
+  const lockIdentity = useMemo(() => ({
+    clubId: props.club?.id || props.club?.name || "club",
+    day: day.toLowerCase(),
+    date: matchdayDate || dateLabel || "undated",
+  }), [dateLabel, day, matchdayDate, props.club?.id, props.club?.name]);
+  const [isLocked, setIsLocked] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
+
+  useEffect(() => {
+    setIsLocked(readMatchdayLock(lockIdentity));
+  }, [lockIdentity]);
+
   const clubWithTiming = useMemo(() => ({
     ...(props.club || {}),
     fixtureDayKey: fixtureDay?.key || day.toLowerCase(),
@@ -441,6 +456,86 @@ export default function MatchdayPage({
     end: clubWithTiming.endTime,
   }), [clubWithTiming, final, props.closedPitches, props.pitchCfg]);
 
+  const editableOverride = isLocked ? undefined : onOverride;
+
+  const lockSchedule = useCallback(() => {
+    writeMatchdayLock(lockIdentity, true);
+    setIsLocked(true);
+    setPendingConfirmation(null);
+    toast.success(`${day} schedule locked`, {
+      description: "The current fixture plan is now protected from schedule changes.",
+    });
+  }, [day, lockIdentity]);
+
+  const toggleScheduleLock = useCallback(() => {
+    if (isLocked) {
+      writeMatchdayLock(lockIdentity, false);
+      setIsLocked(false);
+      toast.success(`${day} schedule unlocked`, {
+        description: "Fixture changes and validated optimiser moves are available again.",
+      });
+      return;
+    }
+
+    if (!hasRun || final.length === 0) {
+      toast.error("Build the schedule before locking it");
+      return;
+    }
+
+    const issues = [];
+    if (unresolved.length) issues.push(`${unresolved.length} unresolved fixture${unresolved.length === 1 ? "" : "s"}`);
+    if (conflicts.length) issues.push(`${conflicts.length} pitch conflict${conflicts.length === 1 ? "" : "s"}`);
+    if (officialConflicts.length) issues.push(`${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"}`);
+    if (refWarnings) issues.push(`${refWarnings} official confirmation${refWarnings === 1 ? "" : "s"} outstanding`);
+
+    if (issues.length) {
+      setPendingConfirmation({ type: "lock", issues });
+      return;
+    }
+
+    lockSchedule();
+  }, [conflicts.length, day, final.length, hasRun, isLocked, lockIdentity, lockSchedule, officialConflicts.length, refWarnings, unresolved.length]);
+
+  const applyOptimisationMove = useCallback((move) => {
+    if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
+    Object.entries(move.patch).forEach(([field, value]) => onOverride(move.fixtureIndex, field, value));
+    toast.success("Validated fixture move applied", {
+      description: move.summary || move.fixtureTitle || "The schedule has been updated.",
+    });
+  }, [isLocked, onOverride]);
+
+  const applyAllValidatedMoves = useCallback(() => {
+    const moves = dayOptimisation.moves || [];
+    if (!moves.length || isLocked || typeof onOverride !== "function") return;
+
+    moves.forEach((move) => {
+      Object.entries(move.patch || {}).forEach(([field, value]) => onOverride(move.fixtureIndex, field, value));
+    });
+
+    setPendingConfirmation(null);
+    toast.success("Schedule improvements applied", {
+      description: `${moves.length} validated move${moves.length === 1 ? "" : "s"} applied.`,
+    });
+  }, [dayOptimisation.moves, isLocked, onOverride]);
+
+  const applyAllOptimisationMoves = useCallback(() => {
+    const moves = dayOptimisation.moves || [];
+    if (!moves.length || isLocked || typeof onOverride !== "function") return;
+    setPendingConfirmation({ type: "optimise", count: moves.length });
+  }, [dayOptimisation.moves, isLocked, onOverride]);
+
+  const reviewOptimisation = useCallback(() => {
+    setSectionQuery("");
+    setSectionFilter("all");
+    setActiveWorkspace("intelligence");
+    setOpenSections((current) => ({ ...current, dayOptimiser: true }));
+    setHighlightedSection("dayOptimiser");
+    window.setTimeout(() => {
+      document.getElementById("matchday-section-dayOptimiser")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    window.setTimeout(() => setHighlightedSection(null), 2200);
+  }, []);
+
   const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
     club: clubWithTiming,
     fixtures: final,
@@ -499,7 +594,8 @@ export default function MatchdayPage({
     showManual,
     setShowManual,
     overrides,
-    onOverride,
+    onOverride: editableOverride,
+    readOnly: isLocked,
     dateLabel,
     games: final,
     conflicts,
@@ -705,7 +801,14 @@ export default function MatchdayPage({
         status: dayOptimisation.status,
         label: dayOptimisation.label,
         filter: dayOptimisation.status === "danger" ? "issues" : dayOptimisation.status === "warning" ? "warnings" : "ready",
-        render: () => <DayOptimiserCard optimisation={dayOptimisation} />,
+        render: () => (
+          <DayOptimiserCard
+            optimisation={dayOptimisation}
+            readOnly={isLocked}
+            onApplyMove={applyOptimisationMove}
+            onApplyAll={applyAllOptimisationMoves}
+          />
+        ),
       },
       {
         id: "parkingIntelligence",
@@ -722,7 +825,7 @@ export default function MatchdayPage({
             day={day}
             satHasRun={hasRun}
             satFinal={final}
-            onOverride={onOverride}
+            onOverride={editableOverride}
           />
         ),
       },
@@ -820,7 +923,7 @@ export default function MatchdayPage({
         ),
       },
     ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, liveWeather.isLoading, liveWeather.refresh, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, onOverride, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
+  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, applyAllOptimisationMoves, applyOptimisationMove, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, isLocked, liveWeather.isLoading, liveWeather.refresh, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
 
 
   const navigationSection = useMemo(() => {
@@ -984,8 +1087,24 @@ export default function MatchdayPage({
           saveWeek={props.saveWeek}
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}
+          isLocked={isLocked}
+          onToggleLock={toggleScheduleLock}
+          onPrint={props.onPrintReport}
+          onPublish={props.onPublish}
+          onOptimise={reviewOptimisation}
+          optimisationCount={dayOptimisation.metrics?.validatedMoves || 0}
         />
       </div>
+
+      {isLocked ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-black">Approved schedule locked</div>
+            <div className="mt-1 text-xs font-bold text-emerald-800">Fixtures remain viewable and printable, but schedule edits and optimiser moves are disabled until you unlock the day.</div>
+          </div>
+          <button type="button" onClick={toggleScheduleLock} className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 transition hover:bg-emerald-100">Unlock schedule</button>
+        </div>
+      ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="grid gap-3 lg:grid-cols-4">
@@ -1085,8 +1204,46 @@ export default function MatchdayPage({
         refs={props.refs}
         pitchCfg={props.pitchCfg}
         closedPitches={props.closedPitches}
-        onOverride={onOverride}
+        onOverride={editableOverride}
+        readOnly={isLocked}
         onClose={() => setSelectedFixtureIndex(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "lock"}
+        eyebrow="Schedule approval"
+        title={`Lock ${day} schedule?`}
+        description="The plan will become read only until it is unlocked. Existing warnings stay visible so they can still be monitored and followed up."
+        confirmLabel="Lock schedule"
+        cancelLabel="Keep editing"
+        tone="warning"
+        initialFocus="cancel"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={lockSchedule}
+      >
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Outstanding checks</div>
+          <ul className="mt-2 space-y-1.5 text-sm font-bold text-amber-950">
+            {(pendingConfirmation?.issues || []).map((issue) => (
+              <li key={issue} className="flex items-start gap-2">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                <span>{issue}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "optimise"}
+        eyebrow="Validated improvements"
+        title={`Apply ${pendingConfirmation?.count || 0} schedule improvement${pendingConfirmation?.count === 1 ? "" : "s"}?`}
+        description="Ground Control will update the affected fixtures now. The day remains unlocked, so you can review the final schedule and adjust it afterwards."
+        confirmLabel={`Apply ${pendingConfirmation?.count || 0} move${pendingConfirmation?.count === 1 ? "" : "s"}`}
+        cancelLabel="Review first"
+        tone="success"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={applyAllValidatedMoves}
       />
     </div>
   );

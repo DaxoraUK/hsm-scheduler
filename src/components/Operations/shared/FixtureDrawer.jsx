@@ -36,6 +36,7 @@ export default function FixtureDrawer({
   pitchCfg = [],
   closedPitches = [],
   onOverride,
+  readOnly = false,
   onClose,
 }) {
   const [blockedMove, setBlockedMove] = useState(null);
@@ -60,7 +61,7 @@ export default function FixtureDrawer({
     fixture.cfg?.format || fixture.manualFormat || fixture.format || "Fixture";
 
   const fixtureIndex = typeof fixture.__index === "number" ? fixture.__index : 0;
-  const canEdit = typeof onOverride === "function";
+  const canEdit = !readOnly && typeof onOverride === "function";
 
   const closeDrawer = () => {
     setBlockedMove(null);
@@ -332,10 +333,12 @@ Good luck!`;
                 description={
                   canEdit
                     ? "Edit the operational details for this fixture."
-                    : "Dashboard view is read-only. Open Operations to make changes."
+                    : readOnly
+                      ? "This schedule is locked. Unlock the matchday before changing fixture details."
+                      : "Dashboard view is read-only. Open Operations to make changes."
                 }
               >
-                {!canEdit && (
+                {!canEdit && !readOnly && (
                   <button
                     type="button"
                     onClick={() => {
@@ -362,6 +365,12 @@ Good luck!`;
                     Edit in Matchday Planner →
                   </button>
                 )}
+
+                {readOnly ? (
+                  <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-900">
+                    Approved schedule locked · view only
+                  </div>
+                ) : null}
 
                 {blockedMove && (
                   <BlockedMoveCard

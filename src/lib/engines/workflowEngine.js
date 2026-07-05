@@ -17,6 +17,7 @@ export function buildMissionControlWorkflow({
   pitchCount = 0,
   closedPitchCount = 0,
   refereeOutstanding = 0,
+  officialConflicts = 0,
   parkingEnabled = true,
   parkingConfigured = true,
   parkingPercent = 0,
@@ -52,10 +53,12 @@ export function buildMissionControlWorkflow({
     {
       key: "officials",
       title: "Confirm officials",
-      detail: refereeOutstanding
-        ? `${refereeOutstanding} official ${refereeOutstanding === 1 ? "needs" : "need"} confirmation.`
-        : "Officials look healthy for scheduled fixtures.",
-      status: refereeOutstanding ? "warning" : "complete",
+      detail: officialConflicts
+        ? `${officialConflicts} overlapping official ${officialConflicts === 1 ? "assignment needs" : "assignments need"} attention.`
+        : refereeOutstanding
+          ? `${refereeOutstanding} official ${refereeOutstanding === 1 ? "needs" : "need"} confirmation.`
+          : "Officials look healthy for scheduled fixtures.",
+      status: officialConflicts || refereeOutstanding ? "warning" : "complete",
       required: true,
       action: WORKFLOW_ACTIONS.OFFICIALS,
     },
@@ -110,6 +113,7 @@ export function getMissionState({
   scheduleBuilt = false,
   fixtureIssues = 0,
   refereeOutstanding = 0,
+  officialConflicts = 0,
   parkingEnabled = true,
   parkingConfigured = true,
   parkingOverCapacity = false,
@@ -127,7 +131,8 @@ export function getMissionState({
   if (
     fixtureIssues > 0 ||
     (parkingEnabled && (!parkingConfigured || parkingOverCapacity)) ||
-    refereeOutstanding > 0
+    refereeOutstanding > 0 ||
+    officialConflicts > 0
   ) {
     return {
       tone: "warning",
