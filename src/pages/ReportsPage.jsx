@@ -29,6 +29,7 @@ const REPORT_ICONS = {
   officials: ShieldCheck,
   exceptions: TriangleAlert,
   analytics: BarChart3,
+  funding: FileCheck2,
 };
 
 function SelectControl({ label, value, onChange, children }) {
@@ -214,9 +215,9 @@ export default function ReportsPage({
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Reports v1"
-        title="Operational reports"
-        subtitle="Build club-scoped matchday packs, operational evidence and export-ready schedules from live or saved Ground Control data."
+        eyebrow="Reports and evidence"
+        title="Create traceable operational reports"
+        subtitle="Build club-scoped matchday packs, management reports and funding evidence documents with visible methodology and source records."
         action={
           <div className="flex flex-wrap gap-2">
             <button
@@ -279,17 +280,24 @@ export default function ReportsPage({
         </div>
       </section>
 
-      <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <SummaryMetric label="Recorded" value={model.evidence.summary.total} detail="Outcome fixtures" />
         <SummaryMetric label="Unresolved" value={model.evidence.summary.unresolved} detail="Need allocation" tone={model.evidence.summary.unresolved ? "danger" : "success"} />
         <SummaryMetric label="Officials" value={`${model.evidence.summary.officialCoverage}%`} detail={`${model.evidence.summary.officialOutstanding} outstanding`} tone={model.evidence.summary.officialCoverage >= 90 ? "success" : "warning"} />
         <SummaryMetric label="Parking peak" value={model.evidence.summary.peakParking} detail={`${model.evidence.summary.parkingOverCapacity} pressure days`} tone={model.evidence.summary.parkingOverCapacity ? "danger" : "success"} />
+        <SummaryMetric label="Evidence confidence" value={`${model.quality.score}%`} detail={model.quality.label} tone={model.quality.tone} />
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Report readiness</div>
           <div className="mt-3"><StatusChip status={model.readiness.status}>{model.readiness.label}</StatusChip></div>
           <div className="mt-2 text-xs font-semibold text-slate-500">{model.readiness.detail}</div>
         </div>
       </section>
+
+      {model.hasData ? (
+        <section className="np rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
+          <strong>Evidence basis:</strong> {model.quality.period.label} · {model.quality.fixtures} fixture record{model.quality.fixtures === 1 ? "" : "s"}. {model.quality.methodology}
+        </section>
+      ) : null}
 
       {!model.hasData ? (
         <EmptyState

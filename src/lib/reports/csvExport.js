@@ -91,6 +91,17 @@ export function buildReportCsv(model) {
     ], model.exceptions || []);
   }
 
+  if (type === "funding") {
+    return tableToCsv([
+      { label: "Category", value: "category" },
+      { label: "Requirement", value: "title" },
+      { label: "Status", value: "status" },
+      { label: "Source type", value: "source" },
+      { label: "Current evidence", value: "evidence" },
+      { label: "Next action", value: "nextAction" },
+    ], model?.grantFramework?.requirements || []);
+  }
+
   const summary = model?.evidence?.summary || {};
   const rows = [
     ["Recorded fixtures", summary.total, "Delivered, postponed and cancelled outcomes"],

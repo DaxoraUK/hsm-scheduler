@@ -15,6 +15,8 @@ import {
   Shapes,
   CloudRain,
   TriangleAlert,
+  FileSearch,
+  Info,
 } from "lucide-react";
 import PageContainer from "@/ui/PageContainer.jsx";
 import PageHeader from "@/ui/PageHeader.jsx";
@@ -129,24 +131,20 @@ function InsightPanel({ model }) {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/20">
               <Database size={24} strokeWidth={2.5} />
             </div>
-            <div className="text-4xl font-black text-emerald-300">{model.summary.evidenceScore}%</div>
+            <div className="text-4xl font-black text-emerald-300">{model.quality.score}%</div>
           </div>
           <div className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
             Analytics evidence depth
           </div>
           <div className="mt-2 text-2xl font-black">
-            {model.summary.evidenceScore >= 80
-              ? "Strong trend base"
-              : model.summary.evidenceScore >= 50
-                ? "Evidence developing"
-                : "More matchdays needed"}
+            {model.quality.label}
           </div>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">
-            Each saved matchday improves seasonal comparisons, facility evidence and operational forecasting.
+            {model.quality.methodology}
           </p>
           <ProgressBar
-            value={model.summary.evidenceScore}
-            tone={model.summary.evidenceScore >= 80 ? "success" : "warning"}
+            value={model.quality.score}
+            tone={model.quality.score >= 85 ? "success" : model.quality.score >= 65 ? "warning" : "danger"}
             className="mt-6"
           />
         </div>
@@ -188,6 +186,139 @@ function Panel({ id, icon: Icon, title, subtitle, badge, open, onToggle, childre
       </button>
       {open ? <div className="border-t border-slate-200 p-5 sm:p-6">{children}</div> : null}
     </section>
+  );
+}
+
+
+function QualityMeasureRow({ item, contextual = false }) {
+  const tone = item.value >= 85 ? "success" : item.value >= 55 ? "warning" : "danger";
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-black text-slate-900">{item.label}</div>
+            {contextual ? (
+              <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 ring-1 ring-slate-200">
+                Project-specific
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{item.detail}</p>
+        </div>
+        <div className="shrink-0 text-xl font-black text-slate-950">{item.value}%</div>
+      </div>
+      <ProgressBar value={item.value} tone={tone} className="mt-3" />
+    </div>
+  );
+}
+
+function EvidenceQualityPanel({ quality }) {
+  const coreMeasures = quality.coreMeasures || quality.measures.filter((item) => item.relevance !== "contextual");
+  const contextualMeasures = quality.contextualMeasures || quality.measures.filter((item) => item.relevance === "contextual");
+  const coreGaps = quality.gaps.filter((gap) => coreMeasures.some((item) => item.id === gap.id));
+
+  return (
+    <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-0 xl:grid-cols-[0.72fr_1.28fr]">
+        <div className="border-b border-slate-200 bg-slate-50 p-6 xl:border-b-0 xl:border-r sm:p-7">
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusChip status={quality.tone}>{quality.label}</StatusChip>
+            <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{quality.period.label}</span>
+          </div>
+
+          <div className="mt-6 flex items-end gap-3">
+            <div className="text-6xl font-black tracking-[-0.06em] text-slate-950">{quality.score}%</div>
+            <div className="pb-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">Core record confidence</div>
+          </div>
+          <ProgressBar value={quality.score} tone={quality.tone} className="mt-5" />
+          <p className="mt-5 text-sm font-semibold leading-6 text-slate-600">{quality.methodology}</p>
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Matchdays</div>
+              <div className="mt-2 text-2xl font-black text-slate-950">{quality.matchdays}</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Fixture records</div>
+              <div className="mt-2 text-2xl font-black text-slate-950">{quality.fixtures}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Core evidence measures</div>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">What makes the selected analytics reliable</h3>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{coreMeasures.length} core checks</span>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {coreMeasures.map((item) => <QualityMeasureRow key={item.id} item={item} />)}
+          </div>
+
+          {contextualMeasures.length ? (
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Contextual evidence</div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                These fields do not reduce the general confidence score. They become important when a selected report or funding project needs them.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {contextualMeasures.map((item) => <QualityMeasureRow key={item.id} item={item} contextual />)}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {coreGaps.length ? (
+        <div className="border-t border-amber-200 bg-amber-50 px-6 py-4 sm:px-7">
+          <div className="flex items-start gap-3 text-sm font-semibold leading-6 text-amber-950">
+            <Info size={18} className="mt-0.5 shrink-0 text-amber-700" />
+            <span><strong>Priority core gap: {coreGaps[0].label} at {coreGaps[0].value}%.</strong> {coreGaps[0].action}</span>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SourceRecords({ rows }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left">
+        <thead>
+          <tr className="text-[10px] font-black uppercase tracking-[0.17em] text-slate-400">
+            <th className="border-b border-slate-200 px-3 py-3">Matchday</th>
+            <th className="border-b border-slate-200 px-3 py-3">Day / date</th>
+            <th className="border-b border-slate-200 px-3 py-3">KO</th>
+            <th className="border-b border-slate-200 px-3 py-3">Fixture</th>
+            <th className="border-b border-slate-200 px-3 py-3">Status</th>
+            <th className="border-b border-slate-200 px-3 py-3">Pitch</th>
+            <th className="border-b border-slate-200 px-3 py-3">Format</th>
+            <th className="border-b border-slate-200 px-3 py-3">Official</th>
+            <th className="border-b border-slate-200 px-3 py-3">Weather</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="align-top">
+              <td className="border-b border-slate-100 px-3 py-4 text-xs font-bold text-slate-500">{row.entryLabel}</td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-bold text-slate-700">{row.dayLabel}<div className="mt-1 text-xs text-slate-400">{row.dateLabel}</div></td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-800">{row.koTime}</td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-950">{row.fixtureLabel}</td>
+              <td className="border-b border-slate-100 px-3 py-4"><StatusChip status={row.status === "delivered" ? "success" : row.status === "postponed" ? "warning" : row.status === "cancelled" ? "danger" : "review"} size="sm">{row.statusLabel}</StatusChip></td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.pitchLabel}</td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.format}</td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.referee}<div className="mt-1 text-xs text-slate-400">{row.officialStatus}</div></td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold capitalize text-slate-600">{row.weatherRisk}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -608,6 +739,8 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
         </div>
       </section>
 
+      {model.hasData ? <EvidenceQualityPanel quality={model.quality} /> : null}
+
       {!model.hasData ? (
         <EmptyState
           icon={Database}
@@ -808,6 +941,18 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               onToggle={togglePanel}
             >
               {model.formatDistribution.length ? <RankedPerformance data={model.formatDistribution} kind="format" /> : <ChartEmpty title="No format trend yet" detail="Fixture formats will appear here when they are recorded." />}
+            </Panel>
+
+            <Panel
+              id="source-records"
+              icon={FileSearch}
+              title="Source records"
+              subtitle="Trace every selected metric back to the fixture records used in the calculation."
+              badge={`${model.sourceRows.length} records`}
+              open={openPanels.has("source-records")}
+              onToggle={togglePanel}
+            >
+              <SourceRecords rows={model.sourceRows} />
             </Panel>
 
             <Panel

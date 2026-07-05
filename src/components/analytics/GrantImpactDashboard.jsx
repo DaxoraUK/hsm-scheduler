@@ -3,15 +3,22 @@ import {
   AlertTriangle,
   BarChart3,
   Building2,
+  CalendarClock,
   Check,
+  ChevronDown,
   ClipboardCheck,
-  Clock3,
   Copy,
+  Database,
+  ExternalLink,
   FileCheck2,
   HeartPulse,
+  Info,
   MapPin,
+  PoundSterling,
+  Search,
   ShieldCheck,
   Sparkles,
+  Target,
   Trophy,
   UsersRound,
 } from "lucide-react";
@@ -21,6 +28,7 @@ import Card from "@/ui/Card.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";
+import { inferGrantHomeNation } from "../../lib/grants/grantMatchingEngine.js";
 
 const TONE = {
   success: {
@@ -41,6 +49,12 @@ const TONE = {
     text: "text-rose-700",
     bar: "danger",
   },
+  info: {
+    surface: "border-sky-200 bg-sky-50",
+    icon: "bg-sky-100 text-sky-700",
+    text: "text-sky-700",
+    bar: "info",
+  },
 };
 
 const THEME_ICONS = {
@@ -57,14 +71,38 @@ const PRIORITY_STYLES = {
   positive: "border-emerald-200 bg-emerald-50 text-emerald-800",
 };
 
+const SCOPE_OPTIONS = [
+  { value: "matchweek", label: "Matchweek" },
+  { value: "weekend", label: "Weekend" },
+  { value: "midweek", label: "Midweek" },
+  { value: "saturday", label: "Saturday" },
+  { value: "sunday", label: "Sunday" },
+];
+
+function SelectControl({ label, value, onChange, children }) {
+  return (
+    <label className="block min-w-0">
+      <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-10 text-sm font-black text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+        >
+          {children}
+        </select>
+        <ChevronDown size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      </div>
+    </label>
+  );
+}
+
 function Metric({ icon: Icon, label, value, detail }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-            {label}
-          </div>
+          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">{label}</div>
           <div className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</div>
           <div className="mt-2 text-sm font-semibold leading-6 text-slate-500">{detail}</div>
         </div>
@@ -79,7 +117,6 @@ function Metric({ icon: Icon, label, value, detail }) {
 function ThemeCard({ theme }) {
   const Icon = THEME_ICONS[theme.id] || BarChart3;
   const tone = TONE[theme.tone] || TONE.warning;
-
   return (
     <div className={`rounded-[26px] border p-5 ${tone.surface}`}>
       <div className="flex items-start justify-between gap-4">
@@ -88,9 +125,7 @@ function ThemeCard({ theme }) {
         </div>
         <div className={`text-2xl font-black ${tone.text}`}>{theme.score}%</div>
       </div>
-      <div className="mt-5 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
-        {theme.label}
-      </div>
+      <div className="mt-5 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{theme.label}</div>
       <div className="mt-2 text-lg font-black text-slate-950">{theme.headline}</div>
       <div className="mt-2 min-h-12 text-sm font-semibold leading-6 text-slate-600">{theme.detail}</div>
       <ProgressBar value={theme.score} tone={tone.bar} className="mt-5" />
@@ -100,42 +135,23 @@ function ThemeCard({ theme }) {
 
 function PriorityCard({ priority, index }) {
   const style = PRIORITY_STYLES[priority.severity] || PRIORITY_STYLES.medium;
-
   return (
     <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${style}`}>
-          {index + 1}
-        </div>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${style}`}>{index + 1}</div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-black text-slate-950">{priority.title}</h3>
             <StatusChip
-              status={
-                priority.severity === "high"
-                  ? "danger"
-                  : priority.severity === "positive"
-                    ? "success"
-                    : priority.severity === "development"
-                      ? "info"
-                      : "warning"
-              }
+              status={priority.severity === "high" ? "danger" : priority.severity === "positive" ? "success" : priority.severity === "development" ? "info" : "warning"}
               size="sm"
             >
-              {priority.severity === "high"
-                ? "High priority"
-                : priority.severity === "positive"
-                  ? "Growth case"
-                  : priority.severity === "development"
-                    ? "Build evidence"
-                    : "Funding case"}
+              {priority.severity === "high" ? "High priority" : priority.severity === "positive" ? "Growth case" : priority.severity === "development" ? "Build evidence" : "Evidence case"}
             </StatusChip>
           </div>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{priority.detail}</p>
           <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-              Evidence
-            </div>
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Recorded basis</div>
             <div className="mt-2 text-sm font-bold leading-6 text-slate-700">{priority.evidence}</div>
           </div>
           <div className="mt-3 flex items-start gap-2 text-sm font-bold leading-6 text-emerald-800">
@@ -148,18 +164,166 @@ function PriorityCard({ priority, index }) {
   );
 }
 
-export default function GrantImpactDashboard(props) {
+function matrixStatus(item) {
+  if (item.status === "available") return { tone: "success", label: "Available" };
+  if (item.status === "partial") return { tone: "warning", label: "Partial" };
+  if (item.status === "manual") return { tone: "info", label: "Manual" };
+  return { tone: "danger", label: "Missing" };
+}
+
+function EvidenceMatrix({ framework }) {
+  return (
+    <Card
+      eyebrow="Grant evidence framework"
+      title="What Ground Control can evidence — and what it cannot"
+      subtitle="Operational records are separated from calculated, inferred and manual evidence so funding claims remain defensible."
+    >
+      <div className="overflow-x-auto">
+        <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left">
+          <thead>
+            <tr className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              <th className="border-b border-slate-200 px-3 py-3">Category</th>
+              <th className="border-b border-slate-200 px-3 py-3">Requirement</th>
+              <th className="border-b border-slate-200 px-3 py-3">Status</th>
+              <th className="border-b border-slate-200 px-3 py-3">Source</th>
+              <th className="border-b border-slate-200 px-3 py-3">Current evidence</th>
+              <th className="border-b border-slate-200 px-3 py-3">Next action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {framework.requirements.map((item) => {
+              const status = matrixStatus(item);
+              return (
+                <tr key={item.id} className="align-top">
+                  <td className="border-b border-slate-100 px-3 py-4 text-xs font-black text-slate-500">{item.category}</td>
+                  <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-900">{item.title}</td>
+                  <td className="border-b border-slate-100 px-3 py-4"><StatusChip status={status.tone} size="sm">{status.label}</StatusChip></td>
+                  <td className="border-b border-slate-100 px-3 py-4 text-xs font-black uppercase tracking-[0.12em] text-slate-500">{item.source}</td>
+                  <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold leading-6 text-slate-600">{item.evidence}</td>
+                  <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold leading-6 text-slate-600">{item.nextAction}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
+        <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
+        <span>{framework.disclaimer}</span>
+      </div>
+    </Card>
+  );
+}
+
+function ReadinessCard({ item }) {
+  const tone = TONE[item.status] || TONE.info;
+  return (
+    <div className={`rounded-[24px] border p-5 ${tone.surface}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{item.label}</div>
+          <div className={`mt-3 text-2xl font-black ${tone.text}`}>{item.display}</div>
+        </div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${tone.icon}`}>
+          {item.id === "operational" ? <Database size={19} /> : item.id === "eligibility" ? <ShieldCheck size={19} /> : item.id === "documents" ? <FileCheck2 size={19} /> : <Target size={19} />}
+        </div>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{item.detail}</p>
+      {item.value != null ? <ProgressBar value={item.value} tone={tone.bar} className="mt-4" /> : null}
+    </div>
+  );
+}
+
+function FundingOpportunityCard({ programme }) {
+  return (
+    <article className="flex h-full flex-col rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{programme.funder}</div>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{programme.name}</h3>
+        </div>
+        <StatusChip status={programme.resolvedStatus.tone} size="sm">{programme.resolvedStatus.label}</StatusChip>
+      </div>
+
+      <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">{programme.summary}</p>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><PoundSterling size={14} /> Funding</div>
+          <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.amountLabel}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Target size={14} /> Club contribution</div>
+          <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.matchFunding}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Search size={14} /> Relevance</div>
+          <div className="mt-2 text-sm font-black text-slate-900">{programme.matchLabel}</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">{programme.evidenceReady}/{programme.evidenceTotal} mapped evidence areas ready</div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Key eligibility checks</div>
+        <ul className="mt-3 space-y-2">
+          {programme.eligibilityNotes.slice(0, 3).map((note) => (
+            <li key={note} className="flex items-start gap-2 text-sm font-semibold leading-5 text-slate-600">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+              <span>{note}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {programme.evidenceGaps.length ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">Evidence to strengthen</div>
+          <div className="mt-2 text-sm font-semibold leading-6 text-amber-950">{programme.evidenceGaps.slice(0, 2).map((item) => item.title).join(" · ")}</div>
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <CalendarClock size={15} /> Verified {new Date(`${programme.lastVerified}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}
+          </div>
+          <StatusChip status={programme.verification.tone} size="sm">{programme.verification.label}</StatusChip>
+        </div>
+        <a
+          href={programme.officialUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3.5 py-2 text-xs font-black text-white transition hover:bg-slate-800"
+        >
+          Official guidance <ExternalLink size={14} />
+        </a>
+      </div>
+    </article>
+  );
+}
+
+export default function GrantImpactDashboard({ midweekEnabled = true, ...props }) {
   const [copied, setCopied] = useState(false);
-  const model = useMemo(() => buildGrantImpactModel(props), [props]);
-  const healthTone = TONE[model.health.tone] || TONE.warning;
-  const evidenceTone = TONE[model.evidence.tone] || TONE.warning;
+  const [period, setPeriod] = useState("all");
+  const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
+  const [homeNation, setHomeNation] = useState(() => inferGrantHomeNation(props.club));
+  const [projectType, setProjectType] = useState("all");
+  const [availability, setAvailability] = useState("current");
+  const effectiveScope = !midweekEnabled && ["matchweek", "midweek"].includes(scope) ? "weekend" : scope;
+  const model = useMemo(
+    () => buildGrantImpactModel({ ...props, midweekEnabled, period, scope: effectiveScope, homeNation, projectType, availability }),
+    [props, midweekEnabled, period, effectiveScope, homeNation, projectType, availability]
+  );
+  const scopeOptions = midweekEnabled ? SCOPE_OPTIONS : SCOPE_OPTIONS.filter((option) => !["matchweek", "midweek"].includes(option.value));
+  const operationalReadiness = model.funding.readiness.find((item) => item.id === "operational");
+  const readinessTone = TONE[operationalReadiness.status] || TONE.warning;
 
   const copyNarrative = async () => {
     try {
-      await navigator.clipboard.writeText(model.narrative);
+      await navigator.clipboard.writeText(`${model.narrative}\n\nFunding focus: ${model.funding.project.label}.\n\nEvidence note: ${model.framework.disclaimer}\n\nOpportunity note: ${model.funding.disclaimer}`);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
-    } catch (_error) {
+    } catch {
       setCopied(false);
     }
   };
@@ -167,130 +331,135 @@ export default function GrantImpactDashboard(props) {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Club Health & Grant Impact"
-        title="Turn operations into evidence"
-        subtitle="Ground Control converts fixture delivery, facility demand and matchday pressure into a clear evidence base for funding applications and club planning."
+        eyebrow="Funding intelligence"
+        title="Find funding and build the evidence case"
+        subtitle="Match verified national and UK-wide programmes to a defined club project, then identify the operational evidence, eligibility checks and documents still required."
         action={
-          <button
-            type="button"
-            onClick={copyNarrative}
-            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900"
-          >
+          <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
             {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
-            {copied ? "Evidence copied" : "Copy funding summary"}
+            {copied ? "Summary copied" : "Copy evidence summary"}
           </button>
         }
       />
 
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <SelectControl label="Evidence period" value={period} onChange={setPeriod}>
+            {model.filters.periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectControl>
+          <SelectControl label="Matchday scope" value={effectiveScope} onChange={setScope}>
+            {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectControl>
+          <SelectControl label="Home nation" value={homeNation} onChange={setHomeNation}>
+            {model.funding.filters.homeNations.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectControl>
+          <SelectControl label="Funding project" value={projectType} onChange={setProjectType}>
+            {model.funding.filters.projectTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </SelectControl>
+          <SelectControl label="Opportunities" value={availability} onChange={setAvailability}>
+            <option value="current">Open, upcoming and monitored</option>
+            <option value="all">All verified schemes</option>
+          </SelectControl>
+        </div>
+      </section>
+
       <section className="overflow-hidden rounded-[34px] bg-gradient-to-br from-slate-950 via-[#0b1d2c] to-emerald-950 text-white shadow-2xl shadow-slate-900/15">
-        <div className="grid gap-8 p-7 lg:grid-cols-[1.25fr_0.75fr] lg:p-9">
+        <div className="grid gap-8 p-7 lg:grid-cols-[1.2fr_0.8fr] lg:p-9">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <StatusChip status={model.health.tone === "success" ? "success" : model.health.tone === "danger" ? "danger" : "warning"}>
-                {model.health.label}
-              </StatusChip>
-              <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">
-                {model.evidence.recordedWeeks} recorded matchday{model.evidence.recordedWeeks === 1 ? "" : "s"}
-              </span>
+              <StatusChip status={model.funding.programmes.length ? "success" : "warning"}>{model.funding.programmes.length} relevant programme{model.funding.programmes.length === 1 ? "" : "s"}</StatusChip>
+              <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Verified {model.funding.coverage.lastVerified}</span>
             </div>
-
-            <div className="mt-7 flex items-end gap-5">
-              <div className="text-7xl font-black tracking-[-0.07em]">{model.health.score}</div>
-              <div className="pb-2">
-                <div className="text-sm font-black uppercase tracking-[0.24em] text-emerald-300">Club health</div>
-                <div className="mt-1 text-lg font-bold text-slate-300">Operational evidence score</div>
-              </div>
-            </div>
-
-            <p className="mt-7 max-w-3xl text-base font-semibold leading-8 text-slate-300">
-              {model.narrative}
-            </p>
-
+            <h2 className="mt-7 max-w-3xl text-4xl font-black tracking-[-0.04em] sm:text-5xl">{model.funding.project.label}</h2>
+            <p className="mt-4 max-w-3xl text-base font-semibold leading-8 text-slate-300">{model.funding.project.description}</p>
+            <div className="mt-6 rounded-2xl bg-white/10 p-4 text-sm font-semibold leading-6 text-slate-200 ring-1 ring-white/10">{model.narrative}</div>
             {model.evidence.isUsingCurrentWeekend ? (
               <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black text-slate-200 ring-1 ring-white/10">
-                <AlertTriangle size={15} className="text-amber-300" />
-                Current weekend shown until the first matchday is saved
+                <AlertTriangle size={15} className="text-amber-300" /> Current matchweek used because no saved evidence exists
               </div>
             ) : null}
           </div>
 
-          <div className={`rounded-[28px] border p-6 ${evidenceTone.surface} text-slate-950`}>
+          <div className={`rounded-[28px] border p-6 ${readinessTone.surface} text-slate-950`}>
             <div className="flex items-center justify-between gap-4">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${evidenceTone.icon}`}>
-                <FileCheck2 size={24} strokeWidth={2.5} />
-              </div>
-              <div className={`text-4xl font-black ${evidenceTone.text}`}>{model.evidence.score}%</div>
+              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${readinessTone.icon}`}><FileCheck2 size={24} strokeWidth={2.5} /></div>
+              <div className={`text-4xl font-black ${readinessTone.text}`}>{operationalReadiness.display}</div>
             </div>
-            <div className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
-              Grant evidence readiness
-            </div>
-            <div className="mt-2 text-2xl font-black">{model.evidence.label}</div>
-            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
-              Readiness increases as the club saves matchdays and records fixture outcomes, facilities, officials and access pressure.
-            </p>
-            <ProgressBar value={model.evidence.score} tone={evidenceTone.bar} className="mt-6" />
+            <div className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">Project evidence coverage</div>
+            <div className="mt-2 text-2xl font-black">Operational records only</div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{operationalReadiness.detail}</p>
+            <ProgressBar value={operationalReadiness.value || 0} tone={readinessTone.bar} className="mt-6" />
           </div>
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          icon={Trophy}
-          label="Fixtures delivered"
-          value={model.metrics.deliveredFixtures}
-          detail={`${model.metrics.teamOpportunitySlots} team participation opportunities.`}
-        />
-        <Metric
-          icon={UsersRound}
-          label="Youth activity"
-          value={model.metrics.youthFixtures}
-          detail={`${model.metrics.femaleFixtures} girls' or women's fixtures evidenced.`}
-        />
-        <Metric
-          icon={Clock3}
-          label="Facility use"
-          value={`${model.metrics.facilityHours} hrs`}
-          detail={`${model.metrics.pitchesUsed}/${model.metrics.pitchesConfigured || model.metrics.pitchesUsed} pitches represented.`}
-        />
-        <Metric
-          icon={HeartPulse}
-          label="Fixture delivery"
-          value={`${100 - model.metrics.postponementRate}%`}
-          detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`}
-        />
-      </div>
+      <Card eyebrow="Project readiness" title="Four separate readiness checks" subtitle="Ground Control avoids one misleading grant-readiness percentage. Operational evidence is scored; eligibility, documents and the project case need explicit club input.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {model.funding.readiness.map((item) => <ReadinessCard key={item.id} item={item} />)}
+        </div>
+      </Card>
 
       <Card
-        eyebrow="Impact framework"
-        title="Evidence by funding theme"
-        subtitle="Four clear measures translate operational performance into the language funders and facility partners expect."
+        eyebrow="Verified opportunities"
+        title={`${model.funding.programmes.length} programme${model.funding.programmes.length === 1 ? "" : "s"} matched to this selection`}
+        subtitle="Each opportunity comes from an official source, carries a last-verified date and is filtered by home nation and project type."
       >
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200"><div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Verified catalogue</div><div className="mt-2 text-2xl font-black text-slate-950">{model.funding.coverage.verifiedProgrammes}</div></div>
+          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200"><div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Selected nation</div><div className="mt-2 text-2xl font-black text-slate-950">{model.funding.coverage.nationProgrammes}</div></div>
+          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200"><div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Open / monitored</div><div className="mt-2 text-2xl font-black text-slate-950">{model.funding.coverage.currentNationProgrammes}</div></div>
+          <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200"><div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Matched now</div><div className="mt-2 text-2xl font-black text-slate-950">{model.funding.coverage.matchingProgrammes}</div></div>
+          <div className={`rounded-2xl p-4 ring-1 ${model.funding.coverage.staleProgrammes ? "bg-rose-50 ring-rose-200" : "bg-emerald-50 ring-emerald-200"}`}><div className={`text-[9px] font-black uppercase tracking-[0.18em] ${model.funding.coverage.staleProgrammes ? "text-rose-600" : "text-emerald-600"}`}>Re-check required</div><div className={`mt-2 text-2xl font-black ${model.funding.coverage.staleProgrammes ? "text-rose-900" : "text-emerald-900"}`}>{model.funding.coverage.staleProgrammes}</div></div>
+        </div>
+
+        {model.funding.programmes.length ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {model.funding.programmes.map((programme) => <FundingOpportunityCard key={programme.id} programme={programme} />)}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold leading-6 text-amber-950">No current verified programmes match this nation and project selection. Switch to all verified schemes to see closed or monitoring entries, and continue checking local sources.</div>
+        )}
+
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
+          <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
+          <span><strong>Coverage boundary:</strong> {model.funding.coverage.scope} {model.funding.disclaimer}</span>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Trophy} label="Fixtures delivered" value={model.metrics.deliveredFixtures} detail={`${model.metrics.teamOpportunitySlots} calculated team opportunities; not individual participant numbers.`} />
+        <Metric icon={UsersRound} label="Participation categories" value={model.metrics.youthFixtures} detail={`${model.metrics.femaleFixtures} girls' or women's fixtures inferred from team names.`} />
+        <Metric icon={CalendarClock} label="Facility use" value={`${model.metrics.facilityHours} hrs`} detail={`${model.metrics.pitchesUsed}/${model.metrics.pitchesConfigured || model.metrics.pitchesUsed} pitches represented.`} />
+        <Metric icon={HeartPulse} label="Fixture delivery" value={`${100 - model.metrics.postponementRate}%`} detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`} />
+      </div>
+
+      <Card eyebrow="Evidence provenance" title="Know where every claim comes from" subtitle="Ground Control keeps direct records, calculations, inferences and manual evidence visibly separate.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {model.themes.map((theme) => (
-            <ThemeCard key={theme.id} theme={theme} />
+          {model.quality.provenance.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-black text-slate-900">{item.label}</div>
+                <StatusChip status={item.status === "available" ? "success" : item.status === "partial" ? "warning" : item.status === "required" ? "info" : "danger"} size="sm">{item.status}</StatusChip>
+              </div>
+              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{item.detail}</p>
+            </div>
           ))}
         </div>
       </Card>
 
+      <EvidenceMatrix framework={model.framework} />
+
+      <Card eyebrow="Impact framework" title="Operational evidence by theme" subtitle="These measures summarise the selected records; they are not funder-specific scoring criteria.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{model.themes.map((theme) => <ThemeCard key={theme.id} theme={theme} />)}</div>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card
-          eyebrow="Funding priorities"
-          title="Evidence-led investment cases"
-          subtitle="Ground Control highlights where operational data supports a credible case for funding."
-        >
-          <div className="space-y-4">
-            {model.priorities.map((priority, index) => (
-              <PriorityCard key={priority.id} priority={priority} index={index} />
-            ))}
-          </div>
+        <Card eyebrow="Evidence priorities" title="Where the operational case is strongest" subtitle="Use these as investigation prompts, then verify them against the live scheme guidance and project evidence.">
+          <div className="space-y-4">{model.priorities.map((priority, index) => <PriorityCard key={priority.id} priority={priority} index={index} />)}</div>
         </Card>
 
         <div className="space-y-6">
-          <Card
-            eyebrow="Live weekend"
-            title="Current operating position"
-            subtitle="Useful context for committee meetings and immediate funding conversations."
-          >
+          <Card eyebrow="Current matchweek" title="Live operating context" subtitle="Kept separate from the selected historical evidence period.">
             <div className="space-y-3">
               {[
                 ["Fixtures scheduled", model.current.fixtures, Trophy],
@@ -300,9 +469,7 @@ export default function GrantImpactDashboard(props) {
               ].map(([label, value, Icon]) => (
                 <div key={label} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200">
-                      <Icon size={18} strokeWidth={2.5} />
-                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200"><Icon size={18} strokeWidth={2.5} /></div>
                     <span className="text-sm font-black text-slate-700">{label}</span>
                   </div>
                   <span className="text-lg font-black text-slate-950">{value}</span>
@@ -311,25 +478,20 @@ export default function GrantImpactDashboard(props) {
             </div>
           </Card>
 
-          <Card
-            eyebrow="Strongest evidence"
-            title="What the data proves"
-            subtitle="A concise evidence checklist for grant forms, trustees and facility partners."
-          >
-            <div className="space-y-4">
-              {[
-                `${model.metrics.deliveredFixtures} fixtures delivered and recorded`,
-                `${model.metrics.facilityHours} hours of organised facility use`,
-                `${model.metrics.youthFixtures} youth fixtures supported`,
-                `${model.metrics.parkingPressureWeeks} matchdays with significant parking pressure`,
-              ].map((item) => (
-                <div key={item} className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                    <Check size={14} strokeWidth={3} />
+          <Card eyebrow="Evidence gaps" title="What to improve next" subtitle="Core and project-specific evidence gaps are shown separately in the funding matches above.">
+            <div className="space-y-3">
+              {model.quality.gaps.slice(0, 5).map((gap) => (
+                <div key={gap.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-black text-slate-900">{gap.label}</div>
+                    <span className="text-sm font-black text-slate-500">{gap.value}%</span>
                   </div>
-                  <span className="text-sm font-bold leading-6 text-slate-700">{item}</span>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{gap.action}</p>
                 </div>
               ))}
+              {!model.quality.gaps.length ? (
+                <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-900"><Database size={18} className="mt-0.5" /> No material operational evidence gaps in the selected records.</div>
+              ) : null}
             </div>
           </Card>
         </div>

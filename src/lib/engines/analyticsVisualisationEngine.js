@@ -1,4 +1,5 @@
 import { getParkingCapacity } from "../domain/clubDomain.js";
+import { buildEvidenceQuality } from "./evidenceQualityEngine.js";
 import {
   buildOperationalEvidence,
   normaliseSavedHistory,
@@ -88,6 +89,13 @@ export function buildAnalyticsVisualisationModel({
     filters: { team, pitch, format },
   });
   const summary = evidence.summary;
+  const quality = buildEvidenceQuality({
+    evidence,
+    entries: selectedEntries,
+    club,
+    pitchCfg,
+    teamCfg,
+  });
   const evidenceScore = clamp(
     Math.min(40, entries.length * 5) +
       (summary.total > 0 ? 15 : 0) +
@@ -140,5 +148,21 @@ export function buildAnalyticsVisualisationModel({
       high: summary.weatherHigh,
       watch: summary.weatherWatch,
     },
+    quality,
+    sourceRows: evidence.rows.map((row) => ({
+      id: row.id,
+      entryLabel: row.entryLabel,
+      dayLabel: row.dayLabel,
+      dateLabel: row.dateLabel,
+      koTime: row.koTime,
+      fixtureLabel: row.fixtureLabel,
+      status: row.status,
+      statusLabel: row.statusLabel,
+      pitchLabel: row.pitchLabel,
+      format: row.format,
+      referee: row.referee || "TBC",
+      officialStatus: row.officialConfirmed ? "Confirmed" : row.officialStatus || "Outstanding",
+      weatherRisk: row.weatherRisk,
+    })),
   };
 }

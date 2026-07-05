@@ -5,6 +5,9 @@ import {
   CalendarDays,
   Car,
   Clock3,
+  Database,
+  FileCheck2,
+  Info,
   MapPinned,
   ShieldCheck,
   Trophy,
@@ -205,6 +208,85 @@ function ExceptionsTable({ rows }) {
   ]} rows={rows} empty="No operational exceptions are recorded for this selection." />;
 }
 
+
+function frameworkStatus(item) {
+  if (item.status === "available") return { tone: "success", label: "Available" };
+  if (item.status === "partial") return { tone: "warning", label: "Partial" };
+  if (item.status === "manual") return { tone: "info", label: "Manual" };
+  return { tone: "danger", label: "Missing" };
+}
+
+function FundingEvidenceReport({ model }) {
+  const quality = model.quality;
+  const framework = model.grantFramework;
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
+        <SummaryCard icon={FileCheck2} label="Evidence confidence" value={`${quality.score}%`} detail={quality.label} />
+        <SummaryCard icon={CalendarDays} label="Selected matchdays" value={quality.matchdays} detail={quality.period.label} />
+        <SummaryCard icon={Database} label="Source records" value={quality.fixtures} detail="Fixture-level appendix included" />
+        <SummaryCard icon={Trophy} label="Framework coverage" value={`${framework.counts.available} available`} detail={`${framework.counts.partial} partial · ${framework.counts.manual} manual`} />
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 p-5 print:break-inside-avoid">
+        <div className="flex items-center gap-3"><Info size={19} className="text-sky-700" /><h3 className="font-black text-slate-950">Methodology and limitations</h3></div>
+        <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{quality.methodology}</p>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{framework.disclaimer}</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
+          {quality.provenance.map((item) => (
+            <div key={item.id} className="rounded-2xl bg-slate-50 p-4 print:bg-white print:ring-1 print:ring-slate-200">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-black text-slate-900">{item.label}</div>
+                <StatusChip status={item.status === "available" ? "success" : item.status === "partial" ? "warning" : item.status === "required" ? "info" : "danger"}>{item.status}</StatusChip>
+              </div>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="print:break-before-page">
+        <div className="mb-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Evidence framework</div>
+          <h3 className="mt-1 text-xl font-black text-slate-950">Requirement coverage and next actions</h3>
+        </div>
+        <Table
+          columns={[
+            { key: "category", label: "Category" },
+            { key: "title", label: "Requirement", className: "font-black text-slate-950" },
+            { key: "status", label: "Status", render: (row) => { const status = frameworkStatus(row); return <StatusChip status={status.tone}>{status.label}</StatusChip>; } },
+            { key: "source", label: "Source" },
+            { key: "evidence", label: "Current evidence" },
+            { key: "nextAction", label: "Next action" },
+          ]}
+          rows={framework.requirements}
+        />
+      </section>
+
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 print:break-inside-avoid print:bg-white">
+        <div className="flex items-center gap-3"><AlertTriangle size={19} className="text-amber-700" /><h3 className="font-black text-amber-950">Priority evidence gaps</h3></div>
+        <div className="mt-4 space-y-3">
+          {quality.gaps.slice(0, 6).map((gap) => (
+            <div key={gap.id} className="rounded-xl bg-white p-3 ring-1 ring-amber-200">
+              <div className="flex items-center justify-between gap-3"><span className="text-sm font-black text-slate-900">{gap.label}</span><span className="text-sm font-black text-amber-800">{gap.value}%</span></div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-slate-600">{gap.action}</div>
+            </div>
+          ))}
+          {!quality.gaps.length ? <div className="text-sm font-semibold text-emerald-800">No material operational evidence gaps are recorded for this selection.</div> : null}
+        </div>
+      </section>
+
+      <section className="print:break-before-page">
+        <div className="mb-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Source appendix</div>
+          <h3 className="mt-1 text-xl font-black text-slate-950">Fixture records supporting this pack</h3>
+        </div>
+        <FixtureReport model={model} />
+      </section>
+    </div>
+  );
+}
+
 function AnalyticsSnapshot({ model }) {
   const summary = model.evidence.summary;
   return (
@@ -244,6 +326,7 @@ export default function ReportDocument({ model, club }) {
     model.reportType === "parking" ? <ParkingReport model={model} /> :
     model.reportType === "officials" ? <OfficialsReport model={model} /> :
     model.reportType === "exceptions" ? <ExceptionsTable rows={model.exceptions} /> :
+    model.reportType === "funding" ? <FundingEvidenceReport model={model} /> :
     <AnalyticsSnapshot model={model} />;
 
   return (
@@ -264,13 +347,15 @@ export default function ReportDocument({ model, club }) {
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <StatusChip status={model.readiness.status}>{model.readiness.label}</StatusChip>
           <span className="text-xs font-bold text-slate-500">Readiness {model.readiness.score}% · {model.readiness.detail}</span>
+          <StatusChip status={model.quality.tone}>{model.quality.label}</StatusChip>
+          <span className="text-xs font-bold text-slate-500">Evidence confidence {model.quality.score}% · {model.quality.period.label}</span>
         </div>
       </header>
 
       {content}
 
       <footer className="mt-8 border-t border-slate-200 pt-4 text-[10px] font-semibold text-slate-400 print:break-inside-avoid">
-        Generated from club-scoped Ground Control operational data. Historical weather is shown only where it was captured; current forecasts are not substituted for past conditions.
+        Generated from club-scoped Ground Control operational data. Calculated and inferred measures are labelled in the funding evidence pack. Historical weather is shown only where it was captured; current forecasts are not substituted for past conditions. This report does not confirm funding eligibility.
       </footer>
     </article>
   );

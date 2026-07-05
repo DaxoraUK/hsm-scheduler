@@ -3,6 +3,8 @@ import {
   createCurrentMatchweekEntry,
   normaliseSavedHistory,
 } from "../engines/operationalEvidenceEngine.js";
+import { buildEvidenceQuality } from "../engines/evidenceQualityEngine.js";
+import { buildGrantEvidenceFramework } from "../grants/grantEvidenceFramework.js";
 
 export const REPORT_TYPES = [
   { id: "operations", label: "Operations pack", description: "Complete matchday schedule, risks and readiness." },
@@ -12,6 +14,7 @@ export const REPORT_TYPES = [
   { id: "officials", label: "Officials", description: "Appointment coverage and outstanding confirmations." },
   { id: "exceptions", label: "Exceptions", description: "Postponed, cancelled, unresolved and incomplete records." },
   { id: "analytics", label: "Analytics snapshot", description: "Executive operational summary for the selected period." },
+  { id: "funding", label: "Funding evidence pack", description: "Evidence provenance, gaps, methodology and source appendix." },
 ];
 
 export const REPORT_SCOPES = [
@@ -190,6 +193,29 @@ export function buildReportsModel({
   const parkingRows = buildParkingRows(evidence);
   const exceptions = buildExceptions(evidence);
   const readiness = readinessSummary(evidence);
+  const quality = buildEvidenceQuality({
+    evidence,
+    entries: selectedEntry ? [selectedEntry] : [],
+    club,
+    pitchCfg,
+    teamCfg,
+    refs,
+  });
+  const grantFramework = buildGrantEvidenceFramework({
+    club,
+    evidence,
+    quality,
+    pitchCfg,
+    teamCfg,
+    refs,
+    metrics: {
+      deliveredFixtures: evidence.summary.delivered,
+      postponedFixtures: evidence.summary.postponed,
+      facilityHours: evidence.summary.facilityHours,
+      officialCoverage: evidence.summary.officialCoverage,
+      parkingPressureWeeks: evidence.summary.parkingOverCapacity,
+    },
+  });
   const reportDefinition = REPORT_TYPES.find((item) => item.id === reportType) || REPORT_TYPES[0];
 
   const officialRows = evidence.delivered.map((row) => ({
@@ -218,6 +244,8 @@ export function buildReportsModel({
     officialRows,
     exceptions,
     readiness,
+    quality,
+    grantFramework,
     configuredOfficials: asArray(refs).length,
     hasData: evidence.rows.length > 0,
     generatedAt: new Date(),
