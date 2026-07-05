@@ -75,13 +75,19 @@ export const authFetch = async (path, body = null, method = "POST", token = "") 
   if (!key) return { error: "Supabase is not configured" };
 
   try {
+    const headers = {
+      "Content-Type": "application/json",
+      apikey: key,
+    };
+
+    // Supabase publishable keys (sb_publishable_...) are API keys, not JWTs.
+    // They belong in the apikey header only. Authorization must contain a real
+    // signed-in user access token when one exists.
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const options = {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        apikey: key,
-        Authorization: `Bearer ${token || key}`,
-      },
+      headers,
     };
     if (body !== null && method !== "GET" && method !== "HEAD") {
       options.body = JSON.stringify(body);
@@ -809,66 +815,6 @@ export const DB = {
     return supaFetch("POST", "rpc/platform_resolve_client_event", {
       target_event_id: String(eventId || "").trim(),
       resolution_note: String(note || "").trim(),
-    });
-  },
-
-  async platformGetPilotEvidence(clubId = null) {
-    return supaFetch("POST", "rpc/platform_get_pilot_evidence", {
-      target_club_id: clubId || null,
-    });
-  },
-
-  async platformRecordLaunchGateEvidence(evidence = {}) {
-    return supaFetch("POST", "rpc/platform_record_launch_gate_evidence", {
-      target_gate_code: String(evidence.gateCode || "").trim(),
-      next_evidence_type: String(evidence.evidenceType || "observation").trim().toLowerCase(),
-      next_result: String(evidence.result || "observation").trim().toLowerCase(),
-      next_environment: String(evidence.environment || "staging").trim().toLowerCase(),
-      next_release: String(evidence.release || "").trim(),
-      next_summary: String(evidence.summary || "").trim(),
-      next_artifact_url: String(evidence.artifactUrl || "").trim() || null,
-      next_observed_at: evidence.observedAt || null,
-      next_metadata: evidence.metadata && typeof evidence.metadata === "object" ? evidence.metadata : {},
-    });
-  },
-
-  async platformUpsertPilotSession(session = {}) {
-    const id = requireClubId(session.clubId);
-    return supaFetch("POST", "rpc/platform_upsert_pilot_session", {
-      target_session_id: session.id || null,
-      target_club_id: id,
-      next_cycle: String(session.cycle || "historical_replay").trim().toLowerCase(),
-      next_status: String(session.status || "planned").trim().toLowerCase(),
-      next_session_date: session.sessionDate || null,
-      next_operator_name: String(session.operatorName || "").trim(),
-      next_fixture_count: Math.max(0, Number(session.fixtureCount) || 0),
-      next_auto_scheduled_count: Math.max(0, Number(session.autoScheduledCount) || 0),
-      next_manual_resolved_count: Math.max(0, Number(session.manualResolvedCount) || 0),
-      next_unresolved_count: Math.max(0, Number(session.unresolvedCount) || 0),
-      next_invalid_recommendation_count: Math.max(0, Number(session.invalidRecommendationCount) || 0),
-      next_correct_warning_count: Math.max(0, Number(session.correctWarningCount) || 0),
-      next_missed_warning_count: Math.max(0, Number(session.missedWarningCount) || 0),
-      next_override_count: Math.max(0, Number(session.overrideCount) || 0),
-      next_critical_defect_count: Math.max(0, Number(session.criticalDefectCount) || 0),
-      next_high_defect_count: Math.max(0, Number(session.highDefectCount) || 0),
-      next_time_saved_minutes: Math.max(0, Number(session.timeSavedMinutes) || 0),
-      next_outcome: String(session.outcome || "not_run").trim().toLowerCase(),
-      next_notes: String(session.notes || "").trim(),
-      next_signoff_name: String(session.signoffName || "").trim(),
-    });
-  },
-
-  async platformUpsertPilotFinding(finding = {}) {
-    return supaFetch("POST", "rpc/platform_upsert_pilot_finding", {
-      target_finding_id: finding.id || null,
-      target_session_id: String(finding.sessionId || "").trim(),
-      next_finding_type: String(finding.findingType || "defect").trim().toLowerCase(),
-      next_severity: String(finding.severity || "medium").trim().toLowerCase(),
-      next_status: String(finding.status || "open").trim().toLowerCase(),
-      next_title: String(finding.title || "").trim(),
-      next_description: String(finding.description || "").trim(),
-      next_workaround: String(finding.workaround || "").trim(),
-      next_reference: String(finding.reference || "").trim(),
     });
   },
 
