@@ -25,3 +25,14 @@ dist-ssr
 
 coverage
 *.tsbuildinfo
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+!.env.edge.example
+!.env.production.example
+
+# Generated launch-gate evidence
+.release-evidence/
+!.env.staging.example
