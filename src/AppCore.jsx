@@ -3,16 +3,6 @@
 // imports logic from lib/ and UI from components/.
 
 import React, { Suspense, lazy, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
-import AppLayout from "./layout/AppLayout.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import SettingsPage from "./pages/SettingsPage.jsx";
-import OperationsPage from "./pages/OperationsPage.jsx";
-import DayTabs from "./components/Operations/DayTabs.jsx";
-import SundayPage from "./pages/SundayPage.jsx";
-import SaturdayPage from "./pages/SaturdayPage.jsx";
-import MidweekPage from "./pages/MidweekPage.jsx";
-import OperationsTimelinePage from "./pages/OperationsTimelinePage.jsx";
-import OperationsCentrePage from "./pages/OperationsCentrePage.jsx";
 import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
@@ -26,7 +16,6 @@ import { usePlatformOperator } from "./hooks/usePlatformOperator.js";
 import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
-import CommunicationsPage from "./pages/CommunicationsPage.jsx";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import { MATCHDAY_SCOPES, getDayTabFromScope, normaliseMatchdayScope } from "./lib/domain/matchdayScope.js";
 import {
@@ -69,14 +58,8 @@ import {
   reopenPitchClosures as reopenPitchClosureRecords,
 } from "./lib/domain/pitchClosures.js";
 
-import SatPrintSheet from "./components/SatPrintSheet.jsx";
-import SunPrintSheet from "./components/SunPrintSheet.jsx";
-import CombinedPrintSheet from "./components/CombinedPrintSheet.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
-import WorkspaceAccessGate from "./components/WorkspaceAccessGate.jsx";
-import CustomerOnboardingWizard from "./components/CustomerOnboardingWizard.jsx";
-import SubscriptionGate from "./components/SubscriptionGate.jsx";
 import { toast } from "sonner";
 import {
   clearTenantStorageContext,
@@ -95,9 +78,23 @@ import {
 } from "./lib/subscriptions/entitlements.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 
+const WorkspaceAccessGate = lazy(() => import("./components/WorkspaceAccessGate.jsx"));
+const CustomerOnboardingWizard = lazy(() => import("./components/CustomerOnboardingWizard.jsx"));
+const SubscriptionGate = lazy(() => import("./components/SubscriptionGate.jsx"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const OperationsPage = lazy(() => import("./pages/OperationsPage.jsx"));
+const DayTabs = lazy(() => import("./components/Operations/DayTabs.jsx"));
+const SaturdayPage = lazy(() => import("./pages/SaturdayPage.jsx"));
+const SundayPage = lazy(() => import("./pages/SundayPage.jsx"));
+const MidweekPage = lazy(() => import("./pages/MidweekPage.jsx"));
+const OperationsCentrePage = lazy(() => import("./pages/OperationsCentrePage.jsx"));
+const OperationsTimelinePage = lazy(() => import("./pages/OperationsTimelinePage.jsx"));
+const CommunicationsPage = lazy(() => import("./pages/CommunicationsPage.jsx"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"));
 const PlatformAdminPage = lazy(() => import("./pages/PlatformAdminPage.jsx"));
+const CombinedPrintSheet = lazy(() => import("./components/CombinedPrintSheet.jsx"));
 
 function LazyPageFallback({ label = "workspace" }) {
   return (
@@ -1317,15 +1314,17 @@ const { resetAll } = useOperationsActions({
   );
 
   if(clubAccessStatus!=="ready") return(
-    <WorkspaceAccessGate
-      status={clubAccessStatus}
-      error={clubAccessError}
-      canBootstrap={canBootstrap}
-      defaultClubName={DEFAULT_CLUB.name}
-      onBootstrap={bootstrapFirstWorkspace}
-      onRetry={refreshClubAccess}
-      onSignOut={handleSignOut}
-    />
+    <Suspense fallback={<BrandSplash message="Preparing workspace access" />}>
+      <WorkspaceAccessGate
+        status={clubAccessStatus}
+        error={clubAccessError}
+        canBootstrap={canBootstrap}
+        defaultClubName={DEFAULT_CLUB.name}
+        onBootstrap={bootstrapFirstWorkspace}
+        onRetry={refreshClubAccess}
+        onSignOut={handleSignOut}
+      />
+    </Suspense>
   );
 
   if(["idle","loading"].includes(subscriptionStatus)) return(
@@ -1333,24 +1332,28 @@ const { resetAll } = useOperationsActions({
   );
 
   if(subscriptionStatus==="error"||!subscription) return(
-    <WorkspaceAccessGate
-      status="error"
-      error={subscriptionError||"The club subscription could not be verified."}
-      onRetry={refreshSubscription}
-      onSignOut={handleSignOut}
-    />
+    <Suspense fallback={<BrandSplash message="Preparing subscription access" />}>
+      <WorkspaceAccessGate
+        status="error"
+        error={subscriptionError||"The club subscription could not be verified."}
+        onRetry={refreshSubscription}
+        onSignOut={handleSignOut}
+      />
+    </Suspense>
   );
 
   if(workspaceSecurityError) return(
-    <WorkspaceAccessGate
-      status="error"
-      error={workspaceSecurityError}
-      onRetry={()=>{
-        setWorkspaceSecurityError("");
-        refreshClubAccess();
-      }}
-      onSignOut={handleSignOut}
-    />
+    <Suspense fallback={<BrandSplash message="Preparing secure workspace" />}>
+      <WorkspaceAccessGate
+        status="error"
+        error={workspaceSecurityError}
+        onRetry={()=>{
+          setWorkspaceSecurityError("");
+          refreshClubAccess();
+        }}
+        onSignOut={handleSignOut}
+      />
+    </Suspense>
   );
 
   if(!workspaceHydrated) return(
@@ -1366,17 +1369,21 @@ const { resetAll } = useOperationsActions({
 
 return(
   <MatchdayScopeProvider scope={matchdayScope} setScope={setMatchdayScope}>
-  <CustomerOnboardingWizard
-    open={onboardingOpen}
-    onboarding={onboarding}
-    status={onboardingStatus}
-    initialDraft={onboardingInitialDraft}
-    currentClub={club}
-    canClose={!onboarding.required}
-    onClose={()=>setOnboardingOpen(false)}
-    onSaveProgress={saveOnboardingProgress}
-    onComplete={handleCompleteOnboarding}
-  />
+  {onboardingOpen && (
+    <Suspense fallback={null}>
+      <CustomerOnboardingWizard
+        open
+        onboarding={onboarding}
+        status={onboardingStatus}
+        initialDraft={onboardingInitialDraft}
+        currentClub={club}
+        canClose={!onboarding.required}
+        onClose={()=>setOnboardingOpen(false)}
+        onSaveProgress={saveOnboardingProgress}
+        onComplete={handleCompleteOnboarding}
+      />
+    </Suspense>
+  )}
   <ProductShell
     mainPage={mainPage}
     setMainPage={setMainPage}
@@ -1438,14 +1445,17 @@ return(
       <div style={S.body}>
 
 {!pageEntitled && mainPage !== "settings" && (
-  <SubscriptionGate
-    entitlement={requiredPageEntitlement}
-    subscription={subscription}
-    onOpenSubscription={workspaceAccess.canManageSubscription?openSubscriptionSettings:undefined}
-  />
+  <Suspense fallback={<LazyPageFallback label="plan access" />}>
+    <SubscriptionGate
+      entitlement={requiredPageEntitlement}
+      subscription={subscription}
+      onOpenSubscription={workspaceAccess.canManageSubscription?openSubscriptionSettings:undefined}
+    />
+  </Suspense>
 )}
    
 {mainPage === "dashboard" && pageEntitled && (
+  <Suspense fallback={<LazyPageFallback label="Mission Control" />}>
   <DashboardPage
     setMainPage={setMainPage}
     setDayTab={setDayTab}
@@ -1478,9 +1488,11 @@ return(
     midweekConflicts={activeMidweekConflicts}
     closedPitches={closedPitches}
   />
+  </Suspense>
 )}
 
 {mainPage==="operations"&&pageEntitled&& (
+  <Suspense fallback={<LazyPageFallback label="operations" />}>
   <OperationsPage>
         {/* Main tabs */}
 <DayTabs
@@ -1756,9 +1768,12 @@ return(
         )}
 
     </OperationsPage>
+  </Suspense>
 )}
     {mainPage === "communications" && pageEntitled && (
-      <CommunicationsPage />
+      <Suspense fallback={<LazyPageFallback label="communications" />}>
+        <CommunicationsPage />
+      </Suspense>
     )}
 
     {mainPage === "analytics" && pageEntitled && (
@@ -1823,6 +1838,7 @@ return(
     )}
         {/* ── SETTINGS ── */}
         {mainPage === "settings" && (
+          <Suspense fallback={<LazyPageFallback label="settings" />}>
           <SettingsPage
             S={S}
             G={G}
@@ -1900,6 +1916,7 @@ return(
             hdrStyle={hdrStyle}
             thC={thC}
           />
+          </Suspense>
         )}
 
         <div style={{textAlign:"center",fontSize:11,color:"#bbb",marginTop:12}} className="np">
@@ -1909,6 +1926,7 @@ return(
 
       <div className="hidden print:block">
       {satHasRun && satFinal.length > 0 && (
+        <Suspense fallback={null}>
         <CombinedPrintSheet
           satGames={satFinal}
           sunGames={sunHasRun ? sunFinal : []}
@@ -1923,6 +1941,7 @@ return(
           endMin={endMin}
           club={club}
         />
+        </Suspense>
       )}
     </div>
   </ProductShell>
