@@ -36,3 +36,5 @@ coverage
 # Generated launch-gate evidence
 .release-evidence/
 !.env.staging.example
+
+*.tsbuildinfo
