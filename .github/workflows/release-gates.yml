@@ -1,0 +1,42 @@
+name: Ground Control release gates
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate release-gate evidence
+        run: npm run release:evidence
+        env:
+          RELEASE_ENVIRONMENT: ci
+          RELEASE_ID: ${{ github.sha }}
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ground-control-release-evidence-${{ github.run_number }}
+          path: .release-evidence/
+          if-no-files-found: error
+          retention-days: 90

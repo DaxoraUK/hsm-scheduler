@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import PlatformPilotEvidencePanel from "./PlatformPilotEvidencePanel.jsx";
 import { DB } from "../lib/supabase.js";
 import {
   createPilotDraft,
@@ -270,6 +271,14 @@ export default function PlatformPilotLaunchPanel({ clubs = [], isPlatformAdmin =
           )}
         </div>
       </section>
+
+      <PlatformPilotEvidencePanel
+        gates={readiness.gates}
+        selectedPilot={selectedPilot}
+        selectedClubName={clubs.find((club) => club.id === selectedPilotClubId)?.name || selectedPilot?.clubName || ""}
+        isPlatformAdmin={isPlatformAdmin}
+        onRefresh={load}
+      />
 
       <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-700"><Siren size={21} /></span><div><h3 className="text-xl font-black text-slate-950">Unresolved client events</h3><p className="mt-1 text-sm font-semibold text-slate-500">Only sanitised diagnostic information is stored. Club fixture and personal data are excluded.</p></div></div>

@@ -30,7 +30,7 @@ function localKey(clubId) {
 
 function getLocalState(clubId) {
   if (typeof window === "undefined" || !window.localStorage) {
-    return { projects: [], requirementRecords: [], documents: [], snapshots: [], profile: { ...EMPTY_FUNDING_PROFILE } };
+    return { projects: [], requirementRecords: [], documents: [], snapshots: [], applications: [], applicationTasks: [], monitoringObligations: [], profile: { ...EMPTY_FUNDING_PROFILE } };
   }
   try {
     const stored = JSON.parse(window.localStorage.getItem(localKey(clubId)) || "null");
@@ -39,10 +39,13 @@ function getLocalState(clubId) {
       requirementRecords: asArray(stored?.requirementRecords),
       documents: asArray(stored?.documents),
       snapshots: asArray(stored?.snapshots),
+      applications: asArray(stored?.applications),
+      applicationTasks: asArray(stored?.applicationTasks),
+      monitoringObligations: asArray(stored?.monitoringObligations),
       profile: stored?.profile && typeof stored.profile === "object" ? stored.profile : { ...EMPTY_FUNDING_PROFILE },
     };
   } catch {
-    return { projects: [], requirementRecords: [], documents: [], snapshots: [], profile: { ...EMPTY_FUNDING_PROFILE } };
+    return { projects: [], requirementRecords: [], documents: [], snapshots: [], applications: [], applicationTasks: [], monitoringObligations: [], profile: { ...EMPTY_FUNDING_PROFILE } };
   }
 }
 
@@ -210,6 +213,67 @@ function normaliseSnapshot(row = {}) {
   };
 }
 
+function normaliseApplication(row = {}) {
+  return {
+    id: row.id || createId(),
+    clubId: row.club_id || row.clubId || "",
+    projectId: row.project_id || row.projectId || "",
+    programmeId: row.programme_id || row.programmeId || "",
+    status: row.status || "considering",
+    ownerName: row.owner_name || row.ownerName || "",
+    ownerEmail: row.owner_email || row.ownerEmail || "",
+    deadline: row.deadline || "",
+    requestedAmount: Number(row.requested_amount ?? row.requestedAmount ?? 0),
+    awardedAmount: Number(row.awarded_amount ?? row.awardedAmount ?? 0),
+    applicationReference: row.application_reference || row.applicationReference || "",
+    submittedAt: row.submitted_at || row.submittedAt || "",
+    expectedDecisionDate: row.expected_decision_date || row.expectedDecisionDate || "",
+    decisionDate: row.decision_date || row.decisionDate || "",
+    decisionNotes: row.decision_notes || row.decisionNotes || "",
+    fundingConditions: row.funding_conditions || row.fundingConditions || "",
+    nextAction: row.next_action || row.nextAction || "",
+    notes: row.notes || "",
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+  };
+}
+
+function normaliseApplicationTask(row = {}) {
+  return {
+    id: row.id || createId(),
+    clubId: row.club_id || row.clubId || "",
+    applicationId: row.application_id || row.applicationId || "",
+    title: row.title || "",
+    status: row.status || "todo",
+    priority: row.priority || "medium",
+    ownerName: row.owner_name || row.ownerName || "",
+    dueDate: row.due_date || row.dueDate || "",
+    notes: row.notes || "",
+    completedAt: row.completed_at || row.completedAt || "",
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+  };
+}
+
+function normaliseMonitoringObligation(row = {}) {
+  return {
+    id: row.id || createId(),
+    clubId: row.club_id || row.clubId || "",
+    applicationId: row.application_id || row.applicationId || "",
+    title: row.title || "",
+    status: row.status || "pending",
+    dueDate: row.due_date || row.dueDate || "",
+    reportingPeriodStart: row.reporting_period_start || row.reportingPeriodStart || "",
+    reportingPeriodEnd: row.reporting_period_end || row.reportingPeriodEnd || "",
+    evidenceRequired: row.evidence_required || row.evidenceRequired || "",
+    ownerName: row.owner_name || row.ownerName || "",
+    notes: row.notes || "",
+    completedAt: row.completed_at || row.completedAt || "",
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+  };
+}
+
 function remoteEligible(clubId) {
   return Boolean(clubId && isSupaConfigured() && Auth.getSession()?.access_token);
 }
@@ -251,12 +315,23 @@ async function loadRemote(clubId) {
       if (!missingProfileSchema) throw error;
       return { rows: [], available: false };
     });
-  const [projects, requirements, documents, snapshots, profileResult] = await Promise.all([
+  const trackerPromise = Promise.all([
+    supaFetch("GET", `funding_applications?select=*&club_id=eq.${club}&order=updated_at.desc`),
+    supaFetch("GET", `funding_application_tasks?select=*&club_id=eq.${club}&order=due_date.asc.nullslast,updated_at.desc`),
+    supaFetch("GET", `funding_monitoring_obligations?select=*&club_id=eq.${club}&order=due_date.asc.nullslast,updated_at.desc`),
+  ]).then(([applications, applicationTasks, monitoringObligations]) => ({ applications, applicationTasks, monitoringObligations, available: true }))
+    .catch((error) => {
+      const missingTrackerSchema = [400, 404].includes(Number(error?.status || 0)) || /funding_(applications|application_tasks|monitoring_obligations)/i.test(String(error?.message || ""));
+      if (!missingTrackerSchema) throw error;
+      return { applications: [], applicationTasks: [], monitoringObligations: [], available: false };
+    });
+  const [projects, requirements, documents, snapshots, profileResult, trackerResult] = await Promise.all([
     supaFetch("GET", `funding_projects?select=*&club_id=eq.${club}&order=updated_at.desc`),
     supaFetch("GET", `funding_requirement_records?select=*&club_id=eq.${club}&order=updated_at.desc`),
     supaFetch("GET", `funding_documents?select=*&club_id=eq.${club}&order=created_at.desc`),
     supaFetch("GET", `funding_evidence_snapshots?select=*&club_id=eq.${club}&order=created_at.desc`),
     profilePromise,
+    trackerPromise,
   ]);
   const profileRow = asArray(profileResult.rows)[0] || null;
   return {
@@ -267,6 +342,10 @@ async function loadRemote(clubId) {
     requirementRecords: asArray(requirements).map(normaliseRequirement),
     documents: asArray(documents).map(normaliseDocument),
     snapshots: asArray(snapshots).map(normaliseSnapshot),
+    applications: (trackerResult.available ? asArray(trackerResult.applications) : getLocalState(clubId).applications).map(normaliseApplication),
+    applicationTasks: (trackerResult.available ? asArray(trackerResult.applicationTasks) : getLocalState(clubId).applicationTasks).map(normaliseApplicationTask),
+    monitoringObligations: (trackerResult.available ? asArray(trackerResult.monitoringObligations) : getLocalState(clubId).monitoringObligations).map(normaliseMonitoringObligation),
+    trackerMode: trackerResult.available ? "remote" : "local",
     profile: profileRow ? normaliseFundingProfile(profileRow) : normaliseFundingProfile(getLocalState(clubId).profile),
   };
 }
@@ -281,6 +360,10 @@ function loadLocal(clubId, reason = "Funding workspace migration is not installe
     requirementRecords: state.requirementRecords.map(normaliseRequirement),
     documents: state.documents.map(normaliseDocument),
     snapshots: state.snapshots.map(normaliseSnapshot),
+    applications: state.applications.map(normaliseApplication),
+    applicationTasks: state.applicationTasks.map(normaliseApplicationTask),
+    monitoringObligations: state.monitoringObligations.map(normaliseMonitoringObligation),
+    trackerMode: "local",
     profile: normaliseFundingProfile(state.profile),
   };
 }
@@ -554,6 +637,155 @@ export async function createFundingSnapshot(clubId, projectId, programmeId, labe
   };
   const rows = await supaFetch("POST", "funding_evidence_snapshots", payload, { Prefer: "return=representation" });
   return normaliseSnapshot(asArray(rows)[0] || payload);
+}
+
+export async function saveFundingApplication(clubId, projectId, application, mode = "remote") {
+  const now = new Date().toISOString();
+  const normalised = normaliseApplication({
+    ...application,
+    id: application?.id || createId(),
+    clubId,
+    projectId,
+    updatedAt: now,
+    createdAt: application?.createdAt || now,
+  });
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.applications = [normalised, ...state.applications.filter((item) => item.id !== normalised.id)];
+    saveLocalState(clubId, state);
+    return normalised;
+  }
+  const payload = {
+    id: normalised.id,
+    club_id: clubId,
+    project_id: projectId,
+    programme_id: normalised.programmeId || null,
+    status: normalised.status,
+    owner_name: normalised.ownerName,
+    owner_email: normalised.ownerEmail,
+    deadline: normalised.deadline || null,
+    requested_amount: normalised.requestedAmount,
+    awarded_amount: normalised.awardedAmount,
+    application_reference: normalised.applicationReference,
+    submitted_at: normalised.submittedAt || null,
+    expected_decision_date: normalised.expectedDecisionDate || null,
+    decision_date: normalised.decisionDate || null,
+    decision_notes: normalised.decisionNotes,
+    funding_conditions: normalised.fundingConditions,
+    next_action: normalised.nextAction,
+    notes: normalised.notes,
+  };
+  const rows = await supaFetch("POST", "funding_applications?on_conflict=id", payload, {
+    Prefer: "resolution=merge-duplicates,return=representation",
+  });
+  return normaliseApplication(asArray(rows)[0] || payload);
+}
+
+export async function deleteFundingApplication(clubId, applicationId, mode = "remote") {
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.applications = state.applications.filter((item) => item.id !== applicationId);
+    state.applicationTasks = state.applicationTasks.filter((item) => item.applicationId !== applicationId);
+    state.monitoringObligations = state.monitoringObligations.filter((item) => item.applicationId !== applicationId);
+    saveLocalState(clubId, state);
+    return true;
+  }
+  await supaFetch("DELETE", `funding_applications?id=eq.${encodeFilter(applicationId)}&club_id=eq.${encodeFilter(clubId)}`, null, { Prefer: "return=minimal" });
+  return true;
+}
+
+export async function saveFundingApplicationTask(clubId, applicationId, task, mode = "remote") {
+  const now = new Date().toISOString();
+  const normalised = normaliseApplicationTask({
+    ...task,
+    id: task?.id || createId(),
+    clubId,
+    applicationId,
+    completedAt: task?.status === "done" ? (task?.completedAt || now) : "",
+    updatedAt: now,
+    createdAt: task?.createdAt || now,
+  });
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.applicationTasks = [normalised, ...state.applicationTasks.filter((item) => item.id !== normalised.id)];
+    saveLocalState(clubId, state);
+    return normalised;
+  }
+  const payload = {
+    id: normalised.id,
+    club_id: clubId,
+    application_id: applicationId,
+    title: normalised.title,
+    status: normalised.status,
+    priority: normalised.priority,
+    owner_name: normalised.ownerName,
+    due_date: normalised.dueDate || null,
+    notes: normalised.notes,
+    completed_at: normalised.completedAt || null,
+  };
+  const rows = await supaFetch("POST", "funding_application_tasks?on_conflict=id", payload, {
+    Prefer: "resolution=merge-duplicates,return=representation",
+  });
+  return normaliseApplicationTask(asArray(rows)[0] || payload);
+}
+
+export async function deleteFundingApplicationTask(clubId, taskId, mode = "remote") {
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.applicationTasks = state.applicationTasks.filter((item) => item.id !== taskId);
+    saveLocalState(clubId, state);
+    return true;
+  }
+  await supaFetch("DELETE", `funding_application_tasks?id=eq.${encodeFilter(taskId)}&club_id=eq.${encodeFilter(clubId)}`, null, { Prefer: "return=minimal" });
+  return true;
+}
+
+export async function saveFundingMonitoringObligation(clubId, applicationId, obligation, mode = "remote") {
+  const now = new Date().toISOString();
+  const normalised = normaliseMonitoringObligation({
+    ...obligation,
+    id: obligation?.id || createId(),
+    clubId,
+    applicationId,
+    completedAt: ["submitted", "accepted", "not_required"].includes(obligation?.status) ? (obligation?.completedAt || now) : "",
+    updatedAt: now,
+    createdAt: obligation?.createdAt || now,
+  });
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.monitoringObligations = [normalised, ...state.monitoringObligations.filter((item) => item.id !== normalised.id)];
+    saveLocalState(clubId, state);
+    return normalised;
+  }
+  const payload = {
+    id: normalised.id,
+    club_id: clubId,
+    application_id: applicationId,
+    title: normalised.title,
+    status: normalised.status,
+    due_date: normalised.dueDate || null,
+    reporting_period_start: normalised.reportingPeriodStart || null,
+    reporting_period_end: normalised.reportingPeriodEnd || null,
+    evidence_required: normalised.evidenceRequired,
+    owner_name: normalised.ownerName,
+    notes: normalised.notes,
+    completed_at: normalised.completedAt || null,
+  };
+  const rows = await supaFetch("POST", "funding_monitoring_obligations?on_conflict=id", payload, {
+    Prefer: "resolution=merge-duplicates,return=representation",
+  });
+  return normaliseMonitoringObligation(asArray(rows)[0] || payload);
+}
+
+export async function deleteFundingMonitoringObligation(clubId, obligationId, mode = "remote") {
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.monitoringObligations = state.monitoringObligations.filter((item) => item.id !== obligationId);
+    saveLocalState(clubId, state);
+    return true;
+  }
+  await supaFetch("DELETE", `funding_monitoring_obligations?id=eq.${encodeFilter(obligationId)}&club_id=eq.${encodeFilter(clubId)}`, null, { Prefer: "return=minimal" });
+  return true;
 }
 
 export const FUNDING_DOCUMENT_RULES = Object.freeze({

@@ -17,6 +17,7 @@ import {
   MapPin,
   Plus,
   Save,
+  Send,
   ShieldCheck,
   Target,
   Trash2,
@@ -25,6 +26,7 @@ import {
 import { toast } from "sonner";
 import Card from "../../ui/Card.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
+import FundingApplicationTracker from "./FundingApplicationTracker.jsx";
 import FundingDocumentUploadDialog from "./FundingDocumentUploadDialog.jsx";
 import FundingLocationPanel from "./FundingLocationPanel.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
@@ -34,9 +36,15 @@ import { buildFundingReadinessChecklist } from "../../lib/grants/fundingReadines
 import {
   FUNDING_DOCUMENT_RULES,
   createFundingSnapshot,
+  deleteFundingApplication,
+  deleteFundingApplicationTask,
   deleteFundingDocument,
+  deleteFundingMonitoringObligation,
   loadFundingWorkspace,
   openFundingDocument,
+  saveFundingApplication,
+  saveFundingApplicationTask,
+  saveFundingMonitoringObligation,
   saveFundingProfile,
   saveFundingProject,
   saveFundingRequirement,
@@ -240,7 +248,7 @@ export default function FundingWorkspacePanel({
   projectType,
   onProjectTypeChange,
 }) {
-  const [workspace, setWorkspace] = useState({ mode: "loading", profileMode: "local", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [], profile: {} });
+  const [workspace, setWorkspace] = useState({ mode: "loading", profileMode: "local", trackerMode: "local", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [], applications: [], applicationTasks: [], monitoringObligations: [], profile: {} });
   const [activeProjectId, setActiveProjectId] = useState("");
   const [draft, setDraft] = useState(() => createProjectDraft(projectType, club.postcode || club.weatherPostcode || ""));
   const [view, setView] = useState("readiness");
@@ -423,6 +431,112 @@ export default function FundingWorkspacePanel({
     }
   };
 
+  const saveApplication = async (application) => {
+    if (!activeProjectId) {
+      toast.error("Save the project first", { description: "Applications must belong to a saved funding project." });
+      return null;
+    }
+    setBusyKey(application?.id ? `application:${application.id}` : "application");
+    try {
+      const saved = await saveFundingApplication(
+        resolvedClubId,
+        activeProjectId,
+        { ...application, programmeId: application.programmeId || selectedProgramme?.id || draft.selectedProgrammeId || "" },
+        workspace.trackerMode || workspace.mode
+      );
+      setWorkspace((current) => ({ ...current, applications: [saved, ...current.applications.filter((item) => item.id !== saved.id)] }));
+      toast.success("Application tracker updated");
+      return saved;
+    } catch (error) {
+      toast.error("Application could not be saved", { description: error?.message || "Try again." });
+      return null;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const removeApplication = async (application) => {
+    setBusyKey("delete");
+    try {
+      await deleteFundingApplication(resolvedClubId, application.id, workspace.trackerMode || workspace.mode);
+      setWorkspace((current) => ({
+        ...current,
+        applications: current.applications.filter((item) => item.id !== application.id),
+        applicationTasks: current.applicationTasks.filter((item) => item.applicationId !== application.id),
+        monitoringObligations: current.monitoringObligations.filter((item) => item.applicationId !== application.id),
+      }));
+      toast.success("Application removed");
+      return true;
+    } catch (error) {
+      toast.error("Application could not be removed", { description: error?.message || "Try again." });
+      return false;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const saveApplicationTask = async (task) => {
+    if (!task?.applicationId) return null;
+    setBusyKey(task.id ? `task:${task.id}` : "task:new");
+    try {
+      const saved = await saveFundingApplicationTask(resolvedClubId, task.applicationId, task, workspace.trackerMode || workspace.mode);
+      setWorkspace((current) => ({ ...current, applicationTasks: [saved, ...current.applicationTasks.filter((item) => item.id !== saved.id)] }));
+      toast.success(task.id ? "Application task updated" : "Application task added");
+      return saved;
+    } catch (error) {
+      toast.error("Task could not be saved", { description: error?.message || "Try again." });
+      return null;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const removeApplicationTask = async (task) => {
+    setBusyKey("delete");
+    try {
+      await deleteFundingApplicationTask(resolvedClubId, task.id, workspace.trackerMode || workspace.mode);
+      setWorkspace((current) => ({ ...current, applicationTasks: current.applicationTasks.filter((item) => item.id !== task.id) }));
+      toast.success("Application task removed");
+      return true;
+    } catch (error) {
+      toast.error("Task could not be removed", { description: error?.message || "Try again." });
+      return false;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const saveMonitoringObligation = async (obligation) => {
+    if (!obligation?.applicationId) return null;
+    setBusyKey(obligation.id ? `obligation:${obligation.id}` : "obligation:new");
+    try {
+      const saved = await saveFundingMonitoringObligation(resolvedClubId, obligation.applicationId, obligation, workspace.trackerMode || workspace.mode);
+      setWorkspace((current) => ({ ...current, monitoringObligations: [saved, ...current.monitoringObligations.filter((item) => item.id !== saved.id)] }));
+      toast.success(obligation.id ? "Monitoring requirement updated" : "Monitoring requirement added");
+      return saved;
+    } catch (error) {
+      toast.error("Monitoring requirement could not be saved", { description: error?.message || "Try again." });
+      return null;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const removeMonitoringObligation = async (obligation) => {
+    setBusyKey("delete");
+    try {
+      await deleteFundingMonitoringObligation(resolvedClubId, obligation.id, workspace.trackerMode || workspace.mode);
+      setWorkspace((current) => ({ ...current, monitoringObligations: current.monitoringObligations.filter((item) => item.id !== obligation.id) }));
+      toast.success("Monitoring requirement removed");
+      return true;
+    } catch (error) {
+      toast.error("Monitoring requirement could not be removed", { description: error?.message || "Try again." });
+      return false;
+    } finally {
+      setBusyKey("");
+    }
+  };
+
   const openDocument = async (document) => {
     try {
       await openFundingDocument(document, workspace.mode);
@@ -480,6 +594,13 @@ export default function FundingWorkspacePanel({
             documentIds: item.documents.map((document) => document.id),
           })),
           documents: projectDocuments.map((document) => ({ id: document.id, fileName: document.fileName, requirementKey: document.requirementKey, createdAt: document.createdAt })),
+          applications: workspace.applications
+            .filter((application) => application.projectId === activeProjectId)
+            .map((application) => ({
+              ...application,
+              tasks: workspace.applicationTasks.filter((task) => task.applicationId === application.id),
+              monitoringObligations: workspace.monitoringObligations.filter((obligation) => obligation.applicationId === application.id),
+            })),
           operationalEvidence: {
             qualityScore: model.quality.score,
             frameworkScore: model.framework.score,
@@ -491,7 +612,7 @@ export default function FundingWorkspacePanel({
         workspace.mode
       );
       setWorkspace((current) => ({ ...current, snapshots: [snapshot, ...current.snapshots] }));
-      toast.success("Evidence snapshot created", { description: "This freezes the current project, checklist and source-record summary for auditability." });
+      toast.success("Evidence snapshot created", { description: "This freezes the current project, checklist, application tracker and source-record summary for auditability." });
     } catch (error) {
       toast.error("Snapshot could not be created", { description: error?.message || "Try again." });
     } finally {
@@ -536,6 +657,7 @@ export default function FundingWorkspacePanel({
             {[
               ["project", "Project brief", Building2],
               ["local", "Local funding", MapPin],
+              ["applications", "Applications", Send],
               ["readiness", "Readiness", ClipboardList],
               ["documents", "Documents", FolderOpen],
               ["snapshots", "Snapshots", History],
@@ -600,6 +722,25 @@ export default function FundingWorkspacePanel({
             canManage={canManage}
             saving={savingProfile}
             onSave={saveProfile}
+          />
+        ) : null}
+
+        {view === "applications" ? (
+          <FundingApplicationTracker
+            project={activeProject}
+            programme={selectedProgramme}
+            applications={workspace.applications}
+            tasks={workspace.applicationTasks}
+            obligations={workspace.monitoringObligations}
+            canManage={canManage}
+            trackerMode={workspace.trackerMode || "local"}
+            busyKey={busyKey}
+            onSaveApplication={saveApplication}
+            onDeleteApplication={removeApplication}
+            onSaveTask={saveApplicationTask}
+            onDeleteTask={removeApplicationTask}
+            onSaveObligation={saveMonitoringObligation}
+            onDeleteObligation={removeMonitoringObligation}
           />
         ) : null}
 
