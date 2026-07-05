@@ -11,6 +11,7 @@ const STORAGE_BUCKET = "funding-documents";
 const LOCAL_PREFIX = "gc_funding_workspace_v1";
 const LOCAL_DB = "ground-control-funding-documents";
 const LOCAL_STORE = "files";
+const EMPTY_FUNDING_PROFILE = Object.freeze({});
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "png", "jpg", "jpeg", "webp"]);
 
@@ -29,7 +30,7 @@ function localKey(clubId) {
 
 function getLocalState(clubId) {
   if (typeof window === "undefined" || !window.localStorage) {
-    return { projects: [], requirementRecords: [], documents: [], snapshots: [] };
+    return { projects: [], requirementRecords: [], documents: [], snapshots: [], profile: { ...EMPTY_FUNDING_PROFILE } };
   }
   try {
     const stored = JSON.parse(window.localStorage.getItem(localKey(clubId)) || "null");
@@ -38,9 +39,10 @@ function getLocalState(clubId) {
       requirementRecords: asArray(stored?.requirementRecords),
       documents: asArray(stored?.documents),
       snapshots: asArray(stored?.snapshots),
+      profile: stored?.profile && typeof stored.profile === "object" ? stored.profile : { ...EMPTY_FUNDING_PROFILE },
     };
   } catch {
-    return { projects: [], requirementRecords: [], documents: [], snapshots: [] };
+    return { projects: [], requirementRecords: [], documents: [], snapshots: [], profile: { ...EMPTY_FUNDING_PROFILE } };
   }
 }
 
@@ -109,6 +111,36 @@ function encodeStoragePath(path) {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+
+function normaliseFundingProfile(row = {}) {
+  const data = row.data && typeof row.data === "object" ? row.data : row;
+  return {
+    clubId: row.club_id || row.clubId || data.clubId || "",
+    postcode: data.postcode || "",
+    facilityPostcode: data.facilityPostcode || data.postcode || "",
+    homeNation: data.homeNation || "",
+    country: data.country || "",
+    region: data.region || "",
+    localAuthority: data.localAuthority || "",
+    adminCounty: data.adminCounty || "",
+    parliamentaryConstituency: data.parliamentaryConstituency || "",
+    countyFa: data.countyFa || "",
+    legalStructure: data.legalStructure || "",
+    affiliation: data.affiliation || "",
+    charityNumber: data.charityNumber || "",
+    cascNumber: data.cascNumber || "",
+    companyNumber: data.companyNumber || "",
+    tenure: data.tenure || "",
+    annualIncomeBand: data.annualIncomeBand || "",
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
+    postcodeResolvedAt: data.postcodeResolvedAt || "",
+    postcodeSource: data.postcodeSource || "",
+    updatedAt: row.updated_at || row.updatedAt || data.updatedAt || null,
+    createdAt: row.created_at || row.createdAt || data.createdAt || null,
+  };
 }
 
 function normaliseProject(row = {}) {
@@ -212,19 +244,30 @@ async function storageFetch(path, { method = "POST", body = null, headers = {} }
 
 async function loadRemote(clubId) {
   const club = encodeFilter(clubId);
-  const [projects, requirements, documents, snapshots] = await Promise.all([
+  const profilePromise = supaFetch("GET", `funding_profiles?select=*&club_id=eq.${club}&limit=1`)
+    .then((rows) => ({ rows, available: true }))
+    .catch((error) => {
+      const missingProfileSchema = [400, 404].includes(Number(error?.status || 0)) || /funding_profiles/i.test(String(error?.message || ""));
+      if (!missingProfileSchema) throw error;
+      return { rows: [], available: false };
+    });
+  const [projects, requirements, documents, snapshots, profileResult] = await Promise.all([
     supaFetch("GET", `funding_projects?select=*&club_id=eq.${club}&order=updated_at.desc`),
     supaFetch("GET", `funding_requirement_records?select=*&club_id=eq.${club}&order=updated_at.desc`),
     supaFetch("GET", `funding_documents?select=*&club_id=eq.${club}&order=created_at.desc`),
     supaFetch("GET", `funding_evidence_snapshots?select=*&club_id=eq.${club}&order=created_at.desc`),
+    profilePromise,
   ]);
+  const profileRow = asArray(profileResult.rows)[0] || null;
   return {
     mode: "remote",
+    profileMode: profileResult.available ? "remote" : "local",
     reason: "Documents and funding records are securely shared in the club workspace.",
     projects: asArray(projects).map(normaliseProject),
     requirementRecords: asArray(requirements).map(normaliseRequirement),
     documents: asArray(documents).map(normaliseDocument),
     snapshots: asArray(snapshots).map(normaliseSnapshot),
+    profile: profileRow ? normaliseFundingProfile(profileRow) : normaliseFundingProfile(getLocalState(clubId).profile),
   };
 }
 
@@ -232,11 +275,13 @@ function loadLocal(clubId, reason = "Funding workspace migration is not installe
   const state = getLocalState(clubId);
   return {
     mode: "local",
+    profileMode: "local",
     reason,
     projects: state.projects.map(normaliseProject),
     requirementRecords: state.requirementRecords.map(normaliseRequirement),
     documents: state.documents.map(normaliseDocument),
     snapshots: state.snapshots.map(normaliseSnapshot),
+    profile: normaliseFundingProfile(state.profile),
   };
 }
 
@@ -249,6 +294,46 @@ export async function loadFundingWorkspace(clubId) {
     if (!missingSchema) throw error;
     return loadLocal(clubId);
   }
+}
+
+export async function saveFundingProfile(clubId, profile, mode = "remote") {
+  const now = new Date().toISOString();
+  const normalised = normaliseFundingProfile({ ...profile, clubId, updatedAt: now, createdAt: profile?.createdAt || now });
+  if (mode !== "remote" || !remoteEligible(clubId)) {
+    const state = getLocalState(clubId);
+    state.profile = normalised;
+    saveLocalState(clubId, state);
+    return normalised;
+  }
+  const payload = {
+    club_id: clubId,
+    data: {
+      postcode: normalised.postcode,
+      facilityPostcode: normalised.facilityPostcode,
+      homeNation: normalised.homeNation,
+      country: normalised.country,
+      region: normalised.region,
+      localAuthority: normalised.localAuthority,
+      adminCounty: normalised.adminCounty,
+      parliamentaryConstituency: normalised.parliamentaryConstituency,
+      countyFa: normalised.countyFa,
+      legalStructure: normalised.legalStructure,
+      affiliation: normalised.affiliation,
+      charityNumber: normalised.charityNumber,
+      cascNumber: normalised.cascNumber,
+      companyNumber: normalised.companyNumber,
+      tenure: normalised.tenure,
+      annualIncomeBand: normalised.annualIncomeBand,
+      latitude: normalised.latitude,
+      longitude: normalised.longitude,
+      postcodeResolvedAt: normalised.postcodeResolvedAt,
+      postcodeSource: normalised.postcodeSource,
+    },
+  };
+  const rows = await supaFetch("POST", "funding_profiles?on_conflict=club_id", payload, {
+    Prefer: "resolution=merge-duplicates,return=representation",
+  });
+  return normaliseFundingProfile(asArray(rows)[0] || payload);
 }
 
 export async function saveFundingProject(clubId, project, mode = "remote") {

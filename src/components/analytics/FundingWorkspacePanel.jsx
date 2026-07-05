@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -14,6 +14,7 @@ import {
   History,
   Info,
   Loader2,
+  MapPin,
   Plus,
   Save,
   ShieldCheck,
@@ -24,6 +25,8 @@ import {
 import { toast } from "sonner";
 import Card from "../../ui/Card.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
+import FundingDocumentUploadDialog from "./FundingDocumentUploadDialog.jsx";
+import FundingLocationPanel from "./FundingLocationPanel.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { VERIFIED_GRANT_PROGRAMMES } from "../../lib/grants/grantProgrammeCatalogue.js";
@@ -34,6 +37,7 @@ import {
   deleteFundingDocument,
   loadFundingWorkspace,
   openFundingDocument,
+  saveFundingProfile,
   saveFundingProject,
   saveFundingRequirement,
   uploadFundingDocument,
@@ -145,7 +149,6 @@ function RequirementCard({ item, canManage, busyKey, onSave, onUpload }) {
   const [status, setStatus] = useState(item.status);
   const [notes, setNotes] = useState(item.notes || "");
   const [dueDate, setDueDate] = useState(item.dueDate || "");
-  const fileRef = useRef(null);
 
   useEffect(() => {
     setStatus(item.status);
@@ -215,22 +218,9 @@ function RequirementCard({ item, canManage, busyKey, onSave, onUpload }) {
           </Field>
           <div className="flex items-end gap-2">
             {item.allowsUpload ? (
-              <>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  className="hidden"
-                  accept={FUNDING_DOCUMENT_RULES.accept}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) onUpload(item, file);
-                    event.target.value = "";
-                  }}
-                />
-                <button type="button" onClick={() => fileRef.current?.click()} disabled={!canManage || busy} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
-                  <Upload size={16} /> Upload
-                </button>
-              </>
+              <button type="button" onClick={() => onUpload(item)} disabled={!canManage || busy} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+                <Upload size={16} /> Attach evidence
+              </button>
             ) : null}
             <button type="button" onClick={() => onSave(item, { status, notes, dueDate })} disabled={!canManage || busy || !dirty} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save
@@ -250,13 +240,16 @@ export default function FundingWorkspacePanel({
   projectType,
   onProjectTypeChange,
 }) {
-  const [workspace, setWorkspace] = useState({ mode: "loading", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [] });
+  const [workspace, setWorkspace] = useState({ mode: "loading", profileMode: "local", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [], profile: {} });
   const [activeProjectId, setActiveProjectId] = useState("");
   const [draft, setDraft] = useState(() => createProjectDraft(projectType, club.postcode || club.weatherPostcode || ""));
   const [view, setView] = useState("readiness");
   const [savingProject, setSavingProject] = useState(false);
   const [busyKey, setBusyKey] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploadTargetKey, setUploadTargetKey] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const resolvedClubId = clubId || String(club.id || club.name || "local-club").toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
@@ -366,34 +359,67 @@ export default function FundingWorkspacePanel({
     }
   };
 
-  const uploadDocument = async (item, file) => {
+  const openUpload = (item = null) => {
+    if (!activeProjectId) {
+      toast.error("Save the project first", { description: "Documents must belong to a saved funding project." });
+      setView("project");
+      return;
+    }
+    setUploadTargetKey(item?.key || "");
+    setUploadOpen(true);
+  };
+
+  const uploadDocument = async ({ requirementKey, file, documentType, reviewDate }) => {
     if (!activeProjectId) {
       toast.error("Save the project first", { description: "Documents must belong to a saved funding project." });
       return;
     }
-    setBusyKey(item.key);
+    const item = checklist.items.find((candidate) => candidate.key === requirementKey);
+    setBusyKey("upload");
     try {
-      const document = await uploadFundingDocument(resolvedClubId, activeProjectId, item.key, file, { documentType: item.title }, workspace.mode);
+      const document = await uploadFundingDocument(
+        resolvedClubId,
+        activeProjectId,
+        requirementKey,
+        file,
+        { documentType: documentType || item?.title || "Supporting evidence", reviewDate },
+        workspace.mode
+      );
       setWorkspace((current) => ({ ...current, documents: [document, ...current.documents] }));
-      const existing = projectRequirements.find((record) => record.requirementKey === item.key);
+      const existing = projectRequirements.find((record) => record.requirementKey === requirementKey);
       if (!existing || existing.status === "missing") {
         const saved = await saveFundingRequirement(resolvedClubId, activeProjectId, {
           ...existing,
-          requirementKey: item.key,
-          status: "ready",
-          notes: existing?.notes || `Supporting document uploaded: ${file.name}`,
+          requirementKey,
+          status: "in_progress",
+          notes: existing?.notes || `Evidence uploaded for review: ${file.name}`,
           dueDate: existing?.dueDate || "",
         }, workspace.mode);
         setWorkspace((current) => ({
           ...current,
-          requirementRecords: [saved, ...current.requirementRecords.filter((record) => !(record.projectId === activeProjectId && record.requirementKey === item.key))],
+          requirementRecords: [saved, ...current.requirementRecords.filter((record) => !(record.projectId === activeProjectId && record.requirementKey === requirementKey))],
         }));
       }
-      toast.success("Document uploaded", { description: workspace.mode === "remote" ? "Stored securely in the club workspace." : "Stored in this browser only." });
+      setUploadOpen(false);
+      setUploadTargetKey("");
+      toast.success("Document uploaded and linked", { description: workspace.mode === "remote" ? "Stored securely in the club workspace. Review the requirement before marking it Ready." : "Stored in this browser only. Review the requirement before marking it Ready." });
     } catch (error) {
       toast.error("Document could not be uploaded", { description: error?.message || "Try again." });
     } finally {
       setBusyKey("");
+    }
+  };
+
+  const saveProfile = async (profile) => {
+    setSavingProfile(true);
+    try {
+      const saved = await saveFundingProfile(resolvedClubId, profile, workspace.profileMode || workspace.mode);
+      setWorkspace((current) => ({ ...current, profile: saved }));
+      toast.success("Funding profile saved", { description: workspace.profileMode === "remote" ? "The location and organisation profile is shared with the club workspace." : "Saved locally until the funding profile migration is applied." });
+    } catch (error) {
+      toast.error("Funding profile could not be saved", { description: error?.message || "Try again." });
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -483,6 +509,11 @@ export default function FundingWorkspacePanel({
         eyebrow="Funding workspace"
         title="Turn every missing item into a guided action"
         subtitle="Build the project case, track programme requirements, attach supporting documents and create dated evidence snapshots in one controlled workspace."
+        action={
+          <button type="button" onClick={() => openUpload()} disabled={!canManage || !activeProjectId} title={!activeProjectId ? "Save the funding project before uploading documents" : "Upload a supporting document"} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
+            <Upload size={17} /> {activeProjectId ? "Upload document" : "Save project to upload"}
+          </button>
+        }
       >
         <div className={`mb-5 flex items-start gap-3 rounded-2xl border p-4 text-sm font-semibold leading-6 ${workspace.mode === "remote" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : workspace.mode === "error" ? "border-rose-200 bg-rose-50 text-rose-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
           {workspace.mode === "remote" ? <ShieldCheck size={19} className="mt-0.5 shrink-0 text-emerald-700" /> : <AlertTriangle size={19} className="mt-0.5 shrink-0 text-amber-700" />}
@@ -504,6 +535,7 @@ export default function FundingWorkspacePanel({
           <div className="flex flex-wrap items-end gap-2">
             {[
               ["project", "Project brief", Building2],
+              ["local", "Local funding", MapPin],
               ["readiness", "Readiness", ClipboardList],
               ["documents", "Documents", FolderOpen],
               ["snapshots", "Snapshots", History],
@@ -553,6 +585,24 @@ export default function FundingWorkspacePanel({
           </div>
         ) : null}
 
+        {view === "local" ? (
+          <FundingLocationPanel
+            profile={{
+              ...club,
+              ...workspace.profile,
+              postcode: workspace.profile?.postcode || club.postcode || club.weatherPostcode || draft.postcode || "",
+              facilityPostcode: workspace.profile?.facilityPostcode || draft.postcode || club.postcode || club.weatherPostcode || "",
+              legalStructure: workspace.profile?.legalStructure || draft.legalStructure || "",
+              affiliation: workspace.profile?.affiliation || draft.affiliation || "",
+              tenure: workspace.profile?.tenure || draft.tenure || "",
+            }}
+            projectType={draft.projectType || projectType}
+            canManage={canManage}
+            saving={savingProfile}
+            onSave={saveProfile}
+          />
+        ) : null}
+
         {view === "readiness" ? (
           <div className="mt-6">
             {!activeProjectId ? (
@@ -587,7 +637,7 @@ export default function FundingWorkspacePanel({
                         <span className="text-xs font-black text-slate-400">{group.items.filter((item) => item.status === "ready").length}/{group.items.length} ready</span>
                       </div>
                       <div className="space-y-3">
-                        {group.items.map((item) => <RequirementCard key={item.key} item={item} canManage={canManage} busyKey={busyKey} onSave={saveRequirement} onUpload={uploadDocument} />)}
+                        {group.items.map((item) => <RequirementCard key={item.key} item={item} canManage={canManage} busyKey={busyKey} onSave={saveRequirement} onUpload={openUpload} />)}
                       </div>
                     </section>
                   ))}
@@ -600,8 +650,11 @@ export default function FundingWorkspacePanel({
         {view === "documents" ? (
           <div className="mt-6">
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-              <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Evidence library</div><h3 className="mt-1 text-xl font-black text-slate-950">{projectDocuments.length} supporting document{projectDocuments.length === 1 ? "" : "s"}</h3><p className="mt-2 text-sm font-semibold text-slate-600">Upload documents from the relevant requirement so every file keeps its purpose and evidence link.</p></div>
-              <div className="rounded-2xl bg-white px-4 py-3 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Accepted: PDF, Word, Excel, CSV, text and images · {FUNDING_DOCUMENT_RULES.maxFileSizeLabel}</div>
+              <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Evidence library</div><h3 className="mt-1 text-xl font-black text-slate-950">{projectDocuments.length} supporting document{projectDocuments.length === 1 ? "" : "s"}</h3><p className="mt-2 text-sm font-semibold text-slate-600">Upload here or from a checklist requirement. Every file must be linked to the evidence item it supports.</p></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-2xl bg-white px-4 py-3 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Accepted: PDF, Word, Excel, CSV, text and images · {FUNDING_DOCUMENT_RULES.maxFileSizeLabel}</div>
+                <button type="button" onClick={() => openUpload()} disabled={!canManage || !activeProjectId} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-40"><Upload size={16} /> Upload document</button>
+              </div>
             </div>
             {projectDocuments.length ? (
               <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
@@ -626,7 +679,7 @@ export default function FundingWorkspacePanel({
                 </div>
               </div>
             ) : (
-              <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 p-10 text-center"><FolderOpen size={32} className="mx-auto text-slate-300" /><h3 className="mt-3 text-lg font-black text-slate-900">No documents attached</h3><p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500">Open Readiness, expand a requirement and upload the supporting document from there. This preserves the link between the file and the funder's requirement.</p></div>
+              <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 p-10 text-center"><FolderOpen size={32} className="mx-auto text-slate-300" /><h3 className="mt-3 text-lg font-black text-slate-900">No documents attached</h3><p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500">Upload the first document and choose the requirement it supports. You can also attach evidence directly from an expanded readiness item.</p><button type="button" onClick={() => openUpload()} disabled={!canManage || !activeProjectId} className="mt-4 inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-40"><Upload size={16} /> Upload first document</button></div>
             )}
           </div>
         ) : null}
@@ -649,6 +702,15 @@ export default function FundingWorkspacePanel({
           </div>
         ) : null}
       </Card>
+
+      <FundingDocumentUploadDialog
+        open={uploadOpen}
+        requirements={checklist.items.filter((item) => item.allowsUpload)}
+        initialRequirementKey={uploadTargetKey}
+        busy={busyKey === "upload"}
+        onSubmit={uploadDocument}
+        onCancel={() => { if (busyKey !== "upload") { setUploadOpen(false); setUploadTargetKey(""); } }}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
