@@ -15,9 +15,9 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
-import PageContainer from "../../components/ui/PageContainer.jsx";
-import PageHeader from "../../components/ui/PageHeader.jsx";
-import Card from "../../components/ui/Card.jsx";
+import PageContainer from "@/ui/PageContainer.jsx";
+import PageHeader from "@/ui/PageHeader.jsx";
+import Card from "@/ui/Card.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";

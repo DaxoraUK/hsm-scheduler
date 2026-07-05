@@ -1,9 +1,9 @@
 import React from "react";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import ManualForm from "../../ManualForm.jsx";
-import Card from "../../ui/Card.jsx";
-import StatusChip from "../../ui/StatusChip.jsx";
-import SecondaryButton from "../../ui/SecondaryButton.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
+import SecondaryButton from "@/ui/SecondaryButton.jsx";
 
 export default function MatchdayManualFixtures({
   club,

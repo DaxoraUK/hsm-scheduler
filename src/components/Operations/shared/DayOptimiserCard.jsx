@@ -1,6 +1,6 @@
 import React from "react";
 import { CheckCircle2, Route, Sparkles, TrendingDown } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 function Metric({ label, value }) {
   return (

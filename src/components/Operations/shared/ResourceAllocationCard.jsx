@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertTriangle, Car, CheckCircle2, MapPinned, ShieldCheck, UsersRound } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 const toneClasses = {
   success: "border-emerald-200 bg-emerald-50 text-emerald-800",

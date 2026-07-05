@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertTriangle, CheckCircle2, CircleGauge, ClipboardCheck, ShieldAlert } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 const toneClasses = {
   success: {

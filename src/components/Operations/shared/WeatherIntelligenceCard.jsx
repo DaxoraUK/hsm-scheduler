@@ -14,7 +14,7 @@ import {
   TriangleAlert,
   Wind,
 } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 function riskTone(status) {
   if (status === "danger") return "border-rose-200 bg-rose-50 text-rose-950";

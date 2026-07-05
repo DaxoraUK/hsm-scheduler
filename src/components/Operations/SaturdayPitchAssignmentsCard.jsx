@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { cleanName } from "../../lib/scheduler.js";
 import { createPitchRegistry } from "../../lib/registry/pitchRegistry.js";
-import Card from "../ui/Card.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 const ARTIFICIAL_SURFACES = new Set(["astro", "3g", "4g", "artificial"]);
 

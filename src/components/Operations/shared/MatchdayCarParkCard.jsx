@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import Card from "../../ui/Card.jsx";
-import StatusChip from "../../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 import {
   getParkingOperationalPlan,
   getParkingSnapshot,

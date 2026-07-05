@@ -5,7 +5,7 @@ import {
   ChevronRight,
   Circle,
 } from "lucide-react";
-import Card from "../ui/Card.jsx";
+import Card from "@/ui/Card.jsx";
 
 export default function OperationsChecklistCard({ items = [], onOpenItem }) {
   const complete = items.filter((item) => item.state === "done").length;

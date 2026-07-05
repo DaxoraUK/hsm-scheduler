@@ -27,7 +27,7 @@ import {
   MANAGEABLE_MEMBER_ROLES,
 } from "../../lib/security/permissions.js";
 import { useWorkspaceSecurity } from "../../hooks/useWorkspaceSecurity.js";
-import ConfirmDialog from "../ui/ConfirmDialog.jsx";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 
 const ROLE_TONES = {
   owner: "border-amber-200 bg-amber-50 text-amber-800",

@@ -1,7 +1,7 @@
 import React from "react";
 import CarparkChart from "../CarparkChart.jsx";
-import Card from "../ui/Card.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 export default function SaturdayCarParkCard({
   club,

@@ -25,8 +25,8 @@ import {
   getFixtureDuration,
 } from "../../../lib/operationsEngine.js";
 import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.js";
-import StatusChip from "../../ui/StatusChip.jsx";
-import PrimaryButton from "../../ui/PrimaryButton.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
+import PrimaryButton from "@/ui/PrimaryButton.jsx";
 
 export default function FixtureDrawer({
   fixture,

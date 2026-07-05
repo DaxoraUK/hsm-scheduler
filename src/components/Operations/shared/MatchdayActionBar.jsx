@@ -10,9 +10,9 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
-import PrimaryButton from "../../ui/PrimaryButton.jsx";
-import SecondaryButton from "../../ui/SecondaryButton.jsx";
-import StatusChip from "../../ui/StatusChip.jsx";
+import PrimaryButton from "@/ui/PrimaryButton.jsx";
+import SecondaryButton from "@/ui/SecondaryButton.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 import { getMatchdayHealth } from "../../../lib/operationsEngine.js";
 
 function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches }) {

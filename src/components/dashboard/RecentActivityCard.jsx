@@ -1,6 +1,6 @@
 import React from "react";
-import Card from "../ui/Card.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 export default function RecentActivityCard({ history = [] }) {
   const recent = history.slice(0, 5);

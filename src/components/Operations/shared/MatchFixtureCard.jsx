@@ -13,7 +13,7 @@ import {
   getFixtureHealth,
   getOfficialStatus,
 } from "../../../lib/operationsEngine.js";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 export default function MatchFixtureCard({
   fixture,

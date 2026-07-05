@@ -1,7 +1,7 @@
 import React from "react";
-import PageContainer from "../components/ui/PageContainer.jsx";
-import PageHeader from "../components/ui/PageHeader.jsx";
-import Card from "../components/ui/Card.jsx";
+import PageContainer from "@/ui/PageContainer.jsx";
+import PageHeader from "@/ui/PageHeader.jsx";
+import Card from "@/ui/Card.jsx";
 import IntegrationHubCard from "../components/Communications/IntegrationHubCard.jsx";
 
 export default function CommunicationsPage() {

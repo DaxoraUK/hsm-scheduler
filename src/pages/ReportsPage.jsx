@@ -13,8 +13,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import PageContainer from "../components/ui/PageContainer.jsx";
-import PageHeader from "../components/ui/PageHeader.jsx";
+import PageContainer from "@/ui/PageContainer.jsx";
+import PageHeader from "@/ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import ReportDocument from "../components/reports/ReportDocument.jsx";

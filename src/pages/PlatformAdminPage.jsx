@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 import PlatformBillingLegalPanel from "../components/PlatformBillingLegalPanel.jsx";
 import PlatformPilotLaunchPanel from "../components/PlatformPilotLaunchPanel.jsx";
 import { DB } from "../lib/supabase.js";

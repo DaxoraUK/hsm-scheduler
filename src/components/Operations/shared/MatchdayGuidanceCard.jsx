@@ -12,7 +12,7 @@ import {
   Sparkles,
   UsersRound,
 } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 const SEVERITY_ORDER = { critical: 0, danger: 0, attention: 1, warning: 1, watch: 2, healthy: 3, success: 3 };
 

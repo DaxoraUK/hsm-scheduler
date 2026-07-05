@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Card from "../../ui/Card.jsx";
-import StatusChip from "../../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 import { sortPitches } from "../../../lib/pitches.js";
 import { createPitchRegistry } from "../../../lib/registry/pitchRegistry.js";
 import {

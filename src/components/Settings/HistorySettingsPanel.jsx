@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CalendarDays, History, RotateCcw, Trash2 } from "lucide-react";
 import { DB, isSupaConfigured } from "../../lib/supabase.js";
-import ConfirmDialog from "../ui/ConfirmDialog.jsx";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 import {
   Notice,
   SecondaryButton,

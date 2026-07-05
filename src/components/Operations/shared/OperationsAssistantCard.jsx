@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Info, Sparkles } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 function statusStyles(status) {
   if (status === "danger") {

@@ -9,8 +9,8 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-import Card from "../ui/Card.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 export default function GroundReadinessCard({
   readiness,

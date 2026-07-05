@@ -1,6 +1,6 @@
 import React from "react";
-import Card from "../../ui/Card.jsx";
-import StatusChip from "../../ui/StatusChip.jsx";
+import Card from "@/ui/Card.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 import { cleanName } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
 import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";

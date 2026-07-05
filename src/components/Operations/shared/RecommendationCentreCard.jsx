@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardCheck, Sparkles } from "lucide-react";
-import StatusChip from "../../ui/StatusChip.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 
 const severityStyles = {
   critical: {

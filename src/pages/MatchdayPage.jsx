@@ -35,8 +35,8 @@ import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.j
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import MatchdayGuidanceCard from "../components/Operations/shared/MatchdayGuidanceCard.jsx";
 import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
-import CollapsibleCard from "../components/ui/CollapsibleCard.jsx";
-import StatusChip from "../components/ui/StatusChip.jsx";
+import CollapsibleCard from "@/ui/CollapsibleCard.jsx";
+import StatusChip from "@/ui/StatusChip.jsx";
 import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";

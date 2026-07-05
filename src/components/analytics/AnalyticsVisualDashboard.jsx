@@ -16,8 +16,8 @@ import {
   CloudRain,
   TriangleAlert,
 } from "lucide-react";
-import PageContainer from "../../components/ui/PageContainer.jsx";
-import PageHeader from "../../components/ui/PageHeader.jsx";
+import PageContainer from "@/ui/PageContainer.jsx";
+import PageHeader from "@/ui/PageHeader.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import EmptyState from "../../ui/EmptyState.jsx";

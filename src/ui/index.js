@@ -1,5 +1,6 @@
 export { default as Card } from "./Card.jsx";
 export { default as CollapsibleCard } from "./CollapsibleCard.jsx";
+export { default as ConfirmDialog } from "./ConfirmDialog.jsx";
 export { default as PageContainer } from "./PageContainer.jsx";
 export { default as PageHeader } from "./PageHeader.jsx";
 export { default as PrimaryButton } from "./PrimaryButton.jsx";

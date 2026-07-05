@@ -1,5 +1,5 @@
 import React from "react";
-import Card from "../ui/Card.jsx";
+import Card from "@/ui/Card.jsx";
 import CoachMessages from "../CoachMessages.jsx";
 
 export default function SaturdayCoachMessagesCard({

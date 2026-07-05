@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import PageContainer from "../components/ui/PageContainer.jsx";
+import PageContainer from "@/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
 import DashboardWorkflowCard from "../components/dashboard/DashboardWorkflowCard.jsx";
