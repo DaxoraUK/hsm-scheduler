@@ -2,14 +2,18 @@
 // The anon key identifies the application; the signed-in user's JWT identifies
 // the actor and is mandatory for all database requests protected by RLS.
 
-const DEFAULT_SUPA_URL = "https://keanexqompimqafhuiow.supabase.co";
-const ENV_SUPA_URL = String(import.meta.env?.VITE_SUPABASE_URL || "").trim();
-const ENV_SUPA_KEY = String(import.meta.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+const ENV_SUPA_URL = String(
+  import.meta.env?.VITE_SUPABASE_URL || "",
+).trim();
+
+const ENV_SUPA_KEY = String(
+  import.meta.env?.VITE_SUPABASE_ANON_KEY || "",
+).trim();
 const SESSION_KEY = "gc_auth_session_v2";
 const LEGACY_SESSION_KEY = "hsm_auth_session";
 const DEVELOPMENT_KEY = "gc_development_supabase_anon_key";
 
-export const SUPA_URL = (ENV_SUPA_URL || (import.meta.env?.DEV ? DEFAULT_SUPA_URL : "")).replace(/\/$/, "");
+export const SUPA_URL = ENV_SUPA_URL.replace(/\/$/, "");
 export const SUPA_AUTH = `${SUPA_URL}/auth/v1`;
 
 let refreshPromise = null;
@@ -785,65 +789,6 @@ export const DB = {
 
   async platformGetPilotLaunchReadiness() {
     return supaFetch("POST", "rpc/platform_get_pilot_launch_readiness", {});
-  },
-
-  async platformGetPilotEvidence(clubId = null) {
-    return supaFetch("POST", "rpc/platform_get_pilot_evidence", {
-      target_club_id: clubId ? requireClubId(clubId) : null,
-    });
-  },
-
-  async platformRecordLaunchGateEvidence(evidence = {}) {
-    return supaFetch("POST", "rpc/platform_record_launch_gate_evidence", {
-      target_gate_code: String(evidence.gateCode || "").trim(),
-      next_evidence_type: String(evidence.evidenceType || "observation").trim().toLowerCase(),
-      next_result: String(evidence.result || "observation").trim().toLowerCase(),
-      next_environment: String(evidence.environment || "staging").trim().toLowerCase(),
-      next_release: String(evidence.release || "").trim(),
-      next_summary: String(evidence.summary || "").trim(),
-      next_artifact_url: String(evidence.artifactUrl || "").trim() || null,
-      next_observed_at: evidence.observedAt || new Date().toISOString(),
-      next_metadata: evidence.metadata && typeof evidence.metadata === "object" ? evidence.metadata : {},
-    });
-  },
-
-  async platformUpsertPilotSession(session = {}) {
-    return supaFetch("POST", "rpc/platform_upsert_pilot_session", {
-      target_session_id: session.id || null,
-      target_club_id: requireClubId(session.clubId),
-      next_cycle: String(session.cycle || "historical_replay").trim().toLowerCase(),
-      next_status: String(session.status || "planned").trim().toLowerCase(),
-      next_session_date: session.sessionDate || null,
-      next_operator_name: String(session.operatorName || "").trim(),
-      next_fixture_count: Math.max(0, Number(session.fixtureCount) || 0),
-      next_auto_scheduled_count: Math.max(0, Number(session.autoScheduledCount) || 0),
-      next_manual_resolved_count: Math.max(0, Number(session.manualResolvedCount) || 0),
-      next_unresolved_count: Math.max(0, Number(session.unresolvedCount) || 0),
-      next_invalid_recommendation_count: Math.max(0, Number(session.invalidRecommendationCount) || 0),
-      next_correct_warning_count: Math.max(0, Number(session.correctWarningCount) || 0),
-      next_missed_warning_count: Math.max(0, Number(session.missedWarningCount) || 0),
-      next_override_count: Math.max(0, Number(session.overrideCount) || 0),
-      next_critical_defect_count: Math.max(0, Number(session.criticalDefectCount) || 0),
-      next_high_defect_count: Math.max(0, Number(session.highDefectCount) || 0),
-      next_time_saved_minutes: Math.max(0, Number(session.timeSavedMinutes) || 0),
-      next_outcome: String(session.outcome || "not_run").trim().toLowerCase(),
-      next_notes: String(session.notes || "").trim(),
-      next_signoff_name: String(session.signoffName || "").trim(),
-    });
-  },
-
-  async platformUpsertPilotFinding(finding = {}) {
-    return supaFetch("POST", "rpc/platform_upsert_pilot_finding", {
-      target_finding_id: finding.id || null,
-      target_session_id: String(finding.sessionId || "").trim() || null,
-      next_finding_type: String(finding.findingType || "defect").trim().toLowerCase(),
-      next_severity: String(finding.severity || "medium").trim().toLowerCase(),
-      next_status: String(finding.status || "open").trim().toLowerCase(),
-      next_title: String(finding.title || "").trim(),
-      next_description: String(finding.description || "").trim(),
-      next_workaround: String(finding.workaround || "").trim(),
-      next_reference: String(finding.reference || "").trim(),
-    });
   },
 
   async platformUpdateLaunchGate({ code, status, evidence = "", ownerLabel = "", dueDate = null } = {}) {
