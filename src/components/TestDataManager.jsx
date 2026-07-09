@@ -20,6 +20,7 @@ function TestDataManager(props) {
     club,
     onSave,
     cfgList = [],
+    refs = [],
   } = props;
 
   const [day, setDay] = useState("sat");
@@ -148,7 +149,7 @@ function TestDataManager(props) {
           <button type="button" onClick={save} style={{ ...S.btn(club.secondary) }}>{saved === day ? "Saved" : `Save ${activeOption.label} Test Data`}</button>
           <button
             type="button"
-            onClick={() => setList?.(generateTestFixtures({ dayKey: activeOption.dayKey, seed: createTestDataSeed(activeOption.dayKey), scenario: "standard", club, teams: cfgList }))}
+            onClick={() => setList?.(generateTestFixtures({ dayKey: activeOption.dayKey, seed: createTestDataSeed(activeOption.dayKey), scenario: "standard", club, teams: cfgList, officials: refs }))}
             style={{ ...S.btn(RE) }}
           >
             Generate Demo Data

@@ -11,14 +11,16 @@ function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
 
-function getStatusVariant(analysis) {
+function getStatusVariant(analysis, hasFixtures = true) {
+  if (!hasFixtures) return "neutral";
   if ((analysis.settings?.carParkSpaces || 0) <= 0) return "warning";
   if (analysis.isOverCapacity) return "danger";
   if (analysis.isOverConcurrentLimit || analysis.isHighPressure) return "warning";
   return "success";
 }
 
-function getStatusLabel(analysis) {
+function getStatusLabel(analysis, hasFixtures = true) {
+  if (!hasFixtures) return "Not assessed";
   if ((analysis.settings?.carParkSpaces || 0) <= 0) return "Configure";
   if (analysis.isOverCapacity) return "Over capacity";
   if (analysis.isOverConcurrentLimit) return "Concurrency risk";
@@ -33,7 +35,8 @@ function getHealthLabel(percentage) {
   return "Critical";
 }
 
-function getHealthScore(analysis) {
+function getHealthScore(analysis, hasFixtures = true) {
+  if (!hasFixtures) return null;
   const occupancy = analysis.peakSlot?.occupancyPct || 0;
   const threshold = analysis.settings?.parkingPressureThresholdPct || 85;
 
@@ -83,10 +86,10 @@ function ParkingBadgeIcon({ variant = "success", size = "md" }) {
   );
 }
 
-function ParkingHeaderAction({ analysis }) {
-  const variant = getStatusVariant(analysis);
+function ParkingHeaderAction({ analysis, hasFixtures }) {
+  const variant = getStatusVariant(analysis, hasFixtures);
 
-  return <StatusChip variant={variant}>{getStatusLabel(analysis)}</StatusChip>;
+  return <StatusChip variant={variant}>{getStatusLabel(analysis, hasFixtures)}</StatusChip>;
 }
 
 
@@ -104,6 +107,27 @@ function ParkingMetric({ label, value, hint }) {
   );
 }
 function ParkingHealthBar({ score }) {
+  if (!Number.isFinite(score)) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+              Parking Health
+            </div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+              Not assessed
+            </div>
+            <div className="mt-1 text-sm font-bold text-slate-500">
+              Build the schedule before parking readiness is calculated.
+            </div>
+          </div>
+          <StatusChip variant="neutral">Not assessed</StatusChip>
+        </div>
+      </div>
+    );
+  }
+
   const safeScore = clamp(score);
   const variant = safeScore >= 85 ? "success" : safeScore >= 65 ? "warning" : "danger";
 
@@ -647,6 +671,15 @@ export default function MatchdayCarParkCard({
   day = "Matchday",
   onOverride,
 }) {
+  const activeFixtures = useMemo(
+    () =>
+      satFinal.filter((fixture) => {
+        const status = String(fixture?.status || "active").toLowerCase();
+        return status !== "postponed" && status !== "cancelled";
+      }),
+    [satFinal]
+  );
+  const hasFixtures = activeFixtures.length > 0;
   const startMins = startHour * 60 + startMin;
   const recommendationEndTime =
     club?.adultEndTime ||
@@ -657,12 +690,12 @@ export default function MatchdayCarParkCard({
   const parkingSnapshot = useMemo(
     () =>
       getParkingSnapshot({
-        fixtures: satFinal,
+        fixtures: activeFixtures,
         club,
         pitchCfg,
         startMins,
       }),
-    [satFinal, club, pitchCfg, startMins]
+    [activeFixtures, club, pitchCfg, startMins]
   );
 
   const analysis = parkingSnapshot.analysis;
@@ -672,11 +705,11 @@ export default function MatchdayCarParkCard({
     () =>
       getParkingOperationalPlan({
         snapshot: parkingSnapshot,
-        fixtures: satFinal,
+        fixtures: activeFixtures,
         club,
         pitchCfg,
       }),
-    [parkingSnapshot, satFinal, club, pitchCfg]
+    [parkingSnapshot, activeFixtures, club, pitchCfg]
   );
 
   const parkingRecommendations = useMemo(() => {
@@ -732,16 +765,22 @@ export default function MatchdayCarParkCard({
   }, [analysis, club, closedPitches, pitchCfg, recommendationEndTime, satFinal, startHour, startMin]);
 
   const peak = analysis.peakSlot;
-  const healthScore = getHealthScore(analysis);
+  const healthScore = getHealthScore(analysis, hasFixtures);
 
   return (
     <Card
       eyebrow="Parking Intelligence"
       title={`${day} Car Park`}
       subtitle="Peak demand, pressure windows and matchday parking readiness."
-      action={<ParkingHeaderAction analysis={analysis} />}
+      action={<ParkingHeaderAction analysis={analysis} hasFixtures={hasFixtures} />}
     >
-      <ParkingPeakStory analysis={analysis} capacity={capacity} />
+      {hasFixtures ? (
+        <ParkingPeakStory analysis={analysis} capacity={capacity} />
+      ) : (
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm font-bold leading-6 text-slate-600">
+          Build the matchday schedule to assess arrival waves, peak demand and parking pressure. The configured capacity is retained below.
+        </div>
+      )}
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <ParkingHealthBar score={healthScore} />
@@ -749,33 +788,37 @@ export default function MatchdayCarParkCard({
           <ParkingMetric label="Capacity" value={capacity} hint="available spaces" />
           <ParkingMetric
             label="Peak demand"
-            value={peak?.estimatedCars || 0}
-            hint={peak ? `${peak.occupancyPct}% at ${peak.label}` : "No fixtures"}
+            value={hasFixtures ? peak?.estimatedCars || 0 : "—"}
+            hint={hasFixtures && peak ? `${peak.occupancyPct}% at ${peak.label}` : "Not assessed"}
           />
           <ParkingMetric
             label="Peak window"
-            value={peak?.label || "—"}
-            hint={peak ? `${peak.fixtureCount} parking-impact fixtures` : "No peak found"}
+            value={hasFixtures ? peak?.label || "—" : "—"}
+            hint={hasFixtures && peak ? `${peak.fixtureCount} parking-impact fixtures` : "Not assessed"}
           />
         </div>
       </div>
 
-      <div className="mt-5">
-        <ParkingMessage analysis={analysis} />
-      </div>
+      {hasFixtures ? (
+        <>
+          <div className="mt-5">
+            <ParkingMessage analysis={analysis} />
+          </div>
 
-      <div className="mt-5">
-        <ParkingOperationsPlan plan={parkingPlan} />
-      </div>
+          <div className="mt-5">
+            <ParkingOperationsPlan plan={parkingPlan} />
+          </div>
 
-      <div className="mt-5">
-        <ParkingRecommendations
-          recommendations={parkingRecommendations}
-          onApplyRecommendation={(recommendation) =>
-            applyParkingRecommendation(recommendation, onOverride)
-          }
-        />
-      </div>
+          <div className="mt-5">
+            <ParkingRecommendations
+              recommendations={parkingRecommendations}
+              onApplyRecommendation={(recommendation) =>
+                applyParkingRecommendation(recommendation, onOverride)
+              }
+            />
+          </div>
+        </>
+      ) : null}
 
       {analysis.exemptFixtures?.length ? (
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold leading-6 text-slate-600">
@@ -783,9 +826,11 @@ export default function MatchdayCarParkCard({
         </div>
       ) : null}
 
-      <div className="mt-5">
-        <ParkingTimeline slots={analysis.slots} capacity={capacity} />
-      </div>
+      {hasFixtures ? (
+        <div className="mt-5">
+          <ParkingTimeline slots={analysis.slots} capacity={capacity} />
+        </div>
+      ) : null}
     </Card>
   );
 }

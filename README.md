@@ -1,32 +1,27 @@
-# React + TypeScript + Vite
+# Daxora Ground Control — staging readiness pass 1
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This patch adds repository and environment preflight evidence for the production-like staging phase.
 
-Currently, two official plugins are available:
+## Install
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Extract this folder into the Ground Control project root, or run from the project root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\daxora-staging-readiness-pass-1\apply-staging-readiness.ps1
+npm run check
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Configure later, without committing secrets
+
+Copy `.env.staging.example` to `.env.staging.local` and replace all placeholders with the dedicated staging Vercel/Supabase values.
+
+Then run:
+
+```powershell
+npm run preflight:staging -- --env-file .env.staging.local
+```
+
+A successful preflight means the repository and configuration are ready for remote verification. It does not claim that staging is deployed or that migrations and tenant isolation have passed.
+
+Follow `docs/STAGING_EXECUTION_CHECKLIST.md` for the remaining order.

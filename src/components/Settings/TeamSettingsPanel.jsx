@@ -176,7 +176,7 @@ export default function TeamSettingsPanel({
           const options = sitePitches.length ? sitePitches : sortedPitches;
 
           return (
-            <article key={`${team.name}-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+            <article key={`team-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Team {index + 1}</div>

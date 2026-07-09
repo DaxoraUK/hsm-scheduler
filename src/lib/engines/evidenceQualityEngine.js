@@ -63,17 +63,28 @@ function periodDetails(entries = []) {
   };
 }
 
-function toneForScore(score) {
+function toneForScore(score, matchdays = 0) {
+  if (matchdays < 3) return "warning";
   if (score >= 85) return "success";
   if (score >= 65) return "warning";
   return "danger";
 }
 
-function labelForScore(score) {
+function labelForScore(score, matchdays = 0) {
+  if (matchdays < 3) return "Early data";
   if (score >= 85) return "High confidence";
   if (score >= 65) return "Usable with gaps";
   if (score >= 40) return "Developing evidence";
   return "Limited evidence";
+}
+
+function confidenceCapForMatchdays(matchdays = 0) {
+  if (matchdays <= 0) return 0;
+  if (matchdays === 1) return 60;
+  if (matchdays === 2) return 70;
+  if (matchdays < 5) return 80;
+  if (matchdays < 8) return 90;
+  return 100;
 }
 
 export function buildEvidenceQuality({
@@ -88,6 +99,7 @@ export function buildEvidenceQuality({
   const delivered = rows.filter((row) => row.status === "delivered");
   const weekly = asArray(evidence.weekly);
   const dayParking = weekly.flatMap((week) => asArray(week.dayParking));
+  const assessedParking = dayParking.filter((item) => item?.hasRun);
 
   const measures = [
     {
@@ -138,8 +150,8 @@ export function buildEvidenceQuality({
     {
       id: "parking-coverage",
       label: "Parking evidence",
-      value: dayParking.length
-        ? coverage(dayParking, (item) => item?.snapshot?.enabled === false || item?.snapshot?.configured)
+      value: assessedParking.length
+        ? coverage(assessedParking, (item) => item?.snapshot?.enabled === false || item?.snapshot?.configured)
         : 0,
       detail: "Matchday parking snapshots use a configured capacity or an explicit disabled state.",
       source: "calculated",
@@ -161,7 +173,9 @@ export function buildEvidenceQuality({
   const contextualMeasures = measures.filter((item) => item.relevance === "contextual");
   const weighted = coreMeasures.reduce((total, item) => total + item.value * item.weight, 0);
   const totalWeight = coreMeasures.reduce((total, item) => total + item.weight, 0);
-  const score = clamp(totalWeight ? weighted / totalWeight : 0);
+  const matchdayCount = asArray(entries).length;
+  const completenessScore = clamp(totalWeight ? weighted / totalWeight : 0);
+  const score = Math.min(completenessScore, confidenceCapForMatchdays(matchdayCount));
   const gaps = [];
 
   measures.forEach((item) => {
@@ -189,8 +203,11 @@ export function buildEvidenceQuality({
 
   return {
     score,
-    tone: toneForScore(score),
-    label: labelForScore(score),
+    completenessScore,
+    confidenceCap: confidenceCapForMatchdays(matchdayCount),
+    isEarlyData: matchdayCount < 3,
+    tone: toneForScore(score, matchdayCount),
+    label: labelForScore(score, matchdayCount),
     period: periodDetails(asArray(entries)),
     matchdays: asArray(entries).length,
     fixtures: rows.length,
@@ -224,7 +241,7 @@ export function buildEvidenceQuality({
         detail: "Governance documents, finances, quotations, consultation and project plans must be supplied separately.",
       },
     ],
-    methodology: "Evidence confidence measures the completeness of core fixture records: history, fixture identity, formats, allocations and officials. Parking and weather are shown separately because their relevance depends on the project or report. It is not a funding eligibility score.",
+    methodology: "Evidence confidence measures core record completeness and is deliberately capped while only a small number of matchdays are available. Fixture identity, formats, allocations and officials are included; parking and weather are shown separately because their relevance depends on the project or report. It is not a funding eligibility score.",
   };
 }
 

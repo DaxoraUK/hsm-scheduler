@@ -15,6 +15,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { isMidweekEnabled, isParkingEnabled } from "../../lib/settings/workspaceSettings.js";
+import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
 
 function SetupCard({ icon: Icon, eyebrow, title, description, status, tone = "ready", metrics = [], onClick }) {
   const toneClasses = {
@@ -70,12 +71,16 @@ export default function SettingsOverviewPanel({
   endMin,
   onboarding = {},
   onOpenOnboarding,
+  subscription,
 }) {
   const sites = Array.isArray(club.sites) && club.sites.length ? club.sites : club.venue ? [{ venue: club.venue, postcode: club.postcode }] : [];
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
   const integrations = Object.values(club.integrations || {}).filter((integration) => integration?.enabled).length;
-  const midweekEnabled = isMidweekEnabled(club);
-  const parkingEnabled = isParkingEnabled(club);
+  const matchdayEnabled = hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING);
+  const midweekEnabled = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING) && isMidweekEnabled(club);
+  const parkingIncluded = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE);
+  const parkingEnabled = parkingIncluded && isParkingEnabled(club);
+  const officialsEnabled = hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT);
   const hasVenue = Boolean(primarySite?.venue || primarySite?.name || club.venue);
   const hasPostcode = Boolean(primarySite?.postcode || club.postcode || club.weatherPostcode);
   const hasScheduling = Number.isFinite(Number(startHour)) && Number.isFinite(Number(endHour));
@@ -85,7 +90,7 @@ export default function SettingsOverviewPanel({
     hasVenue && hasPostcode,
     teamCfg.length > 0,
     pitchCfg.length > 0,
-    hasScheduling,
+    ...(matchdayEnabled ? [hasScheduling] : []),
     productionMode,
     dbStatus === "connected",
   ];
@@ -140,12 +145,17 @@ export default function SettingsOverviewPanel({
           icon={Gauge}
           eyebrow="Workspace"
           title="Modules & environment"
-          description="Choose whether Midweek and Parking are visible and keep development tools away from live club staff."
+          description="Review the workspaces included in the club plan and keep development tools away from live club staff."
           status={productionMode ? "Production" : "Development"}
           tone={productionMode ? "ready" : "attention"}
           metrics={[
-            { label: "Midweek", value: midweekEnabled ? "On" : "Off" },
-            { label: "Parking", value: parkingEnabled ? "On" : "Off" },
+            ...(hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING)
+              ? [{ label: "Midweek", value: midweekEnabled ? "On" : "Off" }]
+              : []),
+            ...(hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE)
+              ? [{ label: "Parking", value: parkingEnabled ? "On" : "Off" }]
+              : []),
+            ...(!matchdayEnabled ? [{ label: "Operations", value: "Not in plan" }] : []),
           ]}
           onClick={() => setSettingsTab("workspace")}
         />
@@ -164,8 +174,10 @@ export default function SettingsOverviewPanel({
         <SetupCard
           icon={MapPinned}
           eyebrow="Locations"
-          title="Venues & parking"
-          description="Manage every site, postcode, parking capacity and weather location from one dedicated view."
+          title={parkingIncluded ? "Venues & parking" : "Venues & sites"}
+          description={parkingIncluded
+            ? "Manage every site, postcode, parking capacity and weather location from one dedicated view."
+            : "Manage the club site and postcode used by fixture imports, resources and club records."}
           status={hasVenue && hasPostcode ? "Configured" : "Needs setup"}
           tone={hasVenue && hasPostcode ? "ready" : "attention"}
           metrics={[
@@ -178,13 +190,15 @@ export default function SettingsOverviewPanel({
         <SetupCard
           icon={UsersRound}
           eyebrow="People"
-          title="Teams & officials"
-          description="Maintain the operational people and teams used by scheduling, communications and intelligence."
+          title={officialsEnabled ? "Teams & officials" : "Teams"}
+          description={officialsEnabled
+            ? "Maintain the operational people and teams used by scheduling, communications and intelligence."
+            : "Maintain the team records used by fixture imports, communications and club resources."}
           status={teamCfg.length ? "Configured" : "Needs setup"}
           tone={teamCfg.length ? "ready" : "attention"}
           metrics={[
             { label: "Teams", value: teamCfg.length },
-            { label: "Officials", value: refs.length },
+            ...(officialsEnabled ? [{ label: "Officials", value: refs.length }] : []),
           ]}
           onClick={() => setSettingsTab("teams")}
         />
@@ -198,21 +212,23 @@ export default function SettingsOverviewPanel({
           tone={pitchCfg.length ? "ready" : "attention"}
           metrics={[
             { label: "Pitches", value: pitchCfg.length },
-            { label: "Max games", value: club.maxConcurrent || "Unset" },
+            ...(matchdayEnabled ? [{ label: "Max games", value: club.maxConcurrent || "Unset" }] : []),
           ]}
           onClick={() => setSettingsTab("pitches")}
         />
 
-        <SetupCard
-          icon={CalendarClock}
-          eyebrow="Rules"
-          title="Scheduling controls"
-          description="Review the weekend operating window, changeover buffers and concurrent-game limit."
-          status={hasScheduling ? "Configured" : "Needs setup"}
-          tone={hasScheduling ? "ready" : "attention"}
-          metrics={[{ label: "Window", value: `${String(startHour ?? 8).padStart(2, "0")}:${String(startMin ?? 30).padStart(2, "0")}–${String(endHour ?? 11).padStart(2, "0")}:${String(endMin ?? 30).padStart(2, "0")}` }]}
-          onClick={() => setSettingsTab("timing")}
-        />
+        {matchdayEnabled ? (
+          <SetupCard
+            icon={CalendarClock}
+            eyebrow="Rules"
+            title="Scheduling controls"
+            description="Review the weekend operating window, changeover buffers and concurrent-game limit."
+            status={hasScheduling ? "Configured" : "Needs setup"}
+            tone={hasScheduling ? "ready" : "attention"}
+            metrics={[{ label: "Window", value: `${String(startHour ?? 8).padStart(2, "0")}:${String(startMin ?? 30).padStart(2, "0")}–${String(endHour ?? 11).padStart(2, "0")}:${String(endMin ?? 30).padStart(2, "0")}` }]}
+            onClick={() => setSettingsTab("timing")}
+          />
+        ) : null}
 
         <SetupCard
           icon={PlugZap}

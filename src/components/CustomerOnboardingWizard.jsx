@@ -225,7 +225,7 @@ function ResourcesStep({ draft, update }) {
         <div className="flex items-center justify-between gap-4"><div><h3 className="text-lg font-black text-slate-950">Teams</h3><p className="text-sm font-semibold text-slate-500">At least one team is required.</p></div><button type="button" onClick={addTeam} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={16} className="text-emerald-300" /> Add team</button></div>
         <div className="mt-4 space-y-3">
           {teams.map((team, index) => (
-            <div key={`${team.name}-${index}`} className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(180px,1.4fr)_1fr_1fr_100px_44px]">
+            <div key={`team-${index}`} className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(180px,1.4fr)_1fr_1fr_100px_44px]">
               <input aria-label={`Team ${index + 1} name`} className={inputClass} value={team.name || ""} onChange={(event) => updateTeam(index, { name: event.target.value })} />
               <select aria-label={`Team ${index + 1} format`} className={selectClass} value={team.format || "11v11-youth"} onChange={(event) => updateTeam(index, { format: event.target.value, teamType: event.target.value === "11v11" ? "adult" : "youth" })}>{FORMATS.map((format) => <option key={format}>{format}</option>)}</select>
               <select aria-label={`Team ${index + 1} day`} className={selectClass} value={team.day || "Saturday"} onChange={(event) => updateTeam(index, { day: event.target.value })}>{DAYS.map((day) => <option key={day}>{day}</option>)}</select>
@@ -240,7 +240,7 @@ function ResourcesStep({ draft, update }) {
         <div className="flex items-center justify-between gap-4"><div><h3 className="text-lg font-black text-slate-950">Pitches and playing areas</h3><p className="text-sm font-semibold text-slate-500">Pitch IDs must be unique.</p></div><button type="button" onClick={addPitch} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={16} className="text-emerald-300" /> Add pitch</button></div>
         <div className="mt-4 space-y-3">
           {pitches.map((pitch, index) => (
-            <div key={`${pitch.id}-${index}`} className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:grid-cols-[100px_minmax(180px,1.4fr)_1fr_1fr_44px]">
+            <div key={`pitch-${index}`} className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:grid-cols-[100px_minmax(180px,1.4fr)_1fr_1fr_44px]">
               <input aria-label={`Pitch ${index + 1} ID`} className={inputClass} value={pitch.id || ""} onChange={(event) => updatePitch(index, { id: event.target.value.replace(/\s+/g, "") })} />
               <input aria-label={`Pitch ${index + 1} name`} className={inputClass} value={pitch.label || ""} onChange={(event) => updatePitch(index, { label: event.target.value })} />
               <select aria-label={`Pitch ${index + 1} format`} className={selectClass} value={pitch.format || "11v11"} onChange={(event) => updatePitch(index, { format: event.target.value })}>{FORMATS.map((format) => <option key={format}>{format}</option>)}</select>

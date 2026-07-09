@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { BarChart3, FileCheck2 } from "lucide-react";
 import AnalyticsVisualDashboard from "../components/analytics/AnalyticsVisualDashboard.jsx";
 import GrantImpactDashboard from "../components/analytics/GrantImpactDashboard.jsx";
+import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 const VIEWS = [
   {
@@ -13,17 +15,27 @@ const VIEWS = [
     id: "funding",
     label: "Funding evidence",
     icon: FileCheck2,
+    entitlement: ENTITLEMENTS.ANALYTICS_ADVANCED,
   },
 ];
 
-export default function AnalyticsPage(props) {
+export default function AnalyticsPage({ subscription, onOpenSubscription, ...props }) {
   const [view, setView] = useState("performance");
+  const advancedAnalyticsEnabled = hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED);
+  const availableViews = useMemo(
+    () => VIEWS.filter((item) => !item.entitlement || hasEntitlement(subscription, item.entitlement)),
+    [subscription]
+  );
+
+  useEffect(() => {
+    if (!availableViews.some((item) => item.id === view)) setView("performance");
+  }, [availableViews, view]);
 
   return (
     <>
-      <div className="mx-auto mb-6 w-full max-w-7xl">
+      <div className="mx-auto mb-6 w-full max-w-7xl space-y-4">
         <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
-          {VIEWS.map((item) => {
+          {availableViews.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
             return (
@@ -43,6 +55,17 @@ export default function AnalyticsPage(props) {
             );
           })}
         </div>
+
+        {!advancedAnalyticsEnabled ? (
+          <PlanFeatureNotice
+            entitlement={ENTITLEMENTS.ANALYTICS_ADVANCED}
+            subscription={subscription}
+            title="Funding evidence is hidden on Core"
+            description="Core includes the operational performance dashboard. The grant-impact evidence workspace and advanced evidence scoring are available from Pro."
+            onOpenSubscription={onOpenSubscription}
+            compact
+          />
+        ) : null}
       </div>
 
       {view === "performance" ? (

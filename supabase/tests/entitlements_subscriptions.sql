@@ -1,5 +1,5 @@
 -- Ground Control entitlement and subscription enforcement proof.
--- Staging/local Supabase only. Apply migrations through 202607030004 first.
+-- Staging/local Supabase only. Apply migrations through 202607050001 first.
 --
 -- Replace USER_A and USER_B below with two real UUIDs from auth.users.
 -- USER_A acts as the club owner. USER_B acts as temporary Daxora platform
@@ -30,6 +30,35 @@ begin
     select 1 from auth.users where id = (select staff_user_id from gc_subscription_test_context)
   ) then
     raise exception 'Replace USER_A and USER_B with two real auth.users UUIDs before running this test';
+  end if;
+end $$;
+
+-- The reviewed commercial matrix keeps advanced capability out of Core and
+-- enables it for Pro/Elite before any club-specific checks run.
+do $$
+begin
+  if exists (
+    select 1 from public.subscription_plans
+    where code = 'core'
+      and entitlements && array['operations_advanced','reports_advanced','analytics_advanced','advanced_integrations','multi_venue']::text[]
+  ) then
+    raise exception 'Plan matrix failure: Core contains Pro-only entitlements';
+  end if;
+
+  if not exists (
+    select 1 from public.subscription_plans
+    where code = 'pro'
+      and entitlements @> array['operations_advanced','reports_advanced','analytics_advanced','advanced_integrations','multi_venue']::text[]
+  ) then
+    raise exception 'Plan matrix failure: Pro is missing advanced entitlements';
+  end if;
+
+  if not exists (
+    select 1 from public.subscription_plans
+    where code = 'elite'
+      and entitlements @> array['operations_advanced','premium_support']::text[]
+  ) then
+    raise exception 'Plan matrix failure: Elite is missing advanced operations or premium support';
   end if;
 end $$;
 

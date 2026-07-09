@@ -532,7 +532,7 @@ function buildWeekly(entries, entryDays, club, pitchCfg) {
         pitchCfg,
         scope: day.key,
       });
-      return { day: day.key, dateLabel: day.dateLabel, snapshot };
+      return { day: day.key, dateLabel: day.dateLabel, hasRun: Boolean(day.hasRun), snapshot };
     });
     const peakParking = dayParking.reduce(
       (best, item) => (!best || item.snapshot.utilisation > best.snapshot.utilisation ||

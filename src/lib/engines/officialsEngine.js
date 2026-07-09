@@ -488,6 +488,71 @@ export function calculateOfficialsReadiness({ fixtures = [], active = [], offici
   const availablePool = availableRefs.length;
   const namedOfficials = new Set(namedFixtures.map((item) => normalise(item.official)).filter(Boolean));
 
+  if (fixtureCount === 0) {
+    const recommendation = {
+      id: "officials-build-schedule",
+      severity: "neutral",
+      title: "Build the schedule first",
+      detail: "Officials coverage cannot be assessed until timed fixtures exist.",
+      guidance: "Build the matchday schedule, then return for coverage and workload guidance.",
+      metric: "Not assessed",
+    };
+
+    return {
+      status: "neutral",
+      score: null,
+      label: "Not assessed",
+      summary: "Build the schedule before officials coverage, peak demand and workload are calculated.",
+      issues: [],
+      actions: [recommendation.guidance],
+      recommendations: [recommendation],
+      nextAction: recommendation,
+      missingFixtures: [],
+      awaitingFixtures: [],
+      declinedFixtures: [],
+      confirmedFixtures: [],
+      conflicts: [],
+      peak: { demand: 0, start: null, label: "No timed fixtures", fixtures: [] },
+      workloads: [],
+      tightTurnarounds: [],
+      pool: {
+        configured: configuredPool,
+        available: availablePool,
+        unavailable: Math.max(0, configuredPool - availablePool),
+        namedOfficials: 0,
+        shortage: 0,
+        refs: configuredRefs.map((ref, index) => ({
+          id: ref.id || `official-${index}`,
+          name: getRefName(ref),
+          role: titleCase(ref.role || ref.type || "club_referee"),
+          available: !isUnavailableRef(ref),
+        })),
+      },
+      metrics: {
+        fixtures: 0,
+        assigned: 0,
+        confirmed: 0,
+        awaiting: 0,
+        missing: 0,
+        unassigned: 0,
+        declined: 0,
+        conflicts: 0,
+        refereePool: configuredPool,
+        availablePool,
+        unavailablePool: Math.max(0, configuredPool - availablePool),
+        officialsUsed: 0,
+        peakDemand: 0,
+        peakTime: "—",
+        peakWindow: "No timed fixtures",
+        shortage: 0,
+        coverage: null,
+        confirmationRate: null,
+        tightTurnarounds: 0,
+        maxWorkload: 0,
+      },
+    };
+  }
+
   const peak = calculatePeakDemand(activeFixtures);
   const shortage = configuredPool ? Math.max(0, peak.demand - availablePool) : 0;
   const { workloads, tightTurnarounds } = buildOfficialWorkloads(activeFixtures, refs, turnaroundMinutes);

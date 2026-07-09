@@ -24,7 +24,7 @@ export default function ReportWeatherSummary({ club, day, current = false }) {
     club,
     date: day?.date,
     fixtures: activeFixtures,
-    enabled: current && Boolean(day?.date),
+    enabled: current && Boolean(day?.date) && Boolean(day?.hasRun),
   });
   const snapshot = useMemo(
     () => calculateWeatherIntelligence({
@@ -37,6 +37,14 @@ export default function ReportWeatherSummary({ club, day, current = false }) {
     }),
     [activeFixtures, club, current, day?.dateLabel, day?.label, liveWeather.data, liveWeather.error, liveWeather.status]
   );
+
+  if (!day?.hasRun) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+        Weather risk is not assessed until the schedule has been built for this day.
+      </div>
+    );
+  }
 
   if (!current) {
     const savedRisks = (day?.rows || []).filter((row) => row.weatherRisk !== "unknown");

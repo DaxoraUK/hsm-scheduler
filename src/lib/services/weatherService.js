@@ -30,7 +30,7 @@ function getForecastEndpoint() {
   }
 
   const error = new Error(
-    "Live weather needs a server-side Open-Meteo commercial endpoint before production use."
+    "Live weather is temporarily unavailable. Try again later or contact support if the problem continues."
   );
   error.code = "WEATHER_PROVIDER_NOT_CONFIGURED";
   throw error;

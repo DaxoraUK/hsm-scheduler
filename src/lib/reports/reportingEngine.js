@@ -107,12 +107,13 @@ function buildExceptions(evidence) {
 
 function buildParkingRows(evidence) {
   return evidence.weekly.flatMap((week) =>
-    week.dayParking.map(({ day, dateLabel, snapshot }) => ({
+    week.dayParking.map(({ day, dateLabel, hasRun, snapshot }) => ({
       id: `${week.id}:${day}`,
       matchday: week.fullLabel,
       day,
       dayLabel: day === "saturday" ? "Saturday" : day === "sunday" ? "Sunday" : "Midweek",
       dateLabel,
+      assessed: Boolean(hasRun),
       enabled: snapshot.enabled,
       configured: snapshot.configured,
       capacity: snapshot.capacity,
@@ -120,9 +121,9 @@ function buildParkingRows(evidence) {
       utilisation: snapshot.utilisation,
       peakTime: snapshot.peakTime,
       fixtureCount: snapshot.fixtureCount,
-      status: snapshot.status,
-      overCapacity: snapshot.isOverCapacity,
-      overConcurrent: snapshot.isOverConcurrentLimit,
+      status: hasRun ? snapshot.status : { key: "pending", label: "Not assessed", variant: "neutral", score: null },
+      overCapacity: Boolean(hasRun && snapshot.isOverCapacity),
+      overConcurrent: Boolean(hasRun && snapshot.isOverConcurrentLimit),
     }))
   );
 }
@@ -149,10 +150,12 @@ function readinessSummary(evidence) {
     evidence.summary.parkingOverCapacity * 10 +
     evidence.cancelled.length * 5;
   const score = Math.max(0, Math.min(100, 100 - penalty));
-  const status = score >= 90 ? "success" : score >= 70 ? "warning" : "danger";
+  const hasCriticalBlocker = evidence.summary.unresolved > 0 || evidence.cancelled.length > 0;
+  const hasReviewBlocker = evidence.summary.officialOutstanding > 0 || evidence.summary.parkingOverCapacity > 0;
+  const status = hasCriticalBlocker ? "danger" : hasReviewBlocker ? "warning" : "success";
   return {
     status,
-    label: score >= 90 ? "Operationally ready" : score >= 70 ? "Review required" : "Action required",
+    label: status === "success" ? "Operationally ready" : status === "warning" ? "Review required" : "Action required",
     score,
     detail: blockers.length ? blockers.join(" · ") : "No material operational blockers are recorded.",
   };

@@ -79,6 +79,7 @@ function DaySection({ day, club, current, parking }) {
   const fixtures = day.rows || [];
   const active = fixtures.filter((row) => row.status === "delivered");
   const exceptions = fixtures.filter((row) => row.status !== "delivered");
+  const assessed = Boolean(day.hasRun);
   return (
     <section className="report-section break-inside-avoid-page rounded-[24px] border border-slate-200 bg-white p-5 print:rounded-none print:border-slate-300 print:p-0 print:pt-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
@@ -88,7 +89,7 @@ function DaySection({ day, club, current, parking }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip status={day.hasRun ? "success" : "warning"}>{day.hasRun ? "Schedule built" : "Not built"}</StatusChip>
-          <StatusChip status={exceptions.length ? "warning" : "success"}>{exceptions.length ? `${exceptions.length} exceptions` : "No exceptions"}</StatusChip>
+          <StatusChip status={!assessed ? "neutral" : exceptions.length ? "warning" : "success"}>{!assessed ? "Not assessed" : exceptions.length ? `${exceptions.length} exceptions` : "No exceptions"}</StatusChip>
         </div>
       </div>
 
@@ -108,16 +109,18 @@ function DaySection({ day, club, current, parking }) {
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 print:bg-white">
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Parking forecast</div>
           <div className="mt-3 text-2xl font-black text-slate-950">
-            {parking?.enabled === false ? "Off" : parking?.configured ? `${parking.peakCars}/${parking.capacity}` : "Configure"}
+            {!assessed ? "—" : parking?.enabled === false ? "Off" : parking?.configured ? `${parking.peakCars}/${parking.capacity}` : "Configure"}
           </div>
           <div className="mt-1 text-xs font-semibold text-slate-500">
-            {parking?.enabled === false
+            {!assessed
+              ? "Build the schedule before parking demand is assessed."
+              : parking?.enabled === false
               ? "Parking excluded from operational readiness."
               : parking?.configured
                 ? `${parking.utilisation}% peak at ${parking.peakTime}`
                 : "Set venue capacity before relying on parking readiness."}
           </div>
-          <div className="mt-3"><StatusChip status={parking?.status?.variant || "neutral"}>{parking?.status?.label || "No data"}</StatusChip></div>
+          <div className="mt-3"><StatusChip status={!assessed ? "neutral" : parking?.status?.variant || "neutral"}>{!assessed ? "Not assessed" : parking?.status?.label || "No data"}</StatusChip></div>
         </div>
       </div>
     </section>
@@ -175,10 +178,10 @@ function ParkingReport({ model }) {
     { key: "dayLabel", label: "Day", className: "font-black text-slate-950" },
     { key: "dateLabel", label: "Date" },
     { key: "capacity", label: "Capacity", render: (row) => row.enabled === false ? "Off" : row.configured ? row.capacity : "Not configured" },
-    { key: "peakCars", label: "Peak demand" },
-    { key: "utilisation", label: "Peak use", render: (row) => row.configured ? `${row.utilisation}%` : "—" },
-    { key: "peakTime", label: "Peak time" },
-    { key: "fixtureCount", label: "Impact fixtures" },
+    { key: "peakCars", label: "Peak demand", render: (row) => row.assessed ? row.peakCars : "—" },
+    { key: "utilisation", label: "Peak use", render: (row) => row.assessed && row.configured ? `${row.utilisation}%` : "—" },
+    { key: "peakTime", label: "Peak time", render: (row) => row.assessed ? row.peakTime : "—" },
+    { key: "fixtureCount", label: "Impact fixtures", render: (row) => row.assessed ? row.fixtureCount : "—" },
     { key: "status", label: "Status", render: (row) => <StatusChip status={row.status?.variant || "neutral"}>{row.status?.label || "No data"}</StatusChip> },
   ]} rows={model.parkingRows} />;
 }

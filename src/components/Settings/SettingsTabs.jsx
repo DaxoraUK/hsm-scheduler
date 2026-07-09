@@ -16,6 +16,7 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
+import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
 
 const TAB_GROUPS = [
   {
@@ -56,15 +57,17 @@ const TAB_GROUPS = [
   },
 ];
 
-export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess, subscription }) {
+export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess, subscription, platformContext }) {
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
     tabs: group.tabs.filter(([key]) => {
       if (subscription?.isReadOnly && key !== "subscription") return false;
-      if (productionMode && key === "testdata") return false;
+      if (key === "testdata" && (productionMode || !platformContext?.isPlatformStaff)) return false;
       if (["subscription", "billing"].includes(key) && !workspaceAccess?.canManageSubscription) return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
       if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;
+      if (["timing", "history", "testdata"].includes(key) && !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)) return false;
+      if (key === "refs" && !hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT)) return false;
       return true;
     }),
   })).filter((group) => group.tabs.length);

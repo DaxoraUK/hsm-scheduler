@@ -13,7 +13,7 @@ export const WORKFLOW_ACTIONS = Object.freeze({
 export function buildMissionControlWorkflow({
   scope = "weekend",
   scheduleBuilt = false,
-  totalFixtures = 0,
+  totalFixtures = null,
   pitchCount = 0,
   closedPitchCount = 0,
   refereeOutstanding = 0,
@@ -28,15 +28,21 @@ export function buildMissionControlWorkflow({
 } = {}) {
   const scopeLabel = getMatchdayScopeLabel(scope);
   const lowerScopeLabel = scopeLabel.toLowerCase();
+  const knownFixtureCount = totalFixtures == null ? null : Math.max(0, Number(totalFixtures) || 0);
+  const scheduleReady = scheduleBuilt && (knownFixtureCount == null || knownFixtureCount > 0);
 
   const steps = [
     {
       key: "fixtures",
       title: "Build schedule",
-      detail: scheduleBuilt
-        ? `${totalFixtures} fixture${totalFixtures === 1 ? "" : "s"} scheduled for ${lowerScopeLabel}.`
-        : "Build the selected matchday before final readiness checks.",
-      status: scheduleBuilt ? "complete" : "current",
+      detail: scheduleReady
+        ? knownFixtureCount == null
+          ? `${scopeLabel} schedule has been built.`
+          : `${knownFixtureCount} fixture${knownFixtureCount === 1 ? "" : "s"} scheduled for ${lowerScopeLabel}.`
+        : scheduleBuilt
+          ? `No active fixtures are scheduled for ${lowerScopeLabel}. Add or import fixtures before publishing.`
+          : "Build the selected matchday before final readiness checks.",
+      status: scheduleReady ? "complete" : "current",
       required: true,
       action: WORKFLOW_ACTIONS.FIXTURES,
     },
@@ -53,12 +59,14 @@ export function buildMissionControlWorkflow({
     {
       key: "officials",
       title: "Confirm officials",
-      detail: officialConflicts
-        ? `${officialConflicts} overlapping official ${officialConflicts === 1 ? "assignment needs" : "assignments need"} attention.`
-        : refereeOutstanding
-          ? `${refereeOutstanding} official ${refereeOutstanding === 1 ? "needs" : "need"} confirmation.`
-          : "Officials look healthy for scheduled fixtures.",
-      status: officialConflicts || refereeOutstanding ? "warning" : "complete",
+      detail: !scheduleReady
+        ? "Officials will be assessed after active fixtures are scheduled."
+        : officialConflicts
+          ? `${officialConflicts} overlapping official ${officialConflicts === 1 ? "assignment needs" : "assignments need"} attention.`
+          : refereeOutstanding
+            ? `${refereeOutstanding} official ${refereeOutstanding === 1 ? "needs" : "need"} confirmation.`
+            : "Officials look healthy for scheduled fixtures.",
+      status: !scheduleReady ? "pending" : officialConflicts || refereeOutstanding ? "warning" : "complete",
       required: true,
       action: WORKFLOW_ACTIONS.OFFICIALS,
     },
@@ -68,12 +76,12 @@ export function buildMissionControlWorkflow({
           title: parkingConfigured ? "Review parking pressure" : "Configure parking",
           detail: !parkingConfigured
             ? "Set the primary venue parking capacity before using parking readiness."
-            : scheduleBuilt
+            : scheduleReady
               ? `${parkingPercent}% projected peak against ${parkingCapacity} spaces.`
-              : "Parking forecast will update after schedule build.",
+              : "Parking forecast will update after active fixtures are scheduled.",
           status: !parkingConfigured
             ? "warning"
-            : !scheduleBuilt
+            : !scheduleReady
               ? "pending"
               : parkingOverCapacity
                 ? "warning"
@@ -94,10 +102,14 @@ export function buildMissionControlWorkflow({
     {
       key: "publish",
       title: `Publish ${lowerScopeLabel}`,
-      detail: blockerCount ? "Resolve review items before publishing." : `${scopeLabel} is ready to publish.`,
-      status: blockerCount ? "pending" : "complete",
+      detail: !scheduleReady
+        ? "Add or import active fixtures before publishing."
+        : blockerCount
+          ? "Resolve review items before publishing."
+          : `${scopeLabel} is ready to publish.`,
+      status: !scheduleReady || blockerCount ? "pending" : "complete",
       required: true,
-      action: blockerCount ? WORKFLOW_ACTIONS.OPERATIONS : WORKFLOW_ACTIONS.PUBLISH,
+      action: !scheduleReady || blockerCount ? WORKFLOW_ACTIONS.OPERATIONS : WORKFLOW_ACTIONS.PUBLISH,
     },
   ];
 
@@ -111,6 +123,7 @@ export function buildMissionControlWorkflow({
 
 export function getMissionState({
   scheduleBuilt = false,
+  totalFixtures = null,
   fixtureIssues = 0,
   refereeOutstanding = 0,
   officialConflicts = 0,
@@ -125,6 +138,15 @@ export function getMissionState({
       label: "Review Required",
       title: "Build schedule",
       detail: "Your weekend is close, but the schedule needs building before final readiness checks.",
+    };
+  }
+
+  if (totalFixtures != null && totalFixtures <= 0) {
+    return {
+      tone: "warning",
+      label: "No Fixtures",
+      title: "Add fixtures",
+      detail: "The schedule has been built, but there are no active fixtures to assess or publish.",
     };
   }
 

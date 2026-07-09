@@ -61,11 +61,15 @@ export default function WorkspaceSettingsPanel({
   setProductionMode,
   setMode,
   subscription,
+  platformContext,
 }) {
   const features = getWorkspaceFeatures(club);
+  const matchdayIncluded = hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING);
   const parkingIncluded = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE);
   const midweekIncluded = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING);
   const analyticsIncluded = hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_CORE);
+  const advancedOperationsIncluded = hasEntitlement(subscription, ENTITLEMENTS.OPERATIONS_ADVANCED);
+  const advancedAnalyticsIncluded = hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED);
 
   const updateMidweek = (enabled) => {
     if (!midweekIncluded) return;
@@ -116,7 +120,8 @@ export default function WorkspaceSettingsPanel({
           icon={CalendarDays}
           title="Weekend Operations"
           description="Saturday and Sunday scheduling, resources, intelligence and communications."
-          status="Core"
+          status={matchdayIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
+          active={matchdayIncluded}
         />
 
         <ModuleCard
@@ -178,47 +183,58 @@ export default function WorkspaceSettingsPanel({
         <ModuleCard
           icon={RadioTower}
           title="Operations Centre & Timeline"
-          description="Live control-room monitoring and the operational command timeline."
-          status="Included"
+          description="Live control-room monitoring, advanced matchday guidance and the operational command timeline."
+          status={advancedOperationsIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
+          active={advancedOperationsIncluded}
         />
 
         <ModuleCard
           icon={BarChart3}
-          title="Analytics & Funding Evidence"
-          description="Operational trends, heatmaps, evidence readiness and reporting."
+          title="Performance Analytics"
+          description="Operational trends, heatmaps, pitch use and matchday performance analysis."
           status={analyticsIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
           active={analyticsIncluded}
         />
+
+        <ModuleCard
+          icon={BarChart3}
+          title="Funding Evidence"
+          description="Advanced grant-impact evidence, readiness scoring and funding-priority analysis."
+          status={advancedAnalyticsIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
+          active={advancedAnalyticsIncluded}
+        />
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
-            <ShieldCheck size={21} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-black text-slate-950">Environment mode</h3>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-              Production mode forces live operations and hides test-data controls. Keep development mode available only while the product is being demonstrated or configured.
-            </p>
+      {platformContext?.isPlatformStaff ? (
+        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+              <ShieldCheck size={21} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black text-slate-950">Environment mode</h3>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+                Platform staff can temporarily enable development mode for controlled demonstrations. Customer accounts always remain on live data.
+              </p>
 
-            <div className="mt-5 flex flex-col gap-4 rounded-[22px] border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${productionMode ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                  <Sparkles size={19} />
-                </span>
-                <div>
-                  <div className="text-sm font-black text-slate-950">{productionMode ? "Production mode" : "Development mode"}</div>
-                  <div className="mt-0.5 text-sm font-semibold text-slate-500">
-                    {productionMode ? "Live data only. Test controls are hidden." : "Test data and demonstration controls remain available."}
+              <div className="mt-5 flex flex-col gap-4 rounded-[22px] border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${productionMode ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    <Sparkles size={19} />
+                  </span>
+                  <div>
+                    <div className="text-sm font-black text-slate-950">{productionMode ? "Production mode" : "Development mode"}</div>
+                    <div className="mt-0.5 text-sm font-semibold text-slate-500">
+                      {productionMode ? "Live data only. Test controls are hidden." : "Demonstration controls are temporarily available to platform staff."}
+                    </div>
                   </div>
                 </div>
+                <Toggle checked={Boolean(productionMode)} onChange={updateProductionMode} label="Enable production mode" />
               </div>
-              <Toggle checked={Boolean(productionMode)} onChange={updateProductionMode} label="Enable production mode" />
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

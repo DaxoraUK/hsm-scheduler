@@ -23,6 +23,7 @@ export const ENTITLEMENTS = Object.freeze({
   RESOURCE_REGISTRY: "resource_registry",
   MATCHDAY_SCHEDULING: "matchday_scheduling",
   MIDWEEK_SCHEDULING: "midweek_scheduling",
+  OPERATIONS_ADVANCED: "operations_advanced",
   PITCH_INTELLIGENCE: "pitch_intelligence",
   PARKING_INTELLIGENCE: "parking_intelligence",
   WEATHER_INTELLIGENCE: "weather_intelligence",
@@ -71,6 +72,7 @@ const coreFeatures = [
 
 const proFeatures = [
   ...coreFeatures,
+  ENTITLEMENTS.OPERATIONS_ADVANCED,
   ENTITLEMENTS.REPORTS_ADVANCED,
   ENTITLEMENTS.ANALYTICS_ADVANCED,
   ENTITLEMENTS.MULTI_VENUE,
@@ -175,9 +177,44 @@ export function getPlanDefinition(code = PLAN_CODES.CORE) {
   return PLAN_CATALOGUE[String(code || "").toLowerCase()] || PLAN_CATALOGUE[PLAN_CODES.CORE];
 }
 
+function parseEntitlementRows(payload, fallback = []) {
+  const candidate =
+    payload?.entitlements ??
+    payload?.effective_entitlements ??
+    payload?.effectiveEntitlements ??
+    payload?.features;
+
+  if (Array.isArray(candidate)) return candidate;
+
+  if (candidate instanceof Set) return [...candidate];
+
+  if (typeof candidate === "string") {
+    const value = candidate.trim();
+    if (!value) return [];
+
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // PostgreSQL text-array and comma-separated fallbacks are handled below.
+    }
+
+    const withoutBraces = value.startsWith("{") && value.endsWith("}")
+      ? value.slice(1, -1)
+      : value;
+
+    return withoutBraces
+      .split(",")
+      .map((item) => item.trim().replace(/^"|"$/g, ""))
+      .filter(Boolean);
+  }
+
+  return fallback;
+}
+
 export function normaliseSubscriptionPayload(payload = {}) {
   const plan = getPlanDefinition(payload.plan_code || payload.planCode);
-  const featureRows = Array.isArray(payload.entitlements) ? payload.entitlements : plan.features;
+  const featureRows = parseEntitlementRows(payload, plan.features);
   const features = new Set(featureRows.map((item) => String(item || "").trim()).filter(Boolean));
   const limits = normaliseLimits({ ...plan.limits, ...(payload.limits || {}) });
   const status = String(payload.status || SUBSCRIPTION_STATUSES.TRIALING).toLowerCase();
@@ -220,7 +257,16 @@ export function getSubscriptionStatusLabel(status) {
 
 export function hasEntitlement(subscription, key) {
   if (!key) return true;
-  return Boolean(subscription?.features?.has?.(key));
+  if (!subscription) return false;
+  if (subscription.features instanceof Set) return subscription.features.has(key);
+  if (Array.isArray(subscription.features)) return subscription.features.includes(key);
+  return false;
+}
+
+export function canUseMatchdayWorkspace(subscription) {
+  if (!subscription) return false;
+  if (String(subscription.planCode || "").toLowerCase() === PLAN_CODES.LINK) return false;
+  return hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING);
 }
 
 export function getEntitlementLimit(subscription, key, fallback = -1) {

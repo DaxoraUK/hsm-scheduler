@@ -8,9 +8,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmDialog from "../../../ui/ConfirmDialog.jsx";
-import { FORMAT_COMPAT } from "../../../lib/constants.js";
 import { cleanName, findCfg } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
+import {
+  getPitchDisplayFormat,
+  getPitchSuitabilityReason,
+  isPitchSuitableForFixture,
+} from "../../../lib/intelligence/pitch/pitchService.js";
 import {
   getKickOffRuleFailure,
   getSuggestionWindowForFixture,
@@ -56,24 +60,15 @@ function isActiveFixture(fixture = {}) {
   return status !== "postponed" && status !== "cancelled";
 }
 
-function getCompatiblePitchIds(cfg = {}) {
-  const format = cfg.format || "";
-
-  return FORMAT_COMPAT[format] || [];
-}
-
-function getSuitablePitches({ cfg = {}, pitchCfg = [], closedPitches = [] } = {}) {
-  const compatibleIds = getCompatiblePitchIds(cfg);
+function getSuitablePitches({ fixture = {}, cfg = {}, pitchCfg = [], closedPitches = [] } = {}) {
   const preferredIds = [cfg.defaultPitch, cfg.altPitch].filter(Boolean);
+  const fixtureWithCfg = { ...fixture, cfg };
 
   return sortPitches(pitchCfg)
     .filter((pitch) => {
       if (!pitch?.id) return false;
       if (closedPitches.includes(pitch.id)) return false;
-      if (preferredIds.includes(pitch.id)) return true;
-      if (compatibleIds.length === 0) return true;
-
-      return compatibleIds.includes(pitch.id);
+      return isPitchSuitableForFixture(pitch, fixtureWithCfg);
     })
     .sort((a, b) => {
       const aPreferred = preferredIds.indexOf(a.id);
@@ -143,7 +138,7 @@ function buildResolutionSuggestions({
 } = {}) {
   const cfg = findCfg(fixture.homeTeam, teamCfg);
   const duration = getDuration(cfg);
-  const suitablePitches = getSuitablePitches({ cfg, pitchCfg, closedPitches });
+  const suitablePitches = getSuitablePitches({ fixture, cfg, pitchCfg, closedPitches });
   const maxConcurrent = Number(club.maxConcurrent || 3);
   const fixtureWithCfg = { ...fixture, cfg };
   const window = getSuggestionWindowForFixture({ fixture: fixtureWithCfg, club });
@@ -189,7 +184,7 @@ function buildResolutionSuggestions({
       suggestions.push({
         pitchId: pitch.id,
         pitchLabel: pitch.label || pitch.id,
-        pitchDesc: pitch.desc || "",
+        pitchDesc: pitch.desc || getPitchDisplayFormat(pitch),
         koTime,
         koMins,
         endMins: fixtureEndMins,
@@ -197,7 +192,7 @@ function buildResolutionSuggestions({
         score,
         confidence: Math.max(72, Math.min(98, Math.round(92 + score / 20))),
         reasons: [
-          "Correct fixture format",
+          `${getPitchDisplayFormat(pitch)} pitch matches ${cfg?.format || fixture.manualFormat || fixture.format || "the fixture format"}`,
           "Pitch is open",
           "Pitch is available",
           "Parking concurrency remains within limit",
@@ -311,6 +306,14 @@ export default function MatchdayUnresolvedCard({
 
     const koMins = timeToMinutes(ov.koTime);
     const cfg = findCfg(fixture.homeTeam, teamCfg);
+    const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
+
+    if (!isPitchSuitableForFixture(selectedPitch, { ...fixture, cfg })) {
+      toast.error("Pitch format does not match", {
+        description: getPitchSuitabilityReason(selectedPitch, { ...fixture, cfg }),
+      });
+      return;
+    }
 
     const koRuleFailure = getKickOffRuleFailure({
       fixture: { ...fixture, cfg },
@@ -372,6 +375,18 @@ export default function MatchdayUnresolvedCard({
         ) : null}
         {unresolved.map((fixture, index) => {
           const cfg = findCfg(fixture.homeTeam, teamCfg);
+          const configuredCompatiblePitches = getSuitablePitches({
+            fixture,
+            cfg,
+            pitchCfg,
+            closedPitches: [],
+          });
+          const suitablePitches = getSuitablePitches({
+            fixture,
+            cfg,
+            pitchCfg,
+            closedPitches,
+          });
           const suggestions = buildResolutionSuggestions({
             fixture,
             club,
@@ -477,6 +492,14 @@ export default function MatchdayUnresolvedCard({
                     ))}
                   </div>
                 </div>
+              ) : configuredCompatiblePitches.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                  No compatible pitch is configured for {cfg?.format || fixture.manualFormat || fixture.format || "this fixture"}. Add a suitable pitch in Settings or update the team&apos;s playing format.
+                </div>
+              ) : suitablePitches.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                  Compatible pitches exist, but they are currently closed. Reopen a suitable pitch in Resources before assigning this fixture.
+                </div>
               ) : (
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-800">
                   No automatic fix was found. Review pitch closures, parking concurrency, or manually assign below.
@@ -501,9 +524,9 @@ export default function MatchdayUnresolvedCard({
                       onChange={(event) => onOverride(9000 + index, "pitchId", event.target.value)}
                     >
                       <option value="">Select pitch...</option>
-                      {getSuitablePitches({ cfg, pitchCfg, closedPitches }).map((pitch) => (
+                      {suitablePitches.map((pitch) => (
                         <option key={pitch.id} value={pitch.id}>
-                          {pitch.label} - {pitch.desc}
+                          {pitch.label} - {pitch.desc || getPitchDisplayFormat(pitch)}
                         </option>
                       ))}
                     </select>

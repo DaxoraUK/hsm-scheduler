@@ -1,6 +1,6 @@
 import React from "react";
 import { Car, MapPinned, Plus, Star, Trash2 } from "lucide-react";
-import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
+import { ENTITLEMENTS, getEntitlementLimit, hasEntitlement, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import {
   Field,
   Notice,
@@ -92,6 +92,8 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
   const sites = getSites(club);
   const primary = sites.find((site) => site.isPrimary) || sites[0];
   const venueLimit = getEntitlementLimit(subscription, LIMIT_KEYS.VENUES);
+  const parkingIncluded = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE);
+  const weatherIncluded = hasEntitlement(subscription, ENTITLEMENTS.WEATHER_INTELLIGENCE);
   const canAddSite = isUnlimitedLimit(venueLimit) || sites.length < venueLimit;
   const totalParking = sites.reduce((sum, site) => sum + (Number(site.carParkSpaces) || 0), 0);
 
@@ -138,8 +140,8 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile label="Sites" value={sites.length} detail={isUnlimitedLimit(venueLimit) ? "Unlimited plan limit" : `${venueLimit} plan limit`} tone="green" />
           <StatTile label="Primary" value={primary?.name || "Unset"} tone="blue" />
-          <StatTile label="Parking" value={`${totalParking} spaces`} tone="slate" />
-          <StatTile label="Weather location" value={club.weatherPostcode || primary?.postcode || "Missing"} tone={club.weatherPostcode || primary?.postcode ? "blue" : "amber"} />
+          {parkingIncluded ? <StatTile label="Parking" value={`${totalParking} spaces`} tone="slate" /> : null}
+          {weatherIncluded ? <StatTile label="Weather location" value={club.weatherPostcode || primary?.postcode || "Missing"} tone={club.weatherPostcode || primary?.postcode ? "blue" : "amber"} /> : null}
         </div>
 
         {!canAddSite ? (
@@ -169,12 +171,12 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
                 <Field label="Site name"><input className={inputClass} value={site.name} onChange={(event) => updateSite(index, "name", event.target.value)} /></Field>
                 <Field label="Venue / address"><input className={inputClass} value={site.venue} onChange={(event) => updateSite(index, "venue", event.target.value)} /></Field>
                 <Field label="Postcode"><input className={inputClass} value={site.postcode} onChange={(event) => updateSite(index, "postcode", event.target.value.toUpperCase())} placeholder="BL6 7QE" /></Field>
-                <Field label="Parking spaces"><input type="number" min={0} className={inputClass} value={site.carParkSpaces} onChange={(event) => updateSite(index, "carParkSpaces", Number(event.target.value))} /></Field>
+                {parkingIncluded ? <Field label="Parking spaces"><input type="number" min={0} className={inputClass} value={site.carParkSpaces} onChange={(event) => updateSite(index, "carParkSpaces", Number(event.target.value))} /></Field> : null}
               </div>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
                 <Field label="Operational notes"><input className={inputClass} value={site.notes} onChange={(event) => updateSite(index, "notes", event.target.value)} placeholder="Access, overflow or site notes" /></Field>
-                <Toggle checked={site.weatherEnabled !== false} onChange={(value) => updateSite(index, "weatherEnabled", value)} label="Use for weather intelligence" description="The first enabled site with a postcode becomes the weather location." />
+                {weatherIncluded ? <Toggle checked={site.weatherEnabled !== false} onChange={(value) => updateSite(index, "weatherEnabled", value)} label="Use for weather intelligence" description="The first enabled site with a postcode becomes the weather location." /> : null}
               </div>
             </div>
           ))}
@@ -185,32 +187,34 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
         </SaveBar>
       </SettingsPanel>
 
-      <SettingsPanel>
-        <SettingsSectionHeader
-          icon={Car}
-          eyebrow="Parking intelligence"
-          title="Estimated vehicles per fixture"
-          description="Set realistic averages by format. Ground Control uses them to predict arrival waves and capacity pressure."
-        />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {FORMAT_LABELS.map(([format, label]) => (
-            <Field key={format} label={label}>
-              <input
-                type="number"
-                min={0}
-                max={250}
-                className={inputClass}
-                value={club.avgCars?.[format] ?? AVG_CARS[format] ?? 0}
-                onChange={(event) => setClub((current) => ({ ...current, avgCars: { ...(current.avgCars || AVG_CARS), [format]: Number(event.target.value) || 0 } }))}
-              />
-            </Field>
-          ))}
-        </div>
-        <Notice tone="neutral" className="mt-5">These are club-wide defaults. Site capacity is configured above and can differ between grounds.</Notice>
-        <SaveBar onSave={() => saveTab?.("venues", { club })} saved={savedTab === "venues"} label="Save venue settings">
-          Saves sites, parking capacity, weather locations and vehicle assumptions together.
-        </SaveBar>
-      </SettingsPanel>
+      {parkingIncluded ? (
+        <SettingsPanel>
+          <SettingsSectionHeader
+            icon={Car}
+            eyebrow="Parking intelligence"
+            title="Estimated vehicles per fixture"
+            description="Set realistic averages by format. Ground Control uses them to predict arrival waves and capacity pressure."
+          />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {FORMAT_LABELS.map(([format, label]) => (
+              <Field key={format} label={label}>
+                <input
+                  type="number"
+                  min={0}
+                  max={250}
+                  className={inputClass}
+                  value={club.avgCars?.[format] ?? AVG_CARS[format] ?? 0}
+                  onChange={(event) => setClub((current) => ({ ...current, avgCars: { ...(current.avgCars || AVG_CARS), [format]: Number(event.target.value) || 0 } }))}
+                />
+              </Field>
+            ))}
+          </div>
+          <Notice tone="neutral" className="mt-5">These are club-wide defaults. Site capacity is configured above and can differ between grounds.</Notice>
+          <SaveBar onSave={() => saveTab?.("venues", { club })} saved={savedTab === "venues"} label="Save venue settings">
+            Saves sites, parking capacity, weather locations and vehicle assumptions together.
+          </SaveBar>
+        </SettingsPanel>
+      ) : null}
     </div>
   );
 }

@@ -285,6 +285,18 @@ function scheduleFixtureDayCore(
 
     const buffer = bufMap[cfg.format] || 15;
     const duration = cfg.gameMins + buffer;
+    const fixtureWithCfg = { ...fixture, cfg };
+    const configuredSuitablePitches = pitchCfg.filter((pitch) =>
+      isPitchSuitableForFixture(pitch, fixtureWithCfg)
+    );
+
+    if (configuredSuitablePitches.length === 0) {
+      unresolved.push({
+        ...fixture,
+        reason: `No compatible pitch is configured for ${cfg.format}. Add a suitable pitch in Settings or update the team's playing format.`,
+      });
+      continue;
+    }
 
     if (isAdult(fixture.homeTeam) && Number.isFinite(fixedAdultKickOffMins)) {
       let placed = false;
@@ -293,7 +305,7 @@ function scheduleFixtureDayCore(
         if (!(pitchId in slots)) continue;
 
         const pitch = getPitch(pitchCfg, pitchId);
-        if (!isPitchSuitableForFixture(pitch, { ...fixture, cfg })) continue;
+        if (!isPitchSuitableForFixture(pitch, fixtureWithCfg)) continue;
 
         if (free(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration)) {
           book(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration);
@@ -331,7 +343,7 @@ function scheduleFixtureDayCore(
       .filter((pitchId) => {
         if (!(pitchId in slots)) return false;
         const pitch = getPitch(pitchCfg, pitchId);
-        return isPitchSuitableForFixture(pitch, { ...fixture, cfg });
+        return isPitchSuitableForFixture(pitch, fixtureWithCfg);
       });
 
     let options = [...preferredOptions];
@@ -342,7 +354,7 @@ function scheduleFixtureDayCore(
           pitch.independent &&
           pitch.id in slots &&
           !options.includes(pitch.id) &&
-          isPitchSuitableForFixture(pitch, { ...fixture, cfg });
+          isPitchSuitableForFixture(pitch, fixtureWithCfg);
 
         if (canUse) options.push(pitch.id);
       });
@@ -368,12 +380,20 @@ function scheduleFixtureDayCore(
           if (!(pitch.id in slots)) return false;
 
           if (isIndependentPitch(pitchCfg, pitch.id)) {
-            return MINI_FORMATS.includes(cfg.format) && isPitchSuitableForFixture(pitch, { ...fixture, cfg });
+            return MINI_FORMATS.includes(cfg.format) && isPitchSuitableForFixture(pitch, fixtureWithCfg);
           }
 
           return formatCanUsePitch(cfg.format, pitch, fixture);
         })
         .map((pitch) => pitch.id);
+    }
+
+    if (candidatePitches.length === 0) {
+      unresolved.push({
+        ...fixture,
+        reason: `Compatible ${cfg.format} pitches are closed or unavailable for this matchday.`,
+      });
+      continue;
     }
 
     const best = findBest(candidatePitches, duration, cfg.format === "3v3");
@@ -404,7 +424,7 @@ function scheduleFixtureDayCore(
         }
 
         const pitch = getPitch(pitchCfg, pitchId);
-        if (!isPitchSuitableForFixture(pitch, { ...fixture, cfg })) {
+        if (!isPitchSuitableForFixture(pitch, fixtureWithCfg)) {
           diagnostics.push(`${pitchId}: unsuitable format`);
           return;
         }

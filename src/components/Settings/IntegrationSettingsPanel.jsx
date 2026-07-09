@@ -1,5 +1,7 @@
 import React from "react";
-import { CalendarDays, CheckCircle2, Clock3, PlugZap } from "lucide-react";
+import { CalendarDays, Clock3, PlugZap } from "lucide-react";
+import PlanFeatureNotice from "../PlanFeatureNotice.jsx";
+import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
 import {
   Field,
   Notice,
@@ -18,7 +20,8 @@ const PLANNED_PROVIDERS = [
   ["Google Calendar", "Publishing club and team calendars"],
 ];
 
-export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, savedTab }) {
+export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, savedTab, subscription, onOpenSubscription }) {
+  const advancedIntegrationsEnabled = hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS);
   const integrations = club.integrations || {};
   const fullTime = integrations.fullTimeFa || {};
 
@@ -78,27 +81,37 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
         </SaveBar>
       </SettingsPanel>
 
-      <SettingsPanel>
-        <SettingsSectionHeader
-          icon={Clock3}
-          eyebrow="Product roadmap"
-          title="Planned integrations"
-          description="These providers are shown for transparency only. There are no fake toggles or unused credential fields."
-        />
+      {advancedIntegrationsEnabled ? (
+        <SettingsPanel>
+          <SettingsSectionHeader
+            icon={Clock3}
+            eyebrow="Product roadmap"
+            title="Planned integrations"
+            description="These providers are shown for transparency only. There are no fake toggles or unused credential fields."
+          />
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {PLANNED_PROVIDERS.map(([name, description]) => (
-            <div key={name} className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm"><CalendarDays size={19} /></span>
-                <span className="rounded-full bg-slate-200 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-slate-600">Planned</span>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {PLANNED_PROVIDERS.map(([name, description]) => (
+              <div key={name} className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm"><CalendarDays size={19} /></span>
+                  <span className="rounded-full bg-slate-200 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-slate-600">Planned</span>
+                </div>
+                <h3 className="mt-4 text-base font-black text-slate-950">{name}</h3>
+                <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">{description}</p>
               </div>
-              <h3 className="mt-4 text-base font-black text-slate-950">{name}</h3>
-              <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">{description}</p>
-            </div>
-          ))}
-        </div>
-      </SettingsPanel>
+            ))}
+          </div>
+        </SettingsPanel>
+      ) : (
+        <PlanFeatureNotice
+          entitlement={ENTITLEMENTS.ADVANCED_INTEGRATIONS}
+          subscription={subscription}
+          title="Advanced provider integrations are hidden"
+          description="Full-Time FA remains available as the standard fixture source. TeamFeePay, Pitchero, Spond and calendar integration workspaces are available from Pro."
+          onOpenSubscription={onOpenSubscription}
+        />
+      )}
     </div>
   );
 }

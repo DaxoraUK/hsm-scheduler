@@ -19,6 +19,7 @@ import OnboardingSettingsPanel from "../components/Settings/OnboardingSettingsPa
 import SubscriptionSettingsPanel from "../components/Settings/SubscriptionSettingsPanel.jsx";
 import BillingLegalPanel from "../components/Settings/BillingLegalPanel.jsx";
 import { isMidweekEnabled, isParkingEnabled } from "../lib/settings/workspaceSettings.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 const TAB_TITLES = {
   overview: ["Settings overview", "Complete the club setup in a clear order and see what still needs attention."],
@@ -46,13 +47,25 @@ const LEGACY_REDIRECTS = {
   sheets: "data",
 };
 
+const TAB_ENTITLEMENTS = {
+  timing: ENTITLEMENTS.MATCHDAY_SCHEDULING,
+  history: ENTITLEMENTS.MATCHDAY_SCHEDULING,
+  testdata: ENTITLEMENTS.MATCHDAY_SCHEDULING,
+  refs: ENTITLEMENTS.OFFICIALS_MANAGEMENT,
+};
+
 export default function SettingsPage(props) {
-  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess } = props;
+  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess, platformContext } = props;
   const requestedTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
-  const activeTab = subscription?.isReadOnly && workspaceAccess?.canManageSubscription ? "subscription" : requestedTab;
+  const permittedTab = requestedTab === "testdata" && !platformContext?.isPlatformStaff
+    ? "overview"
+    : requestedTab;
+  const requiredEntitlement = TAB_ENTITLEMENTS[permittedTab];
+  const entitledTab = requiredEntitlement && !hasEntitlement(subscription, requiredEntitlement) ? "overview" : permittedTab;
+  const activeTab = subscription?.isReadOnly && workspaceAccess?.canManageSubscription ? "subscription" : entitledTab;
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
-  const midweekEnabled = isMidweekEnabled(club);
-  const parkingEnabled = isParkingEnabled(club);
+  const midweekEnabled = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING) && isMidweekEnabled(club);
+  const parkingEnabled = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE) && isParkingEnabled(club);
   const dataStatus = dbStatus === "connected"
     ? "Connected"
     : dbStatus === "saving"
@@ -83,7 +96,7 @@ export default function SettingsPage(props) {
     if (activeTab === "integrations") return <IntegrationSettingsPanel {...props} />;
     if (activeTab === "history") return <HistorySettingsPanel {...props} />;
     if (activeTab === "data") return <DataSettingsPanel {...props} />;
-    if (activeTab === "testdata" && !productionMode) return <TestDataSettingsPanel {...props} />;
+    if (activeTab === "testdata" && !productionMode && platformContext?.isPlatformStaff) return <TestDataSettingsPanel {...props} />;
     return <SettingsOverviewPanel {...props} />;
   };
 

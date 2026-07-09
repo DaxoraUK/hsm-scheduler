@@ -29,16 +29,12 @@ const OPPONENT_PLACES = [
   "Little Lever",
 ];
 
-const REFEREES = [
-  "A. Green",
-  "D. Wilson",
-  "J. Smith",
-  "K. Davies",
-  "M. Brown",
-  "P. Jones",
-  "R. Taylor",
-  "S. Ahmed",
-];
+function configuredOfficialNames(officials = []) {
+  return officials
+    .map((official) => typeof official === "string" ? official : official?.name)
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+}
 
 function hashSeed(value) {
   const text = String(value || "ground-control-demo");
@@ -119,12 +115,13 @@ function leagueFor(team = {}, dayKey, random) {
   return random() > 0.35 ? "Youth Football League" : "District Junior League";
 }
 
-function refereeData(random) {
+function refereeData(random, officials = []) {
+  const availableOfficials = configuredOfficialNames(officials);
   const roll = random();
-  if (roll < 0.42) {
+  if (roll < 0.42 || availableOfficials.length === 0) {
     return { referee: "", refPhone: "", refStatus: "TBC" };
   }
-  const referee = pick(REFEREES, random) || "Demo Official";
+  const referee = pick(availableOfficials, random);
   if (roll < 0.68) {
     return { referee, refPhone: "", refStatus: "Awaiting" };
   }
@@ -141,6 +138,7 @@ export function generateTestFixtures({
   scenario = "standard",
   club = {},
   teams = [],
+  officials = [],
 } = {}) {
   const normalisedDay = normaliseDayKey(dayKey);
   const selectedScenario = SCENARIO_COUNTS[scenario] ? scenario : "standard";
@@ -158,7 +156,7 @@ export function generateTestFixtures({
     league: leagueFor(team, normalisedDay, random),
     isCup: random() < 0.16,
     status: "active",
-    ...refereeData(random),
+    ...refereeData(random, officials),
     fixtureDayKey: normalisedDay,
     __day: normalisedDay,
     demoSeed: seed,

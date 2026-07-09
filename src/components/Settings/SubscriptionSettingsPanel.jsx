@@ -23,13 +23,18 @@ import {
 const FEATURE_LABELS = [
   [ENTITLEMENTS.LEAGUE_LINK, "League connection foundation"],
   [ENTITLEMENTS.MATCHDAY_SCHEDULING, "Matchday scheduling"],
+  [ENTITLEMENTS.MIDWEEK_SCHEDULING, "Midweek scheduling"],
   [ENTITLEMENTS.PARKING_INTELLIGENCE, "Parking intelligence"],
   [ENTITLEMENTS.WEATHER_INTELLIGENCE, "Live weather intelligence"],
   [ENTITLEMENTS.OFFICIALS_MANAGEMENT, "Officials management"],
+  [ENTITLEMENTS.OPERATIONS_ADVANCED, "Advanced operations intelligence"],
   [ENTITLEMENTS.REPORTS_OPERATIONS, "Operational reports"],
+  [ENTITLEMENTS.REPORTS_ADVANCED, "Advanced reports"],
   [ENTITLEMENTS.ANALYTICS_CORE, "Performance analytics"],
-  [ENTITLEMENTS.ANALYTICS_ADVANCED, "Advanced analytics"],
+  [ENTITLEMENTS.ANALYTICS_ADVANCED, "Funding evidence analytics"],
+  [ENTITLEMENTS.ADVANCED_INTEGRATIONS, "Advanced provider integrations"],
   [ENTITLEMENTS.MULTI_VENUE, "Multi-venue operations"],
+  [ENTITLEMENTS.PRIORITY_SUPPORT, "Priority support"],
   [ENTITLEMENTS.PREMIUM_SUPPORT, "Premium support"],
 ];
 

@@ -160,6 +160,9 @@ export default function OfficialsIntelligenceCard({ intelligence = {}, onFixture
     ...(intelligence.awaitingFixtures || []),
   ];
   const next = intelligence.nextAction || recommendations[0] || null;
+  const hasFixtures = Number(metrics.fixtures || 0) > 0;
+  const scoreLabel = Number.isFinite(intelligence.score) ? `${intelligence.score}%` : "Not assessed";
+  const coverageLabel = Number.isFinite(metrics.coverage) ? `${metrics.coverage}%` : "—";
 
   return (
     <div className="space-y-5">
@@ -170,7 +173,7 @@ export default function OfficialsIntelligenceCard({ intelligence = {}, onFixture
               <UserCheck size={15} strokeWidth={2.8} /> Officials Intelligence v2
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-3">
-              <h3 className="text-3xl font-black tracking-tight text-slate-950">{intelligence.score ?? 0}%</h3>
+              <h3 className="text-3xl font-black tracking-tight text-slate-950">{scoreLabel}</h3>
               <StatusChip variant={intelligence.status || "neutral"}>{intelligence.label || "Officials"}</StatusChip>
             </div>
             <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-slate-500">
@@ -191,10 +194,10 @@ export default function OfficialsIntelligenceCard({ intelligence = {}, onFixture
               <MetricTile
                 icon={ShieldCheck}
                 label="Coverage"
-                value={`${metrics.coverage ?? 0}%`}
-                detail={`${metrics.assigned || 0}/${metrics.fixtures || 0} assigned`}
-                warning={(metrics.coverage || 0) < 100}
-                danger={(metrics.coverage || 0) < 75}
+                value={coverageLabel}
+                detail={hasFixtures ? `${metrics.assigned || 0}/${metrics.fixtures || 0} assigned` : "No scheduled fixtures"}
+                warning={hasFixtures && (metrics.coverage || 0) < 100}
+                danger={hasFixtures && (metrics.coverage || 0) < 75}
               />
               <MetricTile
                 icon={UsersRound}
@@ -252,8 +255,8 @@ export default function OfficialsIntelligenceCard({ intelligence = {}, onFixture
                 <div className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Peak pressure</div>
                 <h4 className="mt-1 text-xl font-black text-slate-950">{peak.label || "No timed fixtures"}</h4>
               </div>
-              <StatusChip variant={(metrics.shortage || 0) > 0 ? "danger" : "success"}>
-                {(metrics.shortage || 0) > 0 ? `${metrics.shortage} short` : `${metrics.peakDemand || 0} required`}
+              <StatusChip variant={!hasFixtures ? "neutral" : (metrics.shortage || 0) > 0 ? "danger" : "success"}>
+                {!hasFixtures ? "Not assessed" : (metrics.shortage || 0) > 0 ? `${metrics.shortage} short` : `${metrics.peakDemand || 0} required`}
               </StatusChip>
             </div>
             <p className="mt-3 text-sm font-bold leading-6 text-slate-500">

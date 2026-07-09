@@ -89,9 +89,3 @@ export const TEAM_CONFIG_DEFAULT=[
 // lib/testData/testFixtureGenerator.js. Keeping them out of this foundation
 // file prevents day-specific demo records becoming platform constants.
 
-export const FA_LEAGUES=[
-  {id:"BBDFL",name:"Bolton, Bury and District FL",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=467452772&selectedFixtureGroupAgeGroup=0&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=608702885&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=608702885&itemsPerPage=25"},
-  {id:"LAL",name:"Lancashire Amateur League",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=219056685&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=358794991&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=&itemsPerPage=25"},
-  {id:"WDYFL",name:"Wigan and District Youth FL",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=236124694&selectedFixtureGroupAgeGroup=0&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=8646008&selectedTeam=&selectedRelatedFixtureOption=2&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=&itemsPerPage=25"},
-  {id:"SLC",name:"South Lancs Counties League",url:"https://fulltime.thefa.com/fixtures.html?selectedSeason=614969999&selectedFixtureGroupKey=&selectedDateCode=all&selectedClub=734633761&selectedTeam=&selectedRelatedFixtureOption=3&selectedFixtureDateStatus=&selectedFixtureStatus=&previousSelectedFixtureGroupAgeGroup=&previousSelectedFixtureGroupKey=&previousSelectedClub=&itemsPerPage=25"},
-];

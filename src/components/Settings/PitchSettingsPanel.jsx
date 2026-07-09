@@ -166,7 +166,7 @@ export default function PitchSettingsPanel({
         {sortPitches(pitchCfg).map((pitch, displayIndex) => {
           const realIndex = Math.max(0, pitchCfg.findIndex((candidate) => candidate === pitch || candidate.id === pitch.id));
           return (
-            <article key={`${pitch.id}-${displayIndex}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+            <article key={`pitch-${realIndex}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Pitch {displayIndex + 1}</div>

@@ -50,6 +50,7 @@ export default function TestDataSettingsPanel({
   setTestMidweek,
   club = {},
   teamCfg = [],
+  refs = [],
   activeClubId = "",
 }) {
   const dayOptions = useMemo(
@@ -87,7 +88,7 @@ export default function TestDataSettingsPanel({
   const generate = (nextSeed = seed) => {
     const safeSeed = String(nextSeed || "ground-control-demo").trim() || "ground-control-demo";
     setSeed(safeSeed);
-    setList?.(generateTestFixtures({ dayKey, seed: safeSeed, scenario, club, teams: teamCfg }));
+    setList?.(generateTestFixtures({ dayKey, seed: safeSeed, scenario, club, teams: teamCfg, officials: refs }));
     setSaved("");
   };
 

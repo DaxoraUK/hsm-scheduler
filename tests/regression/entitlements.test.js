@@ -8,6 +8,7 @@ import {
   LIMIT_KEYS,
   normaliseSubscriptionPayload,
   PLAN_CATALOGUE,
+  getUpgradePlanForEntitlement,
 } from "../../src/lib/subscriptions/entitlements.js";
 import { createWorkspaceAccess } from "../../src/lib/security/permissions.js";
 
@@ -46,7 +47,43 @@ describe("plan entitlement model", () => {
     expect(canOpenPage(core, "operations")).toBe(true);
     expect(canOpenPage(core, "analytics")).toBe(true);
     expect(canOpenPage(core, "reports")).toBe(true);
+    expect(hasEntitlement(core, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(false);
+    expect(hasEntitlement(core, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(false);
     expect(hasEntitlement(core, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(false);
+    expect(hasEntitlement(core, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(false);
+    expect(hasEntitlement(core, ENTITLEMENTS.MULTI_VENUE)).toBe(false);
+  });
+
+  test("Pro enables advanced operations, reporting, analytics and integrations", () => {
+    const pro = normaliseSubscriptionPayload({
+      club_id: "club-test",
+      plan_code: "pro",
+      status: "active",
+      access_state: "full",
+      entitlements: PLAN_CATALOGUE.pro.features,
+      limits: PLAN_CATALOGUE.pro.limits,
+    });
+
+    expect(hasEntitlement(pro, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(pro, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(pro, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(pro, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement(pro, ENTITLEMENTS.MULTI_VENUE)).toBe(true);
+    expect(getUpgradePlanForEntitlement(ENTITLEMENTS.OPERATIONS_ADVANCED).code).toBe("pro");
+  });
+
+  test("server-returned entitlement overrides remain authoritative", () => {
+    const eliteWithRestrictedFeatures = normaliseSubscriptionPayload({
+      club_id: "club-test",
+      plan_code: "elite",
+      status: "active",
+      access_state: "full",
+      entitlements: [ENTITLEMENTS.DASHBOARD],
+      limits: {},
+    });
+
+    expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.DASHBOARD)).toBe(true);
+    expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(false);
   });
 
   test("a suspended subscription removes mutation rights without removing owner administration", () => {

@@ -1,12 +1,41 @@
-import { useCallback } from "react";
-import { FA_LEAGUES } from "../lib/constants.js";
+import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
 
 const PROXY = "https://api.allorigins.win/get?url=";
 
-async function fetchLeagueFixtures(league, targetDate) {
-  const response = await fetch(PROXY + encodeURIComponent(league.url));
+function normaliseSource(source = {}, index = 0) {
+  const url = String(source.url || source.sourceUrl || "").trim();
+  if (!url || source.enabled === false) return null;
+
+  return {
+    id: String(source.id || source.clubId || `FULLTIME-${index + 1}`),
+    name: String(source.name || "Full-Time FA"),
+    url,
+  };
+}
+
+export function getConfiguredFixtureSources(config = {}) {
+  if (!config || config.enabled !== true || config.mode === "manual") return [];
+
+  const configured = Array.isArray(config.sources)
+    ? config.sources.map(normaliseSource).filter(Boolean)
+    : [];
+
+  const primary = normaliseSource(config, configured.length);
+  if (primary && !configured.some((source) => source.url === primary.url)) {
+    configured.unshift(primary);
+  }
+
+  return configured;
+}
+
+export function hasConfiguredFixtureSource(config = {}) {
+  return getConfiguredFixtureSources(config).length > 0;
+}
+
+async function fetchLeagueFixtures(source, targetDate) {
+  const response = await fetch(PROXY + encodeURIComponent(source.url));
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
@@ -15,7 +44,7 @@ async function fetchLeagueFixtures(league, targetDate) {
   const data = await response.json();
   return parseFullTimeHtml(data.contents, targetDate).map((fixture) => ({
     ...fixture,
-    league: league.id,
+    league: source.id,
   }));
 }
 
@@ -24,21 +53,30 @@ function isSundayTeam(fixture = {}) {
   return SUN_TEAMS.some((keyword) => homeTeam.includes(keyword));
 }
 
-export function useFixtureFetcher() {
+export function useFixtureFetcher(fixtureSourceConfig = {}) {
+  const fixtureSources = useMemo(
+    () => getConfiguredFixtureSources(fixtureSourceConfig),
+    [fixtureSourceConfig]
+  );
+
   const fetchFixturesForDate = useCallback(async (targetDate, predicate = null) => {
     const statuses = [];
     const fixtures = [];
 
+    if (!fixtureSources.length) {
+      return { statuses, fixtures, skipped: true, reason: "fixture_source_not_configured" };
+    }
+
     await Promise.all(
-      FA_LEAGUES.map(async (league) => {
+      fixtureSources.map(async (source) => {
         try {
-          const found = (await fetchLeagueFixtures(league, targetDate)).filter((fixture) =>
+          const found = (await fetchLeagueFixtures(source, targetDate)).filter((fixture) =>
             typeof predicate === "function" ? predicate(fixture) : true
           );
 
           statuses.push({
-            id: league.id,
-            name: league.name,
+            id: source.id,
+            name: source.name,
             ok: true,
             count: found.length,
           });
@@ -46,8 +84,8 @@ export function useFixtureFetcher() {
           fixtures.push(...found);
         } catch (error) {
           statuses.push({
-            id: league.id,
-            name: league.name,
+            id: source.id,
+            name: source.name,
             ok: false,
             error: error.message,
             count: 0,
@@ -56,8 +94,8 @@ export function useFixtureFetcher() {
       })
     );
 
-    return { statuses, fixtures };
-  }, []);
+    return { statuses, fixtures, skipped: false };
+  }, [fixtureSources]);
 
   const fetchFixtureDayFixtures = useCallback(
     async (fixtureDayOrKey, suppliedDate = "") => {
@@ -115,5 +153,6 @@ export function useFixtureFetcher() {
     fetchSaturdayFixtures,
     fetchSundayFixtures,
     fetchMidweekFixtures,
+    fixtureSourceEnabled: fixtureSources.length > 0,
   };
 }
