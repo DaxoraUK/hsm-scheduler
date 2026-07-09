@@ -1,7 +1,7 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "daxora-ground-control",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,8 @@
     "test:coverage": "vitest run --coverage",
     "check": "npm run lint && npm run test && npm run build",
     "release:evidence": "node scripts/run-release-gates.mjs",
-    "smoke:staging": "node scripts/staging-smoke.mjs"
+    "smoke:staging": "node scripts/staging-smoke.mjs",
+    "preflight:staging": "node scripts/staging-preflight.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
