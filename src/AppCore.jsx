@@ -77,6 +77,7 @@ import {
   getRequiredEntitlementForPage,
 } from "./lib/subscriptions/entitlements.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
+import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 
 const WorkspaceAccessGate = lazy(() => import("./components/WorkspaceAccessGate.jsx"));
 const CustomerOnboardingWizard = lazy(() => import("./components/CustomerOnboardingWizard.jsx"));
@@ -100,7 +101,7 @@ function LazyPageFallback({ label = "workspace" }) {
     <div className="mx-auto flex min-h-[420px] w-full max-w-[1500px] items-center justify-center px-6 py-12">
       <div className="rounded-3xl border border-slate-200 bg-white px-8 py-7 text-center shadow-sm">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
-        <div className="mt-4 text-sm font-black text-slate-800">Loading {label}…</div>
+        <div className="mt-4 text-sm font-black text-slate-800">Loading {label}ÔÇª</div>
       </div>
     </div>
   );
@@ -1166,6 +1167,65 @@ const sunDateLabel=formatMatchdayDate(sunDate,"Sunday");
 const midweekDateLabel=formatMidweekDate(midweekDate,"Midweek");
 const midweekDateIsWeekend=isWeekendDate(midweekDate);
 
+const handleLoadHistory=useCallback((week)=>{
+  const restored=buildHistoryRestoreState(week);
+  const saturday=restored.saturday;
+  const sunday=restored.sunday;
+  const midweek=restored.midweek;
+
+  if(saturday.date&&sunday.date){
+    setMatchWeekend({saturday:saturday.date,sunday:sunday.date});
+  }else if(saturday.date){
+    setMatchWeekend(getWeekendFromSaturday(saturday.date));
+  }else if(sunday.date){
+    setMatchWeekend(getWeekendFromSunday(sunday.date));
+  }
+  if(midweek.date) setMidweekDateState(midweek.date);
+
+  setSatScheduled(saturday.fixtures);
+  setSatUnresolved([]);
+  setSatOverrides({});
+  setSatManual([]);
+  setSatFetchStatus([]);
+  setSatHasRun(saturday.hasRun);
+
+
+  setSunScheduled(sunday.fixtures);
+  setSunUnresolved([]);
+  setSunOverrides({});
+  setSunManual([]);
+  setSunHasRun(sunday.hasRun);
+
+
+  setMidweekScheduled(midweek.fixtures);
+  setMidweekUnresolved([]);
+  setMidweekOverrides({});
+  setMidweekManual([]);
+  setMidweekFetchStatus([]);
+  setMidweekHasRun(midweek.hasRun);
+
+
+  const populatedDays=[saturday,sunday,midweek].filter((day)=>day.hasRun||day.fixtures.length>0);
+  const targetDay=restored.firstPopulatedDay;
+  const targetScope=populatedDays.length>1
+    ? MATCHDAY_SCOPES.MATCHWEEK
+    : targetDay==="sunday"
+      ? MATCHDAY_SCOPES.SUNDAY
+      : targetDay==="midweek"
+        ? MATCHDAY_SCOPES.MIDWEEK
+        : MATCHDAY_SCOPES.SATURDAY;
+
+  setMatchdayScope(targetScope);
+  setDayTab(targetDay);
+  setMainPage("operations");
+  setSettingsTab("overview");
+  setNavigationTarget(null);
+  if(typeof window!=="undefined") window.scrollTo?.({top:0,behavior:"smooth"});
+  toast.success("Saved matchweek loaded",{
+    description:`${restored.label} restored across ${Math.max(populatedDays.length,1)} operating day${populatedDays.length===1?"":"s"}.`,
+  });
+  return true;
+},[setMatchdayScope]);
 const { saveWeek } = useWeekPersistence({
   mode,
   satDate,
@@ -1515,7 +1575,7 @@ return(
   WH={WH}
   midweekEnabled={midweekEnabled}
 />
-{/* ── SATURDAY ── */}
+{/* ÔöÇÔöÇ SATURDAY ÔöÇÔöÇ */}
 {dayTab === "saturday" && (
   <SaturdayPage
     navigationTarget={navigationTarget}
@@ -1585,7 +1645,7 @@ return(
   />
 )}
 
-        {/* ── SUNDAY ── */}
+        {/* ÔöÇÔöÇ SUNDAY ÔöÇÔöÇ */}
         {dayTab === "sunday" && (
           <SundayPage
             navigationTarget={navigationTarget}
@@ -1856,7 +1916,7 @@ return(
         />
       </Suspense>
     )}
-        {/* ── SETTINGS ── */}
+        {/* ÔöÇÔöÇ SETTINGS ÔöÇÔöÇ */}
         {mainPage === "settings" && (
           <Suspense fallback={<LazyPageFallback label="settings" />}>
           <SettingsPage
@@ -1916,9 +1976,7 @@ return(
             closedPitches={closedPitches}
             toggleClosed={toggleClosed}
             history={history}
-            setSatScheduled={setSatScheduled}
-            setSatHasRun={setSatHasRun}
-            setDayTab={setDayTab}
+            onLoadHistory={handleLoadHistory}
             startHour={startHour}
             setStartHour={setStartHour}
             startMin={startMin}

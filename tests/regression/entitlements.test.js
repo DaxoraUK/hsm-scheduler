@@ -72,7 +72,7 @@ describe("plan entitlement model", () => {
     expect(getUpgradePlanForEntitlement(ENTITLEMENTS.OPERATIONS_ADVANCED).code).toBe("pro");
   });
 
-  test("server-returned entitlement overrides remain authoritative", () => {
+  test("the selected package remains authoritative over a stale restricted server list", () => {
     const eliteWithRestrictedFeatures = normaliseSubscriptionPayload({
       club_id: "club-test",
       plan_code: "elite",
@@ -83,7 +83,7 @@ describe("plan entitlement model", () => {
     });
 
     expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.DASHBOARD)).toBe(true);
-    expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(false);
+    expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(true);
   });
 
   test("internal billing-exempt Elite workspaces always receive the complete Elite matrix", () => {

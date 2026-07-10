@@ -212,17 +212,58 @@ function parseEntitlementRows(payload, fallback = []) {
   return fallback;
 }
 
+function normaliseObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+function enabledOverrideKeys(value) {
+  return Object.entries(normaliseObject(value))
+    .filter(([, enabled]) => enabled === true || String(enabled).toLowerCase() === "true")
+    .map(([key]) => String(key || "").trim())
+    .filter(Boolean);
+}
+
 export function normaliseSubscriptionPayload(payload = {}) {
   const plan = getPlanDefinition(payload.plan_code || payload.planCode);
   const status = String(payload.status || SUBSCRIPTION_STATUSES.TRIALING).toLowerCase();
   const billingExempt = Boolean(payload.billing_exempt ?? payload.billingExempt);
-  const serverFeatureRows = parseEntitlementRows(payload, plan.features);
-  const featureRows = plan.code === PLAN_CODES.ELITE
-    && (status === SUBSCRIPTION_STATUSES.INTERNAL || billingExempt)
-    ? [...new Set([...plan.features, ...serverFeatureRows])]
-    : serverFeatureRows;
-  const features = new Set(featureRows.map((item) => String(item || "").trim()).filter(Boolean));
-  const limits = normaliseLimits({ ...plan.limits, ...(payload.limits || {}) });
+
+  // The selected package is authoritative. The server-provided effective list
+  // is additive so a stale plan row or a cached response cannot make an Elite
+  // workspace render as Core. Manual overrides may add capabilities, but may
+  // not silently remove capabilities already included in the package.
+  const serverFeatureRows = parseEntitlementRows(payload, []);
+  const serverPlanRows = parseEntitlementRows(
+    { entitlements: payload.plan_entitlements ?? payload.planEntitlements },
+    []
+  );
+  const overrideRows = enabledOverrideKeys(
+    payload.entitlement_overrides ?? payload.entitlementOverrides
+  );
+  const featureRows = [
+    ...plan.features,
+    ...serverPlanRows,
+    ...serverFeatureRows,
+    ...overrideRows,
+  ];
+  const features = new Set(
+    featureRows.map((item) => String(item || "").trim()).filter(Boolean)
+  );
+
+  const planLimits = normaliseObject(payload.plan_limits ?? payload.planLimits);
+  const limitOverrides = normaliseObject(payload.limit_overrides ?? payload.limitOverrides);
+  const hasStructuredLimitPayload = Object.keys(planLimits).length > 0
+    || Object.keys(limitOverrides).length > 0;
+  const backwardsCompatibleLimits = hasStructuredLimitPayload
+    ? {}
+    : normaliseObject(payload.limits);
+  const limits = normaliseLimits({
+    ...plan.limits,
+    ...planLimits,
+    ...backwardsCompatibleLimits,
+    ...limitOverrides,
+  });
   const accessState = String(payload.access_state || payload.accessState || "read_only").toLowerCase();
 
   return Object.freeze({
@@ -240,10 +281,11 @@ export function normaliseSubscriptionPayload(payload = {}) {
     graceEndsAt: safeDate(payload.grace_ends_at || payload.graceEndsAt),
     currentPeriodEnd: safeDate(payload.current_period_end || payload.currentPeriodEnd),
     cancelAtPeriodEnd: Boolean(payload.cancel_at_period_end ?? payload.cancelAtPeriodEnd),
-    billingExempt: Boolean(payload.billing_exempt ?? payload.billingExempt),
+    billingExempt,
     features,
     limits,
     plan,
+    packageVersion: String(payload.package_version || payload.packageVersion || "").trim(),
     message: String(payload.access_message || payload.accessMessage || "").trim(),
   });
 }

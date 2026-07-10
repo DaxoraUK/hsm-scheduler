@@ -9,6 +9,7 @@ const ENV_SUPA_URL = String(
 const ENV_SUPA_KEY = String(
   import.meta.env?.VITE_SUPABASE_ANON_KEY || "",
 ).trim();
+
 const SESSION_KEY = "gc_auth_session_v2";
 const LEGACY_SESSION_KEY = "hsm_auth_session";
 const DEVELOPMENT_KEY = "gc_development_supabase_anon_key";
@@ -417,11 +418,9 @@ export const DB = {
 
   async loadHistory(clubId) {
     const id = requireClubId(clubId);
-    const rows = await supaFetch(
-      "GET",
-      `history?select=id,data,saved_at&club_id=eq.${encodeFilter(id)}&order=saved_at.desc`
-    );
-    return (Array.isArray(rows) ? rows : []).map((row) => row.data).filter(Boolean);
+    return asArray(await supaFetch("POST", "rpc/load_matchweek_history", {
+      target_club_id: id,
+    }));
   },
 
   async loadRefs(clubId) {

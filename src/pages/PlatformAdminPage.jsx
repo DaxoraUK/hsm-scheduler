@@ -263,7 +263,6 @@ export default function PlatformAdminPage({
       const detail = await DB.platformGetClubDetail(clubId);
       setClubDetail(detail);
       const subscription = detail?.subscription || {};
-      const record = detail?.subscription_record || {};
       setSubscriptionForm({
         planCode: subscription.plan_code || PLAN_CODES.CORE,
         status: subscription.status || SUBSCRIPTION_STATUSES.ACTIVE,
@@ -274,8 +273,10 @@ export default function PlatformAdminPage({
         currentPeriodEnd: inputDate(subscription.current_period_end),
         cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
         reason: "",
-        entitlementOverrides: record.entitlement_overrides || {},
-        limitOverrides: record.limit_overrides || {},
+        // Package assignments are authoritative. Hidden legacy overrides are
+        // intentionally cleared when an administrator reapplies a package.
+        entitlementOverrides: {},
+        limitOverrides: {},
       });
       const existingClub = clubs.find((item) => item.id === clubId);
       setNewCase((current) => ({ ...current, clubId, requesterEmail: existingClub?.ownerEmail || current.requesterEmail }));
@@ -338,7 +339,7 @@ export default function PlatformAdminPage({
     }
     setBusyAction("subscription");
     try {
-      await DB.platformSetClubSubscription(selectedClubId, {
+      const updatedSubscription = await DB.platformSetClubSubscription(selectedClubId, {
         planCode: subscriptionForm.planCode,
         status: subscriptionForm.status,
         billingInterval: subscriptionForm.billingInterval,
@@ -347,11 +348,25 @@ export default function PlatformAdminPage({
         currentPeriodEnd: toIsoOrNull(subscriptionForm.currentPeriodEnd),
         cancelAtPeriodEnd: subscriptionForm.cancelAtPeriodEnd,
         billingExempt: subscriptionForm.billingExempt,
-        entitlementOverrides: subscriptionForm.entitlementOverrides,
-        limitOverrides: subscriptionForm.limitOverrides,
+        // The selected package is the source of truth. This clears invisible
+        // Core-era overrides that previously survived an upgrade to Pro/Elite.
+        entitlementOverrides: {},
+        limitOverrides: {},
         reason: subscriptionForm.reason,
       });
-      toast.success("Subscription updated", { description: "The club entitlements were recalculated and audited." });
+
+      const returnedPlan = String(updatedSubscription?.plan_code || "").toLowerCase();
+      if (returnedPlan && returnedPlan !== String(subscriptionForm.planCode).toLowerCase()) {
+        throw new Error(`Supabase returned ${returnedPlan} after assigning ${subscriptionForm.planCode}.`);
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ground-control-subscription-updated", {
+          detail: { clubId: selectedClubId, subscription: updatedSubscription },
+        }));
+      }
+
+      toast.success("Subscription updated", { description: "The package is now authoritative and the workspace access has been refreshed." });
       await refreshSelectedClub();
     } catch (error) {
       toast.error("Subscription could not be updated", { description: error?.message });

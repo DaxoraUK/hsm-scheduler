@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DB } from "../lib/supabase.js";
 import { normaliseSubscriptionPayload } from "../lib/subscriptions/entitlements.js";
 
@@ -19,6 +19,7 @@ function assertSubscriptionPayload(payload, clubId) {
 }
 
 export function useClubEntitlements(clubId, enabled = true) {
+  const requestVersionRef = useRef(0);
   const [state, setState] = useState({
     status: "idle",
     subscription: null,
@@ -26,6 +27,9 @@ export function useClubEntitlements(clubId, enabled = true) {
   });
 
   const refresh = useCallback(async ({ silent = false } = {}) => {
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+
     if (!enabled || !clubId) {
       setState({ status: "idle", subscription: null, error: "" });
       return null;
@@ -39,14 +43,18 @@ export function useClubEntitlements(clubId, enabled = true) {
       const payload = await DB.getClubSubscription(clubId);
       assertSubscriptionPayload(payload, clubId);
       const subscription = normaliseSubscriptionPayload(payload);
-      setState({ status: "ready", subscription, error: "" });
+      if (requestVersionRef.current === requestVersion) {
+        setState({ status: "ready", subscription, error: "" });
+      }
       return subscription;
     } catch (error) {
-      setState({
-        status: "error",
-        subscription: null,
-        error: error?.message || "Subscription access could not be verified",
-      });
+      if (requestVersionRef.current === requestVersion) {
+        setState({
+          status: "error",
+          subscription: null,
+          error: error?.message || "Subscription access could not be verified",
+        });
+      }
       return null;
     }
   }, [clubId, enabled]);
@@ -54,6 +62,22 @@ export function useClubEntitlements(clubId, enabled = true) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+
+  useEffect(() => {
+    if (!enabled || !clubId || typeof window === "undefined") return undefined;
+
+    const refreshAfterPackageChange = (event) => {
+      const changedClubId = String(event?.detail?.clubId || "").trim();
+      if (changedClubId && changedClubId !== String(clubId)) return;
+      refresh({ silent: true });
+    };
+
+    window.addEventListener("ground-control-subscription-updated", refreshAfterPackageChange);
+    return () => {
+      window.removeEventListener("ground-control-subscription-updated", refreshAfterPackageChange);
+    };
+  }, [clubId, enabled, refresh]);
 
   useEffect(() => {
     if (!enabled || !clubId || typeof window === "undefined") return undefined;

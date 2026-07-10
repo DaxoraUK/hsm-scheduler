@@ -54,7 +54,7 @@ const TAB_ENTITLEMENTS = {
 };
 
 export default function SettingsPage(props) {
-  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess, platformContext } = props;
+  const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess } = props;
   const requestedTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
   const developerToolsAllowed = !productionMode;
   const permittedTab = requestedTab === "testdata" && !developerToolsAllowed

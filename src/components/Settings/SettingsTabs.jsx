@@ -57,7 +57,7 @@ const TAB_GROUPS = [
   },
 ];
 
-export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess, subscription, platformContext }) {
+export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess, subscription }) {
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
     tabs: group.tabs.filter(([key]) => {
