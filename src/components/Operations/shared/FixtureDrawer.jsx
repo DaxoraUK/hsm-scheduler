@@ -27,6 +27,16 @@ import {
 import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.js";
 import StatusChip from "@/ui/StatusChip.jsx";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
+import { toast } from "sonner";
+
+const PARKING_ADVISORY_TYPES = new Set([
+  "parking_capacity",
+  "parking_concurrency",
+]);
+
+function isParkingAdvisory(impact) {
+  return PARKING_ADVISORY_TYPES.has(String(impact?.type || ""));
+}
 
 export default function FixtureDrawer({
   fixture,
@@ -119,8 +129,12 @@ export default function FixtureDrawer({
     });
 
     if (!impact.ok) {
+      const canOverride = isParkingAdvisory(impact);
+
       setBlockedMove({
         ...impact,
+        severity: canOverride ? "warning" : impact.severity,
+        canOverride,
         pendingPatch: patch,
       });
       return;
@@ -154,6 +168,22 @@ export default function FixtureDrawer({
       ...(blockedMove?.pendingPatch || {}),
       ...(patch || {}),
     });
+  };
+
+  const applyPendingOverride = () => {
+    const patch = blockedMove?.pendingPatch;
+    if (!patch || !blockedMove?.canOverride) return;
+
+    applyFixturePatch(patch);
+    setBlockedMove(null);
+    toast.warning("Fixture change applied with a parking warning", {
+      description:
+        "The schedule has been updated. Review the parking plan before publishing the matchday.",
+    });
+  };
+
+  const discardPendingChange = () => {
+    setBlockedMove(null);
   };
 
   const fixtureHealth = getFixtureHealth(displayFixture);
@@ -378,6 +408,8 @@ Good luck!`;
                     applySuggestedPitch={applySuggestedPitch}
                     applySuggestedTime={applySuggestedTime}
                     applyValidatedRecommendation={applyValidatedRecommendation}
+                    applyPendingOverride={applyPendingOverride}
+                    discardPendingChange={discardPendingChange}
                   />
                 )}
 
@@ -661,27 +693,48 @@ function BlockedMoveCard({
   applySuggestedPitch,
   applySuggestedTime,
   applyValidatedRecommendation,
+  applyPendingOverride,
+  discardPendingChange,
 }) {
+  const advisory = blockedMove.canOverride === true;
   const validatedRecommendations = blockedMove.validatedRecommendations || [];
   const hasValidatedRecommendations = validatedRecommendations.length > 0;
   const hasPitchSuggestions = blockedMove.pitchSuggestions?.length > 0;
   const hasTimeSuggestions = blockedMove.timeSuggestions?.length > 0;
 
   return (
-    <div className="mb-5 overflow-hidden rounded-3xl border border-red-200 bg-white shadow-sm">
-      <div className="border-b border-red-200 bg-red-50 px-5 py-4">
+    <div
+      className={`mb-5 overflow-hidden rounded-3xl border bg-white shadow-sm ${
+        advisory ? "border-amber-200" : "border-red-200"
+      }`}
+    >
+      <div
+        className={`border-b px-5 py-4 ${
+          advisory
+            ? "border-amber-200 bg-amber-50"
+            : "border-red-200 bg-red-50"
+        }`}
+      >
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100">
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+              advisory ? "bg-amber-100" : "bg-red-100"
+            }`}
+          >
             <AlertTriangle
-              className="text-red-700"
+              className={advisory ? "text-amber-700" : "text-red-700"}
               size={20}
               strokeWidth={2.5}
             />
           </div>
 
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.22em] text-red-700">
-              Operations Impact
+            <div
+              className={`text-xs font-black uppercase tracking-[0.22em] ${
+                advisory ? "text-amber-700" : "text-red-700"
+              }`}
+            >
+              {advisory ? "Operational warning" : "Operations impact"}
             </div>
 
             <div className="mt-1 text-lg font-black text-slate-900">
@@ -694,6 +747,18 @@ function BlockedMoveCard({
       <div className="space-y-5 p-5">
         <div className="text-sm font-medium leading-6 text-slate-600">
           {blockedMove.message}
+        </div>
+
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+            advisory
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-red-200 bg-red-50 text-red-900"
+          }`}
+        >
+          {advisory
+            ? "This change has not been applied yet. You can accept the parking risk and apply it manually."
+            : "This change has not been applied."}
         </div>
 
         {blockedMove.action && (
@@ -824,6 +889,26 @@ function BlockedMoveCard({
             different official.
           </div>
         )}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={discardPendingChange}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+          >
+            Cancel change
+          </button>
+
+          {advisory && (
+            <button
+              type="button"
+              onClick={applyPendingOverride}
+              className="rounded-2xl bg-amber-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400"
+            >
+              Apply anyway
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
