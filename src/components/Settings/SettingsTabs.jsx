@@ -66,7 +66,7 @@ export default function SettingsTabs({ settingsTab, setSettingsTab, productionMo
       if (["subscription", "billing"].includes(key) && !workspaceAccess?.canManageSubscription) return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
       if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;
-      if (["timing", "history", "testdata"].includes(key) && !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)) return false;
+      if (["timing", "history"].includes(key) && !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)) return false;
       if (key === "refs" && !hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT)) return false;
       return true;
     }),
