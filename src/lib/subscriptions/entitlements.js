@@ -214,10 +214,15 @@ function parseEntitlementRows(payload, fallback = []) {
 
 export function normaliseSubscriptionPayload(payload = {}) {
   const plan = getPlanDefinition(payload.plan_code || payload.planCode);
-  const featureRows = parseEntitlementRows(payload, plan.features);
+  const status = String(payload.status || SUBSCRIPTION_STATUSES.TRIALING).toLowerCase();
+  const billingExempt = Boolean(payload.billing_exempt ?? payload.billingExempt);
+  const serverFeatureRows = parseEntitlementRows(payload, plan.features);
+  const featureRows = plan.code === PLAN_CODES.ELITE
+    && (status === SUBSCRIPTION_STATUSES.INTERNAL || billingExempt)
+    ? [...new Set([...plan.features, ...serverFeatureRows])]
+    : serverFeatureRows;
   const features = new Set(featureRows.map((item) => String(item || "").trim()).filter(Boolean));
   const limits = normaliseLimits({ ...plan.limits, ...(payload.limits || {}) });
-  const status = String(payload.status || SUBSCRIPTION_STATUSES.TRIALING).toLowerCase();
   const accessState = String(payload.access_state || payload.accessState || "read_only").toLowerCase();
 
   return Object.freeze({
@@ -229,7 +234,7 @@ export function normaliseSubscriptionPayload(payload = {}) {
     accessState,
     canWrite: accessState === "full",
     isReadOnly: accessState !== "full",
-    isInternal: status === SUBSCRIPTION_STATUSES.INTERNAL || Boolean(payload.billing_exempt ?? payload.billingExempt),
+    isInternal: status === SUBSCRIPTION_STATUSES.INTERNAL || billingExempt,
     billingInterval: payload.billing_interval || payload.billingInterval || "monthly",
     trialEndsAt: safeDate(payload.trial_ends_at || payload.trialEndsAt),
     graceEndsAt: safeDate(payload.grace_ends_at || payload.graceEndsAt),

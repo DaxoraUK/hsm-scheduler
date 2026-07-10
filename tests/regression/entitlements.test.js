@@ -86,6 +86,25 @@ describe("plan entitlement model", () => {
     expect(hasEntitlement(eliteWithRestrictedFeatures, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(false);
   });
 
+  test("internal billing-exempt Elite workspaces always receive the complete Elite matrix", () => {
+    const internalElite = normaliseSubscriptionPayload({
+      club_id: "club-test",
+      plan_code: "elite",
+      status: "internal",
+      billing_exempt: true,
+      access_state: "full",
+      entitlements: PLAN_CATALOGUE.core.features,
+      limits: {},
+    });
+
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.MULTI_VENUE)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.PREMIUM_SUPPORT)).toBe(true);
+  });
+
   test("a suspended subscription removes mutation rights without removing owner administration", () => {
     const roleAccess = createWorkspaceAccess({ role: "owner" });
     const subscription = normaliseSubscriptionPayload({
