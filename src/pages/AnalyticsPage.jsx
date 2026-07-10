@@ -19,12 +19,18 @@ const VIEWS = [
   },
 ];
 
-export default function AnalyticsPage({ subscription, onOpenSubscription, ...props }) {
+export default function AnalyticsPage({
+  subscription,
+  advancedAnalyticsEnabled: authoritativeAdvancedAnalyticsEnabled,
+  onOpenSubscription,
+  ...props
+}) {
   const [view, setView] = useState("performance");
-  const advancedAnalyticsEnabled = hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED);
+  const advancedAnalyticsEnabled = authoritativeAdvancedAnalyticsEnabled
+    ?? hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED);
   const availableViews = useMemo(
-    () => VIEWS.filter((item) => !item.entitlement || hasEntitlement(subscription, item.entitlement)),
-    [subscription]
+    () => VIEWS.filter((item) => !item.entitlement || advancedAnalyticsEnabled),
+    [advancedAnalyticsEnabled]
   );
 
   useEffect(() => {

@@ -72,6 +72,25 @@ describe("plan entitlement model", () => {
     expect(getUpgradePlanForEntitlement(ENTITLEMENTS.OPERATIONS_ADVANCED).code).toBe("pro");
   });
 
+  test("page gates fall back to the authoritative package when effective features are stale", () => {
+    const serialisedElite = {
+      planCode: "elite",
+      plan: PLAN_CATALOGUE.elite,
+      features: [],
+    };
+    const serialisedPro = {
+      planCode: "pro",
+      plan: PLAN_CATALOGUE.pro,
+      features: [],
+    };
+
+    expect(hasEntitlement(serialisedElite, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(serialisedElite, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement(serialisedPro, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(true);
+    expect(hasEntitlement(serialisedPro, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement({ planCode: "core", features: [] }, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(false);
+  });
+
   test("the selected package remains authoritative over a stale restricted server list", () => {
     const eliteWithRestrictedFeatures = normaliseSubscriptionPayload({
       club_id: "club-test",

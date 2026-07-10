@@ -305,9 +305,16 @@ export function getSubscriptionStatusLabel(status) {
 export function hasEntitlement(subscription, key) {
   if (!key) return true;
   if (!subscription) return false;
-  if (subscription.features instanceof Set) return subscription.features.has(key);
-  if (Array.isArray(subscription.features)) return subscription.features.includes(key);
-  return false;
+
+  if (subscription.features instanceof Set && subscription.features.has(key)) return true;
+  if (Array.isArray(subscription.features) && subscription.features.includes(key)) return true;
+
+  // The selected package is authoritative. Some route chunks or cached client
+  // state can temporarily receive a serialised subscription where the Set of
+  // effective features is missing or stale. Falling back to the catalogue
+  // prevents a valid Pro or Elite workspace from rendering Core-only locks.
+  const planCode = subscription.planCode || subscription.plan_code || subscription.plan?.code;
+  return getPlanDefinition(planCode).features.includes(key);
 }
 
 export function canUseMatchdayWorkspace(subscription) {

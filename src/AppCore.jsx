@@ -74,7 +74,9 @@ import { createWorkspaceAccess } from "./lib/security/permissions.js";
 import {
   applySubscriptionAccess,
   canOpenPage,
+  ENTITLEMENTS,
   getRequiredEntitlementForPage,
+  hasEntitlement,
 } from "./lib/subscriptions/entitlements.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
@@ -101,7 +103,7 @@ function LazyPageFallback({ label = "workspace" }) {
     <div className="mx-auto flex min-h-[420px] w-full max-w-[1500px] items-center justify-center px-6 py-12">
       <div className="rounded-3xl border border-slate-200 bg-white px-8 py-7 text-center shadow-sm">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
-        <div className="mt-4 text-sm font-black text-slate-800">Loading {label}ÔÇª</div>
+        <div className="mt-4 text-sm font-black text-slate-800">Loading {label}…</div>
       </div>
     </div>
   );
@@ -479,6 +481,8 @@ function App(){
 
   const [club,setClub]=useState(DEFAULT_CLUB);
   const midweekEnabled=isMidweekEnabled(club);
+  const advancedAnalyticsEnabled=hasEntitlement(subscription,ENTITLEMENTS.ANALYTICS_ADVANCED);
+  const advancedIntegrationsEnabled=hasEntitlement(subscription,ENTITLEMENTS.ADVANCED_INTEGRATIONS);
 
   useEffect(()=>{
     if(midweekEnabled) return;
@@ -1226,6 +1230,7 @@ const handleLoadHistory=useCallback((week)=>{
   });
   return true;
 },[setMatchdayScope]);
+
 const { saveWeek } = useWeekPersistence({
   mode,
   satDate,
@@ -1575,7 +1580,7 @@ return(
   WH={WH}
   midweekEnabled={midweekEnabled}
 />
-{/* ÔöÇÔöÇ SATURDAY ÔöÇÔöÇ */}
+{/* ── SATURDAY ── */}
 {dayTab === "saturday" && (
   <SaturdayPage
     navigationTarget={navigationTarget}
@@ -1645,7 +1650,7 @@ return(
   />
 )}
 
-        {/* ÔöÇÔöÇ SUNDAY ÔöÇÔöÇ */}
+        {/* ── SUNDAY ── */}
         {dayTab === "sunday" && (
           <SundayPage
             navigationTarget={navigationTarget}
@@ -1848,7 +1853,11 @@ return(
 )}
     {mainPage === "communications" && pageEntitled && (
       <Suspense fallback={<LazyPageFallback label="communications" />}>
-        <CommunicationsPage />
+        <CommunicationsPage
+          subscription={subscription}
+          advancedIntegrationsEnabled={advancedIntegrationsEnabled}
+          onOpenSubscription={workspaceAccess.canManageSubscription?openSubscriptionSettings:undefined}
+        />
       </Suspense>
     )}
 
@@ -1871,6 +1880,9 @@ return(
           refWarnings={refWarnings}
           activeClubId={activeClubId}
           workspaceAccess={workspaceAccess}
+          subscription={subscription}
+          advancedAnalyticsEnabled={advancedAnalyticsEnabled}
+          onOpenSubscription={workspaceAccess.canManageSubscription?openSubscriptionSettings:undefined}
         />
       </Suspense>
     )}
@@ -1916,7 +1928,7 @@ return(
         />
       </Suspense>
     )}
-        {/* ÔöÇÔöÇ SETTINGS ÔöÇÔöÇ */}
+        {/* ── SETTINGS ── */}
         {mainPage === "settings" && (
           <Suspense fallback={<LazyPageFallback label="settings" />}>
           <SettingsPage

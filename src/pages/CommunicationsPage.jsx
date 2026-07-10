@@ -6,8 +6,13 @@ import IntegrationHubCard from "../components/Communications/IntegrationHubCard.
 import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
-export default function CommunicationsPage({ subscription, onOpenSubscription }) {
-  const advancedIntegrationsEnabled = hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS);
+export default function CommunicationsPage({
+  subscription,
+  advancedIntegrationsEnabled: authoritativeAdvancedIntegrationsEnabled,
+  onOpenSubscription,
+}) {
+  const advancedIntegrationsEnabled = authoritativeAdvancedIntegrationsEnabled
+    ?? hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS);
 
   return (
     <PageContainer>
