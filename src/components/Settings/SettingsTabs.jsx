@@ -61,8 +61,10 @@ export default function SettingsTabs({ settingsTab, setSettingsTab, productionMo
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
     tabs: group.tabs.filter(([key]) => {
+      if (key === "testdata") {
+        return Boolean(platformContext?.isPlatformStaff) && !productionMode;
+      }
       if (subscription?.isReadOnly && key !== "subscription") return false;
-      if (key === "testdata" && (productionMode || !platformContext?.isPlatformStaff)) return false;
       if (["subscription", "billing"].includes(key) && !workspaceAccess?.canManageSubscription) return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
       if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;

@@ -56,12 +56,15 @@ const TAB_ENTITLEMENTS = {
 export default function SettingsPage(props) {
   const { settingsTab, setSettingsTab, club = {}, productionMode, dbStatus, subscription, workspaceAccess, platformContext } = props;
   const requestedTab = LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
-  const permittedTab = requestedTab === "testdata" && !platformContext?.isPlatformStaff
+  const developerToolsAllowed = Boolean(platformContext?.isPlatformStaff) && !productionMode;
+  const permittedTab = requestedTab === "testdata" && !developerToolsAllowed
     ? "overview"
     : requestedTab;
   const requiredEntitlement = TAB_ENTITLEMENTS[permittedTab];
   const entitledTab = requiredEntitlement && !hasEntitlement(subscription, requiredEntitlement) ? "overview" : permittedTab;
-  const activeTab = subscription?.isReadOnly && workspaceAccess?.canManageSubscription ? "subscription" : entitledTab;
+  const activeTab = subscription?.isReadOnly && workspaceAccess?.canManageSubscription && entitledTab !== "testdata"
+    ? "subscription"
+    : entitledTab;
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
   const midweekEnabled = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING) && isMidweekEnabled(club);
   const parkingEnabled = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE) && isParkingEnabled(club);
