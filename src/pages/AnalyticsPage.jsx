@@ -40,7 +40,7 @@ export default function AnalyticsPage({
   return (
     <>
       <div className="mx-auto mb-6 w-full max-w-7xl space-y-4">
-        <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" role="tablist" aria-label="Analytics sections">
           {availableViews.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
@@ -49,7 +49,9 @@ export default function AnalyticsPage({
                 key={item.id}
                 type="button"
                 onClick={() => setView(item.id)}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
+                role="tab"
+                aria-selected={active}
+                className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-black transition ${
                   active
                     ? "bg-slate-950 text-white shadow-lg shadow-slate-950/10"
                     : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"

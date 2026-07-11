@@ -362,7 +362,7 @@ export default function ReportsPage({
           ) : null}
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Report types">
           {availableReportTypes.map((item) => {
             const Icon = REPORT_ICONS[item.id] || FileCheck2;
             const active = reportType === item.id;
@@ -371,6 +371,8 @@ export default function ReportsPage({
                 key={item.id}
                 type="button"
                 onClick={() => setReportType(item.id)}
+                role="tab"
+                aria-selected={active}
                 className={`rounded-2xl border p-4 text-left transition ${
                   active
                     ? "border-emerald-300 bg-emerald-50 shadow-sm ring-2 ring-emerald-100"

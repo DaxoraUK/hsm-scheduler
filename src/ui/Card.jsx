@@ -17,7 +17,7 @@ export default function Card({
       className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm ${className}`}
     >
       {hasHeader ? (
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-6">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-6">
           <div className="min-w-0">
             {eyebrow ? (
               <div className="text-xs font-black uppercase tracking-[0.28em] text-emerald-700">
@@ -38,11 +38,11 @@ export default function Card({
             ) : null}
           </div>
 
-          {action ? <div className="shrink-0">{action}</div> : null}
+          {action ? <div className="min-w-0 sm:shrink-0">{action}</div> : null}
         </div>
       ) : null}
 
-      <div className={`${padded ? "p-6" : ""} ${bodyClassName}`}>{children}</div>
+      <div className={`${padded ? "p-4 sm:p-6" : ""} ${bodyClassName}`}>{children}</div>
     </section>
   );
 }

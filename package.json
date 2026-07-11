@@ -14,7 +14,8 @@
     "check": "npm run lint && npm run test && npm run build",
     "release:evidence": "node scripts/run-release-gates.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
-    "preflight:staging": "node scripts/staging-preflight.mjs"
+    "preflight:staging": "node scripts/staging-preflight.mjs",
+    "acceptance:launch": "node scripts/launch-acceptance.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

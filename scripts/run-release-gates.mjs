@@ -98,6 +98,7 @@ function repositoryChecks() {
 const commands = [
   run("Lint", npmCommand, ["run", "lint"]),
   run("Regression tests", npmCommand, ["run", "test"]),
+  run("Launch acceptance matrix", process.execPath, ["scripts/launch-acceptance.mjs", "--check-only"]),
   run("Production build", npmCommand, ["run", "build"]),
 ];
 const repository = repositoryChecks();

@@ -95,7 +95,7 @@ describe("funding project workspace", () => {
     expect(appCore).toContain("workspaceAccess={workspaceAccess}");
     expect(dashboard).toContain("FundingWorkspacePanel");
     expect(dashboard).not.toContain("Four separate readiness checks");
-    expect(workspacePanel).toContain("Turn every missing item into a guided action");
+    expect(workspacePanel).toContain("Build a grant-ready project");
     expect(workspacePanel).toContain("Evidence library");
     expect(workspacePanel).toContain("Immutable application snapshots");
     expect(workspacePanel).toContain("Why this matters");
