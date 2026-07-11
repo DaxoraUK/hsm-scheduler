@@ -492,6 +492,29 @@ export const DB = {
     });
   },
 
+  async listCommunicationDeliveryBatches(clubId, limit = 25) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_communication_delivery_batches", {
+      target_club_id: id,
+      result_limit: Math.max(1, Math.min(Number(limit) || 25, 100)),
+    }));
+  },
+
+  async exportCommunicationDeliveryData(clubId) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/export_communication_delivery_data", {
+      target_club_id: id,
+    });
+    return result && typeof result === "object" ? result : { batches: [], deliveries: [] };
+  },
+
+  async purgeExpiredCommunicationDeliveryData(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/purge_expired_communication_delivery_data", {
+      target_club_id: id,
+    });
+  },
+
   async loadPitches(clubId) {
     return DB.load("pitches", clubId);
   },

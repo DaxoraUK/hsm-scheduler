@@ -65,7 +65,7 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   const contact = contactForTeam(teamCfg, teamContacts, teamName, index);
   const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
   const assistantDestination = contact.preferredChannel === "email" ? contact.assistantEmail : contact.assistantPhone;
-  const recipients = [
+  const recipientRecords = [
     primaryDestination ? { type: "coach", name: contact.coachName || "Coach", destination: primaryDestination, channel: contact.preferredChannel } : null,
     contact.assistantEnabled && assistantDestination ? { type: "assistant", name: contact.assistantName || "Assistant coach", destination: assistantDestination, channel: contact.preferredChannel } : null,
   ].filter(Boolean);
@@ -77,15 +77,29 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     issues.push(referee === "TBC" ? "Official not assigned" : "Official not confirmed");
   }
   if (!contact.receiveMatchdayMessages) issues.push("Matchday messages disabled");
-  if (!recipients.length) issues.push("Coach contact missing");
+  if (!recipientRecords.length) issues.push("Coach contact missing");
   if (contact.preferredChannel === "email" && contact.coachPhone && !contact.coachEmail) issues.push("Preferred email address missing");
   if (["whatsapp", "sms"].includes(contact.preferredChannel) && contact.coachEmail && !contact.coachPhone) issues.push("Preferred mobile number missing");
 
   const blocked = status === "unresolved" || (status === "scheduled" && (ko === "TBC" || pitch === "TBC"));
   const readyState = blocked ? "blocked" : issues.length ? "review" : "ready";
   const message = buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName: contact.coachName });
+  const recipients = recipientRecords.map((recipient) => ({
+    ...recipient,
+    message: buildMessage({
+      status,
+      teamName,
+      opposition,
+      dateLabel,
+      ko,
+      pitch,
+      format,
+      referee,
+      contactName: recipient.name,
+    }),
+  }));
   const id = stableId(fixture, day, index);
-  const messageHash = [id, status, dateLabel, ko, pitch, format, referee, message].join("|");
+  const messageHash = [id, status, dateLabel, ko, pitch, format, referee, ...recipients.map((recipient) => recipient.message)].join("|");
 
   return {
     id,

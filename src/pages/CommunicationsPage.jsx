@@ -6,8 +6,10 @@ import {
   Copy,
   ExternalLink,
   History,
+  Loader2,
   Mail,
   MessageSquareText,
+  RadioTower,
   Phone,
   Send,
   ShieldAlert,
@@ -25,6 +27,12 @@ import { buildCommunicationsModel } from "../lib/communications/communicationsEn
 import { maskContactDestination } from "../lib/communications/contactModel.js";
 import { communicationPrivacyGaps, normaliseCommunicationPrivacy } from "../lib/communications/privacyModel.js";
 import { DB } from "../lib/supabase.js";
+import {
+  buildDeliveryMessages,
+  dispatchCommunicationBatch,
+  EMPTY_DELIVERY_CAPABILITIES,
+  loadDeliveryCapabilities,
+} from "../lib/communications/deliveryService.js";
 
 const FILTERS = [
   ["all", "All"],
@@ -73,10 +81,15 @@ function eventLabel(action) {
     reviewed: "Reviewed",
     copied: "Copied",
     channel_opened: "External channel opened",
+    queued: "Queued for provider",
     send_attempted: "Provider attempt",
+    provider_accepted: "Accepted by provider",
     sent: "Provider confirmed sent",
     delivered: "Provider confirmed delivered",
+    read: "Provider confirmed read",
+    undelivered: "Undelivered",
     failed: "Failed",
+    cancelled: "Cancelled",
   }[action] || action;
 }
 
@@ -91,10 +104,14 @@ function communicationLink(recipient, message, teamName) {
   return digits ? `https://wa.me/${digits}?text=${body}` : "";
 }
 
-function QueueModal({ rows, selected, setSelected, privacy, onClose, onCopySelected, onOpenChannel }) {
+function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, onClose, onCopySelected, onOpenChannel, onSendWeb }) {
   const gaps = communicationPrivacyGaps(privacy);
   const selectedRows = rows.filter((row) => selected[row.id]);
+  const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
+  const noticeMissingRows = selectedRows.filter((row) => !row.contact?.privacyNoticeProvidedAt);
+  const webPlan = buildDeliveryMessages(webEligibleRows, capabilities);
   const canCopy = !gaps.length && selectedRows.length;
+  const canSendWeb = !gaps.length && webPlan.messages.length > 0 && !sending;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Coach message queue">
       <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] bg-white shadow-2xl">
@@ -109,9 +126,33 @@ function QueueModal({ rows, selected, setSelected, privacy, onClose, onCopySelec
 
         {gaps.length ? (
           <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-950 sm:px-6">
-            <strong>Privacy setup required:</strong> complete {gaps.join(" · ")} in Settings → Privacy & contacts before copying the bulk queue.
+            <strong>Privacy setup required:</strong> complete {gaps.join(" · ")} in Settings → Privacy & contacts before copying or sending the bulk queue.
           </div>
         ) : null}
+
+        <div className={`border-b px-5 py-4 sm:px-6 ${capabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <RadioTower size={18} className={`mt-0.5 shrink-0 ${capabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />
+              <div>
+                <div className={`text-sm font-black ${capabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
+                  {capabilities.webSendingEnabled ? "Secure web sending is available" : "Web sending is prepared but not switched on"}
+                </div>
+                <div className={`mt-1 text-xs font-semibold ${capabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
+                  {capabilities.webSendingEnabled
+                    ? `${webPlan.messages.length} selected recipient${webPlan.messages.length === 1 ? "" : "s"} can be sent through configured providers.${webPlan.unavailable.length ? ` ${webPlan.unavailable.length} will remain external-channel only.` : ""}${noticeMissingRows.length ? ` ${noticeMissingRows.length} team${noticeMissingRows.length === 1 ? " is" : "s are"} excluded until the privacy notice is recorded.` : ""}`
+                    : "Add server-side provider credentials and channel flags in Vercel before live delivery can occur."}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {["email", "sms", "whatsapp"].map((channel) => {
+                const item = capabilities.channels?.[channel];
+                return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {item?.enabled ? "Ready" : "Not configured"}</StatusChip>;
+              })}
+            </div>
+          </div>
+        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
           <div className="space-y-3">
@@ -143,10 +184,14 @@ function QueueModal({ rows, selected, setSelected, privacy, onClose, onCopySelec
         </div>
 
         <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div className="text-sm font-bold text-slate-600">{selectedRows.length} message{selectedRows.length === 1 ? "" : "s"} selected</div>
+          <div className="text-sm font-bold text-slate-600">{selectedRows.length} message{selectedRows.length === 1 ? "" : "s"} selected · {webPlan.messages.length} web recipient{webPlan.messages.length === 1 ? "" : "s"}{noticeMissingRows.length ? ` · ${noticeMissingRows.length} privacy notice missing` : ""}</div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={onClose} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-100">Close</button>
-            <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
+            <button type="button" onClick={onClose} disabled={sending} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-100 disabled:opacity-40">Close</button>
+            <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
+            <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+              {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+              {sending ? "Sending securely…" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending not configured"}
+            </button>
           </div>
         </div>
       </section>
@@ -163,6 +208,9 @@ export default function CommunicationsPage(props) {
   const [selected, setSelected] = useState({});
   const [events, setEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [deliveryCapabilities, setDeliveryCapabilities] = useState(EMPTY_DELIVERY_CAPABILITIES);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
 
   const rows = model.rows.filter((row) => {
@@ -190,6 +238,19 @@ export default function CommunicationsPage(props) {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
+
+  useEffect(() => {
+    let active = true;
+    setCapabilitiesLoading(true);
+    loadDeliveryCapabilities()
+      .then((value) => {
+        if (active) setDeliveryCapabilities(value);
+      })
+      .finally(() => {
+        if (active) setCapabilitiesLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const record = async (row, action, recipient = null, detail = {}, refresh = true) => {
     if (!auditAvailable) return null;
@@ -244,7 +305,8 @@ export default function CommunicationsPage(props) {
   const copySelected = async (selectedRows) => {
     if (!selectedRows.length) return;
     try {
-      await navigator.clipboard.writeText(selectedRows.map((row) => `${row.teamName}\nRecipients: ${row.recipients.map((recipient) => `${recipient.name} (${recipient.channel})`).join(", ")}\n\n${row.message}`).join("\n\n--------------------\n\n"));
+      const preparedCopies = selectedRows.flatMap((row) => row.recipients.map((recipient) => `${row.teamName}\nRecipient: ${recipient.name} (${recipient.channel})\n\n${recipient.message || row.message}`));
+      await navigator.clipboard.writeText(preparedCopies.join("\n\n--------------------\n\n"));
       await Promise.all(selectedRows.map((row) => record(row, "copied", null, { bulk: true }, false)));
       await loadEvents();
       toast.success(`${selectedRows.length} messages copied`, { description: "Use the queue to open each chosen external channel. Delivery is not tracked." });
@@ -255,7 +317,7 @@ export default function CommunicationsPage(props) {
   };
 
   const openChannel = async (row, recipient) => {
-    const link = communicationLink(recipient, row.message, row.teamName);
+    const link = communicationLink(recipient, recipient.message || row.message, row.teamName);
     if (!link) {
       toast.error("Contact destination is incomplete");
       return;
@@ -264,12 +326,51 @@ export default function CommunicationsPage(props) {
     await record(row, "channel_opened", recipient);
   };
 
+  const sendSelectedViaWeb = async (selectedRows) => {
+    const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
+    const plan = buildDeliveryMessages(webEligibleRows, deliveryCapabilities);
+    if (!plan.messages.length) {
+      toast.error("No configured web recipients", { description: "Enable an email, SMS or WhatsApp provider in Vercel first." });
+      return;
+    }
+    const warning = plan.unavailable.length
+      ? ` ${plan.unavailable.length} recipient${plan.unavailable.length === 1 ? "" : "s"} use a channel that is not configured and will not be sent.`
+      : "";
+    const confirmed = window.confirm(`Send ${plan.messages.length} real coach message${plan.messages.length === 1 ? "" : "s"} through the configured provider?${warning}`);
+    if (!confirmed) return;
+
+    setSending(true);
+    try {
+      const requestKey = globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const result = await dispatchCommunicationBatch({
+        clubId: props.activeClubId,
+        rows: webEligibleRows,
+        capabilities: deliveryCapabilities,
+        requestKey,
+      });
+      await loadEvents();
+      if (result.failed) {
+        toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: "Open the audit trail before retrying failed recipients." });
+      } else {
+        toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: "Delivery status will update only when the provider confirms it." });
+      }
+      if (result.unavailable?.length) {
+        toast.info(`${result.unavailable.length} recipient${result.unavailable.length === 1 ? "" : "s"} not sent`, { description: "Their preferred channel is not configured for web sending." });
+      }
+      setQueueOpen(false);
+    } catch (error) {
+      toast.error("Coach messages were not sent", { description: error?.message || "The provider request failed." });
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <PageContainer>
       <PageHeader
         eyebrow="Matchweek communications"
         title="Communications"
-        subtitle="Prepare coach messages in one queue, keep incomplete fixtures out and record review or copy activity without claiming external delivery."
+        subtitle="Prepare one coach-message queue, send through configured web providers or use the audited copy-out fallback, and track only provider-confirmed delivery states."
         action={model.counts.total ? (
           <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
             <Send size={17} /> Send coach messages
@@ -284,6 +385,25 @@ export default function CommunicationsPage(props) {
       ) : (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-950"><ShieldCheck size={19} className="mt-0.5 shrink-0" /><span>Coach contact access is restricted and communication events are retained for {privacy.retentionDays} days under the club's recorded privacy setup.</span></div>
       )}
+
+      <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${deliveryCapabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+        <div className="flex items-start gap-3">
+          {capabilitiesLoading ? <Loader2 size={19} className="mt-0.5 shrink-0 animate-spin text-slate-500" /> : <RadioTower size={19} className={`mt-0.5 shrink-0 ${deliveryCapabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />}
+          <div>
+            <div className={`text-sm font-black ${deliveryCapabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
+              {capabilitiesLoading ? "Checking web-delivery providers…" : deliveryCapabilities.webSendingEnabled ? "Web delivery ready" : "Web delivery foundation installed"}
+            </div>
+            <div className={`mt-1 text-xs font-semibold leading-5 ${deliveryCapabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
+              {deliveryCapabilities.webSendingEnabled
+                ? "Only enabled server-side channels can send. Provider acceptance, delivery and failure callbacks are recorded separately."
+                : "No provider is enabled, so Ground Control cannot send anything automatically. Existing copy, WhatsApp, SMS and email hand-off actions remain available."}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {["email", "sms", "whatsapp"].map((channel) => <StatusChip key={channel} status={deliveryCapabilities.channels?.[channel]?.enabled ? "success" : "neutral"} size="sm">{channel} · {deliveryCapabilities.channels?.[channel]?.enabled ? "Ready" : "Off"}</StatusChip>)}
+        </div>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={MessageSquareText} label="Prepared" value={model.counts.total} detail={`${model.counts.recipients} adult recipient records`} />
@@ -369,7 +489,7 @@ export default function CommunicationsPage(props) {
         )}
       </Card>
 
-      <Card eyebrow="Shared audit trail" title="Recent communication activity" subtitle="Records preparation actions inside Ground Control. Sent or delivered statuses require future provider confirmation and cannot be created by this copy-out workflow.">
+      <Card eyebrow="Shared audit trail" title="Recent communication activity" subtitle="Records queue, copy-out and provider activity. Sent, delivered or read states appear only after a configured provider returns that status.">
         {historyLoading ? (
           <div className="py-8 text-center text-sm font-bold text-slate-500">Loading communication history…</div>
         ) : !events.length ? (
@@ -379,7 +499,7 @@ export default function CommunicationsPage(props) {
             {events.slice(0, 20).map((event) => (
               <div key={event.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered"].includes(event.action) ? "success" : event.action === "failed" ? "danger" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered", "read"].includes(event.action) ? "success" : ["failed", "undelivered"].includes(event.action) ? "danger" : event.action === "provider_accepted" ? "info" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
                   <div className="mt-1 text-xs font-semibold text-slate-500">{event.recipient_label || "No recipient stored"}{event.recipient_hint ? ` · ${event.recipient_hint}` : ""} · {event.actor_label || "Club operator"}</div>
                 </div>
                 <div className="text-xs font-bold text-slate-400">{new Date(event.occurred_at).toLocaleString("en-GB")}</div>
@@ -390,7 +510,7 @@ export default function CommunicationsPage(props) {
       </Card>
 
       {queueOpen ? (
-        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} onClose={() => setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} />
+        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} />
       ) : null}
     </PageContainer>
   );

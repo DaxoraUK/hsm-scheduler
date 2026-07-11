@@ -88,10 +88,11 @@ export default function CommunicationsPrivacyPanel({
     if (!canManage || !activeClubId) return;
     setExporting(true);
     try {
-      const [privacy, remoteContacts, events] = await Promise.all([
+      const [privacy, remoteContacts, events, deliveryData] = await Promise.all([
         DB.getCommunicationPrivacy(activeClubId),
         DB.loadTeamContacts(activeClubId),
         DB.listCommunicationEvents(activeClubId, 200),
+        DB.exportCommunicationDeliveryData(activeClubId).catch(() => ({ batches: [], deliveries: [] })),
       ]);
       downloadJson(`ground-control-communications-data-${new Date().toISOString().slice(0, 10)}.json`, {
         exportedAt: new Date().toISOString(),
@@ -100,6 +101,8 @@ export default function CommunicationsPrivacyPanel({
         privacy: normaliseCommunicationPrivacy(privacy),
         contacts: remoteContacts,
         communicationEvents: events,
+        deliveryBatches: deliveryData.batches || [],
+        deliveries: deliveryData.deliveries || [],
       });
       toast.success("Communications data exported");
     } catch (error) {
@@ -113,8 +116,11 @@ export default function CommunicationsPrivacyPanel({
     if (!canManage || !activeClubId) return;
     setPurging(true);
     try {
-      const count = await DB.purgeExpiredCommunicationEvents(activeClubId);
-      toast.success("Retention applied", { description: `${Number(count) || 0} expired event records removed.` });
+      const [eventCount, deliveryCount] = await Promise.all([
+        DB.purgeExpiredCommunicationEvents(activeClubId),
+        DB.purgeExpiredCommunicationDeliveryData(activeClubId).catch(() => 0),
+      ]);
+      toast.success("Retention applied", { description: `${Number(eventCount) || 0} expired event records and ${Number(deliveryCount) || 0} delivery records removed.` });
     } catch (error) {
       toast.error("Retention cleanup failed", { description: error?.message });
     } finally {
@@ -138,7 +144,7 @@ export default function CommunicationsPrivacyPanel({
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Contact records" value={contacts.filter((item) => item.coachPhone || item.coachEmail || item.assistantPhone || item.assistantEmail).length} detail="Adult team contacts" tone="green" />
         <StatTile label="Privacy notices" value={contacts.filter((item) => item.privacyNoticeProvidedAt).length} detail="Recorded as provided" tone="blue" />
-        <StatTile label="Retention" value={`${draft.retentionDays} days`} detail="Communications event history" tone="violet" />
+        <StatTile label="Retention" value={`${draft.retentionDays} days`} detail="Audit and provider delivery history" tone="violet" />
         <StatTile label="Setup gaps" value={gaps.length} detail={gaps.length ? gaps.slice(0, 2).join(" · ") : "Required fields complete"} tone={gaps.length ? "rose" : "slate"} />
       </div>
 
