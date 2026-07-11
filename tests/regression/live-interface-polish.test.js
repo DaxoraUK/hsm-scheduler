@@ -44,6 +44,11 @@ describe("live interface polish", () => {
     expect(statusStrip).not.toContain("Matchday status");
     expect(dashboard).toContain("More matchweek actions");
     expect(dashboard).toContain("Awaiting schedule");
+    expect(statusStrip).toContain("relative z-20 overflow-visible");
+    expect(statusStrip).toContain("overflow-hidden rounded-b-[26px]");
+    expect(statusStrip).not.toContain(
+      '<section className="overflow-hidden rounded-[26px]',
+    );
   });
 
   test("keeps matchday workspaces compact and collapsed by default", () => {

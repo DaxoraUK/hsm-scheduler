@@ -50,7 +50,7 @@ export default function DashboardStatusStrip({
   );
 
   return (
-    <section className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+    <section className="relative z-20 overflow-visible rounded-[26px] border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">
@@ -100,7 +100,7 @@ export default function DashboardStatusStrip({
         </div>
       </div>
 
-      <div className="grid divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+      <div className="grid overflow-hidden rounded-b-[26px] divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
         {items.map((item) => {
           const tone = toneMap[item.status] || toneMap.muted;
           const Icon = tone.icon;
