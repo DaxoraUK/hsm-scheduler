@@ -1,4 +1,5 @@
 import { cleanName } from "../scheduler.js";
+import { contactForTeam } from "./contactModel.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -34,23 +35,6 @@ function stableId(fixture = {}, day = "matchday", index = 0) {
   ].join(":");
 }
 
-function getTeamContact(teamCfg = [], teamName = "", clubName = "") {
-  const cleaned = cleanName(teamName, clubName);
-  const key = normalise(cleaned || teamName);
-  const team = asArray(teamCfg).find((item) => {
-    const itemKey = normalise(cleanName(item.name || item.teamName || "", clubName));
-    return itemKey === key || itemKey.includes(key) || key.includes(itemKey);
-  });
-
-  return {
-    team,
-    name: String(team?.managerName || team?.coachName || "").trim(),
-    phone: String(team?.managerPhone || team?.coachPhone || "").trim(),
-    email: String(team?.managerEmail || team?.coachEmail || "").trim(),
-    channel: String(team?.communicationChannel || "whatsapp").trim().toLowerCase(),
-  };
-}
-
 function buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName }) {
   const greeting = contactName ? `Hi ${contactName},` : "Hi,";
 
@@ -69,7 +53,7 @@ function buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, form
   return `${greeting}\n\n${teamName} are at home on ${dateLabel}.\n\nOpposition: ${opposition}\nKick-off: ${ko}\nPitch: ${pitch}\nFormat: ${format}\nReferee: ${referee}\n\nPlease confirm receipt and let the club know promptly if there are any issues.`;
 }
 
-function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, teamCfg }) {
+function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, teamCfg, teamContacts }) {
   const status = fixtureStatus(fixture, forcedStatus);
   const teamName = cleanName(fixture.homeTeam || fixture.team || fixture.home || "Home team", club?.name) || "Home team";
   const opposition = String(fixture.awayTeam || fixture.opponent || fixture.away || "Opposition TBC").trim();
@@ -78,7 +62,13 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   const format = String(fixture.cfg?.format || fixture.manualFormat || fixture.format || "TBC").trim() || "TBC";
   const referee = String(fixture.referee || fixture.official || fixture.ref || "TBC").trim() || "TBC";
   const refereeStatus = normalise(fixture.refStatus || fixture.officialStatus || fixture.assignmentStatus);
-  const contact = getTeamContact(teamCfg, teamName, club?.name);
+  const contact = contactForTeam(teamCfg, teamContacts, teamName, index);
+  const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
+  const assistantDestination = contact.preferredChannel === "email" ? contact.assistantEmail : contact.assistantPhone;
+  const recipients = [
+    primaryDestination ? { type: "coach", name: contact.coachName || "Coach", destination: primaryDestination, channel: contact.preferredChannel } : null,
+    contact.assistantEnabled && assistantDestination ? { type: "assistant", name: contact.assistantName || "Assistant coach", destination: assistantDestination, channel: contact.preferredChannel } : null,
+  ].filter(Boolean);
   const issues = [];
 
   if (status === "scheduled" && ko === "TBC") issues.push("Kick-off time missing");
@@ -86,11 +76,14 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   if (status === "scheduled" && (referee === "TBC" || !["confirmed", "accepted", "assigned"].includes(refereeStatus))) {
     issues.push(referee === "TBC" ? "Official not assigned" : "Official not confirmed");
   }
-  if (!contact.phone && !contact.email) issues.push("Manager contact missing");
+  if (!contact.receiveMatchdayMessages) issues.push("Matchday messages disabled");
+  if (!recipients.length) issues.push("Coach contact missing");
+  if (contact.preferredChannel === "email" && contact.coachPhone && !contact.coachEmail) issues.push("Preferred email address missing");
+  if (["whatsapp", "sms"].includes(contact.preferredChannel) && contact.coachEmail && !contact.coachPhone) issues.push("Preferred mobile number missing");
 
   const blocked = status === "unresolved" || (status === "scheduled" && (ko === "TBC" || pitch === "TBC"));
   const readyState = blocked ? "blocked" : issues.length ? "review" : "ready";
-  const message = buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName: contact.name });
+  const message = buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName: contact.coachName });
   const id = stableId(fixture, day, index);
   const messageHash = [id, status, dateLabel, ko, pitch, format, referee, message].join("|");
 
@@ -110,15 +103,16 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     referee,
     refereeStatus,
     contact,
+    recipients,
     message,
     raw: fixture,
   };
 }
 
-function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg }) {
+function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg, teamContacts }) {
   if (!hasRun && !asArray(final).length && !asArray(unresolved).length) return [];
-  const scheduledRows = asArray(final).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg }));
-  const unresolvedRows = asArray(unresolved).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg }));
+  const scheduledRows = asArray(final).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg, teamContacts }));
+  const unresolvedRows = asArray(unresolved).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg, teamContacts }));
   const byId = new Map();
   [...scheduledRows, ...unresolvedRows].forEach((row) => {
     const current = byId.get(row.id);
@@ -131,6 +125,7 @@ function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg }) {
 export function buildCommunicationsModel({
   club = {},
   teamCfg = [],
+  teamContacts = [],
   satFinal = [],
   sunFinal = [],
   midweekFinal = [],
@@ -146,18 +141,19 @@ export function buildCommunicationsModel({
   midweekEnabled = true,
 } = {}) {
   const rows = [
-    ...(midweekEnabled ? dayRows({ day: "midweek", dateLabel: midweekDateLabel, hasRun: midweekHasRun, final: midweekFinal, unresolved: midweekUnresolved, club, teamCfg }) : []),
-    ...dayRows({ day: "saturday", dateLabel: satDateLabel, hasRun: satHasRun, final: satFinal, unresolved: satUnresolved, club, teamCfg }),
-    ...dayRows({ day: "sunday", dateLabel: sunDateLabel, hasRun: sunHasRun, final: sunFinal, unresolved: sunUnresolved, club, teamCfg }),
+    ...(midweekEnabled ? dayRows({ day: "midweek", dateLabel: midweekDateLabel, hasRun: midweekHasRun, final: midweekFinal, unresolved: midweekUnresolved, club, teamCfg, teamContacts }) : []),
+    ...dayRows({ day: "saturday", dateLabel: satDateLabel, hasRun: satHasRun, final: satFinal, unresolved: satUnresolved, club, teamCfg, teamContacts }),
+    ...dayRows({ day: "sunday", dateLabel: sunDateLabel, hasRun: sunHasRun, final: sunFinal, unresolved: sunUnresolved, club, teamCfg, teamContacts }),
   ];
 
   const counts = rows.reduce((result, row) => {
     result.total += 1;
     result[row.readyState] += 1;
-    if (!row.contact.phone && !row.contact.email) result.missingContacts += 1;
+    if (!row.recipients.length) result.missingContacts += 1;
+    result.recipients += row.recipients.length;
     if (row.status === "postponed" || row.status === "cancelled") result.exceptionUpdates += 1;
     return result;
-  }, { total: 0, ready: 0, review: 0, blocked: 0, missingContacts: 0, exceptionUpdates: 0 });
+  }, { total: 0, ready: 0, review: 0, blocked: 0, missingContacts: 0, exceptionUpdates: 0, recipients: 0 });
 
   return {
     rows,

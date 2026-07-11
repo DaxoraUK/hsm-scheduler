@@ -22,6 +22,7 @@ import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
 import { buildReportsModel, reportFilename, REPORT_SCOPES, REPORT_TYPES } from "../lib/reports/reportingEngine.js";
 import { buildReportCsv, downloadCsv } from "../lib/reports/csvExport.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { buildFundingEvidencePack, downloadFundingEvidencePack } from "../lib/grants/fundingEvidencePack.js";
 
 const ADVANCED_REPORT_IDS = new Set(["analytics", "funding"]);
 
@@ -190,6 +191,13 @@ export default function ReportsPage({
     toast.success("CSV report downloaded", { description: filename });
   };
 
+  const exportFundingEvidence = () => {
+    if (!advancedReportsEnabled || reportType !== "funding") return;
+    const pack = buildFundingEvidencePack({ club, model, source: "reports" });
+    downloadFundingEvidencePack(pack);
+    toast.success("Funding evidence draft downloaded", { description: "Review every claim and re-check official programme guidance before submission." });
+  };
+
   const printReport = () => {
     if (typeof window === "undefined") return;
     const cleanup = () => {
@@ -244,6 +252,16 @@ export default function ReportsPage({
         subtitle="Build club-scoped operational packs from current or historical records, with advanced analytics and a funding evidence draft available on Pro."
         action={
           <div className="flex flex-wrap gap-2">
+            {reportType === "funding" && advancedReportsEnabled ? (
+              <button
+                type="button"
+                onClick={exportFundingEvidence}
+                disabled={!model.hasData}
+                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileCheck2 size={17} /> Evidence draft
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={exportCsv}

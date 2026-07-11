@@ -1,14 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
   Copy,
+  ExternalLink,
+  History,
   Mail,
   MessageSquareText,
   Phone,
+  Send,
   ShieldAlert,
+  ShieldCheck,
   UsersRound,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import PageContainer from "../ui/PageContainer.jsx";
@@ -17,7 +22,9 @@ import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import Card from "../ui/Card.jsx";
 import { buildCommunicationsModel } from "../lib/communications/communicationsEngine.js";
-import { tenantGetJson, tenantSetJson } from "../lib/storage/tenantStorage.js";
+import { maskContactDestination } from "../lib/communications/contactModel.js";
+import { communicationPrivacyGaps, normaliseCommunicationPrivacy } from "../lib/communications/privacyModel.js";
+import { DB } from "../lib/supabase.js";
 
 const FILTERS = [
   ["all", "All"],
@@ -48,7 +55,7 @@ function SummaryCard({ icon: Icon, label, value, detail, tone = "slate" }) {
 }
 
 function readiness(row) {
-  if (row.readyState === "ready") return { tone: "success", label: "Ready to copy" };
+  if (row.readyState === "ready") return { tone: "success", label: "Ready" };
   if (row.readyState === "review") return { tone: "warning", label: "Review first" };
   return { tone: "danger", label: "Blocked" };
 }
@@ -60,21 +67,160 @@ function statusLabel(status) {
   return "Match details";
 }
 
+function eventLabel(action) {
+  return {
+    queue_opened: "Queue opened",
+    reviewed: "Reviewed",
+    copied: "Copied",
+    channel_opened: "External channel opened",
+    send_attempted: "Provider attempt",
+    sent: "Provider confirmed sent",
+    delivered: "Provider confirmed delivered",
+    failed: "Failed",
+  }[action] || action;
+}
+
+function communicationLink(recipient, message, teamName) {
+  if (!recipient?.destination) return "";
+  const body = encodeURIComponent(message);
+  if (recipient.channel === "email") {
+    return `mailto:${recipient.destination}?subject=${encodeURIComponent(`${teamName} matchday details`)}&body=${body}`;
+  }
+  if (recipient.channel === "sms") return `sms:${recipient.destination}?body=${body}`;
+  const digits = String(recipient.destination).replace(/\D/g, "").replace(/^0/, "44");
+  return digits ? `https://wa.me/${digits}?text=${body}` : "";
+}
+
+function QueueModal({ rows, selected, setSelected, privacy, onClose, onCopySelected, onOpenChannel }) {
+  const gaps = communicationPrivacyGaps(privacy);
+  const selectedRows = rows.filter((row) => selected[row.id]);
+  const canCopy = !gaps.length && selectedRows.length;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Coach message queue">
+      <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Coach message queue</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">Review messages before using an external channel</h2>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">Ground Control prepares and audits the queue. Copying or opening WhatsApp, SMS or email does not prove the message was sent or delivered.</p>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Close queue"><X size={18} /></button>
+        </div>
+
+        {gaps.length ? (
+          <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-950 sm:px-6">
+            <strong>Privacy setup required:</strong> complete {gaps.join(" · ")} in Settings → Privacy & contacts before copying the bulk queue.
+          </div>
+        ) : null}
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const checked = Boolean(selected[row.id]);
+              return (
+                <article key={row.id} className={`rounded-2xl border p-4 ${checked ? "border-emerald-300 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
+                  <div className="flex flex-wrap items-start gap-4">
+                    <input type="checkbox" checked={checked} onChange={(event) => setSelected((current) => ({ ...current, [row.id]: event.target.checked }))} className="mt-1 h-4 w-4 rounded border-slate-300 accent-emerald-600" aria-label={`Select ${row.teamName}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-black text-slate-950">{row.teamName}</h3>
+                        <StatusChip status="success" size="sm">{row.recipients.length} recipient{row.recipients.length === 1 ? "" : "s"}</StatusChip>
+                      </div>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{row.dateLabel} · {row.ko} · {row.pitch}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {row.recipients.map((recipient) => (
+                          <button key={`${row.id}-${recipient.type}`} type="button" onClick={() => onOpenChannel(row, recipient)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-emerald-300 hover:text-emerald-800">
+                            <ExternalLink size={14} /> {recipient.name} · {recipient.channel} · {maskContactDestination(recipient.destination)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="text-sm font-bold text-slate-600">{selectedRows.length} message{selectedRows.length === 1 ? "" : "s"} selected</div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={onClose} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-100">Close</button>
+            <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function CommunicationsPage(props) {
   const model = useMemo(() => buildCommunicationsModel(props), [props]);
+  const privacy = useMemo(() => normaliseCommunicationPrivacy(props.communicationPrivacy), [props.communicationPrivacy]);
   const [day, setDay] = useState("all");
   const [filter, setFilter] = useState("all");
-  const [reviewState, setReviewState] = useState(() => tenantGetJson("communicationsReview", {}));
-
-  useEffect(() => {
-    tenantSetJson("communicationsReview", reviewState);
-  }, [reviewState]);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [selected, setSelected] = useState({});
+  const [events, setEvents] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
 
   const rows = model.rows.filter((row) => {
     if (day !== "all" && row.day !== day) return false;
     if (filter !== "all" && row.readyState !== filter) return false;
     return true;
   });
+  const readyRows = rows.filter((row) => row.readyState === "ready" && row.recipients.length && row.contact.receiveMatchdayMessages);
+
+  const loadEvents = useCallback(async () => {
+    if (!auditAvailable) {
+      setEvents([]);
+      return;
+    }
+    setHistoryLoading(true);
+    try {
+      setEvents(await DB.listCommunicationEvents(props.activeClubId, 50));
+    } catch (error) {
+      toast.error("Communication history could not be loaded", { description: error?.message });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [auditAvailable, props.activeClubId]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
+
+  const record = async (row, action, recipient = null, detail = {}, refresh = true) => {
+    if (!auditAvailable) return null;
+    try {
+      const event = {
+        messageKey: row?.id || `queue:${new Date().toISOString().slice(0, 10)}`,
+        messageHash: row?.messageHash || "",
+        fixtureId: row?.raw?.id || row?.raw?.fixtureId || null,
+        teamKey: row?.contact?.teamKey || null,
+        teamName: row?.teamName || "Matchweek queue",
+        action,
+        channel: recipient?.channel || (action === "copied" ? "copy" : "other"),
+        recipientType: recipient?.type || (row?.recipients?.length > 1 ? "multiple" : row?.recipients?.[0]?.type || null),
+        recipientLabel: recipient?.name || row?.recipients?.map((item) => item.name).join(", ") || "",
+        recipientHint: recipient ? maskContactDestination(recipient.destination) : row?.recipients?.map((item) => maskContactDestination(item.destination)).join(", ") || "",
+        detail,
+      };
+      await DB.recordCommunicationEvent(props.activeClubId, event);
+      if (refresh) await loadEvents();
+      return true;
+    } catch (error) {
+      toast.warning("Action completed, but the shared audit trail was not updated", { description: error?.message });
+      return false;
+    }
+  };
+
+  const openQueue = async () => {
+    setSelected(Object.fromEntries(readyRows.map((row) => [row.id, true])));
+    setQueueOpen(true);
+    await record(null, "queue_opened", null, { readyMessages: readyRows.length, totalMessages: model.counts.total });
+  };
 
   const copyMessage = async (row) => {
     if (row.readyState === "blocked") {
@@ -83,40 +229,39 @@ export default function CommunicationsPage(props) {
     }
     try {
       await navigator.clipboard.writeText(row.message);
-      setReviewState((current) => ({
-        ...current,
-        [row.id]: { messageHash: row.messageHash, reviewedAt: new Date().toISOString(), copiedAt: new Date().toISOString() },
-      }));
+      await record(row, "copied");
       toast.success("Message copied", { description: `${row.teamName} · external delivery is not tracked.` });
     } catch {
       toast.error("Copy failed", { description: "Select the message text and copy it manually." });
     }
   };
 
-  const markReviewed = (row) => {
-    setReviewState((current) => ({
-      ...current,
-      [row.id]: { ...current[row.id], messageHash: row.messageHash, reviewedAt: new Date().toISOString() },
-    }));
+  const markReviewed = async (row) => {
+    await record(row, "reviewed");
+    toast.success("Review recorded", { description: row.teamName });
   };
 
-  const copyAllReady = async () => {
-    const readyRows = rows.filter((row) => row.readyState === "ready");
-    if (!readyRows.length) {
-      toast.info("No ready messages in this view");
-      return;
-    }
+  const copySelected = async (selectedRows) => {
+    if (!selectedRows.length) return;
     try {
-      await navigator.clipboard.writeText(readyRows.map((row) => `${row.teamName}\n${row.message}`).join("\n\n--------------------\n\n"));
-      const now = new Date().toISOString();
-      setReviewState((current) => ({
-        ...current,
-        ...Object.fromEntries(readyRows.map((row) => [row.id, { messageHash: row.messageHash, reviewedAt: now, copiedAt: now }])),
-      }));
-      toast.success(`${readyRows.length} messages copied`, { description: "Paste and send each message through the club's chosen channel." });
+      await navigator.clipboard.writeText(selectedRows.map((row) => `${row.teamName}\nRecipients: ${row.recipients.map((recipient) => `${recipient.name} (${recipient.channel})`).join(", ")}\n\n${row.message}`).join("\n\n--------------------\n\n"));
+      await Promise.all(selectedRows.map((row) => record(row, "copied", null, { bulk: true }, false)));
+      await loadEvents();
+      toast.success(`${selectedRows.length} messages copied`, { description: "Use the queue to open each chosen external channel. Delivery is not tracked." });
+      setQueueOpen(false);
     } catch {
       toast.error("Bulk copy failed");
     }
+  };
+
+  const openChannel = async (row, recipient) => {
+    const link = communicationLink(recipient, row.message, row.teamName);
+    if (!link) {
+      toast.error("Contact destination is incomplete");
+      return;
+    }
+    window.open(link, "_blank", "noopener,noreferrer");
+    await record(row, "channel_opened", recipient);
   };
 
   return (
@@ -124,26 +269,30 @@ export default function CommunicationsPage(props) {
       <PageHeader
         eyebrow="Matchweek communications"
         title="Communications"
-        subtitle="Prepare accurate manager updates from the current schedule, review anything incomplete and copy messages into the club's chosen channel."
-        action={model.counts.ready ? (
-          <button type="button" onClick={copyAllReady} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800">
-            <Copy size={17} /> Copy ready messages
+        subtitle="Prepare coach messages in one queue, keep incomplete fixtures out and record review or copy activity without claiming external delivery."
+        action={model.counts.total ? (
+          <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+            <Send size={17} /> Send coach messages
           </button>
         ) : null}
       />
 
+      {!props.communicationSchemaReady ? (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950"><strong>Secure communications migration required.</strong> Apply the included Supabase migration before coach contacts or shared communication history are used.</div>
+      ) : !privacy.configured ? (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950"><strong>Privacy setup is incomplete.</strong> Open Settings → Privacy & contacts before copying a bulk message queue.</div>
+      ) : (
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-950"><ShieldCheck size={19} className="mt-0.5 shrink-0" /><span>Coach contact access is restricted and communication events are retained for {privacy.retentionDays} days under the club's recorded privacy setup.</span></div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard icon={MessageSquareText} label="Prepared" value={model.counts.total} detail="Current matchweek messages" />
+        <SummaryCard icon={MessageSquareText} label="Prepared" value={model.counts.total} detail={`${model.counts.recipients} adult recipient records`} />
         <SummaryCard icon={CheckCircle2} label="Ready" value={model.counts.ready} detail="Complete and contact-linked" tone="green" />
-        <SummaryCard icon={AlertTriangle} label="Needs review" value={model.counts.review} detail="Can be copied after a check" tone="amber" />
+        <SummaryCard icon={AlertTriangle} label="Needs review" value={model.counts.review} detail="Check before including" tone="amber" />
         <SummaryCard icon={ShieldAlert} label="Blocked" value={model.counts.blocked} detail="Allocation must be resolved" tone="rose" />
       </div>
 
-      <Card
-        eyebrow="Review queue"
-        title="Manager messages"
-        subtitle={model.disclaimer}
-      >
+      <Card eyebrow="Review queue" title="Coach messages" subtitle={model.disclaimer}>
         <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap gap-2">
             {model.days.map((item) => (
@@ -162,15 +311,14 @@ export default function CommunicationsPage(props) {
         </div>
 
         {!model.rows.length ? (
-          <EmptyState title="No communications are ready" message="Build a Saturday, Sunday or Midweek schedule to prepare manager messages." />
+          <EmptyState title="No communications are ready" description="Build a Saturday, Sunday or Midweek schedule to prepare coach messages." />
         ) : !rows.length ? (
-          <EmptyState title="No messages match this view" message="Change the day or review filter." />
+          <EmptyState title="No messages match this view" description="Change the day or review filter." />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {rows.map((row) => {
               const state = readiness(row);
-              const audit = reviewState[row.id];
-              const currentReview = audit?.messageHash === row.messageHash ? audit : null;
+              const latest = events.find((event) => event.message_key === row.id && event.message_hash === row.messageHash);
               return (
                 <article key={row.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -178,26 +326,30 @@ export default function CommunicationsPage(props) {
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusChip status={state.tone} size="sm">{state.label}</StatusChip>
                         <StatusChip status={row.status === "scheduled" ? "neutral" : row.status === "cancelled" ? "danger" : "warning"} size="sm">{statusLabel(row.status)}</StatusChip>
-                        {currentReview?.copiedAt ? <StatusChip status="info" size="sm">Copied on this device</StatusChip> : currentReview?.reviewedAt ? <StatusChip status="info" size="sm">Reviewed</StatusChip> : null}
+                        {latest ? <StatusChip status="info" size="sm">{eventLabel(latest.action)}</StatusChip> : null}
                       </div>
                       <h3 className="mt-3 text-xl font-black text-slate-950">{row.teamName}</h3>
                       <div className="mt-1 text-sm font-semibold text-slate-500">{row.dateLabel} · {row.ko} · {row.pitch}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right ring-1 ring-slate-200">
-                      <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Manager contact</div>
-                      <div className="mt-1 text-sm font-black text-slate-900">{row.contact.name || "Not recorded"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Recipients</div>
+                      <div className="mt-1 text-sm font-black text-slate-900">{row.recipients.length || "None"}</div>
                     </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
-                    {row.contact.phone ? <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5"><Phone size={13} />{row.contact.phone}</span> : null}
-                    {row.contact.email ? <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5"><Mail size={13} />{row.contact.email}</span> : null}
-                    {!row.contact.phone && !row.contact.email ? <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-amber-800"><UsersRound size={13} />Add contact in Team settings</span> : null}
+                    {row.recipients.map((recipient) => (
+                      <span key={recipient.type} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5">
+                        {recipient.channel === "email" ? <Mail size={13} /> : <Phone size={13} />}
+                        {recipient.name} · {maskContactDestination(recipient.destination)}
+                      </span>
+                    ))}
+                    {!row.recipients.length ? <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-amber-800"><UsersRound size={13} />Add contact in Team settings</span> : null}
                   </div>
 
                   {row.issues.length ? (
                     <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Review before copy</div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Review before queueing</div>
                       <div className="mt-2 text-sm font-bold leading-6 text-amber-950">{row.issues.join(" · ")}</div>
                     </div>
                   ) : null}
@@ -205,14 +357,10 @@ export default function CommunicationsPage(props) {
                   <pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 font-sans text-sm font-semibold leading-6 text-slate-700">{row.message}</pre>
 
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
-                    {!currentReview?.reviewedAt && row.readyState !== "blocked" ? (
-                      <button type="button" onClick={() => markReviewed(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50">
-                        <ClipboardCheck size={15} /> Mark reviewed
-                      </button>
+                    {row.readyState !== "blocked" ? (
+                      <button type="button" onClick={() => markReviewed(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50"><ClipboardCheck size={15} /> Record review</button>
                     ) : null}
-                    <button type="button" onClick={() => copyMessage(row)} disabled={row.readyState === "blocked"} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
-                      <Copy size={15} /> Copy message
-                    </button>
+                    <button type="button" onClick={() => copyMessage(row)} disabled={row.readyState === "blocked"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={15} /> Copy individually</button>
                   </div>
                 </article>
               );
@@ -220,6 +368,30 @@ export default function CommunicationsPage(props) {
           </div>
         )}
       </Card>
+
+      <Card eyebrow="Shared audit trail" title="Recent communication activity" subtitle="Records preparation actions inside Ground Control. Sent or delivered statuses require future provider confirmation and cannot be created by this copy-out workflow.">
+        {historyLoading ? (
+          <div className="py-8 text-center text-sm font-bold text-slate-500">Loading communication history…</div>
+        ) : !events.length ? (
+          <EmptyState icon={History} title="No communication activity recorded" description="Open the coach-message queue, review or copy a message to create the first shared audit event." />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {events.slice(0, 20).map((event) => (
+              <div key={event.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered"].includes(event.action) ? "success" : event.action === "failed" ? "danger" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">{event.recipient_label || "No recipient stored"}{event.recipient_hint ? ` · ${event.recipient_hint}` : ""} · {event.actor_label || "Club operator"}</div>
+                </div>
+                <div className="text-xs font-bold text-slate-400">{new Date(event.occurred_at).toLocaleString("en-GB")}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {queueOpen ? (
+        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} onClose={() => setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} />
+      ) : null}
     </PageContainer>
   );
 }

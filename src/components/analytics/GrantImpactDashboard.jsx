@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Copy,
   Database,
+  Download,
   ExternalLink,
   FileCheck2,
   HeartPulse,
@@ -30,6 +31,7 @@ import StatusChip from "../../ui/StatusChip.jsx";
 import FundingWorkspacePanel from "./FundingWorkspacePanel.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";
 import { inferGrantHomeNation } from "../../lib/grants/grantMatchingEngine.js";
+import { buildFundingEvidencePack, downloadFundingEvidencePack } from "../../lib/grants/fundingEvidencePack.js";
 
 const TONE = {
   success: {
@@ -310,6 +312,11 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
     }
   };
 
+  const downloadEvidencePack = () => {
+    const pack = buildFundingEvidencePack({ club: props.club, model, source: "funding-analytics" });
+    downloadFundingEvidencePack(pack);
+  };
+
   return (
     <PageContainer>
       <PageHeader
@@ -317,10 +324,15 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         title="Find funding and build the evidence case"
         subtitle="Match verified national and UK-wide programmes to a defined club project, then identify the operational evidence, eligibility checks and documents still required."
         action={
-          <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
-            {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
-            {copied ? "Summary copied" : "Copy evidence summary"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={downloadEvidencePack} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800">
+              <Download size={17} /> Download evidence draft
+            </button>
+            <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
+              {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
+              {copied ? "Summary copied" : "Copy evidence summary"}
+            </button>
+          </div>
         }
       />
 

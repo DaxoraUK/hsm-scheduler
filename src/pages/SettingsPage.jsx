@@ -18,6 +18,7 @@ import HistorySettingsPanel from "../components/Settings/HistorySettingsPanel.js
 import DataSettingsPanel from "../components/Settings/DataSettingsPanel.jsx";
 import IntegrationSettingsPanel from "../components/Settings/IntegrationSettingsPanel.jsx";
 import AccessSecurityPanel from "../components/Settings/AccessSecurityPanel.jsx";
+import CommunicationsPrivacyPanel from "../components/Settings/CommunicationsPrivacyPanel.jsx";
 import OnboardingSettingsPanel from "../components/Settings/OnboardingSettingsPanel.jsx";
 import SubscriptionSettingsPanel from "../components/Settings/SubscriptionSettingsPanel.jsx";
 import BillingLegalPanel from "../components/Settings/BillingLegalPanel.jsx";
@@ -46,6 +47,10 @@ const TAB_TITLES = {
   access: [
     "Access & audit",
     "Manage club roles, secure invitations, trusted audit history and time-limited support access.",
+  ],
+  privacy: [
+    "Privacy & coach contacts",
+    "Document the purpose, lawful basis, privacy notice and retention controls for adult coach communications.",
   ],
   onboarding: [
     "Setup wizard",
@@ -172,6 +177,7 @@ export default function SettingsPage(props) {
       return <SubscriptionSettingsPanel {...props} />;
     if (activeTab === "billing") return <BillingLegalPanel {...props} />;
     if (activeTab === "access") return <AccessSecurityPanel {...props} />;
+    if (activeTab === "privacy") return <CommunicationsPrivacyPanel {...props} />;
     if (activeTab === "onboarding")
       return <OnboardingSettingsPanel {...props} />;
     if (activeTab === "club") return <ClubSettingsPanel {...props} />;

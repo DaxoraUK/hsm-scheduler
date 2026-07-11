@@ -431,6 +431,67 @@ export const DB = {
     return DB.load("team_config", clubId);
   },
 
+  async loadTeamContacts(clubId) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_team_contacts", {
+      target_club_id: id,
+    }));
+  },
+
+  async saveTeamContacts(clubId, contacts = []) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/replace_team_contacts", {
+      target_club_id: id,
+      records: Array.isArray(contacts) ? contacts : [],
+    });
+  },
+
+  async deleteTeamContact(clubId, teamKey) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_team_contact", {
+      target_club_id: id,
+      target_team_key: String(teamKey || "").trim(),
+    });
+  },
+
+  async getCommunicationPrivacy(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/get_communication_privacy_settings", {
+      target_club_id: id,
+    });
+  },
+
+  async saveCommunicationPrivacy(clubId, settings = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_communication_privacy_settings", {
+      target_club_id: id,
+      settings: settings && typeof settings === "object" ? settings : {},
+    });
+  },
+
+  async recordCommunicationEvent(clubId, event = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/record_communication_event", {
+      target_club_id: id,
+      event_data: event && typeof event === "object" ? event : {},
+    });
+  },
+
+  async listCommunicationEvents(clubId, limit = 50) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_communication_events", {
+      target_club_id: id,
+      result_limit: Math.max(1, Math.min(Number(limit) || 50, 200)),
+    }));
+  },
+
+  async purgeExpiredCommunicationEvents(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/purge_expired_communication_events", {
+      target_club_id: id,
+    });
+  },
+
   async loadPitches(clubId) {
     return DB.load("pitches", clubId);
   },

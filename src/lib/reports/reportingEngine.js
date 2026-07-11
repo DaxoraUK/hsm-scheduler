@@ -5,6 +5,7 @@ import {
 } from "../engines/operationalEvidenceEngine.js";
 import { buildEvidenceQuality } from "../engines/evidenceQualityEngine.js";
 import { buildGrantEvidenceFramework } from "../grants/grantEvidenceFramework.js";
+import { buildGrantFundingModel } from "../grants/grantMatchingEngine.js";
 
 export const REPORT_TYPES = [
   { id: "operations", label: "Operations pack", description: "Complete matchday schedule, risks and readiness." },
@@ -219,6 +220,13 @@ export function buildReportsModel({
       parkingPressureWeeks: evidence.summary.parkingOverCapacity,
     },
   });
+  const grantFunding = buildGrantFundingModel({
+    club,
+    quality,
+    framework: grantFramework,
+    projectType: "all",
+    availability: "current",
+  });
   const reportDefinition = REPORT_TYPES.find((item) => item.id === reportType) || REPORT_TYPES[0];
 
   const officialRows = evidence.delivered.map((row) => ({
@@ -249,6 +257,16 @@ export function buildReportsModel({
     readiness,
     quality,
     grantFramework,
+    funding: grantFunding,
+    metrics: {
+      scheduledFixtures: evidence.summary.scheduled ?? evidence.summary.delivered,
+      teamOpportunitySlots: (evidence.summary.scheduled ?? evidence.summary.delivered) * 2,
+      facilityHours: evidence.summary.facilityHours,
+      postponedFixtures: evidence.summary.postponed,
+      officialCoverage: evidence.summary.officialCoverage,
+    },
+    sourceRows: evidence.rows,
+    narrative: `${club?.name || "The club"} has ${evidence.summary.scheduled ?? evidence.summary.delivered} fixture${(evidence.summary.scheduled ?? evidence.summary.delivered) === 1 ? "" : "s"} scheduled to proceed in this selection, representing ${((evidence.summary.scheduled ?? evidence.summary.delivered) * 2)} team fixture opportunities and ${evidence.summary.facilityHours || 0} scheduled pitch hours. These figures do not prove completed activity, attendance or unique beneficiaries.`,
     configuredOfficials: asArray(refs).length,
     hasData: evidence.rows.length > 0,
     generatedAt: new Date(),

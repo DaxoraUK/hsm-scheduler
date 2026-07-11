@@ -60,6 +60,7 @@ export const SETTINGS_GROUPS = Object.freeze([
     icon: Database,
     tabs: [
       ["access", "Access & audit"],
+      ["privacy", "Privacy & contacts"],
       ["history", "Matchweek history"],
       ["data", "Data & backups"],
     ],
@@ -107,6 +108,7 @@ function isTabVisible({
     return false;
   }
   if (key === "access" && !workspaceAccess?.canViewAudit) return false;
+  if (key === "privacy" && !workspaceAccess?.canManageSettings) return false;
   if (
     ["timing", "history"].includes(key) &&
     !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)

@@ -102,6 +102,15 @@ import {
 } from "./lib/subscriptions/entitlements.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
+import {
+  alignTeamContacts,
+  extractLegacyTeamContacts,
+  stripTeamContactsFromConfig,
+} from "./lib/communications/contactModel.js";
+import {
+  DEFAULT_COMMUNICATION_PRIVACY,
+  normaliseCommunicationPrivacy,
+} from "./lib/communications/privacyModel.js";
 
 const WorkspaceAccessGate = lazy(
   () => import("./components/WorkspaceAccessGate.jsx"),
@@ -141,6 +150,19 @@ function LazyPageFallback({ label = "workspace" }) {
       </div>
     </div>
   );
+}
+
+
+function isMissingCommunicationSchema(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || error?.details || "").toLowerCase();
+  return [400, 404].includes(status) || [
+    "list_team_contacts",
+    "get_communication_privacy_settings",
+    "replace_team_contacts",
+    "communication_privacy_settings",
+    "team_contacts",
+  ].some((token) => message.includes(token));
 }
 
 function readClubTiming(club = {}) {
@@ -372,7 +394,10 @@ function App() {
 
   const [refs, setRefs] = useState([]);
   const [history, setHistory] = useState([]);
-  const [teamCfg, setTeamCfg] = useState(TEAM_CONFIG_DEFAULT);
+  const [teamCfg, setTeamCfg] = useState(() => stripTeamContactsFromConfig(TEAM_CONFIG_DEFAULT));
+  const [teamContacts, setTeamContacts] = useState(() => alignTeamContacts(TEAM_CONFIG_DEFAULT, extractLegacyTeamContacts(TEAM_CONFIG_DEFAULT)));
+  const [communicationPrivacy, setCommunicationPrivacy] = useState(DEFAULT_COMMUNICATION_PRIVACY);
+  const [communicationSchemaReady, setCommunicationSchemaReady] = useState(false);
 
   const [dbStatus, setDbStatus] = useState(() =>
     isSupaConfigured() ? "connecting" : "disabled",
@@ -688,7 +713,8 @@ function App() {
 
       const securedClub = { ...nextClub, id: activeClubId || nextClub?.id };
       setClub(securedClub);
-      setTeamCfg(teams);
+      setTeamCfg(stripTeamContactsFromConfig(teams));
+      setTeamContacts(alignTeamContacts(teams, extractLegacyTeamContacts(teams)));
       setPitchCfg(migratePitches(pitches));
       setStartHour(scheduling.startHour);
       setStartMin(scheduling.startMin);
@@ -697,7 +723,7 @@ function App() {
       setBufferYouth(scheduling.bufferYouth);
       setBufferAdult(scheduling.bufferAdult);
       tenantSetJson("club", securedClub);
-      tenantSetJson("teamConfig", teams);
+      tenantSetJson("teamConfig", stripTeamContactsFromConfig(teams));
       tenantSetJson("pitches", pitches);
       setDbStatus("connected");
       setOnboardingOpen(false);
@@ -907,11 +933,13 @@ function App() {
             },
           }
         : baseClub;
-    const nextTeamCfg = data.teamCfg || teamCfg;
+    const nextTeamCfg = stripTeamContactsFromConfig(data.teamCfg || teamCfg);
+    const nextTeamContacts = alignTeamContacts(nextTeamCfg, data.teamContacts || teamContacts);
     const nextRefs = data.refs || refs;
 
     if (data.club) setClub(nextClub);
-    if (data.teamCfg) setTeamCfg(data.teamCfg);
+    if (data.teamCfg) setTeamCfg(nextTeamCfg);
+    if (data.teamContacts) setTeamContacts(nextTeamContacts);
     if (data.refs) setRefs(data.refs);
 
     tenantSetJson("club", nextClub);
@@ -922,8 +950,10 @@ function App() {
       const saves = [];
       if (data.club || ["club", "workspace", "venues", "timing"].includes(tab))
         saves.push(DB.saveClub(activeClubId, nextClub));
-      if (data.teamCfg || tab === "teams")
+      if (data.teamCfg || tab === "teams") {
         saves.push(DB.saveTeamCfg(activeClubId, nextTeamCfg));
+        saves.push(DB.saveTeamContacts(activeClubId, nextTeamContacts));
+      }
       if (data.refs || tab === "refs")
         saves.push(DB.saveRefs(activeClubId, nextRefs));
       if (tab === "pitches") saves.push(DB.savePitches(activeClubId, pitchCfg));
@@ -1046,9 +1076,14 @@ function App() {
           ...(localClub?.features || {}),
         },
       };
-      const fallbackTeams = Array.isArray(localTeams)
+      const fallbackTeamRows = Array.isArray(localTeams)
         ? localTeams
         : TEAM_CONFIG_DEFAULT;
+      const fallbackContacts = alignTeamContacts(
+        fallbackTeamRows,
+        extractLegacyTeamContacts(fallbackTeamRows),
+      );
+      const fallbackTeams = stripTeamContactsFromConfig(fallbackTeamRows);
 
       setClub(fallbackClub);
       const fallbackTiming = readClubTiming(fallbackClub);
@@ -1059,6 +1094,9 @@ function App() {
       setBufferYouth(fallbackTiming.bufferYouth);
       setBufferAdult(fallbackTiming.bufferAdult);
       setTeamCfg(fallbackTeams);
+      setTeamContacts(fallbackContacts);
+      setCommunicationPrivacy(DEFAULT_COMMUNICATION_PRIVACY);
+      setCommunicationSchemaReady(false);
       setRefs(Array.isArray(localRefs) ? localRefs : []);
       setHistory(Array.isArray(localHistory) ? localHistory : []);
       setPitchCfg(safeLocalPitches);
@@ -1125,6 +1163,7 @@ function App() {
           remoteTestSat,
           remoteTestSun,
           remoteTestMidweek,
+          communicationContext,
         ] = await Promise.all([
           DB.loadHistory(activeClubId),
           DB.loadRefs(activeClubId),
@@ -1135,6 +1174,19 @@ function App() {
           DB.loadTestFixtures(activeClubId, "testsat"),
           DB.loadTestFixtures(activeClubId, "testsun"),
           DB.loadTestFixtures(activeClubId, "testmidweek"),
+          workspaceAccess.canOperate
+            ? Promise.all([
+                DB.loadTeamContacts(activeClubId),
+                DB.getCommunicationPrivacy(activeClubId),
+              ])
+                .then(([contacts, privacy]) => ({ available: true, contacts, privacy }))
+                .catch((error) => {
+                  if (isMissingCommunicationSchema(error)) {
+                    return { available: false, contacts: [], privacy: DEFAULT_COMMUNICATION_PRIVACY };
+                  }
+                  throw error;
+                })
+            : Promise.resolve({ available: true, contacts: [], privacy: DEFAULT_COMMUNICATION_PRIVACY }),
         ]);
         if (cancelled) return;
 
@@ -1156,11 +1208,19 @@ function App() {
                 ...(clubData?.features || {}),
               },
             };
-        const nextTeams = isUnconfiguredWorkspace
+        const rawNextTeams = isUnconfiguredWorkspace
           ? []
           : Array.isArray(cfgData)
             ? cfgData
             : [];
+        const nextTeams = stripTeamContactsFromConfig(rawNextTeams);
+        const legacyRemoteContacts = extractLegacyTeamContacts(rawNextTeams);
+        const nextTeamContacts = alignTeamContacts(
+          nextTeams,
+          communicationContext.available && communicationContext.contacts.length
+            ? communicationContext.contacts
+            : legacyRemoteContacts,
+        );
         const nextPitches =
           Array.isArray(pitchData) && pitchData.length
             ? migratePitches(pitchData)
@@ -1180,6 +1240,9 @@ function App() {
         setHistory(Array.isArray(histData) ? histData : []);
         setRefs(Array.isArray(refData) ? refData : []);
         setTeamCfg(nextTeams);
+        setTeamContacts(nextTeamContacts);
+        setCommunicationPrivacy(normaliseCommunicationPrivacy(communicationContext.privacy));
+        setCommunicationSchemaReady(Boolean(communicationContext.available));
         setPitchCfg(
           isUnconfiguredWorkspace
             ? []
@@ -1283,6 +1346,7 @@ function App() {
     clearWeekendScheduleForDateChange,
     reportSyncFailure,
     reportSyncSuccess,
+    workspaceAccess.canOperate,
   ]);
 
   useEffect(() => {
@@ -2371,7 +2435,12 @@ function App() {
             <Suspense fallback={<LazyPageFallback label="communications" />}>
               <CommunicationsPage
                 club={club}
+                activeClubId={activeClubId}
+                workspaceAccess={workspaceAccess}
                 teamCfg={teamCfg}
+                teamContacts={teamContacts}
+                communicationPrivacy={communicationPrivacy}
+                communicationSchemaReady={communicationSchemaReady}
                 satFinal={satFinal}
                 sunFinal={sunFinal}
                 midweekFinal={activeMidweekFinal}
@@ -2513,6 +2582,11 @@ function App() {
                 setHistory={setHistory}
                 teamCfg={teamCfg}
                 setTeamCfg={setTeamCfg}
+                teamContacts={teamContacts}
+                setTeamContacts={setTeamContacts}
+                communicationPrivacy={communicationPrivacy}
+                setCommunicationPrivacy={setCommunicationPrivacy}
+                communicationSchemaReady={communicationSchemaReady}
                 TEAM_CONFIG_DEFAULT={TEAM_CONFIG_DEFAULT}
                 pitchCfg={pitchCfg}
                 setPitchCfg={setPitchCfg}

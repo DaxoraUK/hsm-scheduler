@@ -54,7 +54,7 @@ describe("communications, reports and grant evidence truthfulness", () => {
     });
     expect(review.counts.review).toBe(1);
     expect(review.rows[0].issues).toContain("Official not assigned");
-    expect(review.rows[0].issues).toContain("Manager contact missing");
+    expect(review.rows[0].issues).toContain("Coach contact missing");
 
     const blocked = buildCommunicationsModel({
       club: { name: "Horwich St Mary's" },
