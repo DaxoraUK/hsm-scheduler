@@ -185,6 +185,11 @@ export default function PitchSettingsPanel({
         action={<PrimaryButton icon={Plus} onClick={addPitch} disabled={!canAddPitch}>Add pitch</PrimaryButton>}
       />
 
+      <SaveBar sticky onSave={() => saveTab?.("pitches")} saved={savedTab === "pitches"} label="Save pitches">
+        <span className="font-black text-slate-700">Editing {selectedPitch?.label || selectedPitch?.id || "pitch settings"}</span>
+        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
+      </SaveBar>
+
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatTile label="Pitches" value={pitchCfg.length} detail={isUnlimitedLimit(pitchLimit) ? "Unlimited plan limit" : `${pitchLimit} plan limit`} tone="green" />
         <StatTile label="Grass" value={surfaces.grass || 0} tone="slate" />
@@ -220,13 +225,8 @@ export default function PitchSettingsPanel({
         “Inside pitch” models a smaller layout marked within a larger pitch. Independent pitches do not count towards the concurrent-game limit.
       </Notice>
 
-      <SaveBar sticky onSave={() => saveTab?.("pitches")} saved={savedTab === "pitches"} label="Save pitches">
-        <span className="font-black text-slate-700">Editing {selectedPitch?.label || selectedPitch?.id || "pitch settings"}</span>
-        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
-      </SaveBar>
-
-      <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 xl:sticky xl:top-44 xl:max-h-[calc(100vh-12rem)] xl:self-start xl:overflow-hidden">
+      <div className="mt-5 grid min-w-0 gap-5 2xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 2xl:sticky 2xl:top-44 2xl:max-h-[calc(100vh-12rem)] 2xl:self-start 2xl:overflow-hidden">
           <div className="relative">
             <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -241,7 +241,7 @@ export default function PitchSettingsPanel({
             <span>{filteredPitches.length} shown</span>
             <span>{pitchCfg.length} total</span>
           </div>
-          <div className="mt-2 max-h-[360px] space-y-1 overflow-y-auto pr-1 xl:max-h-[calc(100vh-18rem)]">
+          <div className="mt-2 grid max-h-[280px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3 2xl:block 2xl:max-h-[calc(100vh-18rem)] 2xl:space-y-1">
             {filteredPitches.map(({ pitch, index }) => {
               const active = index === selectedIndex;
               const siteName = sites.find((site) => site.id === (pitch.siteId || primarySite?.id))?.name || "Main site";
@@ -295,11 +295,11 @@ export default function PitchSettingsPanel({
                 </button>
               </div>
 
-              <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
                 <Field label="Pitch ID">
                   <input className={`${inputClass} font-mono`} value={selectedPitch.id || ""} onChange={(event) => updatePitch(selectedIndex, "id", event.target.value.replace(/\s+/g, ""))} />
                 </Field>
-                <Field label="Name" className="lg:col-span-2 xl:col-span-2">
+                <Field label="Name">
                   <input className={inputClass} value={selectedPitch.label || ""} onChange={(event) => updatePitch(selectedIndex, "label", event.target.value)} />
                 </Field>
                 <Field label="Site">
@@ -329,7 +329,7 @@ export default function PitchSettingsPanel({
                     Independent pitch
                   </label>
                 </Field>
-                <Field label="Description" className="lg:col-span-2 xl:col-span-2">
+                <Field label="Description" className="md:col-span-2">
                   <input className={inputClass} value={selectedPitch.desc || ""} onChange={(event) => updatePitch(selectedIndex, "desc", event.target.value)} placeholder="Optional notes" />
                 </Field>
               </div>

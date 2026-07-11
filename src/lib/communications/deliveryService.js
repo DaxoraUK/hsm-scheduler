@@ -21,6 +21,51 @@ async function responsePayload(response) {
   }
 }
 
+
+export function describeCommunicationDispatchFailure(result = {}) {
+  const firstFailure = result?.failure || (Array.isArray(result?.results)
+    ? result.results.find((item) => item?.status === "failed")
+    : null) || {};
+  const providerStatus = Number(firstFailure.providerStatus) || null;
+  const code = String(firstFailure.code || result?.code || "COMMUNICATION_DISPATCH_FAILED");
+  const rawMessage = String(firstFailure.message || firstFailure.error || result?.error || "The message provider rejected the request").trim();
+  const lower = rawMessage.toLowerCase();
+
+  if (providerStatus === 401 || /api key|unauthori[sz]ed|authentication/.test(lower)) {
+    return {
+      title: "Email provider authentication failed",
+      description: "The Resend API key on this Vercel deployment is missing, invalid or no longer active. Update RESEND_API_KEY and redeploy staging.",
+      code,
+    };
+  }
+  if (providerStatus === 403 || /resend\.dev|testing domain|verified domain|forbidden/.test(lower)) {
+    return {
+      title: "Resend blocked the test email",
+      description: `${rawMessage}. Check that the pilot inbox is the email attached to the Resend account, or use a verified sending domain.`,
+      code,
+    };
+  }
+  if (providerStatus === 422 || /invalid.*(from|sender|recipient|email)|validation/.test(lower)) {
+    return {
+      title: "Email sender or recipient is invalid",
+      description: `${rawMessage}. Check COMMUNICATIONS_EMAIL_FROM and the staging pilot recipient in Vercel.`,
+      code,
+    };
+  }
+  if (providerStatus === 429 || /rate limit|too many requests/.test(lower)) {
+    return {
+      title: "Email provider rate limit reached",
+      description: "Resend temporarily refused the request because too many messages were attempted. Wait briefly and retry once.",
+      code,
+    };
+  }
+  return {
+    title: "The provider did not accept the message",
+    description: rawMessage || "Open the Vercel function log for the communications dispatch request before retrying.",
+    code,
+  };
+}
+
 export async function loadDeliveryCapabilities() {
   try {
     const response = await fetch("/api/communications/capabilities", {
@@ -96,6 +141,9 @@ export async function dispatchCommunicationBatch({ clubId, rows, capabilities, r
   });
   const payload = await responsePayload(response);
   if (!response.ok) {
+    if (Array.isArray(payload?.results)) {
+      return { ...payload, unavailable: prepared.unavailable };
+    }
     const error = new Error(payload?.error || "The message batch could not be sent");
     error.code = payload?.code || "COMMUNICATION_DISPATCH_FAILED";
     error.detail = payload;

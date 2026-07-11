@@ -31,6 +31,7 @@ import { communicationPrivacyGaps, normaliseCommunicationPrivacy } from "../lib/
 import { DB } from "../lib/supabase.js";
 import {
   buildDeliveryMessages,
+  describeCommunicationDispatchFailure,
   dispatchCommunicationBatch,
   EMPTY_DELIVERY_CAPABILITIES,
   loadDeliveryCapabilities,
@@ -259,6 +260,7 @@ export default function CommunicationsPage(props) {
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState(null);
+  const [sendFailure, setSendFailure] = useState(null);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
 
   const rows = model.rows.filter((row) => {
@@ -388,6 +390,7 @@ export default function CommunicationsPage(props) {
       return;
     }
 
+    setSendFailure(null);
     setSendConfirmation({
       rows: webEligibleRows,
       recipientCount: plan.messages.length,
@@ -409,18 +412,31 @@ export default function CommunicationsPage(props) {
         requestKey,
       });
       await loadEvents();
+      if (result.failed && !result.accepted) {
+        const failure = describeCommunicationDispatchFailure(result);
+        setSendFailure(failure);
+        toast.error(failure.title, { description: failure.description });
+        return;
+      }
       if (result.failed) {
-        toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: "Open the audit trail before retrying failed recipients." });
+        const failure = describeCommunicationDispatchFailure(result);
+        toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: failure.description });
       } else {
         toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: confirmation.emailPilot ? "The internal staging inbox will receive the redirected test. Delivery remains a separate provider status." : "Delivery status will update only when the provider confirms it." });
       }
       if (result.unavailable?.length) {
         toast.info(`${result.unavailable.length} recipient${result.unavailable.length === 1 ? "" : "s"} not sent`, { description: "Their preferred channel is not configured for web sending." });
       }
+      setSendFailure(null);
       setSendConfirmation(null);
       setQueueOpen(false);
     } catch (error) {
-      toast.error("Coach messages were not sent", { description: error?.message || "The provider request failed." });
+      const failure = describeCommunicationDispatchFailure(error?.detail || {
+        error: error?.message,
+        code: error?.code,
+      });
+      setSendFailure(failure);
+      toast.error(failure.title, { description: failure.description });
     } finally {
       setSending(false);
     }
@@ -594,7 +610,11 @@ export default function CommunicationsPage(props) {
         tone={sendConfirmation?.emailPilot ? "info" : "warning"}
         busy={sending}
         initialFocus="cancel"
-        onCancel={() => !sending && setSendConfirmation(null)}
+        onCancel={() => {
+          if (sending) return;
+          setSendFailure(null);
+          setSendConfirmation(null);
+        }}
         onConfirm={confirmWebSend}
       >
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -605,6 +625,18 @@ export default function CommunicationsPage(props) {
           ) : null}
           {sendConfirmation?.unavailableCount ? (
             <div className="mt-2 text-xs font-bold text-amber-700">{sendConfirmation.unavailableCount} recipient{sendConfirmation.unavailableCount === 1 ? "" : "s"} use an unavailable channel and will be skipped.</div>
+          ) : null}
+          {sendFailure ? (
+            <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-left">
+              <div className="flex items-start gap-3">
+                <ShieldAlert size={18} className="mt-0.5 shrink-0 text-rose-700" />
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-rose-950">{sendFailure.title}</div>
+                  <div className="mt-1 text-sm font-semibold leading-6 text-rose-900">{sendFailure.description}</div>
+                  <div className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Reference: {sendFailure.code}</div>
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
       </ConfirmDialog>

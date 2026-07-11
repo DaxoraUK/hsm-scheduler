@@ -255,6 +255,16 @@ export default function TeamSettingsPanel({
         action={<PrimaryButton icon={Plus} onClick={addTeam} disabled={!canAddTeam}>Add team</PrimaryButton>}
       />
 
+      <SaveBar
+        sticky
+        onSave={() => saveTab?.("teams", { teamCfg, teamContacts: contacts })}
+        saved={savedTab === "teams"}
+        label="Save teams and contacts"
+      >
+        <span className="font-black text-slate-700">Editing {selectedTeam?.name || "team settings"}</span>
+        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
+      </SaveBar>
+
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatTile label="Teams" value={teamCfg.length} detail={isUnlimitedLimit(teamLimit) ? "Unlimited plan limit" : `${teamLimit} plan limit`} tone="green" />
         <StatTile label="Youth" value={counts.youth || 0} tone="blue" />
@@ -296,18 +306,8 @@ export default function TeamSettingsPanel({
         Only adult coach or manager contact details should be entered here. Do not enter player or child contact information. Contact data is excluded from general team exports.
       </Notice>
 
-      <SaveBar
-        sticky
-        onSave={() => saveTab?.("teams", { teamCfg, teamContacts: contacts })}
-        saved={savedTab === "teams"}
-        label="Save teams and contacts"
-      >
-        <span className="font-black text-slate-700">Editing {selectedTeam?.name || "team settings"}</span>
-        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
-      </SaveBar>
-
-      <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 xl:sticky xl:top-44 xl:max-h-[calc(100vh-12rem)] xl:self-start xl:overflow-hidden">
+      <div className="mt-5 grid min-w-0 gap-5 2xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 2xl:sticky 2xl:top-44 2xl:max-h-[calc(100vh-12rem)] 2xl:self-start 2xl:overflow-hidden">
           <div className="relative">
             <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -322,7 +322,7 @@ export default function TeamSettingsPanel({
             <span>{filteredTeams.length} shown</span>
             <span>{teamCfg.length} total</span>
           </div>
-          <div className="mt-2 max-h-[360px] space-y-1 overflow-y-auto pr-1 xl:max-h-[calc(100vh-18rem)]">
+          <div className="mt-2 grid max-h-[280px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3 2xl:block 2xl:max-h-[calc(100vh-18rem)] 2xl:space-y-1">
             {filteredTeams.map(({ team, index, contact }) => {
               const active = index === selectedIndex;
               const contactReady = Boolean(contact?.coachPhone || contact?.coachEmail);
@@ -375,8 +375,8 @@ export default function TeamSettingsPanel({
                 </button>
               </div>
 
-              <div className="grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
-                <Field label="Team name" className="lg:col-span-2 xl:col-span-2">
+              <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
+                <Field label="Team name" className="md:col-span-2">
                   <input className={inputClass} value={selectedTeam.name || ""} onChange={(event) => updateTeam(selectedIndex, "name", event.target.value)} />
                 </Field>
                 <Field label="Type">
@@ -431,7 +431,7 @@ export default function TeamSettingsPanel({
                 </div>
 
                 {canManageContacts ? (
-                  <div className="mt-5 grid gap-x-4 gap-y-5 lg:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-5 grid gap-x-5 gap-y-5 md:grid-cols-2">
                     <Field label="Coach / manager name">
                       <input className={inputClass} value={selectedContact.coachName} onChange={(event) => updateContact(selectedIndex, "coachName", event.target.value)} placeholder="Primary adult contact" />
                     </Field>

@@ -52,7 +52,7 @@ export function stripTeamContactsFromConfig(teamCfg = []) {
 }
 
 export function normaliseTeamContact(contact = {}, team = {}, index = 0) {
-  const channel = text(contact.preferredChannel || contact.communicationChannel || team.communicationChannel || "whatsapp").toLowerCase();
+  const channel = text(contact.preferredChannel || contact.preferred_channel || contact.communicationChannel || team.communicationChannel || "whatsapp").toLowerCase();
   return {
     teamKey: text(contact.teamKey || contact.team_key) || getTeamContactKey(team, index),
     teamName: text(contact.teamName || contact.team_name || team.name || team.teamName),
@@ -80,6 +80,7 @@ export function extractLegacyTeamContacts(teamCfg = []) {
 export function normaliseEditableTeamContact(contact = {}, team = {}, index = 0) {
   const channel = text(firstDefined(
     contact.preferredChannel,
+    contact.preferred_channel,
     contact.communicationChannel,
     team.communicationChannel,
     "whatsapp",

@@ -171,6 +171,7 @@ export async function POST(request) {
           status: "failed",
           error: error?.message || "Provider send failed",
           code: error?.code || "PROVIDER_SEND_FAILED",
+          providerStatus: Number(error?.status) || null,
         });
       }
     }
@@ -179,14 +180,29 @@ export async function POST(request) {
     const accepted = results.filter((item) => ["provider_accepted", "sent", "delivered", "read"].includes(item.status)).length;
     const failed = results.filter((item) => item.status === "failed").length;
 
+    const failedResults = results.filter((item) => item.status === "failed");
+    const primaryFailure = failedResults[0] || null;
+    const outcome = failed && accepted ? "partial" : failed ? "failed" : "accepted";
+
+    // A provider rejection is an application-level delivery result, not a broken
+    // HTTP request. Return the completed batch as JSON so the browser can show
+    // the real provider reason instead of replacing it with a generic 502 error.
     return json({
       batchId,
       requestKey,
       requested: results.length,
       accepted,
       failed,
+      outcome,
+      failure: primaryFailure
+        ? {
+            message: primaryFailure.error || "The provider rejected the message",
+            code: primaryFailure.code || "PROVIDER_SEND_FAILED",
+            providerStatus: primaryFailure.providerStatus || null,
+          }
+        : null,
       results,
-    }, failed && !accepted ? 502 : 200);
+    }, 200);
   } catch (error) {
     return errorResponse(error);
   }
