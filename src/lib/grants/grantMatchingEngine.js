@@ -174,6 +174,10 @@ export function buildGrantFundingModel({
 
   const current = allNationProgrammes.filter((programme) => programme.resolvedStatus.isCurrent);
   const stale = allNationProgrammes.filter((programme) => programme.verification.stale);
+  const latestVerified = allNationProgrammes
+    .map((programme) => parseDate(programme.lastVerified))
+    .filter(Boolean)
+    .sort((a, b) => b.getTime() - a.getTime())[0] || null;
   const operationalEvidenceScore = buildOperationalProjectScore(project, quality, framework);
   const manualRequirements = [...new Set(matching.flatMap((programme) => asArray(programme.manualRequirements)))];
 
@@ -192,7 +196,9 @@ export function buildGrantFundingModel({
       currentNationProgrammes: current.length,
       matchingProgrammes: matching.length,
       staleProgrammes: stale.length,
-      lastVerified: "5 Jul 2026",
+      lastVerified: latestVerified
+        ? latestVerified.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+        : "Not verified",
       scope: "Verified national and UK-wide programmes. County FA, local-authority, charitable-trust and postcode-restricted local schemes require a separate discovery layer and are not yet claimed as complete.",
     },
     readiness: [

@@ -211,6 +211,7 @@ export function buildGrantImpactModel({
 
   const metrics = {
     deliveredFixtures,
+    scheduledFixtures: deliveredFixtures,
     postponedFixtures,
     postponementRate,
     postponementLabel: rateLabel(postponementRate),
@@ -300,7 +301,7 @@ export function buildGrantImpactModel({
       id: "pitch-concentration",
       title: "Reduce pressure on the busiest pitch",
       detail: "A large share of selected activity is concentrated on one playing area.",
-      evidence: `${busiestPitch?.label || "The busiest pitch"} hosted ${busiestPitch?.total || 0} fixtures (${busiestPitchShare}% of delivered activity).`,
+      evidence: `${busiestPitch?.label || "The busiest pitch"} hosted ${busiestPitch?.total || 0} fixtures (${busiestPitchShare}% of scheduled activity).`,
       severity: "medium",
       grantAngle: "Potential evidence for additional playable space, pitch renovation, lighting or surface conversion.",
     }));
@@ -309,8 +310,8 @@ export function buildGrantImpactModel({
     priorities.push(buildPriority({
       id: "officials-workforce",
       title: "Officials and volunteer workforce",
-      detail: "Recorded delivery contains gaps in confirmed matchday staffing.",
-      evidence: `${confirmedOfficials} of ${deliveredFixtures} delivered fixtures have confirmed officials (${officialCoverage}%).`,
+      detail: "The scheduled fixture record contains gaps in confirmed matchday staffing.",
+      evidence: `${confirmedOfficials} of ${deliveredFixtures} scheduled fixtures have confirmed officials (${officialCoverage}%).`,
       severity: officialCoverage < 65 ? "high" : "medium",
       grantAngle: "Potential evidence for recruitment, training, accreditation, equipment or volunteer retention.",
     }));
@@ -322,23 +323,23 @@ export function buildGrantImpactModel({
       detail: "More saved matchdays are needed before short-term pressure can be presented as a sustained trend.",
       evidence: `${evidenceEntries.length} selected matchday${evidenceEntries.length === 1 ? "" : "s"} currently available.`,
       severity: "development",
-      grantAngle: "Build a reproducible baseline covering demand, facility pressure, delivery and outcomes.",
+      grantAngle: "Build a reproducible baseline covering scheduled demand, facility pressure and verified outcomes.",
     }));
   }
   if (!priorities.length) {
     priorities.push(buildPriority({
       id: "capacity-protection",
-      title: "Protect delivery capacity",
+      title: "Protect scheduled capacity",
       detail: "Selected operations are stable; the evidence supports preventative planning rather than an urgent deficit case.",
-      evidence: `${deliveryRate}% fixture delivery across ${evidenceEntries.length} selected matchday${evidenceEntries.length === 1 ? "" : "s"}.`,
+      evidence: `${deliveryRate}% of recorded fixtures remained scheduled rather than postponed or cancelled across ${evidenceEntries.length} selected matchday${evidenceEntries.length === 1 ? "" : "s"}.`,
       severity: "positive",
       grantAngle: "Potential evidence for preventative maintenance, equipment renewal or planned capacity growth.",
     }));
   }
 
   const narrative = deliveredFixtures
-    ? `${club?.name || "The club"} recorded ${deliveredFixtures} delivered fixture${deliveredFixtures === 1 ? "" : "s"} across ${evidenceEntries.length} selected matchday${evidenceEntries.length === 1 ? "" : "s"}, representing ${teamOpportunitySlots} team participation opportunities and approximately ${facilityHours} hours of organised activity. ${postponedFixtures ? `${postponedFixtures} postponement${postponedFixtures === 1 ? " was" : "s were"} recorded.` : "No postponements were recorded in the selection."} Participation categories are inferred from team names and should be verified before external use.`
-    : `${club?.name || "The club"} has not yet built a sufficient operational evidence base for the selected period. Save completed matchdays and record outcomes before using Ground Control figures in an external application.`;
+    ? `${club?.name || "The club"} recorded ${deliveredFixtures} fixture${deliveredFixtures === 1 ? "" : "s"} scheduled to proceed across ${evidenceEntries.length} selected matchday${evidenceEntries.length === 1 ? "" : "s"}. This represents ${teamOpportunitySlots} team fixture opportunities and approximately ${facilityHours} scheduled pitch hours, not confirmed attendance or completed participation. ${postponedFixtures ? `${postponedFixtures} postponement${postponedFixtures === 1 ? " was" : "s were"} recorded.` : "No postponements were recorded in the selection."} Team categories are inferred from names and must be verified before external use.`
+    : `${club?.name || "The club"} has not yet built a sufficient operational evidence base for the selected period. Save matchweeks and record actual outcomes before using Ground Control figures in an external application.`;
 
   const themes = [
     {
@@ -346,15 +347,15 @@ export function buildGrantImpactModel({
       label: "Participation",
       score: participationScore,
       tone: getTone(participationScore),
-      headline: `${deliveredFixtures} fixtures delivered`,
-      detail: `${teamOpportunitySlots} calculated team opportunities; player numbers are not yet evidenced.`,
+      headline: `${deliveredFixtures} fixtures scheduled`,
+      detail: `${teamOpportunitySlots} calculated team fixture opportunities; attendance and player reach are not evidenced.`,
     },
     {
       id: "facilities",
       label: "Facilities",
       score: facilitiesScore,
       tone: getTone(facilitiesScore),
-      headline: `${facilityHours} activity hours`,
+      headline: `${facilityHours} scheduled pitch hours`,
       detail: `${pitchesUsed}/${asArray(pitchCfg).length || pitchesUsed || 0} configured pitches represented in the selection.`,
     },
     {
@@ -362,7 +363,7 @@ export function buildGrantImpactModel({
       label: "Resilience",
       score: deliveryScore,
       tone: getTone(deliveryScore),
-      headline: `${deliveryRate}% delivery rate`,
+      headline: `${deliveryRate}% remained scheduled`,
       detail: `${postponedFixtures} postponement${postponedFixtures === 1 ? "" : "s"} recorded.`,
     },
     {
@@ -370,7 +371,7 @@ export function buildGrantImpactModel({
       label: "Workforce",
       score: workforceScore,
       tone: getTone(workforceScore),
-      headline: `${confirmedOfficials}/${deliveredFixtures} officials confirmed`,
+      headline: `${confirmedOfficials}/${deliveredFixtures} scheduled fixtures covered`,
       detail: "Based on appointment status stored with selected fixtures.",
     },
   ];

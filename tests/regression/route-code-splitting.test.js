@@ -14,6 +14,7 @@ const routeModules = [
   "MidweekPage",
   "OperationsCentrePage",
   "OperationsTimelinePage",
+  "CommunicationsPage",
   "AnalyticsPage",
   "ReportsPage",
   "SettingsPage",
@@ -35,7 +36,6 @@ describe("route-level code splitting", () => {
         new RegExp(`import\\s+${moduleName}\\s+from`),
       );
     });
-    expect(appCoreSource).not.toContain("CommunicationsPage");
   });
 
   test("defers optional onboarding and subscription UI", () => {

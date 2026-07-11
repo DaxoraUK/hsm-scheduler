@@ -8,7 +8,7 @@ import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.
 const VIEWS = [
   {
     id: "performance",
-    label: "Performance analytics",
+    label: "Operations analytics",
     icon: BarChart3,
   },
   {
@@ -67,7 +67,7 @@ export default function AnalyticsPage({
             entitlement={ENTITLEMENTS.ANALYTICS_ADVANCED}
             subscription={subscription}
             title="Funding evidence is hidden on Core"
-            description="Core includes the operational performance dashboard. The grant-impact evidence workspace and advanced evidence scoring are available from Pro."
+            description="Core includes the operational analytics dashboard. The grant-impact evidence workspace and advanced evidence scoring are available from Pro."
             onOpenSubscription={onOpenSubscription}
             compact
           />

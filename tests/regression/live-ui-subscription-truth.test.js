@@ -24,18 +24,18 @@ const packageMigration = read(
 );
 
 describe("live UI and subscription truthfulness", () => {
-  test("uses a focused five-item customer navigation", () => {
+  test("uses a focused six-item customer navigation with a real communications workflow", () => {
     expect(productShell).toContain('"Mission Control"');
     expect(productShell).toContain('"Operations"');
     expect(productShell).toContain('"Analytics"');
     expect(productShell).toContain('"Reports"');
+    expect(productShell).toContain('"Communications"');
     expect(productShell).toContain('"Settings"');
-    expect(productShell).not.toContain('["communications", "Communications"');
     expect(
       existsSync(
         new URL("../../src/pages/CommunicationsPage.jsx", import.meta.url),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("removes duplicate and unfinished dashboard and matchday surfaces", () => {
@@ -55,7 +55,7 @@ describe("live UI and subscription truthfulness", () => {
     expect(analyticsDashboard).toContain(
       'new Set(["fixture-trends", "pitch-use"])',
     );
-    expect(analyticsDashboard).toContain('label="Delivery rate"');
+    expect(analyticsDashboard).toContain('label="Schedule completion"');
     expect(analyticsDashboard).toContain('label="Busiest pitch"');
     expect(analyticsDashboard).toContain('label="Officials coverage"');
     expect(analyticsDashboard).toContain('label="Parking pressure"');

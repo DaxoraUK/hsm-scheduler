@@ -36,6 +36,10 @@ const TEAM_COLUMNS = [
   { key: "altPitch", label: "Alternative Pitch", aliases: ["Alt Pitch"] },
   { key: "day", label: "Default Day", aliases: ["Day"] },
   { key: "gameMins", label: "Match Minutes", aliases: ["Minutes", "Mins"] },
+  { key: "managerName", label: "Manager Name", aliases: ["Coach", "Manager"] },
+  { key: "managerPhone", label: "Manager Phone", aliases: ["Mobile", "Coach Phone"] },
+  { key: "managerEmail", label: "Manager Email", aliases: ["Coach Email"] },
+  { key: "communicationChannel", label: "Preferred Channel", aliases: ["Channel"] },
   { key: "ageOrder", label: "Age Order" },
 ];
 
@@ -76,6 +80,12 @@ function normaliseImportedTeam(row, index, primarySiteId) {
     altPitch: String(row.altPitch || "").trim() || null,
     day,
     gameMins: Math.max(20, numberValue(row.gameMins, 70)),
+    managerName: String(row.managerName || "").trim(),
+    managerPhone: String(row.managerPhone || "").trim(),
+    managerEmail: String(row.managerEmail || "").trim(),
+    communicationChannel: ["whatsapp", "sms", "email"].includes(String(row.communicationChannel || "").trim().toLowerCase())
+      ? String(row.communicationChannel).trim().toLowerCase()
+      : "whatsapp",
     ageOrder: numberValue(row.ageOrder, index + 1),
   };
 }
@@ -119,6 +129,10 @@ export default function TeamSettingsPanel({
     ageOrder: current.length + 1,
     day: "Saturday",
     gameMins: 70,
+    managerName: "",
+    managerPhone: "",
+    managerEmail: "",
+    communicationChannel: "whatsapp",
   }]);
   };
 
@@ -151,7 +165,7 @@ export default function TeamSettingsPanel({
           rows={teamCfg}
           columns={TEAM_COLUMNS}
           filename="ground-control-teams"
-          templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, ageOrder: 7 }]}
+          templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, managerName: "Alex Example", managerPhone: "07123 456789", managerEmail: "alex@example.org", communicationChannel: "whatsapp", ageOrder: 7 }]}
           normaliseRow={(row, index) => normaliseImportedTeam(row, index, primarySite?.id)}
           onImport={importTeams}
         />
@@ -230,6 +244,22 @@ export default function TeamSettingsPanel({
                   <select className={selectClass} value={team.altPitch || ""} onChange={(event) => updateTeam(index, "altPitch", event.target.value)}>
                     <option value="">None</option>
                     {options.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Manager / coach name" >
+                  <input className={inputClass} value={team.managerName || ""} onChange={(event) => updateTeam(index, "managerName", event.target.value)} placeholder="Primary matchday contact" />
+                </Field>
+                <Field label="Manager mobile" >
+                  <input className={inputClass} value={team.managerPhone || ""} onChange={(event) => updateTeam(index, "managerPhone", event.target.value)} placeholder="07xxx xxxxxx" />
+                </Field>
+                <Field label="Manager email" >
+                  <input type="email" className={inputClass} value={team.managerEmail || ""} onChange={(event) => updateTeam(index, "managerEmail", event.target.value)} placeholder="manager@club.org.uk" />
+                </Field>
+                <Field label="Preferred channel" >
+                  <select className={selectClass} value={team.communicationChannel || "whatsapp"} onChange={(event) => updateTeam(index, "communicationChannel", event.target.value)}>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="sms">SMS</option>
+                    <option value="email">Email</option>
                   </select>
                 </Field>
                 <Field label="Scheduling order" hint="Lower numbers are considered first." >

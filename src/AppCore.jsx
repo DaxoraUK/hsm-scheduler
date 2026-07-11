@@ -124,6 +124,7 @@ const OperationsCentrePage = lazy(
 const OperationsTimelinePage = lazy(
   () => import("./pages/OperationsTimelinePage.jsx"),
 );
+const CommunicationsPage = lazy(() => import("./pages/CommunicationsPage.jsx"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"));
@@ -1909,18 +1910,9 @@ function App() {
     setMainPage("reports");
   };
 
-  const openCoachMessages = (day = "saturday") => {
-    setMainPage("operations");
-    setDayTab(day);
-    setNavigationTarget({
-      target: "communications",
-      page: "operations",
-      day,
-      workspace: "communications",
-      card: "coachMessages",
-      scrollToSection: true,
-      createdAt: Date.now(),
-    });
+  const openCoachMessages = () => {
+    setNavigationTarget(null);
+    setMainPage("communications");
   };
 
   return (
@@ -2375,6 +2367,28 @@ function App() {
               </OperationsPage>
             </Suspense>
           )}
+          {mainPage === "communications" && pageEntitled && (
+            <Suspense fallback={<LazyPageFallback label="communications" />}>
+              <CommunicationsPage
+                club={club}
+                teamCfg={teamCfg}
+                satFinal={satFinal}
+                sunFinal={sunFinal}
+                midweekFinal={activeMidweekFinal}
+                satUnresolved={satUnresolved}
+                sunUnresolved={sunUnresolved}
+                midweekUnresolved={activeMidweekUnresolved}
+                satHasRun={satHasRun}
+                sunHasRun={sunHasRun}
+                midweekHasRun={activeMidweekHasRun}
+                satDateLabel={satDateLabel}
+                sunDateLabel={sunDateLabel}
+                midweekDateLabel={midweekDateLabel}
+                midweekEnabled={midweekEnabled}
+              />
+            </Suspense>
+          )}
+
           {mainPage === "analytics" && pageEntitled && (
             <Suspense fallback={<LazyPageFallback label="analytics" />}>
               <AnalyticsPage

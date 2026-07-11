@@ -14,7 +14,7 @@ export const REPORT_TYPES = [
   { id: "officials", label: "Officials", description: "Appointment coverage and outstanding confirmations." },
   { id: "exceptions", label: "Exceptions", description: "Postponed, cancelled, unresolved and incomplete records." },
   { id: "analytics", label: "Analytics snapshot", description: "Executive operational summary for the selected period." },
-  { id: "funding", label: "Funding evidence pack", description: "Evidence provenance, gaps, methodology and source appendix." },
+  { id: "funding", label: "Funding evidence draft", description: "Evidence provenance, gaps, limitations and a source appendix for human review." },
 ];
 
 export const REPORT_SCOPES = [
@@ -212,7 +212,7 @@ export function buildReportsModel({
     teamCfg,
     refs,
     metrics: {
-      deliveredFixtures: evidence.summary.delivered,
+      scheduledFixtures: evidence.summary.scheduled ?? evidence.summary.delivered,
       postponedFixtures: evidence.summary.postponed,
       facilityHours: evidence.summary.facilityHours,
       officialCoverage: evidence.summary.officialCoverage,

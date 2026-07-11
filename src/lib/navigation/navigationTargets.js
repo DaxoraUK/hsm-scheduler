@@ -28,7 +28,7 @@ export const NAV_TARGET_META = Object.freeze({
   [NAV_TARGETS.OFFICIALS]: { page: "operations", workspace: "intelligence", card: "officialsIntelligence", label: "Officials" },
   [NAV_TARGETS.WEATHER]: { page: "operations", workspace: "intelligence", card: "weatherIntelligence", label: "Weather" },
   [NAV_TARGETS.RECOMMENDATIONS]: { page: "operations", workspace: "intelligence", card: "recommendationCentre", label: "Recommendations" },
-  [NAV_TARGETS.COMMUNICATIONS]: { page: "operations", workspace: "communications", card: "coachMessages", label: "Coach Messages" },
+  [NAV_TARGETS.COMMUNICATIONS]: { page: "communications", label: "Communications" },
   [NAV_TARGETS.ANALYTICS]: { page: "analytics", label: "Analytics" },
   [NAV_TARGETS.REPORTS]: { page: "reports", label: "Reports" },
   [NAV_TARGETS.SETTINGS]: { page: "settings", label: "Settings" },

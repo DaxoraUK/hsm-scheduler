@@ -17,6 +17,7 @@ import {
   Eye,
   FileText,
   LayoutDashboard,
+  MessageSquareText,
   LogOut,
   Menu,
   RefreshCw,
@@ -95,6 +96,7 @@ export default function ProductShell({
   const workspaceNavItems = platformOnly ? [] : [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
+    ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],

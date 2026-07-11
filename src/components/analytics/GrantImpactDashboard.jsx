@@ -412,10 +412,10 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={Trophy} label="Fixtures delivered" value={model.metrics.deliveredFixtures} detail={`${model.metrics.teamOpportunitySlots} calculated team opportunities; not individual participant numbers.`} />
+        <Metric icon={Trophy} label="Fixtures scheduled" value={model.metrics.scheduledFixtures ?? model.metrics.deliveredFixtures} detail={`${model.metrics.teamOpportunitySlots} team fixture opportunities; not attendance or individual participant numbers.`} />
         <Metric icon={UsersRound} label="Participation categories" value={model.metrics.youthFixtures} detail={`${model.metrics.femaleFixtures} girls' or women's fixtures inferred from team names.`} />
         <Metric icon={CalendarClock} label="Facility use" value={`${model.metrics.facilityHours} hrs`} detail={`${model.metrics.pitchesUsed}/${model.metrics.pitchesConfigured || model.metrics.pitchesUsed} pitches represented.`} />
-        <Metric icon={HeartPulse} label="Fixture delivery" value={`${100 - model.metrics.postponementRate}%`} detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`} />
+        <Metric icon={HeartPulse} label="Schedule completion" value={`${model.metrics.scheduleCompletionRate ?? 100 - model.metrics.postponementRate}%`} detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`} />
       </div>
 
       <Card eyebrow="Evidence provenance" title="Know where every claim comes from" subtitle="Ground Control keeps direct records, calculations, inferences and manual evidence visibly separate.">

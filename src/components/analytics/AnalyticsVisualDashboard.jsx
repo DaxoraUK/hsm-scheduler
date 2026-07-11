@@ -102,9 +102,9 @@ function InsightPanel({ model }) {
           <div className="flex flex-wrap items-center gap-3">
             <StatusChip status={tone}>
               {model.summary.deliveryRate >= 90
-                ? "Strong delivery"
+                ? "Strong schedule completion"
                 : model.summary.deliveryRate >= 75
-                  ? "Performance watch"
+                  ? "Schedule watch"
                   : "Action required"}
             </StatusChip>
             <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">
@@ -131,7 +131,7 @@ function InsightPanel({ model }) {
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/10">
               <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
-                Activity delivered
+                Scheduled pitch time
               </div>
               <div className="mt-1 text-xl font-black">
                 {model.summary.facilityHours} hours
@@ -493,7 +493,7 @@ function OutcomeTrend({ weekly }) {
               <div
                 className="flex w-full max-w-[58px] flex-col-reverse overflow-hidden rounded-t-xl bg-slate-100"
                 style={{ height }}
-                title={`${week.fullLabel}: ${week.delivered} delivered, ${week.postponed} postponed, ${week.cancelled} cancelled`}
+                title={`${week.fullLabel}: ${week.delivered} scheduled, ${week.postponed} postponed, ${week.cancelled} cancelled`}
               >
                 <div
                   className="bg-emerald-500"
@@ -518,7 +518,7 @@ function OutcomeTrend({ weekly }) {
       <div className="mt-4 flex flex-wrap gap-5 text-xs font-bold text-slate-500">
         <span className="inline-flex items-center gap-2">
           <i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
-          Delivered
+          Scheduled
         </span>
         <span className="inline-flex items-center gap-2">
           <i className="h-2.5 w-2.5 rounded-sm bg-amber-400" />
@@ -934,7 +934,7 @@ function RankedPerformance({ data, kind = "team" }) {
             />
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] font-black uppercase tracking-[0.13em] text-slate-400">
-            <span>{item.deliveryRate}% delivery</span>
+            <span>{item.deliveryRate}% remained scheduled</span>
             <span>{item.officialCoverage}% officials</span>
           </div>
         </div>
@@ -1004,7 +1004,7 @@ export default function AnalyticsVisualDashboard({
       <PageHeader
         eyebrow="Performance Analytics"
         title="Understand every matchday"
-        subtitle="Track delivery, pitch usage, congestion, parking and officials using the club's saved operational history. No invented figures and no hidden assumptions."
+        subtitle="Track scheduled activity, pitch usage, congestion, parking and officials using the club's saved operational history. Scheduled records are not treated as attendance or completed participation."
         action={
           <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm">
             <CalendarDays size={17} className="text-emerald-600" />
@@ -1094,7 +1094,7 @@ export default function AnalyticsVisualDashboard({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               icon={Trophy}
-              label="Delivery rate"
+              label="Schedule completion"
               value={`${model.summary.deliveryRate}%`}
               detail={`${model.summary.delivered} scheduled from ${model.summary.total} recorded outcomes`}
               tone={model.summary.deliveryRate >= 90 ? "success" : "warning"}
@@ -1130,8 +1130,8 @@ export default function AnalyticsVisualDashboard({
             <Panel
               id="fixture-trends"
               icon={Activity}
-              title="Fixture delivery trend"
-              subtitle="Delivered, postponed and cancelled fixtures by saved matchday."
+              title="Fixture outcome trend"
+              subtitle="Scheduled, postponed and cancelled fixture records by saved matchday."
               badge={`${model.summary.total} fixtures`}
               open={openPanels.has("fixture-trends")}
               onToggle={togglePanel}
@@ -1276,8 +1276,8 @@ export default function AnalyticsVisualDashboard({
             <Panel
               id="team-performance"
               icon={UsersRound}
-              title="Team activity and delivery"
-              subtitle="Compare fixture volume, delivered hours, postponements and officials coverage by team."
+              title="Team activity and scheduling"
+              subtitle="Compare fixture volume, scheduled pitch hours, postponements and officials coverage by team."
               badge={`${model.teamPerformance.length} teams`}
               open={openPanels.has("team-performance")}
               onToggle={togglePanel}

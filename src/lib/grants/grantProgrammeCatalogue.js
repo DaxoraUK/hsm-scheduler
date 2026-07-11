@@ -106,7 +106,7 @@ export const GRANT_PROJECT_TYPES = [
   },
 ];
 
-const VERIFIED_ON = "2026-07-05";
+const VERIFIED_ON = "2026-07-11";
 
 function programme(programme) {
   return {
@@ -333,18 +333,34 @@ export const VERIFIED_GRANT_PROGRAMMES = [
   programme({
     id: "ff-lionesses-here-to-play",
     funder: "Football Foundation",
-    name: "Lionesses HERe to Play Fund",
+    name: "Lionesses HERe to Play Fund – Teams",
     nations: ["england"],
     status: "open",
     deadline: "2026-09-30",
-    amountLabel: "£500 or £1,500",
+    amountLabel: "£500 to £7,500 across up to five opportunities",
     projectTypes: ["women-girls", "participation", "equipment", "workforce"],
-    summary: "Set-up support for new women and girls' teams or England Football programmes, including kit, equipment and delivery costs.",
-    matchFunding: "No match-funding requirement stated on the public overview",
-    eligibilityNotes: ["New team or eligible England Football programme", "Fund closes 30 September 2026", "Current criteria must be checked before applying"],
+    summary: "Set-up support for new women and girls' teams or eligible England Football programmes, including kit, equipment and programme costs.",
+    matchFunding: "No match-funding requirement stated on the official team guidance",
+    eligibilityNotes: ["New team or eligible England Football programme", "Organisations can combine up to five opportunities", "Fund closes 30 September 2026", "Club applicants must meet the relevant inclusion-workshop condition"],
     evidenceRequirementIds: ["participation-opportunity", "inclusion-reach", "workforce"],
-    manualRequirements: ["New-team delivery plan", "Budget", "Affiliation or programme details", "Safeguarding arrangements"],
+    manualRequirements: ["New-team plan", "Budget", "Affiliation or programme details", "Safeguarding arrangements", "Verified organisation, contacts and site"],
     officialUrl: "https://footballfoundation.org.uk/grant/lionesses-here-to-play/here-for-teams",
+  }),
+  programme({
+    id: "ff-lionesses-here-to-play-facilities",
+    funder: "Football Foundation",
+    name: "Lionesses HERe to Play Fund – Facilities",
+    nations: ["england"],
+    status: "open",
+    deadline: "2026-09-30",
+    amountLabel: "Up to £25,000; no more than 75% of total project cost",
+    projectTypes: ["clubhouse", "equipment", "women-girls", "disability-inclusion", "parking-access"],
+    summary: "Facility improvements intended to make grassroots sites more welcoming, safe and inclusive for women and girls.",
+    matchFunding: "Applicant must provide at least 25% partnership funding",
+    eligibilityNotes: ["Minimum five years' security of tenure", "No retrospective costs or commitments", "Fund closes 30 September 2026", "Planning and building-regulation requirements must be checked"],
+    evidenceRequirementIds: ["sustained-demand", "participation-opportunity", "inclusion-reach", "site-access", "monitoring-baseline"],
+    manualRequirements: ["Tenure evidence", "Two quotes for each requested item", "Planning or building-regulation evidence where relevant", "Evidence of at least 25% partnership funding", "Project plan and photographs", "Safeguarding and inclusion case"],
+    officialUrl: "https://footballfoundation.org.uk/grant/lionesses-here-to-play/here-for-facilities",
   }),
   programme({
     id: "sport-england-movement-fund",

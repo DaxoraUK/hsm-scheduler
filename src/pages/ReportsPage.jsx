@@ -241,7 +241,7 @@ export default function ReportsPage({
       <PageHeader
         eyebrow="Reports and evidence"
         title="Create traceable operational reports"
-        subtitle="Build club-scoped operational packs from current or historical records, with advanced analytics and funding evidence available on Pro."
+        subtitle="Build club-scoped operational packs from current or historical records, with advanced analytics and a funding evidence draft available on Pro."
         action={
           <div className="flex flex-wrap gap-2">
             <button
@@ -269,7 +269,7 @@ export default function ReportsPage({
           entitlement={ENTITLEMENTS.REPORTS_ADVANCED}
           subscription={subscription}
           title="Advanced evidence reports are available on Pro"
-          description="Core includes operations, fixture, pitch, parking, officials and exception reports. Analytics snapshots and funding evidence packs are available from Pro."
+          description="Core includes operations, fixture, pitch, parking, officials and exception reports. Analytics snapshots and funding evidence drafts are available from Pro."
           onOpenSubscription={onOpenSubscription}
           compact
         />
