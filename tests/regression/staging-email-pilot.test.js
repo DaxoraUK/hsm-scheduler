@@ -117,6 +117,14 @@ describe("staging email pilot", () => {
     expect(stagingEnv).toContain("COMMUNICATIONS_WHATSAPP_ENABLED=false");
   });
 
+  test("does not count a reused delivery as a new provider acceptance", () => {
+    expect(dispatchSource).toContain("const reused = results.filter((item) => item.reused).length");
+    expect(dispatchSource).toContain("!item.reused &&");
+    expect(dispatchSource).toContain('reused ? "duplicate"');
+    expect(pageSource).toContain("Message not resent");
+    expect(pageSource).toContain("did not create another provider request");
+  });
+
   test("maps Resend hard failures and suppression separately from delivery", () => {
     expect(mapResendStatus("email.failed")).toBe("failed");
     expect(mapResendStatus("email.suppressed")).toBe("undelivered");

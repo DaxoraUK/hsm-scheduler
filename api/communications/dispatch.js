@@ -177,12 +177,13 @@ export async function POST(request) {
     }
 
     await serviceRpc("refresh_communication_delivery_batch", { p_batch_id: batchId });
-    const accepted = results.filter((item) => ["provider_accepted", "sent", "delivered", "read"].includes(item.status)).length;
+    const reused = results.filter((item) => item.reused).length;
+    const accepted = results.filter((item) => !item.reused && ["provider_accepted", "sent", "delivered", "read"].includes(item.status)).length;
     const failed = results.filter((item) => item.status === "failed").length;
 
     const failedResults = results.filter((item) => item.status === "failed");
     const primaryFailure = failedResults[0] || null;
-    const outcome = failed && accepted ? "partial" : failed ? "failed" : "accepted";
+    const outcome = failed && accepted ? "partial" : failed ? "failed" : accepted ? "accepted" : reused ? "duplicate" : "processed";
 
     // A provider rejection is an application-level delivery result, not a broken
     // HTTP request. Return the completed batch as JSON so the browser can show
@@ -193,6 +194,7 @@ export async function POST(request) {
       requested: results.length,
       accepted,
       failed,
+      reused,
       outcome,
       failure: primaryFailure
         ? {

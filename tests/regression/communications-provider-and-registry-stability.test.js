@@ -21,7 +21,7 @@ describe("communications provider and settings registry stability", () => {
   });
 
   test("returns provider rejections as completed batch results instead of hiding them behind a generic 502", () => {
-    expect(dispatch).toContain('const outcome = failed && accepted ? "partial" : failed ? "failed" : "accepted"');
+    expect(dispatch).toContain('const outcome = failed && accepted ? "partial" : failed ? "failed" : accepted ? "accepted" : reused ? "duplicate" : "processed"');
     expect(dispatch).toContain("providerStatus: Number(error?.status) || null");
     expect(dispatch).toContain("Return the completed batch as JSON");
     expect(dispatch).toContain("}, 200);");

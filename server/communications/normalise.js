@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { MATCHDAY_EMAIL_TEMPLATE_VERSION } from "./emailTemplates.js";
 
 export function text(value, max = 4000) {
   return String(value || "").trim().slice(0, max);
@@ -62,17 +63,20 @@ export function sanitiseOutboundMessages(clubId, rows = []) {
     const recipientType = ["coach", "assistant"].includes(text(row?.recipientType, 30).toLowerCase())
       ? text(row?.recipientType, 30).toLowerCase()
       : "coach";
+    const contentVersion = channel === "email" ? MATCHDAY_EMAIL_TEMPLATE_VERSION : "message-body-v1";
     const idempotencyKey = sha256([
       clubId,
       channel,
       destination.toLowerCase(),
       messageHash,
       recipientType,
+      contentVersion,
     ].join("|"));
 
     return {
       clientKey: text(row?.clientKey || `${messageKey}:${recipientType}`, 240),
       idempotencyKey,
+      contentVersion,
       messageKey,
       messageHash,
       fixtureId: text(row?.fixtureId, 240) || null,

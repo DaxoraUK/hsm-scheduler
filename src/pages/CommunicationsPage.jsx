@@ -421,8 +421,15 @@ export default function CommunicationsPage(props) {
       if (result.failed) {
         const failure = describeCommunicationDispatchFailure(result);
         toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: failure.description });
-      } else {
+      } else if (result.accepted) {
         toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: confirmation.emailPilot ? "The internal staging inbox will receive the redirected test. Delivery remains a separate provider status." : "Delivery status will update only when the provider confirms it." });
+      } else if (result.reused) {
+        toast.info("Message not resent", { description: "The same recipient and message were already processed recently, so Ground Control did not create another provider request." });
+      } else {
+        toast.info("No new provider request was created", { description: "Review the communication history before trying again." });
+      }
+      if (result.reused && result.accepted) {
+        toast.info(`${result.reused} recent duplicate${result.reused === 1 ? " was" : "s were"} not resent`, { description: "Only newly accepted provider requests were counted as sent in this batch." });
       }
       if (result.unavailable?.length) {
         toast.info(`${result.unavailable.length} recipient${result.unavailable.length === 1 ? "" : "s"} not sent`, { description: "Their preferred channel is not configured for web sending." });

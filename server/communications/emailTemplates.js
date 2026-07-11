@@ -1,3 +1,5 @@
+export const MATCHDAY_EMAIL_TEMPLATE_VERSION = "professional-matchday-v1";
+
 const STATUS_PRESENTATION = Object.freeze({
   scheduled: {
     eyebrow: "MATCHDAY DETAILS",

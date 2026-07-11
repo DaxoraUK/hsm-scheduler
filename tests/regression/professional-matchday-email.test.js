@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { buildMatchdayEmail, escapeHtml } from "../../server/communications/emailTemplates.js";
-import { sanitiseOutboundMessages } from "../../server/communications/normalise.js";
+import { buildMatchdayEmail, escapeHtml, MATCHDAY_EMAIL_TEMPLATE_VERSION } from "../../server/communications/emailTemplates.js";
+import { sanitiseOutboundMessages, sha256 } from "../../server/communications/normalise.js";
 import { buildDeliveryMessages } from "../../src/lib/communications/deliveryService.js";
 
 const capabilities = {
@@ -57,6 +57,21 @@ describe("professional matchday email", () => {
       kickOff: "08:30",
       venue: "Scholes Bank",
     });
+  });
+
+  test("versions email delivery identity so a redesigned template creates a fresh provider request", () => {
+    const prepared = buildDeliveryMessages([row], capabilities).messages[0];
+    const sanitised = sanitiseOutboundMessages("club-1", [prepared])[0];
+    const legacyKey = sha256([
+      "club-1",
+      "email",
+      "andrew@example.org",
+      "hash-1",
+      "coach",
+    ].join("|"));
+
+    expect(sanitised.contentVersion).toBe(MATCHDAY_EMAIL_TEMPLATE_VERSION);
+    expect(sanitised.idempotencyKey).not.toBe(legacyKey);
   });
 
   test("builds a responsive branded HTML email and a complete plain-text fallback", () => {
