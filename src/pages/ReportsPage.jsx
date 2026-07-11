@@ -18,8 +18,12 @@ import PageHeader from "../ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import ReportDocument from "../components/reports/ReportDocument.jsx";
+import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
 import { buildReportsModel, reportFilename, REPORT_SCOPES, REPORT_TYPES } from "../lib/reports/reportingEngine.js";
 import { buildReportCsv, downloadCsv } from "../lib/reports/csvExport.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+
+const ADVANCED_REPORT_IDS = new Set(["analytics", "funding"]);
 
 const REPORT_ICONS = {
   operations: ClipboardList,
@@ -68,6 +72,9 @@ function SummaryMetric({ label, value, detail, tone = "neutral" }) {
 
 export default function ReportsPage({
   club = {},
+  subscription,
+  advancedReportsEnabled: authoritativeAdvancedReportsEnabled,
+  onOpenSubscription,
   history = [],
   pitchCfg = [],
   teamCfg = [],
@@ -95,6 +102,13 @@ export default function ReportsPage({
   const [selectedSource, setSelectedSource] = useState("current");
   const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
   const [pendingAutoPrint, setPendingAutoPrint] = useState(false);
+  const advancedReportsEnabled = authoritativeAdvancedReportsEnabled
+    ?? hasEntitlement(subscription, ENTITLEMENTS.REPORTS_ADVANCED);
+  const dataExportEnabled = hasEntitlement(subscription, ENTITLEMENTS.DATA_EXPORT);
+  const availableReportTypes = useMemo(
+    () => REPORT_TYPES.filter((item) => advancedReportsEnabled || !ADVANCED_REPORT_IDS.has(item.id)),
+    [advancedReportsEnabled]
+  );
 
   const current = useMemo(() => ({
     satFinal,
@@ -151,10 +165,20 @@ export default function ReportsPage({
   }, [model.sourceOptions, selectedSource]);
 
   useEffect(() => {
+    if (!availableReportTypes.some((item) => item.id === reportType)) {
+      setReportType("operations");
+    }
+  }, [availableReportTypes, reportType]);
+
+  useEffect(() => {
     if (!midweekEnabled && ["matchweek", "midweek"].includes(scope)) setScope("weekend");
   }, [midweekEnabled, scope]);
 
   const exportCsv = () => {
+    if (!dataExportEnabled) {
+      toast.error("CSV export is not included in this plan");
+      return;
+    }
     const csv = buildReportCsv(model);
     const filename = reportFilename({
       clubName: club.name,
@@ -181,7 +205,7 @@ export default function ReportsPage({
   useEffect(() => {
     if (!navigationTarget || navigationTarget.target !== "reports") return;
 
-    const nextType = REPORT_TYPES.some((item) => item.id === navigationTarget.reportType)
+    const nextType = availableReportTypes.some((item) => item.id === navigationTarget.reportType)
       ? navigationTarget.reportType
       : "fixtures";
     const allowedScopes = REPORT_SCOPES.map((item) => item.value);
@@ -197,7 +221,7 @@ export default function ReportsPage({
     setScope(nextScope);
     setPendingAutoPrint(Boolean(navigationTarget.autoPrint));
     clearNavigationTarget?.();
-  }, [clearNavigationTarget, midweekEnabled, navigationTarget]);
+  }, [availableReportTypes, clearNavigationTarget, midweekEnabled, navigationTarget]);
 
   useEffect(() => {
     if (!pendingAutoPrint || !model.hasData) return undefined;
@@ -217,16 +241,16 @@ export default function ReportsPage({
       <PageHeader
         eyebrow="Reports and evidence"
         title="Create traceable operational reports"
-        subtitle="Build club-scoped matchday packs, management reports and funding evidence documents with visible methodology and source records."
+        subtitle="Build club-scoped operational packs from current or historical records, with advanced analytics and funding evidence available on Pro."
         action={
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={exportCsv}
-              disabled={!model.hasData}
+              disabled={!model.hasData || !dataExportEnabled}
               className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Download size={17} /> Export CSV
+              <Download size={17} /> {dataExportEnabled ? "Export CSV" : "CSV locked"}
             </button>
             <button
               type="button"
@@ -240,6 +264,17 @@ export default function ReportsPage({
         }
       />
 
+      {!advancedReportsEnabled ? (
+        <PlanFeatureNotice
+          entitlement={ENTITLEMENTS.REPORTS_ADVANCED}
+          subscription={subscription}
+          title="Advanced evidence reports are available on Pro"
+          description="Core includes operations, fixture, pitch, parking, officials and exception reports. Analytics snapshots and funding evidence packs are available from Pro."
+          onOpenSubscription={onOpenSubscription}
+          compact
+        />
+      ) : null}
+
       <section className="np rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <SelectControl label="Report data" value={selectedSource} onChange={setSelectedSource}>
@@ -251,7 +286,7 @@ export default function ReportsPage({
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {REPORT_TYPES.map((item) => {
+          {availableReportTypes.map((item) => {
             const Icon = REPORT_ICONS[item.id] || FileCheck2;
             const active = reportType === item.id;
             return (

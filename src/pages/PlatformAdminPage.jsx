@@ -43,6 +43,7 @@ import {
   PLAN_CATALOGUE,
   PLAN_CODES,
   SUBSCRIPTION_STATUSES,
+  getAssignablePlans,
 } from "../lib/subscriptions/entitlements.js";
 
 const PANEL_TABS = Object.freeze([
@@ -578,7 +579,7 @@ export default function PlatformAdminPage({
                     {!platformContext.isPlatformAdmin ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-600">Support operators can review subscriptions but cannot change commercial access.</div> : null}
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                       <label className="text-xs font-black text-slate-600">Plan<select disabled={!platformContext.isPlatformAdmin} value={subscriptionForm.planCode} onChange={(event) => setSubscriptionForm((current) => ({ ...current, planCode: event.target.value }))} className={`${inputClass} mt-2`}>
-                        {Object.values(PLAN_CATALOGUE).map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}
+                        {getAssignablePlans({ includeCode: subscriptionForm.planCode }).map((plan) => <option key={plan.code} value={plan.code}>{plan.name}{plan.launchStatus === "held" ? " (legacy)" : ""}</option>)}
                       </select></label>
                       <label className="text-xs font-black text-slate-600">Status<select disabled={!platformContext.isPlatformAdmin} value={subscriptionForm.status} onChange={(event) => setSubscriptionForm((current) => ({ ...current, status: event.target.value }))} className={`${inputClass} mt-2`}>
                         {Object.values(SUBSCRIPTION_STATUSES).map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}

@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { isSupaConfigured, DB } from "../lib/supabase.js";
 import { toast } from "sonner";
-import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
+import {
+  decorateFixturesForDay,
+  normaliseFixtureDayKey,
+} from "../lib/domain/fixtureDay.js";
 import { getParkingCapacity } from "../lib/domain/clubDomain.js";
 import { getParkingSettings } from "../lib/intelligence/parking/parkingService.js";
 import { weatherService } from "../lib/services/weatherService.js";
@@ -11,7 +14,7 @@ function splitFixtures(fixtures = [], dayKey) {
   const decorated = decorateFixturesForDay(fixtures, dayKey);
   return {
     active: decorated.filter(
-      (game) => game.status !== "postponed" && game.status !== "cancelled"
+      (game) => game.status !== "postponed" && game.status !== "cancelled",
     ),
     postponed: decorated.filter((game) => game.status === "postponed"),
     cancelled: decorated.filter((game) => game.status === "cancelled"),
@@ -37,56 +40,72 @@ function attachWeatherExposure(fixture = {}, exposure = null, forecast = null) {
   };
 }
 
-export async function captureWeatherSnapshots(days = [], club = {}, service = weatherService) {
+export async function captureWeatherSnapshots(
+  days = [],
+  club = {},
+  service = weatherService,
+) {
   const config = service.getConfiguration(club);
   if (!config.enabled || !config.postcode) return days;
 
-  return Promise.all(days.map(async (day) => {
-    if (!day?.hasRun || !day?.date || !day?.scheduled?.length) return day;
-    const controller = typeof AbortController === "undefined" ? null : new AbortController();
-    const timeout = controller ? setTimeout(() => controller.abort(), 3500) : null;
-    try {
-      const forecast = await service.getForecast({
-        postcode: config.postcode,
-        date: day.date,
-        fixtures: day.scheduled,
-        signal: controller?.signal,
-      });
-      const snapshot = calculateWeatherIntelligence({
-        club,
-        fixtures: day.scheduled,
-        dateLabel: day.dateLabel || day.label,
-        forecastSource: forecast,
-        connectionStatus: forecast?.cacheStatus === "stale" ? "stale" : "success",
-        connectionError: forecast?.warning || null,
-      });
-      const exposureById = new Map(
-        (snapshot.fixtureExposure || []).map((exposure) => [String(exposure.id), exposure])
-      );
-      const scheduled = day.scheduled.map((fixture, index) => {
-        const key = String(fixture.id || fixture.fixtureId || `weather-fixture-${index}`);
-        const exposure = exposureById.get(key) || snapshot.fixtureExposure?.[index] || null;
-        return attachWeatherExposure(fixture, exposure, forecast);
-      });
-      return {
-        ...day,
-        scheduled,
-        weatherSnapshot: {
-          provider: snapshot.provider,
-          updatedAt: snapshot.updatedAt,
-          overallRisk: snapshot.overallRisk,
-          forecast: snapshot.forecast,
-          metrics: snapshot.metrics,
-          cacheStatus: forecast?.cacheStatus || "live",
-        },
-      };
-    } catch {
-      // Saving the operational record must not fail because a forecast is unavailable.
-      return day;
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
-  }));
+  return Promise.all(
+    days.map(async (day) => {
+      if (!day?.hasRun || !day?.date || !day?.scheduled?.length) return day;
+      const controller =
+        typeof AbortController === "undefined" ? null : new AbortController();
+      const timeout = controller
+        ? setTimeout(() => controller.abort(), 3500)
+        : null;
+      try {
+        const forecast = await service.getForecast({
+          postcode: config.postcode,
+          date: day.date,
+          fixtures: day.scheduled,
+          signal: controller?.signal,
+        });
+        const snapshot = calculateWeatherIntelligence({
+          club,
+          fixtures: day.scheduled,
+          dateLabel: day.dateLabel || day.label,
+          forecastSource: forecast,
+          connectionStatus:
+            forecast?.cacheStatus === "stale" ? "stale" : "success",
+          connectionError: forecast?.warning || null,
+        });
+        const exposureById = new Map(
+          (snapshot.fixtureExposure || []).map((exposure) => [
+            String(exposure.id),
+            exposure,
+          ]),
+        );
+        const scheduled = day.scheduled.map((fixture, index) => {
+          const key = String(
+            fixture.id || fixture.fixtureId || `weather-fixture-${index}`,
+          );
+          const exposure =
+            exposureById.get(key) || snapshot.fixtureExposure?.[index] || null;
+          return attachWeatherExposure(fixture, exposure, forecast);
+        });
+        return {
+          ...day,
+          scheduled,
+          weatherSnapshot: {
+            provider: snapshot.provider,
+            updatedAt: snapshot.updatedAt,
+            overallRisk: snapshot.overallRisk,
+            forecast: snapshot.forecast,
+            metrics: snapshot.metrics,
+            cacheStatus: forecast?.cacheStatus || "live",
+          },
+        };
+      } catch {
+        // Saving the operational record must not fail because a forecast is unavailable.
+        return day;
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    }),
+  );
 }
 
 function buildFixtureDaySnapshots({
@@ -125,7 +144,14 @@ function buildFixtureDaySnapshots({
   }
 
   return [
-    ["midweek", "Midweek", midweekDate, midweekDateLabel, midweekHasRun, midweekFinal],
+    [
+      "midweek",
+      "Midweek",
+      midweekDate,
+      midweekDateLabel,
+      midweekHasRun,
+      midweekFinal,
+    ],
     ["saturday", "Saturday", satDate, satDateLabel, satHasRun, satFinal],
     ["sunday", "Sunday", sunDate, sunDateLabel, sunHasRun, sunFinal],
   ].map(([key, label, date, dateLabel, hasRun, final]) => {
@@ -200,9 +226,21 @@ export function useWeekPersistence({
     if (!publishedDays.length) return;
 
     const byKey = Object.fromEntries(snapshots.map((day) => [day.key, day]));
-    const saturday = byKey.saturday || { scheduled: [], postponed: [], cancelled: [] };
-    const sunday = byKey.sunday || { scheduled: [], postponed: [], cancelled: [] };
-    const midweek = byKey.midweek || { scheduled: [], postponed: [], cancelled: [] };
+    const saturday = byKey.saturday || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
+    const sunday = byKey.sunday || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
+    const midweek = byKey.midweek || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
 
     const parkingSettings = getParkingSettings(club);
     const parkingCapacity = getParkingCapacity(club, 0);
@@ -210,11 +248,14 @@ export function useWeekPersistence({
       id: Date.now(),
       dateLabel:
         mode === "test"
-          ? "Test Matchweek"
+          ? "Demonstration Matchweek"
           : saturday.hasRun || sunday.hasRun
             ? satDateLabel
             : midweekDateLabel || "Midweek",
-      date: saturday.hasRun || sunday.hasRun ? satDate || undefined : midweekDate || undefined,
+      date:
+        saturday.hasRun || sunday.hasRun
+          ? satDate || undefined
+          : midweekDate || undefined,
       savedAt: new Date().toISOString(),
       carParkSpaces: parkingCapacity,
       parking: {
@@ -261,12 +302,15 @@ export function useWeekPersistence({
         setDbStatus("error");
         onSyncFailure?.(error, publishToCloud);
         toast.error("Saved on this device only", {
-          description: error?.message || "Cloud sync failed. Use Retry sync before using another device.",
+          description:
+            error?.message ||
+            "Cloud sync failed. Use Retry sync before using another device.",
         });
       }
     } else {
       toast.info("Saved locally", {
-        description: "Cloud sync is not configured. Data is stored on this device only.",
+        description:
+          "Cloud sync is not configured. Data is stored on this device only.",
       });
     }
 

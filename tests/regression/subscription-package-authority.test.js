@@ -23,25 +23,38 @@ describe("subscription package authority", () => {
       limit_overrides: {},
     });
 
-    expect(hasEntitlement(subscription, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(true);
-    expect(hasEntitlement(subscription, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(true);
-    expect(hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(true);
-    expect(hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement(subscription, ENTITLEMENTS.OPERATIONS_ADVANCED)).toBe(
+      true,
+    );
+    expect(hasEntitlement(subscription, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(
+      true,
+    );
+    expect(hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(
+      true,
+    );
+    expect(
+      hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS),
+    ).toBe(false);
     expect(getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS)).toBe(-1);
   });
 
-  test("package changes can still add explicit extras without removing package rights", () => {
+  test("explicit true overrides can add a controlled extra without removing package rights", () => {
     const subscription = normaliseSubscriptionPayload({
       club_id: "club-test",
       plan_code: "core",
       status: "active",
       access_state: "full",
-      entitlement_overrides: { advanced_integrations: true },
+      entitlement_overrides: { analytics_advanced: true },
       plan_limits: PLAN_CATALOGUE.core.limits,
       limit_overrides: { teams: 30 },
     });
 
-    expect(hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS)).toBe(true);
+    expect(hasEntitlement(subscription, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(
+      true,
+    );
+    expect(hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)).toBe(
+      true,
+    );
     expect(getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS)).toBe(30);
   });
 });

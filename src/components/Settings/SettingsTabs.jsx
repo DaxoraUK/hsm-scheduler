@@ -5,29 +5,27 @@ import {
   Building2,
   CalendarClock,
   Database,
-  Gauge,
   History,
   LayoutGrid,
   MapPinned,
   PlugZap,
-  Rocket,
   ShieldCheck,
   TestTube2,
   Trophy,
   UsersRound,
 } from "lucide-react";
-import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
+import {
+  ENTITLEMENTS,
+  hasEntitlement,
+} from "../../lib/subscriptions/entitlements.js";
 
 const TAB_GROUPS = [
   {
-    label: "Workspace",
+    label: "Workspace & plan",
     tabs: [
       ["overview", "Overview", LayoutGrid],
-      ["workspace", "Workspace", Gauge],
       ["subscription", "Plan & subscription", BadgePoundSterling],
       ["billing", "Billing & legal", ReceiptText],
-      ["onboarding", "Setup wizard", Rocket],
-      ["access", "Access & audit", ShieldCheck],
     ],
   },
   {
@@ -35,49 +33,72 @@ const TAB_GROUPS = [
     tabs: [
       ["club", "Club profile", Building2],
       ["venues", "Venues & sites", MapPinned],
-      ["timing", "Scheduling rules", CalendarClock],
-    ],
-  },
-  {
-    label: "Matchday setup",
-    tabs: [
       ["teams", "Teams", UsersRound],
       ["pitches", "Pitches", Trophy],
       ["refs", "Officials", ShieldCheck],
+      ["timing", "Scheduling rules", CalendarClock],
+      ["integrations", "Fixture sources", PlugZap],
     ],
   },
   {
-    label: "Connections & data",
+    label: "Access & data",
     tabs: [
-      ["integrations", "Fixture sources", PlugZap],
+      ["access", "Access & audit", ShieldCheck],
       ["history", "Matchweek history", History],
       ["data", "Data & backups", Database],
-      ["testdata", "Developer tools", TestTube2],
     ],
+  },
+  {
+    label: "Platform tools",
+    tabs: [["testdata", "Developer tools", TestTube2]],
   },
 ];
 
-export default function SettingsTabs({ settingsTab, setSettingsTab, productionMode, workspaceAccess, subscription }) {
+export default function SettingsTabs({
+  settingsTab,
+  setSettingsTab,
+  productionMode,
+  workspaceAccess,
+  subscription,
+  platformContext,
+}) {
   const groups = TAB_GROUPS.map((group) => ({
     ...group,
     tabs: group.tabs.filter(([key]) => {
-      if (key === "testdata") return !productionMode;
+      if (key === "testdata")
+        return !productionMode && Boolean(platformContext?.isPlatformStaff);
       if (subscription?.isReadOnly && key !== "subscription") return false;
-      if (["subscription", "billing"].includes(key) && !workspaceAccess?.canManageSubscription) return false;
+      if (
+        ["subscription", "billing"].includes(key) &&
+        !workspaceAccess?.canManageSubscription
+      )
+        return false;
       if (key === "access" && !workspaceAccess?.canViewAudit) return false;
-      if (key === "onboarding" && !workspaceAccess?.canManageSettings) return false;
-      if (["timing", "history"].includes(key) && !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)) return false;
-      if (key === "refs" && !hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT)) return false;
+      if (
+        ["timing", "history"].includes(key) &&
+        !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)
+      )
+        return false;
+      if (
+        key === "refs" &&
+        !hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT)
+      )
+        return false;
       return true;
     }),
   })).filter((group) => group.tabs.length);
 
   return (
-    <nav className="rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm" aria-label="Settings sections">
+    <nav
+      className="rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm"
+      aria-label="Settings sections"
+    >
       <div className="space-y-5">
         {groups.map((group) => (
           <section key={group.label}>
-            <div className="px-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{group.label}</div>
+            <div className="px-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              {group.label}
+            </div>
             <div className="mt-2 grid gap-1 sm:grid-cols-2 xl:grid-cols-1">
               {group.tabs.map(([key, label, Icon]) => {
                 const active = settingsTab === key;
@@ -87,10 +108,14 @@ export default function SettingsTabs({ settingsTab, setSettingsTab, productionMo
                     type="button"
                     onClick={() => setSettingsTab(key)}
                     className={`flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-sm font-black transition ${
-                      active ? "bg-slate-950 text-white shadow-lg shadow-slate-950/10" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                      active
+                        ? "bg-slate-950 text-white shadow-lg shadow-slate-950/10"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                     }`}
                   >
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${active ? "bg-emerald-400/15 text-emerald-300" : "bg-slate-100 text-slate-400"}`}>
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${active ? "bg-emerald-400/15 text-emerald-300" : "bg-slate-100 text-slate-400"}`}
+                    >
                       <Icon size={18} strokeWidth={2.4} />
                     </span>
                     <span className="min-w-0 truncate">{label}</span>

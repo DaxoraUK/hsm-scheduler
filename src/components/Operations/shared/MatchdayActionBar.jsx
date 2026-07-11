@@ -16,11 +16,18 @@ import SecondaryButton from "@/ui/SecondaryButton.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 import { getMatchdayHealth } from "../../../lib/operationsEngine.js";
 
-function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked }) {
+function getNextAction({
+  hasRun,
+  unresolvedCount,
+  refWarnings,
+  closedPitches,
+  isLocked,
+}) {
   if (isLocked) {
     return {
       label: "Schedule locked",
-      detail: "The approved plan is read only. Unlock it before rebuilding or applying fixture changes.",
+      detail:
+        "The approved plan is read only. Unlock it before rebuilding or applying fixture changes.",
       variant: "success",
       icon: Lock,
     };
@@ -64,7 +71,8 @@ function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, is
 
   return {
     label: "Ready to publish",
-    detail: "The plan looks ready for coach messages, printing and final checks.",
+    detail:
+      "The plan looks ready for coach messages, printing and final checks.",
     variant: "success",
     icon: CheckCircle2,
   };
@@ -72,14 +80,20 @@ function getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, is
 
 function WorkflowStep({ number, title, detail, active }) {
   return (
-    <div className={`rounded-2xl border p-4 ${active ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+    <div
+      className={`rounded-2xl border p-4 ${active ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}
+    >
       <div className="flex items-start gap-3">
-        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}
+        >
           {number}
         </div>
         <div>
           <div className="text-sm font-black text-slate-950">{title}</div>
-          <div className="mt-1 text-xs font-bold leading-5 text-slate-500">{detail}</div>
+          <div className="mt-1 text-xs font-bold leading-5 text-slate-500">
+            {detail}
+          </div>
         </div>
       </div>
     </div>
@@ -119,9 +133,16 @@ export default function MatchdayActionBar({
 
   const pitchCapacity = matchdayHealth.pitchCapacity;
   const buildSchedule = mode === "test" ? runTest : runLive;
-  const nextAction = getNextAction({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
+  const nextAction = getNextAction({
+    hasRun,
+    unresolvedCount,
+    refWarnings,
+    closedPitches,
+    isLocked,
+  });
   const NextIcon = nextAction.icon;
-  const buildLabel = mode === "test" ? `Run ${day} Test` : `Fetch ${day} Fixtures`;
+  const buildLabel =
+    mode === "test" ? `Build ${day} Schedule` : `Fetch ${day} Fixtures`;
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -137,27 +158,52 @@ export default function MatchdayActionBar({
             </h1>
 
             <p className="mt-3 text-sm font-bold leading-6 text-slate-300 sm:text-base">
-              Build the schedule, review risks, manage resources and prepare the matchday for publication from one guided workspace.
+              Build the schedule, review risks, manage resources and prepare the
+              matchday for publication from one guided workspace.
             </p>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[470px]">
             <StatusChip
-              variant={isLocked ? "success" : hasRun ? (needsReview ? "warning" : "success") : "neutral"}
+              variant={
+                isLocked
+                  ? "success"
+                  : hasRun
+                    ? needsReview
+                      ? "warning"
+                      : "success"
+                    : "neutral"
+              }
               className="w-full border-white/10 shadow-none"
             >
-              {isLocked ? "Locked" : hasRun ? (needsReview ? "Review Required" : "Ready") : "Not Run"}
+              {isLocked
+                ? "Locked"
+                : hasRun
+                  ? needsReview
+                    ? "Review Required"
+                    : "Ready"
+                  : "Not Run"}
             </StatusChip>
 
-            <StatusChip variant="neutral" className="w-full border-white/10 shadow-none">
+            <StatusChip
+              variant="neutral"
+              className="w-full border-white/10 shadow-none"
+            >
               {fixtureCount} fixture{fixtureCount === 1 ? "" : "s"}
             </StatusChip>
 
-            <StatusChip variant={pitchCapacity.variant} className="w-full border-white/10 shadow-none">
-              {pitchCapacity.available} / {pitchCapacity.total} pitches available
+            <StatusChip
+              variant={pitchCapacity.variant}
+              className="w-full border-white/10 shadow-none"
+            >
+              {pitchCapacity.available} / {pitchCapacity.total} pitches
+              available
             </StatusChip>
 
-            <StatusChip variant={matchdayHealth.variant} className="w-full border-white/10 shadow-none">
+            <StatusChip
+              variant={matchdayHealth.variant}
+              className="w-full border-white/10 shadow-none"
+            >
               Health {matchdayHealth.score}%
             </StatusChip>
           </div>
@@ -175,8 +221,12 @@ export default function MatchdayActionBar({
                 <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
                   Next best action
                 </div>
-                <h2 className="mt-1 text-xl font-black text-slate-950">{nextAction.label}</h2>
-                <p className="mt-1 text-sm font-bold leading-6 text-slate-500">{nextAction.detail}</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  {nextAction.label}
+                </h2>
+                <p className="mt-1 text-sm font-bold leading-6 text-slate-500">
+                  {nextAction.detail}
+                </p>
               </div>
             </div>
 
@@ -186,13 +236,19 @@ export default function MatchdayActionBar({
           </div>
 
           <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center">
-            <PrimaryButton onClick={buildSchedule} disabled={isLocked} className="w-full lg:w-auto">
+            <PrimaryButton
+              onClick={buildSchedule}
+              disabled={isLocked}
+              className="w-full lg:w-auto"
+            >
               <Play size={17} />
               {isLocked ? "Unlock to rebuild" : buildLabel}
             </PrimaryButton>
 
             {typeof setAllowArtificial === "function" && (
-              <label className={`flex min-h-12 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+              <label
+                className={`flex min-h-12 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 shadow-sm ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+              >
                 <span>Allow artificial surfaces</span>
                 <input
                   type="checkbox"
@@ -207,9 +263,28 @@ export default function MatchdayActionBar({
         </div>
 
         <div className="grid gap-3">
-          <WorkflowStep number="1" title="Build" detail="Fetch or run test fixtures and let the engine create the plan." active={!hasRun && !isLocked} />
-          <WorkflowStep number="2" title="Review" detail="Check unresolved fixtures, pitch pressure, officials and recommendations." active={hasRun && needsReview && !isLocked} />
-          <WorkflowStep number="3" title={isLocked ? "Locked" : "Publish"} detail={isLocked ? "The approved fixture plan is protected from schedule changes." : "Save the week, print schedules and prepare coach communications."} active={isLocked || (hasRun && !needsReview)} />
+          <WorkflowStep
+            number="1"
+            title="Build"
+            detail="Load fixtures or demonstration data and let the engine create the plan."
+            active={!hasRun && !isLocked}
+          />
+          <WorkflowStep
+            number="2"
+            title="Review"
+            detail="Check unresolved fixtures, pitch pressure, officials and recommendations."
+            active={hasRun && needsReview && !isLocked}
+          />
+          <WorkflowStep
+            number="3"
+            title={isLocked ? "Locked" : "Publish"}
+            detail={
+              isLocked
+                ? "The approved fixture plan is protected from schedule changes."
+                : "Save the week, print schedules and prepare coach communications."
+            }
+            active={isLocked || (hasRun && !needsReview)}
+          />
         </div>
       </div>
 
@@ -219,7 +294,10 @@ export default function MatchdayActionBar({
           Save Week
         </SecondaryButton>
 
-        <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}>
+        <SecondaryButton
+          onClick={onPrint}
+          disabled={!hasRun || fixtureCount === 0}
+        >
           <Printer size={17} />
           Print current report
         </SecondaryButton>
@@ -229,14 +307,22 @@ export default function MatchdayActionBar({
           Open Communications
         </SecondaryButton>
 
-        <SecondaryButton onClick={onToggleLock} disabled={!hasRun || fixtureCount === 0}>
+        <SecondaryButton
+          onClick={onToggleLock}
+          disabled={!hasRun || fixtureCount === 0}
+        >
           {isLocked ? <LockOpen size={17} /> : <Lock size={17} />}
           {isLocked ? "Unlock" : "Lock Schedule"}
         </SecondaryButton>
 
-        <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}>
+        <SecondaryButton
+          onClick={onOptimise}
+          disabled={isLocked || optimisationCount === 0}
+        >
           <Sparkles size={17} />
-          {optimisationCount > 0 ? `Review ${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}
+          {optimisationCount > 0
+            ? `Review ${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}`
+            : "Optimised"}
         </SecondaryButton>
       </div>
     </section>

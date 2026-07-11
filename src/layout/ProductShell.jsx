@@ -7,7 +7,7 @@ import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
-import { canOpenPage } from "../lib/subscriptions/entitlements.js";
+import { canOpenPage, ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 import {
   CalendarDays,
@@ -19,7 +19,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageSquareText,
   RefreshCw,
   Settings,
   ShieldCheck,
@@ -96,7 +95,6 @@ export default function ProductShell({
   const workspaceNavItems = platformOnly ? [] : [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
-    ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
@@ -104,6 +102,8 @@ export default function ProductShell({
     if (key === "settings") return workspaceAccess?.canManageSettings;
     return canOpenPage(subscription, key);
   });
+
+  const advancedOperationsEnabled = hasEntitlement(subscription, ENTITLEMENTS.OPERATIONS_ADVANCED);
 
   const navItems = platformContext?.isPlatformStaff
     ? [...workspaceNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
@@ -115,7 +115,10 @@ export default function ProductShell({
       setMobileOpen(false);
       return;
     }
-    nav.goTo(target, { scroll: false });
+    nav.goTo(target, {
+      day: key === "operations" ? (advancedOperationsEnabled ? "centre" : "saturday") : undefined,
+      scroll: false,
+    });
     setMobileOpen(false);
   };
 

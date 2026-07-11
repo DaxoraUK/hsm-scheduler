@@ -185,7 +185,7 @@ export function createNavigationController({
     goToOfficials: (options) => goTo(NAV_TARGETS.OFFICIALS, options),
     goToWeather: (options) => goTo(NAV_TARGETS.WEATHER, options),
     goToRecommendations: (options) => goTo(NAV_TARGETS.RECOMMENDATIONS, options),
-    goToCommunications: () => goTo(NAV_TARGETS.COMMUNICATIONS),
+    goToCommunications: (options) => goTo(NAV_TARGETS.COMMUNICATIONS, options),
     goToAnalytics: () => goTo(NAV_TARGETS.ANALYTICS),
     goToReports: () => goTo(NAV_TARGETS.REPORTS),
     goToSettings: (options) => goTo(NAV_TARGETS.SETTINGS, options),

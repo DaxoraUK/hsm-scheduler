@@ -8,7 +8,7 @@ export const LEGAL_DOCUMENT_CODES = Object.freeze({
   SUBPROCESSOR_LIST: "subprocessor_list",
 });
 
-export const SELF_SERVICE_PLANS = Object.freeze(["link", "core", "pro"]);
+export const SELF_SERVICE_PLANS = Object.freeze(["core", "pro"]);
 
 function safeDate(value) {
   if (!value) return null;
@@ -73,7 +73,6 @@ export function canSelfServePlan(planCode, billingInterval = "monthly") {
   const plan = String(planCode || "").toLowerCase();
   const interval = String(billingInterval || "monthly").toLowerCase();
   if (!SELF_SERVICE_PLANS.includes(plan)) return false;
-  if (interval === "annual") return plan === "link";
   return interval === "monthly";
 }
 

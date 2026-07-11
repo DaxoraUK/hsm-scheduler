@@ -9,12 +9,13 @@ export default function RecentActivityCard({ history = [] }) {
     <Card
       eyebrow="Activity"
       title="Recent Activity"
-      subtitle="Latest saved weekends and operational updates."
+      subtitle="Latest saved matchweeks and operational updates."
       action={<StatusChip variant="neutral">{recent.length} items</StatusChip>}
     >
       {recent.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500">
-          No recent activity yet. Save a weekend to begin building the activity log.
+          No recent activity yet. Save a matchweek to begin building the
+          activity log.
         </div>
       ) : (
         <div className="space-y-4">
@@ -27,13 +28,16 @@ export default function RecentActivityCard({ history = [] }) {
 
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-black text-slate-800">
-                  Weekend saved
+                  Matchweek saved
                 </div>
 
                 <div className="mt-1 truncate text-sm font-medium text-slate-500">
                   {item.dateLabel || "Saved schedule"} ·{" "}
                   {(item.scheduled?.length || 0) +
-                    (item.sunScheduled?.length || 0)}{" "}
+                    (item.sunScheduled?.length || 0) +
+                    (item.midweekScheduled?.length ||
+                      item.midweekFinal?.length ||
+                      0)}{" "}
                   fixtures
                 </div>
               </div>

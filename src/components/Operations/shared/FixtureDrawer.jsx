@@ -13,7 +13,6 @@ import {
   ClipboardList,
   Building2,
   Radio,
-  History,
   Sparkles,
 } from "lucide-react";
 import { cleanName } from "../../../lib/scheduler.js";
@@ -70,7 +69,8 @@ export default function FixtureDrawer({
   const format =
     fixture.cfg?.format || fixture.manualFormat || fixture.format || "Fixture";
 
-  const fixtureIndex = typeof fixture.__index === "number" ? fixture.__index : 0;
+  const fixtureIndex =
+    typeof fixture.__index === "number" ? fixture.__index : 0;
   const canEdit = !readOnly && typeof onOverride === "function";
 
   const closeDrawer = () => {
@@ -193,8 +193,8 @@ export default function FixtureDrawer({
     fixtureHealth.variant === "success"
       ? "text-emerald-700"
       : fixtureHealth.variant === "warning"
-      ? "text-amber-700"
-      : "text-red-700";
+        ? "text-amber-700"
+        : "text-red-700";
 
   const managerMessage = `Hi! ${teamName} are home.
 
@@ -233,7 +233,6 @@ Good luck!`;
     ["overview", "Overview", ClipboardList],
     ["operations", "Operations", Building2],
     ["messages", "Messages", MessageSquareText],
-    ["history", "History", History],
   ];
 
   return (
@@ -380,14 +379,14 @@ Good luck!`;
                               fixture.__day ||
                                 fixture.day ||
                                 fixture.cfg?.day ||
-                                ""
+                                "",
                             )
                               .toLowerCase()
                               .includes("sunday")
                               ? "sunday"
                               : "saturday",
                           },
-                        })
+                        }),
                       );
                     }}
                     className="mb-5 w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
@@ -418,7 +417,9 @@ Good luck!`;
                     {canEdit ? (
                       <select
                         value={displayFixture.status || "active"}
-                        onChange={(e) => updateFixture("status", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("status", e.target.value)
+                        }
                         className="control-input"
                       >
                         <option value="active">Active</option>
@@ -426,7 +427,9 @@ Good luck!`;
                         <option value="cancelled">Cancelled</option>
                       </select>
                     ) : (
-                      <ReadOnlyValue value={displayFixture.status || "active"} />
+                      <ReadOnlyValue
+                        value={displayFixture.status || "active"}
+                      />
                     )}
                   </ControlRow>
 
@@ -435,7 +438,9 @@ Good luck!`;
                       <input
                         type="time"
                         value={displayFixture.koTime || ""}
-                        onChange={(e) => updateFixture("koTime", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("koTime", e.target.value)
+                        }
                         className="control-input"
                       />
                     ) : (
@@ -447,7 +452,9 @@ Good luck!`;
                     {canEdit ? (
                       <select
                         value={displayFixture.pitchId || ""}
-                        onChange={(e) => updateFixture("pitchId", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("pitchId", e.target.value)
+                        }
                         className="control-input"
                       >
                         <option value="">Select pitch...</option>
@@ -460,7 +467,8 @@ Good luck!`;
                               value={pitch.id}
                               disabled={isClosed}
                             >
-                              {pitch.label}{isClosed ? " (Closed)" : ""}
+                              {pitch.label}
+                              {isClosed ? " (Closed)" : ""}
                             </option>
                           );
                         })}
@@ -485,8 +493,14 @@ Good luck!`;
                         value={
                           refs.find(
                             (ref) =>
-                              String(ref.name || "").replace(/\./g, "").trim().toLowerCase() ===
-                              String(displayFixture.referee || "").replace(/\./g, "").trim().toLowerCase()
+                              String(ref.name || "")
+                                .replace(/\./g, "")
+                                .trim()
+                                .toLowerCase() ===
+                              String(displayFixture.referee || "")
+                                .replace(/\./g, "")
+                                .trim()
+                                .toLowerCase(),
                           )?.name ||
                           displayFixture.referee ||
                           ""
@@ -497,7 +511,7 @@ Good luck!`;
                           const selectedRef = refs.find(
                             (ref) =>
                               String(ref.name || "").trim() ===
-                              String(value || "").trim()
+                              String(value || "").trim(),
                           );
 
                           updateFixturePatch({
@@ -540,7 +554,9 @@ Good luck!`;
                         <option value="Confirmed">Confirmed</option>
                       </select>
                     ) : (
-                      <ReadOnlyValue value={displayFixture.refStatus || "TBC"} />
+                      <ReadOnlyValue
+                        value={displayFixture.refStatus || "TBC"}
+                      />
                     )}
                   </ControlRow>
 
@@ -668,20 +684,6 @@ Good luck!`;
               </div>
             </DrawerSection>
           )}
-
-          {activeTab === "history" && (
-            <DrawerSection
-              icon={History}
-              eyebrow="History"
-              title="Fixture History"
-              description="Audit trail placeholder. This will connect to Supabase history later."
-            >
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
-                History tracking will appear here once fixture-level audit events
-                are wired into Ground Control.
-              </div>
-            </DrawerSection>
-          )}
         </div>
       </aside>
     </div>
@@ -710,9 +712,7 @@ function BlockedMoveCard({
     >
       <div
         className={`border-b px-5 py-4 ${
-          advisory
-            ? "border-amber-200 bg-amber-50"
-            : "border-red-200 bg-red-50"
+          advisory ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"
         }`}
       >
         <div className="flex items-center gap-3">
@@ -803,7 +803,6 @@ function BlockedMoveCard({
           </div>
         )}
 
-
         {hasValidatedRecommendations && (
           <div>
             <div className="mb-3 text-xs font-black uppercase tracking-wide text-emerald-700">
@@ -815,7 +814,9 @@ function BlockedMoveCard({
                 <button
                   type="button"
                   key={recommendation.id}
-                  onClick={() => applyValidatedRecommendation(recommendation.patch)}
+                  onClick={() =>
+                    applyValidatedRecommendation(recommendation.patch)
+                  }
                   className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left transition hover:bg-emerald-100"
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -883,12 +884,14 @@ function BlockedMoveCard({
           </div>
         )}
 
-        {!hasValidatedRecommendations && !hasPitchSuggestions && !hasTimeSuggestions && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-            No automatic alternatives found. Try a later kick-off or assign a
-            different official.
-          </div>
-        )}
+        {!hasValidatedRecommendations &&
+          !hasPitchSuggestions &&
+          !hasTimeSuggestions && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+              No automatic alternatives found. Try a later kick-off or assign a
+              different official.
+            </div>
+          )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button

@@ -29,7 +29,7 @@ export default function MatchdayScheduleCard({
           </h2>
 
           <p className="mt-2 text-base font-medium text-slate-500">
-            {mode === "test" ? "Test data" : dateLabel}
+            {mode === "test" ? "Demonstration data" : dateLabel}
           </p>
         </div>
       </div>
@@ -66,16 +66,16 @@ export default function MatchdayScheduleCard({
         {officialConflicts.length > 0 && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
             <div className="text-sm font-black text-red-900">
-              Official Clash{officialConflicts.length > 1 ? "es" : ""} Detected (
-              {officialConflicts.length})
+              Official Clash{officialConflicts.length > 1 ? "es" : ""} Detected
+              ({officialConflicts.length})
             </div>
 
             <div className="mt-2 space-y-1">
               {officialConflicts.map((conflict, index) => (
                 <div key={index} className="text-sm font-medium text-red-800">
-                  {conflict.referee || "This official"} is assigned to {" "}
+                  {conflict.referee || "This official"} is assigned to{" "}
                   {cleanName(conflict.a.homeTeam, club?.name)} (
-                  {conflict.a.koTime}) and {" "}
+                  {conflict.a.koTime}) and{" "}
                   {cleanName(conflict.b.homeTeam, club?.name)} (
                   {conflict.b.koTime}) at overlapping times.
                 </div>
@@ -83,14 +83,15 @@ export default function MatchdayScheduleCard({
             </div>
 
             <div className="mt-3 text-xs font-bold text-red-700">
-              Assign a different official or change one kick-off time to resolve.
+              Assign a different official or change one kick-off time to
+              resolve.
             </div>
           </div>
         )}
 
         {mode === "test" && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-            Test data only — switch to Live for real fixtures.
+            Demonstration fixtures only — switch to Live for real fixtures.
           </div>
         )}
 
@@ -104,12 +105,16 @@ export default function MatchdayScheduleCard({
         <div className="space-y-4">
           {games.map((fixture, index) => {
             const officialConflict = officialConflicts.some(
-              (conflict) => conflict.a === fixture || conflict.b === fixture
+              (conflict) => conflict.a === fixture || conflict.b === fixture,
             );
 
             return (
               <MatchFixtureCard
-                key={fixture.id || fixture.fixtureId || `${fixture.homeTeam}-${index}`}
+                key={
+                  fixture.id ||
+                  fixture.fixtureId ||
+                  `${fixture.homeTeam}-${index}`
+                }
                 fixture={fixture}
                 index={index}
                 club={club}
