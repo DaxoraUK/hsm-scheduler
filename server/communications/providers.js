@@ -1,4 +1,5 @@
 import { channelConfiguration, communicationProviderConfig } from "./config.js";
+import { buildMatchdayEmail } from "./emailTemplates.js";
 
 async function responsePayload(response) {
   const text = await response.text();
@@ -17,19 +18,7 @@ function providerError(message, code, status = 502, detail = null) {
 async function sendEmail(item) {
   const config = channelConfiguration("email");
   const destination = config.pilotMode ? config.pilotRecipient : item.destination;
-  const subject = config.pilotMode ? `[STAGING TEST] ${item.subject}` : item.subject;
-  const messageBody = config.pilotMode
-    ? [
-        "GROUND CONTROL STAGING EMAIL TEST",
-        "",
-        "This email was redirected to the authorised internal test inbox.",
-        "It was not sent to the saved coach or assistant contact.",
-        `Intended recipient: ${item.recipientLabel || item.recipientType} (${item.recipientHint || "masked"})`,
-        "",
-        "--- Prepared matchday message ---",
-        item.messageBody,
-      ].join("\n")
-    : item.messageBody;
+  const email = buildMatchdayEmail(item, { pilotMode: config.pilotMode });
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -40,8 +29,9 @@ async function sendEmail(item) {
     body: JSON.stringify({
       from: config.from,
       to: [destination],
-      subject,
-      text: messageBody,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
       tags: [
         { name: "club", value: item.clubTag },
         { name: "message", value: item.messageTag },

@@ -61,6 +61,15 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   const pitch = String(fixture.pitchLabel || fixture.pitch || fixture.pitchId || "TBC").trim() || "TBC";
   const format = String(fixture.cfg?.format || fixture.manualFormat || fixture.format || "TBC").trim() || "TBC";
   const referee = String(fixture.referee || fixture.official || fixture.ref || "TBC").trim() || "TBC";
+  const venue = String(
+    fixture.venueName
+      || fixture.venue
+      || fixture.siteName
+      || fixture.groundName
+      || club?.venue
+      || club?.groundName
+      || "",
+  ).trim();
   const refereeStatus = normalise(fixture.refStatus || fixture.officialStatus || fixture.assignmentStatus);
   const contact = contactForTeam(teamCfg, teamContacts, teamName, index);
   const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
@@ -107,12 +116,14 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     day,
     dateLabel,
     status,
+    clubName: String(club?.name || "Your club").trim() || "Your club",
     readyState,
     issues,
     teamName,
     opposition,
     ko,
     pitch,
+    venue,
     format,
     referee,
     refereeStatus,

@@ -90,9 +90,11 @@ describe("staging email pilot", () => {
     expect(result.status).toBe("provider_accepted");
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(request.to).toEqual(["internal.test@example.org"]);
-    expect(request.subject).toBe("[STAGING TEST] HSM U14 matchday details");
-    expect(request.text).toContain("It was not sent to the saved coach or assistant contact.");
+    expect(request.subject).toBe("[STAGING TEST] Team | matchday details");
+    expect(request.text).toContain("No saved coach or assistant address received it.");
     expect(request.text).toContain("Coach One (co•••@example.org)");
+    expect(request.html).toContain("Internal staging test");
+    expect(request.html).toContain("Ground Control");
     expect(request.tags).toContainEqual({ name: "environment", value: "staging" });
   });
 

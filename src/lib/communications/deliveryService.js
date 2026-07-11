@@ -66,6 +66,14 @@ export function describeCommunicationDispatchFailure(result = {}) {
   };
 }
 
+
+function deliverySubject(row = {}) {
+  if (row.status === "postponed") return `${row.teamName} | fixture postponed`;
+  if (row.status === "cancelled") return `${row.teamName} | fixture cancelled`;
+  if (row.status === "unresolved") return `${row.teamName} | fixture update`;
+  return `${row.teamName} | matchday details`;
+}
+
 export async function loadDeliveryCapabilities() {
   try {
     const response = await fetch("/api/communications/capabilities", {
@@ -103,8 +111,17 @@ export function buildDeliveryMessages(rows = [], capabilities = EMPTY_DELIVERY_C
         recipientHint: maskContactDestination(recipient.destination),
         channel: recipient.channel,
         destination: recipient.destination,
-        subject: `${row.teamName} matchday details`,
+        subject: deliverySubject(row),
         message: recipient.message || row.message,
+        clubName: row.clubName,
+        status: row.status,
+        dateLabel: row.dateLabel,
+        opposition: row.opposition,
+        kickOff: row.ko,
+        venue: row.venue,
+        pitch: row.pitch,
+        format: row.format,
+        referee: row.referee,
       };
       if (capabilities.channels?.[recipient.channel]?.enabled) messages.push(item);
       else unavailable.push(item);

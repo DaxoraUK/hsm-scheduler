@@ -85,6 +85,15 @@ export function sanitiseOutboundMessages(clubId, rows = []) {
       destination,
       subject: text(row?.subject || `${text(row?.teamName, 180)} matchday details`, 240),
       messageBody,
+      clubName: text(row?.clubName, 180),
+      status: text(row?.status, 30).toLowerCase() || "scheduled",
+      dateLabel: text(row?.dateLabel, 180),
+      opposition: text(row?.opposition, 180),
+      kickOff: text(row?.kickOff || row?.ko, 40),
+      venue: text(row?.venue, 240),
+      pitch: text(row?.pitch, 120),
+      format: text(row?.format, 80),
+      referee: text(row?.referee, 180),
     };
   });
 }
