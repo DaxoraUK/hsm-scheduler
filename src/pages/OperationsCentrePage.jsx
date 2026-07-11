@@ -258,7 +258,9 @@ export default function OperationsCentrePage({
 }) {
   const key = storageKey(club);
   const stored = loadStoredState(key);
-  const [scope, setScope] = useState(MATCHDAY_SCOPES.WEEKEND);
+  const [scope, setScope] = useState(() =>
+    midweekEnabled ? MATCHDAY_SCOPES.MATCHWEEK : MATCHDAY_SCOPES.WEEKEND
+  );
   const [now, setNow] = useState(() => new Date());
   const [checks, setChecks] = useState(() => {
     const completed = stored?.checks || {};
@@ -457,7 +459,7 @@ export default function OperationsCentrePage({
                   {snapshot.label}
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
-                  Operations Centre
+                  Operations overview
                 </span>
               </div>
 
@@ -532,9 +534,6 @@ export default function OperationsCentrePage({
             {[
               ...(midweekEnabled ? [[MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"]] : []),
               [MATCHDAY_SCOPES.WEEKEND, "Weekend"],
-              ...(midweekEnabled ? [[MATCHDAY_SCOPES.MIDWEEK, "Midweek"]] : []),
-              [MATCHDAY_SCOPES.SATURDAY, "Saturday"],
-              [MATCHDAY_SCOPES.SUNDAY, "Sunday"],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -561,23 +560,14 @@ export default function OperationsCentrePage({
               />
             )}
 
-            {scope === MATCHDAY_SCOPES.MIDWEEK ? (
-              <MidweekCalendarControl
-                midweekDate={midweekDate}
-                midweekDateLabel={midweekDateLabel}
-                onMidweekChange={onMidweekChange}
-                onUseCurrentMidweekDate={onUseCurrentMidweekDate}
-              />
-            ) : (
-              <WeekendCalendarControl
-                satDate={satDate}
-                satDateLabel={satDateLabel}
-                sunDateLabel={sunDateLabel}
-                isCurrentWeekend={isCurrentWeekend}
-                onWeekendChange={onWeekendChange}
-                onUseCurrentWeekend={onUseCurrentWeekend}
-              />
-            )}
+            <WeekendCalendarControl
+              satDate={satDate}
+              satDateLabel={satDateLabel}
+              sunDateLabel={sunDateLabel}
+              isCurrentWeekend={isCurrentWeekend}
+              onWeekendChange={onWeekendChange}
+              onUseCurrentWeekend={onUseCurrentWeekend}
+            />
           </div>
         </div>
       </section>

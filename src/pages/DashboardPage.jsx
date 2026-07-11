@@ -761,7 +761,7 @@ function BuildMatchweekDialog({
             <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Mission Control</div>
             <h2 className="mt-2 text-2xl font-black">Build the matchweek</h2>
             <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-300">
-              Select every day that should be generated. Ground Control will build them in sequence and open the Operations Centre for review.
+              Select every day that should be generated. Ground Control will build them in sequence and open the Operations Overview for review.
             </p>
           </div>
           <button type="button" onClick={onClose} disabled={building} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50">

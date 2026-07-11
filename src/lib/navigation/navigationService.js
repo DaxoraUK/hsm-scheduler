@@ -139,7 +139,7 @@ export function createNavigationController({
 
     safeCall(setMainPage, meta.page);
 
-    if (["saturday", "sunday", "midweek", "timeline"].includes(String(requestedDay).toLowerCase())) {
+    if (["centre", "saturday", "sunday", "midweek", "timeline"].includes(String(requestedDay).toLowerCase())) {
       safeCall(setDayTab, requestedDay);
     }
 

@@ -5,7 +5,7 @@ import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
 import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
-import { getDayTabFromScope, getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
+import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
 import { canOpenPage } from "../lib/subscriptions/entitlements.js";
 
@@ -115,10 +115,7 @@ export default function ProductShell({
       setMobileOpen(false);
       return;
     }
-    nav.goTo(target, {
-      day: key === "operations" ? getDayTabFromScope(matchdayScope) : undefined,
-      scroll: false,
-    });
+    nav.goTo(target, { scroll: false });
     setMobileOpen(false);
   };
 

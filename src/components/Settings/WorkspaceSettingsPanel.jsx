@@ -182,8 +182,8 @@ export default function WorkspaceSettingsPanel({
 
         <ModuleCard
           icon={RadioTower}
-          title="Operations Centre & Timeline"
-          description="Live control-room monitoring, advanced matchday guidance and the operational command timeline."
+          title="Operations Overview & Timeline"
+          description="Cross-day readiness, advanced matchday guidance and the operational command timeline."
           status={advancedOperationsIncluded ? "Included" : `${subscription?.planName || "Plan"} locked`}
           active={advancedOperationsIncluded}
         />

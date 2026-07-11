@@ -20,7 +20,7 @@ export const NAV_TARGETS = Object.freeze({
 
 export const NAV_TARGET_META = Object.freeze({
   [NAV_TARGETS.MISSION_CONTROL]: { page: "dashboard", label: "Mission Control" },
-  [NAV_TARGETS.OPERATIONS]: { page: "operations", label: "Operations" },
+  [NAV_TARGETS.OPERATIONS]: { page: "operations", dayTab: "centre", label: "Operations Overview" },
   [NAV_TARGETS.TIMELINE]: { page: "operations", workspace: "timeline", dayTab: "timeline", label: "Operations Timeline" },
   [NAV_TARGETS.FIXTURES]: { page: "operations", workspace: "fixtures", card: "schedule", label: "Fixtures" },
   [NAV_TARGETS.RESOURCES]: { page: "operations", workspace: "resources", card: "pitchClosures", label: "Resources" },
