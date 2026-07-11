@@ -1,4 +1,4 @@
-import { publicCommunicationCapabilities } from "../../server/communications/config.js";
+import { communicationProviderConfig, publicCommunicationCapabilities } from "../../server/communications/config.js";
 import { json, methodNotAllowed, readJson } from "../../server/communications/http.js";
 import { sanitiseOutboundMessages, sha256, text } from "../../server/communications/normalise.js";
 import { sendProviderMessage } from "../../server/communications/providers.js";
@@ -23,12 +23,40 @@ export async function POST(request) {
       }, 503);
     }
 
-    const { token } = await verifySupabaseUser(request);
+    const { user, token } = await verifySupabaseUser(request);
     const body = await readJson(request);
     const clubId = text(body?.clubId, 80);
     if (!clubId) return json({ error: "No club workspace was supplied", code: "CLUB_CONTEXT_REQUIRED" }, 400);
 
     const messages = sanitiseOutboundMessages(clubId, body?.messages || []);
+    const providerConfig = communicationProviderConfig();
+    if (providerConfig.email.pilotMode) {
+      const actorEmail = String(user?.email || "").trim().toLowerCase();
+      if (!providerConfig.email.pilotOperatorEmails.includes(actorEmail)) {
+        return json({
+          error: "This account is not authorised to run the staging email pilot.",
+          code: "EMAIL_PILOT_OPERATOR_NOT_AUTHORISED",
+        }, 403);
+      }
+      if (body?.pilotAcknowledged !== true) {
+        return json({
+          error: "Confirm that this is a staging email test before dispatch.",
+          code: "EMAIL_PILOT_ACKNOWLEDGEMENT_REQUIRED",
+        }, 409);
+      }
+      if (messages.some((item) => item.channel !== "email")) {
+        return json({
+          error: "The staging pilot permits email only. SMS and WhatsApp remain disabled.",
+          code: "EMAIL_PILOT_CHANNEL_RESTRICTED",
+        }, 409);
+      }
+      if (messages.length > providerConfig.email.pilotMaxBatch) {
+        return json({
+          error: `The staging email pilot is limited to ${providerConfig.email.pilotMaxBatch} recipients per batch.`,
+          code: "EMAIL_PILOT_BATCH_LIMIT",
+        }, 413);
+      }
+    }
     const unavailable = messages.filter((item) => !capabilities.channels[item.channel]?.enabled);
     if (unavailable.length) {
       return json({

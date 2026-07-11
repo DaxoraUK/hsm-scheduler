@@ -5,7 +5,7 @@ export const EMPTY_DELIVERY_CAPABILITIES = Object.freeze({
   webSendingEnabled: false,
   mode: "disabled",
   channels: {
-    email: { enabled: false, provider: null, statusTracking: false },
+    email: { enabled: false, provider: null, statusTracking: false, pilotMode: false, pilotRecipientHint: null, operatorRestricted: false, maxBatch: null, blockedReason: null },
     sms: { enabled: false, provider: null, statusTracking: false },
     whatsapp: { enabled: false, provider: null, statusTracking: false, templateRequired: true },
   },
@@ -90,6 +90,7 @@ export async function dispatchCommunicationBatch({ clubId, rows, capabilities, r
     body: JSON.stringify({
       clubId,
       requestKey,
+      pilotAcknowledged: Boolean(capabilities.channels?.email?.pilotMode),
       messages: prepared.messages,
     }),
   });

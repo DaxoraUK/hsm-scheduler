@@ -23,8 +23,8 @@ export async function POST(request) {
     p_provider_name: "resend",
     p_provider_reference: String(providerReference),
     p_next_status: nextStatus,
-    p_error_code: payload?.data?.bounce?.type || null,
-    p_error_message: payload?.data?.bounce?.message || null,
+    p_error_code: payload?.data?.bounce?.type || payload?.data?.failed?.reason || payload?.type || null,
+    p_error_message: payload?.data?.bounce?.message || payload?.data?.failed?.reason || null,
     p_provider_detail: { eventType: payload?.type || null },
   });
   return json({ ok: true });

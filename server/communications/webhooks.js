@@ -42,6 +42,8 @@ export function mapResendStatus(type) {
     "email.bounced": "undelivered",
     "email.complained": "failed",
     "email.delivery_delayed": "provider_accepted",
+    "email.failed": "failed",
+    "email.suppressed": "undelivered",
   }[type] || null;
 }
 

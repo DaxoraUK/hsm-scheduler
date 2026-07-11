@@ -110,8 +110,11 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
   const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
   const noticeMissingRows = selectedRows.filter((row) => !row.contact?.privacyNoticeProvidedAt);
   const webPlan = buildDeliveryMessages(webEligibleRows, capabilities);
+  const emailPilot = Boolean(capabilities.channels?.email?.pilotMode);
+  const pilotMaxBatch = Number(capabilities.channels?.email?.maxBatch) || 5;
+  const pilotBatchTooLarge = emailPilot && webPlan.messages.length > pilotMaxBatch;
   const canCopy = !gaps.length && selectedRows.length;
-  const canSendWeb = !gaps.length && webPlan.messages.length > 0 && !sending;
+  const canSendWeb = !gaps.length && webPlan.messages.length > 0 && !pilotBatchTooLarge && !sending;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Coach message queue">
       <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] bg-white shadow-2xl">
@@ -136,19 +139,22 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
               <RadioTower size={18} className={`mt-0.5 shrink-0 ${capabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />
               <div>
                 <div className={`text-sm font-black ${capabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
-                  {capabilities.webSendingEnabled ? "Secure web sending is available" : "Web sending is prepared but not switched on"}
+                  {emailPilot ? "Staging email pilot is active" : capabilities.webSendingEnabled ? "Secure web sending is available" : "Web sending is prepared but not switched on"}
                 </div>
                 <div className={`mt-1 text-xs font-semibold ${capabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
-                  {capabilities.webSendingEnabled
-                    ? `${webPlan.messages.length} selected recipient${webPlan.messages.length === 1 ? "" : "s"} can be sent through configured providers.${webPlan.unavailable.length ? ` ${webPlan.unavailable.length} will remain external-channel only.` : ""}${noticeMissingRows.length ? ` ${noticeMissingRows.length} team${noticeMissingRows.length === 1 ? " is" : "s are"} excluded until the privacy notice is recorded.` : ""}`
-                    : "Add server-side provider credentials and channel flags in Vercel before live delivery can occur."}
+                  {emailPilot
+                    ? `Every provider email is redirected to ${capabilities.channels.email.pilotRecipientHint}. Coaches will not receive these test emails. The pilot limit is ${pilotMaxBatch} recipients per batch.${pilotBatchTooLarge ? " Reduce the selection before continuing." : ""}`
+                    : capabilities.webSendingEnabled
+                      ? `${webPlan.messages.length} selected recipient${webPlan.messages.length === 1 ? "" : "s"} can be sent through configured providers.${webPlan.unavailable.length ? ` ${webPlan.unavailable.length} will remain external-channel only.` : ""}${noticeMissingRows.length ? ` ${noticeMissingRows.length} team${noticeMissingRows.length === 1 ? " is" : "s are"} excluded until the privacy notice is recorded.` : ""}`
+                      : "Add server-side provider credentials and channel flags in Vercel before live delivery can occur."}
                 </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {["email", "sms", "whatsapp"].map((channel) => {
                 const item = capabilities.channels?.[channel];
-                return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {item?.enabled ? "Ready" : "Not configured"}</StatusChip>;
+                const label = channel === "email" && item?.pilotMode ? "Pilot ready" : item?.enabled ? "Ready" : "Not configured";
+                return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {label}</StatusChip>;
               })}
             </div>
           </div>
@@ -190,7 +196,7 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
             <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
             <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
               {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
-              {sending ? "Sending securely…" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending not configured"}
+              {sending ? "Sending securely…" : emailPilot ? "Send staging email test" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending not configured"}
             </button>
           </div>
         </div>
@@ -336,7 +342,16 @@ export default function CommunicationsPage(props) {
     const warning = plan.unavailable.length
       ? ` ${plan.unavailable.length} recipient${plan.unavailable.length === 1 ? "" : "s"} use a channel that is not configured and will not be sent.`
       : "";
-    const confirmed = window.confirm(`Send ${plan.messages.length} real coach message${plan.messages.length === 1 ? "" : "s"} through the configured provider?${warning}`);
+    const emailPilot = Boolean(deliveryCapabilities.channels?.email?.pilotMode);
+    const pilotMaxBatch = Number(deliveryCapabilities.channels?.email?.maxBatch) || 5;
+    if (emailPilot && plan.messages.length > pilotMaxBatch) {
+      toast.error("Staging pilot batch limit exceeded", { description: `Select no more than ${pilotMaxBatch} email recipients.` });
+      return;
+    }
+    const confirmation = emailPilot
+      ? `Send ${plan.messages.length} staging test email${plan.messages.length === 1 ? "" : "s"}? Every email will be redirected to ${deliveryCapabilities.channels.email.pilotRecipientHint}. No coach will receive these messages.${warning}`
+      : `Send ${plan.messages.length} real coach message${plan.messages.length === 1 ? "" : "s"} through the configured provider?${warning}`;
+    const confirmed = window.confirm(confirmation);
     if (!confirmed) return;
 
     setSending(true);
@@ -352,7 +367,7 @@ export default function CommunicationsPage(props) {
       if (result.failed) {
         toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: "Open the audit trail before retrying failed recipients." });
       } else {
-        toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: "Delivery status will update only when the provider confirms it." });
+        toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: emailPilot ? "The staging inbox will receive redirected test emails. Provider delivery status remains separate." : "Delivery status will update only when the provider confirms it." });
       }
       if (result.unavailable?.length) {
         toast.info(`${result.unavailable.length} recipient${result.unavailable.length === 1 ? "" : "s"} not sent`, { description: "Their preferred channel is not configured for web sending." });
@@ -391,17 +406,23 @@ export default function CommunicationsPage(props) {
           {capabilitiesLoading ? <Loader2 size={19} className="mt-0.5 shrink-0 animate-spin text-slate-500" /> : <RadioTower size={19} className={`mt-0.5 shrink-0 ${deliveryCapabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />}
           <div>
             <div className={`text-sm font-black ${deliveryCapabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
-              {capabilitiesLoading ? "Checking web-delivery providers…" : deliveryCapabilities.webSendingEnabled ? "Web delivery ready" : "Web delivery foundation installed"}
+              {capabilitiesLoading ? "Checking web-delivery providers…" : deliveryCapabilities.channels?.email?.pilotMode ? "Staging email pilot ready" : deliveryCapabilities.webSendingEnabled ? "Web delivery ready" : "Web delivery foundation installed"}
             </div>
             <div className={`mt-1 text-xs font-semibold leading-5 ${deliveryCapabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
-              {deliveryCapabilities.webSendingEnabled
-                ? "Only enabled server-side channels can send. Provider acceptance, delivery and failure callbacks are recorded separately."
-                : "No provider is enabled, so Ground Control cannot send anything automatically. Existing copy, WhatsApp, SMS and email hand-off actions remain available."}
+              {deliveryCapabilities.channels?.email?.pilotMode
+                ? `Email is enabled only for the staging pilot. Every provider email is redirected to ${deliveryCapabilities.channels.email.pilotRecipientHint}; saved coach contacts will not receive it.`
+                : deliveryCapabilities.webSendingEnabled
+                  ? "Only enabled server-side channels can send. Provider acceptance, delivery and failure callbacks are recorded separately."
+                  : "No provider is enabled, so Ground Control cannot send anything automatically. Existing copy, WhatsApp, SMS and email hand-off actions remain available."}
             </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {["email", "sms", "whatsapp"].map((channel) => <StatusChip key={channel} status={deliveryCapabilities.channels?.[channel]?.enabled ? "success" : "neutral"} size="sm">{channel} · {deliveryCapabilities.channels?.[channel]?.enabled ? "Ready" : "Off"}</StatusChip>)}
+          {["email", "sms", "whatsapp"].map((channel) => {
+            const item = deliveryCapabilities.channels?.[channel];
+            const label = channel === "email" && item?.pilotMode ? "Pilot" : item?.enabled ? "Ready" : "Off";
+            return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {label}</StatusChip>;
+          })}
         </div>
       </div>
 
