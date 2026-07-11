@@ -36,6 +36,7 @@ import {
   EMPTY_DELIVERY_CAPABILITIES,
   loadDeliveryCapabilities,
 } from "../lib/communications/deliveryService.js";
+import { communicationRowSignature, findStaleCommunicationRows } from "../lib/communications/queueSafety.js";
 
 const FILTERS = [
   ["all", "All"],
@@ -254,6 +255,7 @@ export default function CommunicationsPage(props) {
   const [filter, setFilter] = useState("all");
   const [queueOpen, setQueueOpen] = useState(false);
   const [selected, setSelected] = useState({});
+  const [queueSnapshot, setQueueSnapshot] = useState({});
   const [events, setEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deliveryCapabilities, setDeliveryCapabilities] = useState(EMPTY_DELIVERY_CAPABILITIES);
@@ -327,10 +329,28 @@ export default function CommunicationsPage(props) {
     }
   };
 
-  const openQueue = async () => {
-    setSelected(Object.fromEntries(readyRows.map((row) => [row.id, true])));
+  const openQueueWithRows = async (queueRows, detail = {}) => {
+    const nextRows = Array.isArray(queueRows) ? queueRows : [];
+    setSelected(Object.fromEntries(nextRows.map((row) => [row.id, true])));
+    setQueueSnapshot(Object.fromEntries(nextRows.map((row) => [row.id, communicationRowSignature(row)])));
     setQueueOpen(true);
-    await record(null, "queue_opened", null, { readyMessages: readyRows.length, totalMessages: model.counts.total });
+    await record(null, "queue_opened", null, { readyMessages: nextRows.length, totalMessages: model.counts.total, ...detail });
+  };
+
+  const openQueue = async () => {
+    await openQueueWithRows(readyRows);
+  };
+
+  const reopenFailedMessage = async (event) => {
+    const row = model.rows.find((item) => item.id === event.message_key && item.readyState === "ready" && item.recipients.length);
+    if (!row) {
+      toast.error("The message cannot be retried", { description: "The fixture is no longer ready or the coach contact is unavailable. Rebuild and review the current queue." });
+      return;
+    }
+    setDay("all");
+    setFilter("all");
+    await openQueueWithRows([row], { retryOfEventId: event.id, contentChanged: event.message_hash !== row.messageHash });
+    toast.info(event.message_hash === row.messageHash ? "Failed message ready to retry" : "Fixture details changed", { description: event.message_hash === row.messageHash ? "Review the recipient and send the message again." : "Ground Control opened the latest message version rather than retrying obsolete content." });
   };
 
   const copyMessage = async (row) => {
@@ -377,6 +397,11 @@ export default function CommunicationsPage(props) {
   };
 
   const sendSelectedViaWeb = (selectedRows) => {
+    const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
+    if (staleRows.length) {
+      toast.error("The message queue changed", { description: "Fixture or contact details changed after the queue was opened. Close and reopen the queue before sending." });
+      return;
+    }
     const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
     const plan = buildDeliveryMessages(webEligibleRows, deliveryCapabilities);
     if (!plan.messages.length) {
@@ -396,12 +421,20 @@ export default function CommunicationsPage(props) {
       recipientCount: plan.messages.length,
       unavailableCount: plan.unavailable.length,
       emailPilot,
+      signatures: Object.fromEntries(webEligibleRows.map((row) => [row.id, communicationRowSignature(row)])),
     });
   };
 
   const confirmWebSend = async () => {
     if (!sendConfirmation?.rows?.length || sending) return;
     const confirmation = sendConfirmation;
+    const staleRows = findStaleCommunicationRows(confirmation.rows, model.rows, confirmation.signatures || {});
+    if (staleRows.length) {
+      const failure = { title: "The message queue is out of date", description: "Fixture or coach-contact details changed before confirmation. Go back, reopen the queue and review the latest version.", code: "STALE_COMMUNICATION_QUEUE" };
+      setSendFailure(failure);
+      toast.error(failure.title, { description: failure.description });
+      return;
+    }
     setSending(true);
     try {
       const requestKey = globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -592,7 +625,14 @@ export default function CommunicationsPage(props) {
                   <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered", "read"].includes(event.action) ? "success" : ["failed", "undelivered"].includes(event.action) ? "danger" : event.action === "provider_accepted" ? "info" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
                   <div className="mt-1 text-xs font-semibold text-slate-500">{event.recipient_label || "No recipient stored"}{event.recipient_hint ? ` · ${event.recipient_hint}` : ""} · {event.actor_label || "Club operator"}</div>
                 </div>
-                <div className="text-xs font-bold text-slate-400">{new Date(event.occurred_at).toLocaleString("en-GB")}</div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  {["failed", "undelivered"].includes(event.action) ? (
+                    <button type="button" onClick={() => reopenFailedMessage(event)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 transition hover:bg-rose-50">
+                      <Send size={14} /> {model.rows.find((row) => row.id === event.message_key)?.messageHash === event.message_hash ? "Retry" : "Review latest"}
+                    </button>
+                  ) : null}
+                  <div className="text-xs font-bold text-slate-400">{new Date(event.occurred_at).toLocaleString("en-GB")}</div>
+                </div>
               </div>
             ))}
           </div>

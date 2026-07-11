@@ -22,7 +22,9 @@ import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
 import { buildReportsModel, reportFilename, REPORT_SCOPES, REPORT_TYPES } from "../lib/reports/reportingEngine.js";
 import { buildReportCsv, downloadCsv } from "../lib/reports/csvExport.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
-import { buildFundingEvidencePack, downloadFundingEvidencePack } from "../lib/grants/fundingEvidencePack.js";
+import { buildFundingEvidencePack, downloadFundingApplicationPack, downloadFundingEvidencePack } from "../lib/grants/fundingEvidencePack.js";
+import { loadFundingImpactEvidence } from "../lib/grants/fundingImpactEvidenceService.js";
+import { loadFundingWorkspace } from "../lib/grants/fundingWorkspaceService.js";
 
 const ADVANCED_REPORT_IDS = new Set(["analytics", "funding"]);
 
@@ -103,6 +105,9 @@ export default function ReportsPage({
   const [selectedSource, setSelectedSource] = useState("current");
   const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
   const [pendingAutoPrint, setPendingAutoPrint] = useState(false);
+  const [impactEvidence, setImpactEvidence] = useState([]);
+  const [fundingProjects, setFundingProjects] = useState([]);
+  const [fundingProjectId, setFundingProjectId] = useState("");
   const advancedReportsEnabled = authoritativeAdvancedReportsEnabled
     ?? hasEntitlement(subscription, ENTITLEMENTS.REPORTS_ADVANCED);
   const dataExportEnabled = hasEntitlement(subscription, ENTITLEMENTS.DATA_EXPORT);
@@ -160,6 +165,21 @@ export default function ReportsPage({
   }), [club, current, history, pitchCfg, refs, reportType, scope, selectedSource, teamCfg]);
 
   useEffect(() => {
+    let cancelled = false;
+    const resolvedClubId = club.id || club.organisationId || String(club.name || "local-club").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    Promise.all([
+      loadFundingImpactEvidence(resolvedClubId).catch(() => ({ records: [] })),
+      loadFundingWorkspace(resolvedClubId).catch(() => ({ projects: [] })),
+    ]).then(([impactResult, workspaceResult]) => {
+      if (cancelled) return;
+      setImpactEvidence(impactResult.records || []);
+      setFundingProjects(workspaceResult.projects || []);
+      setFundingProjectId((current) => current || workspaceResult.projects?.[0]?.id || "");
+    });
+    return () => { cancelled = true; };
+  }, [club.id, club.name, club.organisationId]);
+
+  useEffect(() => {
     if (!model.sourceOptions.some((option) => option.value === selectedSource)) {
       setSelectedSource("current");
     }
@@ -174,6 +194,18 @@ export default function ReportsPage({
   useEffect(() => {
     if (!midweekEnabled && ["matchweek", "midweek"].includes(scope)) setScope("weekend");
   }, [midweekEnabled, scope]);
+
+  const selectedFundingProject = fundingProjects.find((project) => project.id === fundingProjectId) || null;
+  const selectedImpactEvidence = fundingProjectId
+    ? impactEvidence.filter((record) => record.projectId === fundingProjectId)
+    : [];
+  const buildSelectedFundingPack = () => buildFundingEvidencePack({
+    club,
+    model,
+    project: selectedFundingProject,
+    impactEvidence: selectedImpactEvidence,
+    source: "reports",
+  });
 
   const exportCsv = () => {
     if (!dataExportEnabled) {
@@ -193,9 +225,20 @@ export default function ReportsPage({
 
   const exportFundingEvidence = () => {
     if (!advancedReportsEnabled || reportType !== "funding") return;
-    const pack = buildFundingEvidencePack({ club, model, source: "reports" });
+    const pack = buildSelectedFundingPack();
     downloadFundingEvidencePack(pack);
     toast.success("Funding evidence draft downloaded", { description: "Review every claim and re-check official programme guidance before submission." });
+  };
+
+  const exportFundingApplication = () => {
+    if (!advancedReportsEnabled || reportType !== "funding") return;
+    if (!selectedFundingProject) {
+      toast.error("Select a funding project", { description: "Application-ready packs must be tied to a saved funding project." });
+      return;
+    }
+    const pack = buildSelectedFundingPack();
+    downloadFundingApplicationPack(pack);
+    toast.success("Application evidence pack downloaded", { description: "Open the HTML file to review, print or save it as PDF." });
   };
 
   const printReport = () => {
@@ -253,14 +296,24 @@ export default function ReportsPage({
         action={
           <div className="flex flex-wrap gap-2">
             {reportType === "funding" && advancedReportsEnabled ? (
-              <button
-                type="button"
-                onClick={exportFundingEvidence}
-                disabled={!model.hasData}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FileCheck2 size={17} /> Evidence draft
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={exportFundingApplication}
+                  disabled={!model.hasData || !selectedFundingProject}
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FileCheck2 size={17} /> Application pack
+                </button>
+                <button
+                  type="button"
+                  onClick={exportFundingEvidence}
+                  disabled={!model.hasData}
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={17} /> Data draft
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -294,13 +347,19 @@ export default function ReportsPage({
       ) : null}
 
       <section className="np rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className={`grid gap-4 ${reportType === "funding" ? "lg:grid-cols-3" : "lg:grid-cols-[1.2fr_0.8fr]"}`}>
           <SelectControl label="Report data" value={selectedSource} onChange={setSelectedSource}>
             {model.sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </SelectControl>
           <SelectControl label="Matchday scope" value={scope} onChange={setScope}>
             {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </SelectControl>
+          {reportType === "funding" ? (
+            <SelectControl label="Funding project" value={fundingProjectId} onChange={setFundingProjectId}>
+              <option value="">Select a saved funding project</option>
+              {fundingProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+            </SelectControl>
+          ) : null}
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

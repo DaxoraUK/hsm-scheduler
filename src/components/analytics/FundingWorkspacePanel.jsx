@@ -22,6 +22,7 @@ import {
   Target,
   Trash2,
   Upload,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import Card from "../../ui/Card.jsx";
@@ -29,10 +30,12 @@ import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import FundingApplicationTracker from "./FundingApplicationTracker.jsx";
 import FundingDocumentUploadDialog from "./FundingDocumentUploadDialog.jsx";
 import FundingLocationPanel from "./FundingLocationPanel.jsx";
+import FundingImpactEvidencePanel from "./FundingImpactEvidencePanel.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { VERIFIED_GRANT_PROGRAMMES } from "../../lib/grants/grantProgrammeCatalogue.js";
 import { buildFundingReadinessChecklist } from "../../lib/grants/fundingReadinessEngine.js";
+import { summariseFundingImpactEvidence } from "../../lib/grants/fundingImpactEvidenceService.js";
 import {
   FUNDING_DOCUMENT_RULES,
   createFundingSnapshot,
@@ -247,6 +250,9 @@ export default function FundingWorkspacePanel({
   model,
   projectType,
   onProjectTypeChange,
+  onImpactEvidenceChange,
+  impactEvidence = [],
+  onActiveProjectChange,
 }) {
   const [workspace, setWorkspace] = useState({ mode: "loading", profileMode: "local", trackerMode: "local", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [], applications: [], applicationTasks: [], monitoringObligations: [], profile: {} });
   const [activeProjectId, setActiveProjectId] = useState("");
@@ -288,6 +294,10 @@ export default function FundingWorkspacePanel({
   }, [resolvedClubId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeProject = workspace.projects.find((project) => project.id === activeProjectId) || null;
+
+  useEffect(() => {
+    onActiveProjectChange?.(activeProject);
+  }, [activeProject, onActiveProjectChange]);
   const selectedProgramme = useMemo(() => {
     const id = draft.selectedProgrammeId || activeProject?.selectedProgrammeId;
     return model.funding.programmes.find((programme) => programme.id === id)
@@ -607,6 +617,7 @@ export default function FundingWorkspacePanel({
             metrics: model.metrics,
             evidencePeriod: model.filters.periodOptions.find((option) => option.value === model.filters.selectedPeriod)?.label || model.filters.selectedPeriod,
           },
+          impactEvidence: summariseFundingImpactEvidence(impactEvidence),
           disclaimer: model.funding.disclaimer,
         },
         workspace.mode
@@ -658,6 +669,7 @@ export default function FundingWorkspacePanel({
               ["project", "Project brief", Building2],
               ["local", "Local funding", MapPin],
               ["applications", "Applications", Send],
+              ["impact", "Impact evidence", UsersRound],
               ["readiness", "Readiness", ClipboardList],
               ["documents", "Documents", FolderOpen],
               ["snapshots", "Snapshots", History],
@@ -786,6 +798,15 @@ export default function FundingWorkspacePanel({
               </>
             )}
           </div>
+        ) : null}
+
+        {view === "impact" ? (
+          <FundingImpactEvidencePanel
+            clubId={resolvedClubId}
+            projectId={activeProjectId}
+            canManage={canManage}
+            onEvidenceChange={onImpactEvidenceChange}
+          />
         ) : null}
 
         {view === "documents" ? (

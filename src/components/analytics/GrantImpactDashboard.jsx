@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   BarChart3,
@@ -31,7 +32,7 @@ import StatusChip from "../../ui/StatusChip.jsx";
 import FundingWorkspacePanel from "./FundingWorkspacePanel.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";
 import { inferGrantHomeNation } from "../../lib/grants/grantMatchingEngine.js";
-import { buildFundingEvidencePack, downloadFundingEvidencePack } from "../../lib/grants/fundingEvidencePack.js";
+import { buildFundingEvidencePack, downloadFundingApplicationPack, downloadFundingEvidencePack } from "../../lib/grants/fundingEvidencePack.js";
 
 const TONE = {
   success: {
@@ -231,7 +232,7 @@ function FundingOpportunityCard({ programme }) {
 
       <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">{programme.summary}</p>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><PoundSterling size={14} /> Funding</div>
           <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.amountLabel}</div>
@@ -239,6 +240,11 @@ function FundingOpportunityCard({ programme }) {
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Target size={14} /> Club contribution</div>
           <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.matchFunding}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><CalendarClock size={14} /> Timing</div>
+          <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.deadline ? `Deadline ${new Date(`${programme.deadline}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}` : programme.resolvedStatus.label}</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">{programme.decisionTime || programme.projectDuration || "Check the current official timetable"}</div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Search size={14} /> Relevance</div>
@@ -265,6 +271,17 @@ function FundingOpportunityCard({ programme }) {
           <div className="mt-2 text-sm font-semibold leading-6 text-amber-950">{programme.evidenceGaps.slice(0, 2).map((item) => item.title).join(" · ")}</div>
         </div>
       ) : null}
+
+      <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-slate-700 marker:hidden">Application documents and manual checks</summary>
+        <div className="border-t border-slate-200 px-4 py-3">
+          <ul className="space-y-2">
+            {[...(programme.requiredDocuments || []), ...(programme.manualRequirements || [])].slice(0, 8).map((item) => (
+              <li key={item} className="flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />{item}</li>
+            ))}
+          </ul>
+        </div>
+      </details>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -293,6 +310,8 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
   const [homeNation, setHomeNation] = useState(() => inferGrantHomeNation(props.club));
   const [projectType, setProjectType] = useState("all");
   const [availability, setAvailability] = useState("current");
+  const [impactEvidence, setImpactEvidence] = useState([]);
+  const [activeFundingProject, setActiveFundingProject] = useState(null);
   const effectiveScope = !midweekEnabled && ["matchweek", "midweek"].includes(scope) ? "weekend" : scope;
   const model = useMemo(
     () => buildGrantImpactModel({ ...props, midweekEnabled, period, scope: effectiveScope, homeNation, projectType, availability }),
@@ -313,8 +332,17 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
   };
 
   const downloadEvidencePack = () => {
-    const pack = buildFundingEvidencePack({ club: props.club, model, source: "funding-analytics" });
+    const pack = buildFundingEvidencePack({ club: props.club, model, project: activeFundingProject, impactEvidence, source: "funding-analytics" });
     downloadFundingEvidencePack(pack);
+  };
+
+  const downloadApplicationPack = () => {
+    if (!activeFundingProject) {
+      toast.error("Save and select a funding project", { description: "Application-ready packs must be tied to a saved project and its evidence register." });
+      return;
+    }
+    const pack = buildFundingEvidencePack({ club: props.club, model, project: activeFundingProject, impactEvidence, source: "funding-analytics" });
+    downloadFundingApplicationPack(pack);
   };
 
   return (
@@ -325,8 +353,11 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         subtitle="Match verified national and UK-wide programmes to a defined club project, then identify the operational evidence, eligibility checks and documents still required."
         action={
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={downloadApplicationPack} disabled={!activeFundingProject} title={activeFundingProject ? "Download a project-specific application evidence pack" : "Save and select a funding project first"} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
+              <FileCheck2 size={17} /> Application-ready pack
+            </button>
             <button type="button" onClick={downloadEvidencePack} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800">
-              <Download size={17} /> Download evidence draft
+              <Download size={17} /> Data evidence draft
             </button>
             <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
               {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
@@ -394,6 +425,9 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         model={model}
         projectType={projectType}
         onProjectTypeChange={setProjectType}
+        onImpactEvidenceChange={setImpactEvidence}
+        impactEvidence={impactEvidence}
+        onActiveProjectChange={setActiveFundingProject}
       />
 
       <Card
