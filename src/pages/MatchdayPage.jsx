@@ -40,7 +40,6 @@ import WeatherIntelligenceCard from "../components/Operations/shared/WeatherInte
 import MatchdayGuidanceCard from "../components/Operations/shared/MatchdayGuidanceCard.jsx";
 import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
 import CollapsibleCard from "../ui/CollapsibleCard.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
 import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
@@ -56,6 +55,7 @@ import {
   readMatchdayLock,
   writeMatchdayLock,
 } from "../lib/operations/matchdayLock.js";
+import { getParkingStats } from "../lib/dashboardStats.js";
 import { toast } from "sonner";
 
 const WORKSPACES = [
@@ -221,7 +221,7 @@ function WorkspaceTab({ workspace, active, count, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`group flex min-h-[74px] items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition ${
+      className={`group flex min-h-[60px] items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition ${
         active
           ? "bg-slate-950 text-white shadow-md"
           : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white hover:text-slate-950 hover:shadow-sm"
@@ -229,19 +229,12 @@ function WorkspaceTab({ workspace, active, count, onClick }) {
     >
       <div className="flex min-w-0 items-center gap-3">
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-white/10 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${active ? "bg-white/10 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
         >
-          <Icon size={20} strokeWidth={2.5} />
+          <Icon size={19} strokeWidth={2.5} />
         </div>
-        <div className="min-w-0">
-          <div
-            className={`text-[11px] font-black uppercase tracking-[0.2em] ${active ? "text-emerald-300" : "text-slate-400"}`}
-          >
-            Workspace
-          </div>
-          <div className="mt-1 truncate text-base font-black">
-            {workspace.label}
-          </div>
+        <div className="min-w-0 truncate text-sm font-black">
+          {workspace.label}
         </div>
       </div>
       <span
@@ -606,6 +599,25 @@ export default function MatchdayPage({
     ],
   );
 
+  const parkingStats = useMemo(
+    () =>
+      getParkingStats({
+        fixtures: active,
+        club: clubWithTiming,
+        pitchCfg: props.pitchCfg || [],
+        startMins: (props.startHour ?? 8) * 60 + (props.startMin ?? 30),
+        scope: day.toLowerCase(),
+      }),
+    [
+      active,
+      clubWithTiming,
+      day,
+      props.pitchCfg,
+      props.startHour,
+      props.startMin,
+    ],
+  );
+
   const recommendationCentre = useMemo(
     () =>
       buildRecommendationCentre({
@@ -949,10 +961,25 @@ export default function MatchdayPage({
         subtitle:
           "Available spaces, arrival waves, peak demand and practical mitigation actions.",
         icon: Car,
-        badge: "Engine",
+        badge: !hasRun
+          ? "Awaiting schedule"
+          : !parkingStats.configured
+            ? "Configure parking"
+            : `${parkingStats.pct}% peak`,
         ...getSectionStatus({
-          warning: active.length > 0,
-          ready: active.length === 0,
+          danger: hasRun && parkingStats.overCapacity,
+          warning:
+            hasRun &&
+            !parkingStats.overCapacity &&
+            (!parkingStats.configured ||
+              parkingStats.isHighPressure ||
+              parkingStats.isOverConcurrentLimit),
+          ready:
+            hasRun &&
+            parkingStats.configured &&
+            !parkingStats.overCapacity &&
+            !parkingStats.isHighPressure &&
+            !parkingStats.isOverConcurrentLimit,
         }),
         render: () => (
           <MatchdayCarParkCard
@@ -1208,10 +1235,8 @@ export default function MatchdayPage({
   const workspaceSectionIds = sections
     .filter((section) => section.workspace === activeWorkspace)
     .map((section) => section.id);
-  function shouldAutoExpandSection(section) {
-    if (section?.id === "matchdayGuidance") return true;
-    if (section?.workspace === "intelligence") return false;
-    return section?.status === "danger" || section?.status === "warning";
+  function shouldAutoExpandSection() {
+    return false;
   }
 
   function isSectionOpen(section) {
@@ -1290,8 +1315,8 @@ export default function MatchdayPage({
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-4">
+      <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {WORKSPACES.map((workspace) => (
             <WorkspaceTab
               key={workspace.id}

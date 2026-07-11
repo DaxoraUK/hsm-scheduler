@@ -1,7 +1,10 @@
 import React, { useEffect } from "react";
-import { BadgePoundSterling, Database, Settings2 } from "lucide-react";
+import { Database, Settings2 } from "lucide-react";
 
-import SettingsTabs from "../components/Settings/SettingsTabs.jsx";
+import SettingsTabs, {
+  getSettingsGroupKey,
+  getVisibleSettingsGroups,
+} from "../components/Settings/SettingsTabs.jsx";
 import SettingsOverviewPanel from "../components/Settings/SettingsOverviewPanel.jsx";
 import WorkspaceSettingsPanel from "../components/Settings/WorkspaceSettingsPanel.jsx";
 import ClubSettingsPanel from "../components/Settings/ClubSettingsPanel.jsx";
@@ -113,6 +116,15 @@ export default function SettingsPage(props) {
     workspaceAccess,
     platformContext,
   } = props;
+  const visibleGroups = getVisibleSettingsGroups({
+    productionMode,
+    workspaceAccess,
+    subscription,
+    platformContext,
+  });
+  const visibleTabs = new Set(
+    visibleGroups.flatMap((group) => group.tabs.map(([key]) => key)),
+  );
   const requestedTab =
     LEGACY_REDIRECTS[settingsTab] || settingsTab || "overview";
   const developerToolsAllowed =
@@ -126,10 +138,17 @@ export default function SettingsPage(props) {
     requiredEntitlement && !hasEntitlement(subscription, requiredEntitlement)
       ? "overview"
       : permittedTab;
-  const activeTab =
+  const candidateTab =
     subscription?.isReadOnly && workspaceAccess?.canManageSubscription
       ? "subscription"
       : entitledTab;
+  const activeTab = visibleTabs.has(candidateTab)
+    ? candidateTab
+    : visibleGroups[0]?.tabs?.[0]?.[0] || "overview";
+  const activeGroupKey = getSettingsGroupKey(activeTab);
+  const activeGroup = visibleGroups.find(
+    (group) => group.key === activeGroupKey,
+  );
   const [title, subtitle] = TAB_TITLES[activeTab] || TAB_TITLES.overview;
   const dataStatus =
     dbStatus === "connected"
@@ -186,13 +205,14 @@ export default function SettingsPage(props) {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:min-w-[340px]">
-            <HeaderMetric
-              label="Plan"
-              value={subscription?.planName || "Unverified"}
-              icon={BadgePoundSterling}
-            />
-            <HeaderMetric label="Data" value={dataStatus} icon={Database} />
+          <div className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-slate-600 lg:self-auto">
+            <Database size={16} className="text-slate-400" />
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Data
+            </span>
+            <span className="text-sm font-black text-slate-950">
+              {dataStatus}
+            </span>
           </div>
         </div>
       </section>
@@ -201,24 +221,41 @@ export default function SettingsPage(props) {
         <aside className="self-start xl:sticky xl:top-24">
           <SettingsTabs {...props} settingsTab={activeTab} />
         </aside>
-        <div className="min-w-0">{renderPanel()}</div>
+        <div className="min-w-0 space-y-4">
+          {activeGroup?.tabs?.length > 1 ? (
+            <SettingsSubnavigation
+              tabs={activeGroup.tabs}
+              activeTab={activeTab}
+              onChange={setSettingsTab}
+            />
+          ) : null}
+          {renderPanel()}
+        </div>
       </div>
     </div>
   );
 }
 
-function HeaderMetric({ label, value, icon: Icon }) {
+function SettingsSubnavigation({ tabs = [], activeTab, onChange }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-      <div className="flex items-center gap-2 text-slate-400">
-        <Icon size={15} />
-        <span className="text-[9px] font-black uppercase tracking-[0.18em]">
+    <nav
+      className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
+      aria-label="Settings subsection"
+    >
+      {tabs.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange?.(key)}
+          className={`shrink-0 rounded-xl px-3.5 py-2.5 text-xs font-black transition ${
+            activeTab === key
+              ? "bg-slate-950 text-white shadow-sm"
+              : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
+          }`}
+        >
           {label}
-        </span>
-      </div>
-      <div className="mt-2 truncate text-sm font-black text-slate-950">
-        {value}
-      </div>
-    </div>
+        </button>
+      ))}
+    </nav>
   );
 }

@@ -1,57 +1,78 @@
 import React from "react";
-import { AlertTriangle, CheckCircle2, Circle, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  XCircle,
+} from "lucide-react";
 
 const toneMap = {
   success: {
     icon: CheckCircle2,
-    wrap: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    dot: "text-emerald-600",
+    iconWrap: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    detail: "text-emerald-800",
   },
   warning: {
     icon: AlertTriangle,
-    wrap: "border-amber-200 bg-amber-50 text-amber-900",
-    dot: "text-amber-600",
+    iconWrap: "bg-amber-50 text-amber-700 ring-amber-200",
+    detail: "text-amber-900",
   },
   danger: {
     icon: XCircle,
-    wrap: "border-red-200 bg-red-50 text-red-800",
-    dot: "text-red-600",
+    iconWrap: "bg-rose-50 text-rose-700 ring-rose-200",
+    detail: "text-rose-800",
   },
   muted: {
     icon: Circle,
-    wrap: "border-slate-200 bg-white text-slate-600",
-    dot: "text-slate-400",
+    iconWrap: "bg-slate-100 text-slate-500 ring-slate-200",
+    detail: "text-slate-700",
   },
 };
 
-export default function DashboardStatusStrip({ items = [], actionsMenu = null, scope = "weekend", onScopeChange, midweekEnabled = true }) {
+const scopeOptions = [
+  { key: "matchweek", label: "Matchweek", midweekOnly: true },
+  { key: "weekend", label: "Weekend" },
+  { key: "midweek", label: "Midweek", midweekOnly: true },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
+export default function DashboardStatusStrip({
+  items = [],
+  actionsMenu = null,
+  primaryAction = null,
+  scope = "weekend",
+  onScopeChange,
+  midweekEnabled = true,
+}) {
+  const visibleScopes = scopeOptions.filter(
+    (option) => !option.midweekOnly || midweekEnabled,
+  );
+
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+    <section className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">
-            Matchday status
+            Matchweek overview
           </div>
-          <div className="mt-1 text-sm font-bold text-slate-500">
-            Open the area that needs attention or review the current matchday position.
+          <div className="mt-1 text-sm font-black text-slate-950">
+            Current operating position
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center lg:justify-end">
           {onScopeChange ? (
-            <div className="flex rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200" aria-label="Mission Control scope">
-              {[
-                ...(midweekEnabled ? [{ key: "matchweek", label: "Week" }] : []),
-                { key: "weekend", label: "W/end" },
-                ...(midweekEnabled ? [{ key: "midweek", label: "Mid" }] : []),
-                { key: "saturday", label: "Sat" },
-                { key: "sunday", label: "Sun" },
-              ].map((option) => (
+            <div
+              className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200"
+              aria-label="Mission Control scope"
+            >
+              {visibleScopes.map((option) => (
                 <button
                   key={option.key}
                   type="button"
                   onClick={() => onScopeChange(option.key)}
-                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${
+                  className={`shrink-0 rounded-xl px-3 py-2 text-xs font-black transition sm:px-3.5 ${
                     scope === option.key
                       ? "bg-slate-950 text-white shadow-sm"
                       : "text-slate-500 hover:bg-white hover:text-slate-950"
@@ -63,11 +84,23 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null, s
             </div>
           ) : null}
 
-          {actionsMenu ? <div>{actionsMenu}</div> : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {primaryAction?.onClick ? (
+              <button
+                type="button"
+                onClick={primaryAction.onClick}
+                disabled={primaryAction.disabled}
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {primaryAction.label || "Open Operations"}
+              </button>
+            ) : null}
+            {actionsMenu}
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
         {items.map((item) => {
           const tone = toneMap[item.status] || toneMap.muted;
           const Icon = tone.icon;
@@ -77,17 +110,21 @@ export default function DashboardStatusStrip({ items = [], actionsMenu = null, s
               key={item.label}
               type="button"
               onClick={item.onClick}
-              className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${tone.wrap}`}
+              className="flex min-w-0 items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5"
             >
-              <Icon size={19} strokeWidth={2.5} className={tone.dot} />
-              <div className="min-w-0">
-                <div className="truncate text-[10px] font-black uppercase tracking-[0.2em] opacity-70">
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${tone.iconWrap}`}
+              >
+                <Icon size={17} strokeWidth={2.5} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                   {item.label}
-                </div>
-                <div className="mt-0.5 truncate text-sm font-black">
+                </span>
+                <span className={`mt-0.5 block truncate text-sm font-black ${tone.detail}`}>
                   {item.detail}
-                </div>
-              </div>
+                </span>
+              </span>
             </button>
           );
         })}

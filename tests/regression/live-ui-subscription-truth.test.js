@@ -86,7 +86,9 @@ describe("live UI and subscription truthfulness", () => {
   test("keeps setup shortcuts on Overview and reduces permanent Settings navigation", () => {
     expect(settingsTabs).not.toContain('["workspace", "Workspace"');
     expect(settingsTabs).not.toContain('["onboarding", "Setup wizard"');
-    expect(settingsTabs).toContain('label: "Workspace & plan"');
+    expect(settingsTabs).toContain('label: "Club & venues"');
+    expect(settingsTabs).toContain('label: "Teams & resources"');
+    expect(settingsTabs).toContain('label: "Plan & billing"');
     expect(settingsTabs).toContain('label: "Access & data"');
   });
 

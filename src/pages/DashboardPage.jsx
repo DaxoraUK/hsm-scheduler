@@ -30,7 +30,7 @@ import {
 
 import {
   CalendarDays,
-  ChevronDown,
+  MoreHorizontal,
   Save,
   FileText,
   ArrowRight,
@@ -582,6 +582,15 @@ export default function DashboardPage({
               }
             : nextAction;
 
+  const primaryActionHandler = !canSchedule
+    ? () => nav.goToSettings({ settingsTab: "subscription" })
+    : !canWrite
+      ? () => nav.goToOperations({ day: operationsLandingDay })
+      : needsMatchweekBuild
+        ? openBuildMatchweek
+        : nextAction?.onClick ||
+          (() => nav.goToOperations({ day: operationsLandingDay }));
+
   const heroWeather = {
     available: weatherIntelligence.forecastAvailable,
     status: weatherIntelligence.status,
@@ -601,16 +610,13 @@ export default function DashboardPage({
       <button
         type="button"
         onClick={() => setActionsOpen((open) => !open)}
-        className="inline-flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900 active:scale-[0.98]"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 active:scale-[0.98]"
         aria-expanded={actionsOpen}
         aria-haspopup="menu"
+        aria-label="More matchweek actions"
       >
-        <Sparkles size={18} className="text-emerald-300" strokeWidth={2.5} />
-        Command Menu
-        <ChevronDown
-          size={17}
-          className={`text-slate-300 transition ${actionsOpen ? "rotate-180" : ""}`}
-        />
+        <MoreHorizontal size={19} strokeWidth={2.5} />
+        <span className="hidden sm:inline">More</span>
       </button>
 
       {actionsOpen ? (
@@ -620,10 +626,10 @@ export default function DashboardPage({
         >
           <div className="border-b border-slate-100 px-5 py-4">
             <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">
-              Command Menu
+              More actions
             </div>
             <div className="mt-1 text-sm font-bold text-slate-500">
-              Quick access to common club operations.
+              Save, rebuild or open supporting areas.
             </div>
           </div>
 
@@ -691,28 +697,14 @@ export default function DashboardPage({
         issueCount={heroIssueCount}
         weather={heroWeather}
         scopeLabel={getMatchdayScopeLabel(matchdayScope)}
-        onContinue={
-          !canSchedule
-            ? () => nav.goToSettings({ settingsTab: "subscription" })
-            : !canWrite
-              ? () => nav.goToOperations({ day: operationsLandingDay })
-              : needsMatchweekBuild
-                ? openBuildMatchweek
-                : nextAction?.onClick ||
-                  (() => nav.goToOperations({ day: operationsLandingDay }))
-        }
-        secondaryAction={{
-          label: "Open Operations",
-          onClick: () => {
-            setMainPage("operations");
-            setDayTab(operationsLandingDay);
-            setNavigationTarget?.(null);
-          },
-        }}
       />
 
       <DashboardStatusStrip
         actionsMenu={commandMenu}
+        primaryAction={{
+          label: heroNextAction?.title || "Open Operations",
+          onClick: primaryActionHandler,
+        }}
         scope={matchdayScope}
         onScopeChange={setMatchdayScope}
         midweekEnabled={midweekEnabled}
@@ -757,8 +749,14 @@ export default function DashboardPage({
           },
           {
             label: "Parking",
-            status: parkingStats.overCapacity ? "danger" : "success",
-            detail: scheduleBuilt ? `${parkingStats.pct}% peak` : "Pending",
+            status: !scheduleBuilt
+              ? "muted"
+              : parkingStats.overCapacity
+                ? "danger"
+                : "success",
+            detail: scheduleBuilt
+              ? `${parkingStats.pct}% peak`
+              : "Awaiting schedule",
             onClick: () => nav.goToParking({ day: navigationDay }),
           },
         ]}
