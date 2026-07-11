@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,6 +24,7 @@ import PageHeader from "../ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import Card from "../ui/Card.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import { buildCommunicationsModel } from "../lib/communications/communicationsEngine.js";
 import { maskContactDestination } from "../lib/communications/contactModel.js";
 import { communicationPrivacyGaps, normaliseCommunicationPrivacy } from "../lib/communications/privacyModel.js";
@@ -105,6 +107,8 @@ function communicationLink(recipient, message, teamName) {
 }
 
 function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, onClose, onCopySelected, onOpenChannel, onSendWeb }) {
+  if (typeof document === "undefined") return null;
+
   const gaps = communicationPrivacyGaps(privacy);
   const selectedRows = rows.filter((row) => selected[row.id]);
   const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
@@ -113,95 +117,132 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
   const emailPilot = Boolean(capabilities.channels?.email?.pilotMode);
   const pilotMaxBatch = Number(capabilities.channels?.email?.maxBatch) || 5;
   const pilotBatchTooLarge = emailPilot && webPlan.messages.length > pilotMaxBatch;
-  const canCopy = !gaps.length && selectedRows.length;
+  const canCopy = !gaps.length && selectedRows.length > 0;
   const canSendWeb = !gaps.length && webPlan.messages.length > 0 && !pilotBatchTooLarge && !sending;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Coach message queue">
-      <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Coach message queue</div>
-            <h2 className="mt-2 text-2xl font-black text-slate-950">Review messages before using an external channel</h2>
-            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">Ground Control prepares and audits the queue. Copying or opening WhatsApp, SMS or email does not prove the message was sent or delivered.</p>
-          </div>
-          <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Close queue"><X size={18} /></button>
-        </div>
+  const allSelected = rows.length > 0 && selectedRows.length === rows.length;
 
-        {gaps.length ? (
-          <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-950 sm:px-6">
-            <strong>Privacy setup required:</strong> complete {gaps.join(" · ")} in Settings → Privacy & contacts before copying or sending the bulk queue.
-          </div>
-        ) : null}
+  const selectAll = () => setSelected(Object.fromEntries(rows.map((row) => [row.id, true])));
+  const clearAll = () => setSelected({});
 
-        <div className={`border-b px-5 py-4 sm:px-6 ${capabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <RadioTower size={18} className={`mt-0.5 shrink-0 ${capabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />
-              <div>
-                <div className={`text-sm font-black ${capabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
-                  {emailPilot ? "Staging email pilot is active" : capabilities.webSendingEnabled ? "Secure web sending is available" : "Web sending is prepared but not switched on"}
-                </div>
-                <div className={`mt-1 text-xs font-semibold ${capabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
-                  {emailPilot
-                    ? `Every provider email is redirected to ${capabilities.channels.email.pilotRecipientHint}. Coaches will not receive these test emails. The pilot limit is ${pilotMaxBatch} recipients per batch.${pilotBatchTooLarge ? " Reduce the selection before continuing." : ""}`
-                    : capabilities.webSendingEnabled
-                      ? `${webPlan.messages.length} selected recipient${webPlan.messages.length === 1 ? "" : "s"} can be sent through configured providers.${webPlan.unavailable.length ? ` ${webPlan.unavailable.length} will remain external-channel only.` : ""}${noticeMissingRows.length ? ` ${noticeMissingRows.length} team${noticeMissingRows.length === 1 ? " is" : "s are"} excluded until the privacy notice is recorded.` : ""}`
-                      : "Add server-side provider credentials and channel flags in Vercel before live delivery can occur."}
-                </div>
+  return createPortal(
+    <div className="fixed inset-0 z-[120] overflow-y-auto bg-slate-950/65 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Coach message queue">
+      <div className="flex min-h-full items-stretch justify-center sm:items-center sm:p-6">
+        <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:max-w-6xl sm:rounded-[30px] sm:border sm:border-white/20">
+          <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 sm:px-7 sm:py-5">
+            <div className="flex items-start justify-between gap-5">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Matchweek communications</div>
+                <h2 className="mt-1.5 text-2xl font-black tracking-tight text-slate-950">Send coach messages</h2>
+                <p className="mt-1.5 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+                  Check recipients and fixture details before continuing. Provider acceptance, sending and delivery are recorded as separate events.
+                </p>
+              </div>
+              <button type="button" onClick={onClose} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40" aria-label="Close queue"><X size={18} /></button>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm font-black text-slate-800">
+                {selectedRows.length} of {rows.length} message{rows.length === 1 ? "" : "s"} selected
+                <span className="ml-2 font-semibold text-slate-500">· {webPlan.messages.length} provider recipient{webPlan.messages.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={selectAll} disabled={allSelected || sending} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40">Select all</button>
+                <button type="button" onClick={clearAll} disabled={!selectedRows.length || sending} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40">Clear</button>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {["email", "sms", "whatsapp"].map((channel) => {
-                const item = capabilities.channels?.[channel];
-                const label = channel === "email" && item?.pilotMode ? "Pilot ready" : item?.enabled ? "Ready" : "Not configured";
-                return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {label}</StatusChip>;
+          </header>
+
+          {gaps.length ? (
+            <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-950 sm:px-7">
+              <strong>Privacy setup required:</strong> complete {gaps.join(" · ")} in Settings → Privacy & contacts before copying or sending this queue.
+            </div>
+          ) : null}
+
+          <div className={`shrink-0 border-b px-5 py-3 sm:px-7 ${capabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <RadioTower size={18} className={`mt-0.5 shrink-0 ${capabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />
+                <div className="min-w-0">
+                  <div className={`text-sm font-black ${capabilities.webSendingEnabled ? "text-emerald-950" : "text-slate-800"}`}>
+                    {emailPilot ? "Staging email pilot is active" : capabilities.webSendingEnabled ? "Secure web sending available" : "Web sending not configured"}
+                  </div>
+                  <div className={`mt-0.5 text-xs font-semibold leading-5 ${capabilities.webSendingEnabled ? "text-emerald-800" : "text-slate-500"}`}>
+                    {emailPilot
+                      ? `All provider emails will be redirected to ${capabilities.channels.email.pilotRecipientHint}. No coach will receive these messages. Maximum ${pilotMaxBatch} recipients.${pilotBatchTooLarge ? " Reduce the selection to continue." : ""}`
+                      : capabilities.webSendingEnabled
+                        ? `${webPlan.messages.length} selected recipient${webPlan.messages.length === 1 ? "" : "s"} can use a configured provider.${webPlan.unavailable.length ? ` ${webPlan.unavailable.length} will remain external-channel only.` : ""}${noticeMissingRows.length ? ` ${noticeMissingRows.length} excluded until the privacy notice is recorded.` : ""}`
+                        : "Copy the selected messages or configure a server-side provider before sending from Ground Control."}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["email", "sms", "whatsapp"].map((channel) => {
+                  const item = capabilities.channels?.[channel];
+                  const label = channel === "email" && item?.pilotMode ? "Pilot" : item?.enabled ? "Ready" : "Off";
+                  return <StatusChip key={channel} status={item?.enabled ? "success" : "neutral"} size="sm">{channel} · {label}</StatusChip>;
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-4 py-4 sm:px-7 sm:py-5">
+            <div className="grid gap-3 xl:grid-cols-2">
+              {rows.map((row) => {
+                const checked = Boolean(selected[row.id]);
+                return (
+                  <article key={row.id} className={`rounded-[22px] border bg-white p-4 shadow-sm transition ${checked ? "border-emerald-300 ring-2 ring-emerald-100" : "border-slate-200"}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" checked={checked} onChange={(event) => setSelected((current) => ({ ...current, [row.id]: event.target.checked }))} className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 accent-emerald-600" aria-label={`Select ${row.teamName}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-black text-slate-950">{row.teamName}</h3>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">{row.dateLabel} · {row.ko} · {row.pitch}</p>
+                          </div>
+                          <StatusChip status="success" size="sm">{row.recipients.length} recipient{row.recipients.length === 1 ? "" : "s"}</StatusChip>
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          {row.recipients.map((recipient) => (
+                            <button key={`${row.id}-${recipient.type}`} type="button" onClick={() => onOpenChannel(row, recipient)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
+                              <span className="min-w-0 text-xs font-black text-slate-700"><span className="block truncate">{recipient.name}</span><span className="font-semibold text-slate-500">{recipient.channel} · {maskContactDestination(recipient.destination)}</span></span>
+                              <ExternalLink size={14} className="shrink-0 text-slate-400" />
+                            </button>
+                          ))}
+                        </div>
+
+                        <details className="mt-3 rounded-xl border border-slate-200 bg-white">
+                          <summary className="cursor-pointer px-3 py-2 text-xs font-black text-slate-600">Preview message</summary>
+                          <pre className="max-h-44 overflow-y-auto whitespace-pre-wrap border-t border-slate-100 px-3 py-3 font-sans text-xs font-semibold leading-5 text-slate-600">{row.message}</pre>
+                        </details>
+                      </div>
+                    </div>
+                  </article>
+                );
               })}
             </div>
           </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
-          <div className="space-y-3">
-            {rows.map((row) => {
-              const checked = Boolean(selected[row.id]);
-              return (
-                <article key={row.id} className={`rounded-2xl border p-4 ${checked ? "border-emerald-300 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
-                  <div className="flex flex-wrap items-start gap-4">
-                    <input type="checkbox" checked={checked} onChange={(event) => setSelected((current) => ({ ...current, [row.id]: event.target.checked }))} className="mt-1 h-4 w-4 rounded border-slate-300 accent-emerald-600" aria-label={`Select ${row.teamName}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-black text-slate-950">{row.teamName}</h3>
-                        <StatusChip status="success" size="sm">{row.recipients.length} recipient{row.recipients.length === 1 ? "" : "s"}</StatusChip>
-                      </div>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{row.dateLabel} · {row.ko} · {row.pitch}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {row.recipients.map((recipient) => (
-                          <button key={`${row.id}-${recipient.type}`} type="button" onClick={() => onOpenChannel(row, recipient)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-emerald-300 hover:text-emerald-800">
-                            <ExternalLink size={14} /> {recipient.name} · {recipient.channel} · {maskContactDestination(recipient.destination)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div className="text-sm font-bold text-slate-600">{selectedRows.length} message{selectedRows.length === 1 ? "" : "s"} selected · {webPlan.messages.length} web recipient{webPlan.messages.length === 1 ? "" : "s"}{noticeMissingRows.length ? ` · ${noticeMissingRows.length} privacy notice missing` : ""}</div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={onClose} disabled={sending} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-100 disabled:opacity-40">Close</button>
-            <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
-            <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
-              {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
-              {sending ? "Sending securely…" : emailPilot ? "Send staging email test" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending not configured"}
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
+          <footer className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-xs font-bold leading-5 text-slate-500">
+                Copying or opening WhatsApp, SMS or email does not prove the message was sent or delivered.
+                {noticeMissingRows.length ? ` ${noticeMissingRows.length} selected message${noticeMissingRows.length === 1 ? " is" : "s are"} missing a recorded privacy notice.` : ""}
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={onClose} disabled={sending} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">Cancel</button>
+                <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
+                <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+                  {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+                  {sending ? "Sending securely…" : emailPilot ? "Send staging email test" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending unavailable"}
+                </button>
+              </div>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -217,6 +258,7 @@ export default function CommunicationsPage(props) {
   const [deliveryCapabilities, setDeliveryCapabilities] = useState(EMPTY_DELIVERY_CAPABILITIES);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sendConfirmation, setSendConfirmation] = useState(null);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
 
   const rows = model.rows.filter((row) => {
@@ -332,34 +374,37 @@ export default function CommunicationsPage(props) {
     await record(row, "channel_opened", recipient);
   };
 
-  const sendSelectedViaWeb = async (selectedRows) => {
+  const sendSelectedViaWeb = (selectedRows) => {
     const webEligibleRows = selectedRows.filter((row) => Boolean(row.contact?.privacyNoticeProvidedAt));
     const plan = buildDeliveryMessages(webEligibleRows, deliveryCapabilities);
     if (!plan.messages.length) {
       toast.error("No configured web recipients", { description: "Enable an email, SMS or WhatsApp provider in Vercel first." });
       return;
     }
-    const warning = plan.unavailable.length
-      ? ` ${plan.unavailable.length} recipient${plan.unavailable.length === 1 ? "" : "s"} use a channel that is not configured and will not be sent.`
-      : "";
     const emailPilot = Boolean(deliveryCapabilities.channels?.email?.pilotMode);
     const pilotMaxBatch = Number(deliveryCapabilities.channels?.email?.maxBatch) || 5;
     if (emailPilot && plan.messages.length > pilotMaxBatch) {
       toast.error("Staging pilot batch limit exceeded", { description: `Select no more than ${pilotMaxBatch} email recipients.` });
       return;
     }
-    const confirmation = emailPilot
-      ? `Send ${plan.messages.length} staging test email${plan.messages.length === 1 ? "" : "s"}? Every email will be redirected to ${deliveryCapabilities.channels.email.pilotRecipientHint}. No coach will receive these messages.${warning}`
-      : `Send ${plan.messages.length} real coach message${plan.messages.length === 1 ? "" : "s"} through the configured provider?${warning}`;
-    const confirmed = window.confirm(confirmation);
-    if (!confirmed) return;
 
+    setSendConfirmation({
+      rows: webEligibleRows,
+      recipientCount: plan.messages.length,
+      unavailableCount: plan.unavailable.length,
+      emailPilot,
+    });
+  };
+
+  const confirmWebSend = async () => {
+    if (!sendConfirmation?.rows?.length || sending) return;
+    const confirmation = sendConfirmation;
     setSending(true);
     try {
       const requestKey = globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const result = await dispatchCommunicationBatch({
         clubId: props.activeClubId,
-        rows: webEligibleRows,
+        rows: confirmation.rows,
         capabilities: deliveryCapabilities,
         requestKey,
       });
@@ -367,11 +412,12 @@ export default function CommunicationsPage(props) {
       if (result.failed) {
         toast.warning(`${result.accepted} accepted, ${result.failed} failed`, { description: "Open the audit trail before retrying failed recipients." });
       } else {
-        toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: emailPilot ? "The staging inbox will receive redirected test emails. Provider delivery status remains separate." : "Delivery status will update only when the provider confirms it." });
+        toast.success(`${result.accepted} message${result.accepted === 1 ? "" : "s"} accepted by provider`, { description: confirmation.emailPilot ? "The internal staging inbox will receive the redirected test. Delivery remains a separate provider status." : "Delivery status will update only when the provider confirms it." });
       }
       if (result.unavailable?.length) {
         toast.info(`${result.unavailable.length} recipient${result.unavailable.length === 1 ? "" : "s"} not sent`, { description: "Their preferred channel is not configured for web sending." });
       }
+      setSendConfirmation(null);
       setQueueOpen(false);
     } catch (error) {
       toast.error("Coach messages were not sent", { description: error?.message || "The provider request failed." });
@@ -531,8 +577,37 @@ export default function CommunicationsPage(props) {
       </Card>
 
       {queueOpen ? (
-        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} />
+        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => !sending && setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(sendConfirmation)}
+        eyebrow={sendConfirmation?.emailPilot ? "Internal staging test" : "Secure web delivery"}
+        title={sendConfirmation?.emailPilot
+          ? `Send ${sendConfirmation?.recipientCount || 0} internal test email${sendConfirmation?.recipientCount === 1 ? "" : "s"}?`
+          : `Send ${sendConfirmation?.recipientCount || 0} coach message${sendConfirmation?.recipientCount === 1 ? "" : "s"}?`}
+        description={sendConfirmation?.emailPilot
+          ? "The provider request will be redirected to the internal staging inbox. Saved coach and assistant addresses will not receive this test."
+          : "Ground Control will submit the selected messages to the configured providers. Acceptance does not prove delivery."}
+        confirmLabel={sendConfirmation?.emailPilot ? "Send staging email test" : "Send messages"}
+        cancelLabel="Go back"
+        tone={sendConfirmation?.emailPilot ? "info" : "warning"}
+        busy={sending}
+        initialFocus="cancel"
+        onCancel={() => !sending && setSendConfirmation(null)}
+        onConfirm={confirmWebSend}
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Delivery summary</div>
+          <div className="mt-2 text-sm font-black text-slate-900">{sendConfirmation?.recipientCount || 0} provider recipient{sendConfirmation?.recipientCount === 1 ? "" : "s"}</div>
+          {sendConfirmation?.emailPilot ? (
+            <div className="mt-2 text-sm font-semibold leading-6 text-slate-600">Redirect inbox: <strong className="text-slate-900">{deliveryCapabilities.channels?.email?.pilotRecipientHint}</strong><br />No coach will receive the test.</div>
+          ) : null}
+          {sendConfirmation?.unavailableCount ? (
+            <div className="mt-2 text-xs font-bold text-amber-700">{sendConfirmation.unavailableCount} recipient{sendConfirmation.unavailableCount === 1 ? "" : "s"} use an unavailable channel and will be skipped.</div>
+          ) : null}
+        </div>
+      </ConfirmDialog>
     </PageContainer>
   );
 }

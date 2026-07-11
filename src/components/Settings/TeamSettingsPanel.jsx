@@ -2,7 +2,7 @@ import React from "react";
 import { Plus, RotateCcw, ShieldCheck, Trash2, UsersRound } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
-import { alignTeamContacts, getTeamContactKey, normaliseTeamContact } from "../../lib/communications/contactModel.js";
+import { alignTeamContactsForEditing, getTeamContactKey, normaliseEditableTeamContact } from "../../lib/communications/contactModel.js";
 import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
 import {
@@ -101,7 +101,7 @@ export default function TeamSettingsPanel({
   const teamLimit = getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS);
   const canAddTeam = isUnlimitedLimit(teamLimit) || teamCfg.length < teamLimit;
   const canManageContacts = Boolean(workspaceAccess?.canManageSettings);
-  const contacts = alignTeamContacts(teamCfg, teamContacts);
+  const contacts = alignTeamContactsForEditing(teamCfg, teamContacts);
   const counts = teamCfg.reduce((acc, team) => {
     const type = classifyFallback(team);
     acc[type] = (acc[type] || 0) + 1;
@@ -109,7 +109,7 @@ export default function TeamSettingsPanel({
   }, {});
 
   const setAlignedContacts = (updater) => {
-    setTeamContacts?.((current) => updater(alignTeamContacts(teamCfg, current)));
+    setTeamContacts?.((current) => updater(alignTeamContactsForEditing(teamCfg, current)));
   };
 
   const updateTeam = (index, field, value) => {
@@ -134,7 +134,7 @@ export default function TeamSettingsPanel({
     if (!canManageContacts) return;
     setAlignedContacts((current) => current.map((contact, rowIndex) => (
       rowIndex === index
-        ? normaliseTeamContact({ teamKey: contact.teamKey, teamName: contact.teamName, receiveMatchdayMessages: false })
+        ? normaliseEditableTeamContact({ teamKey: contact.teamKey, teamName: contact.teamName, receiveMatchdayMessages: false })
         : contact
     )));
   };
@@ -155,26 +155,26 @@ export default function TeamSettingsPanel({
     const nextIndex = teamCfg.length;
     setTeamCfg((current) => [...current, nextTeam]);
     setTeamContacts?.((current) => [
-      ...alignTeamContacts(teamCfg, current),
-      normaliseTeamContact({ teamKey: getTeamContactKey(nextTeam, nextIndex), teamName: nextTeam.name }, nextTeam, nextIndex),
+      ...alignTeamContactsForEditing(teamCfg, current),
+      normaliseEditableTeamContact({ teamKey: getTeamContactKey(nextTeam, nextIndex), teamName: nextTeam.name }, nextTeam, nextIndex),
     ]);
   };
 
   const removeTeam = (index) => {
     setTeamCfg((current) => current.filter((_, rowIndex) => rowIndex !== index));
-    setTeamContacts?.((current) => alignTeamContacts(teamCfg, current).filter((_, rowIndex) => rowIndex !== index));
+    setTeamContacts?.((current) => alignTeamContactsForEditing(teamCfg, current).filter((_, rowIndex) => rowIndex !== index));
   };
 
   const importTeams = (rows, mode) => {
     const next = mode === "append" ? [...teamCfg, ...rows] : rows;
     const limited = isUnlimitedLimit(teamLimit) ? next : next.slice(0, teamLimit);
     setTeamCfg(limited);
-    setTeamContacts?.((current) => alignTeamContacts(limited, mode === "append" ? current : []));
+    setTeamContacts?.((current) => alignTeamContactsForEditing(limited, mode === "append" ? current : []));
   };
 
   const restoreDefaults = () => {
     setTeamCfg(TEAM_CONFIG_DEFAULT);
-    setTeamContacts?.(alignTeamContacts(TEAM_CONFIG_DEFAULT, []));
+    setTeamContacts?.(alignTeamContactsForEditing(TEAM_CONFIG_DEFAULT, []));
   };
 
   return (
@@ -230,7 +230,7 @@ export default function TeamSettingsPanel({
           const homeSiteId = team.siteId || primarySite?.id || "";
           const sitePitches = sortedPitches.filter((pitch) => (pitch.siteId || primarySite?.id) === homeSiteId);
           const options = sitePitches.length ? sitePitches : sortedPitches;
-          const contact = contacts[index] || normaliseTeamContact({}, team, index);
+          const contact = contacts[index] || normaliseEditableTeamContact({}, team, index);
 
           return (
             <article key={contact.teamKey || `team-${index}`} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">

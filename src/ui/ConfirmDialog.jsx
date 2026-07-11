@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, CheckCircle2, Info, Sparkles, X } from "lucide-react";
 
 const TONES = {
@@ -64,13 +65,13 @@ export default function ConfirmDialog({
     };
   }, [busy, initialFocus, onCancel, open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const toneConfig = TONES[tone] || TONES.warning;
   const ToneIcon = toneConfig.icon;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="presentation">
+  return createPortal(
+    <div className="fixed inset-0 z-[140] flex items-center justify-center p-4" role="presentation">
       <button
         type="button"
         aria-label="Close confirmation"
@@ -146,6 +147,7 @@ export default function ConfirmDialog({
           </div>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -63,7 +63,7 @@ export default function CommunicationsPrivacyPanel({
     }));
   }, [club.email, club.name, club.privacyEmail, communicationPrivacy]);
 
-  const update = (field, value) => setDraft((current) => normaliseCommunicationPrivacy({ ...current, [field]: value }));
+  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
 
   const save = async () => {
     if (!canManage || !activeClubId) return;

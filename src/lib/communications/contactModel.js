@@ -19,6 +19,14 @@ function text(value) {
   return String(value || "").trim();
 }
 
+function editableText(value) {
+  return value == null ? "" : String(value);
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null) ?? "";
+}
+
 export function normaliseTeamKey(value, fallback = "") {
   const raw = text(value || fallback).toLowerCase();
   const key = raw
@@ -69,6 +77,32 @@ export function extractLegacyTeamContacts(teamCfg = []) {
     .filter((contact) => contact.coachName || contact.coachPhone || contact.coachEmail || contact.assistantName || contact.assistantPhone || contact.assistantEmail);
 }
 
+export function normaliseEditableTeamContact(contact = {}, team = {}, index = 0) {
+  const channel = text(firstDefined(
+    contact.preferredChannel,
+    contact.communicationChannel,
+    team.communicationChannel,
+    "whatsapp",
+  )).toLowerCase();
+
+  return {
+    teamKey: text(firstDefined(contact.teamKey, contact.team_key)) || getTeamContactKey(team, index),
+    teamName: editableText(firstDefined(contact.teamName, contact.team_name, team.name, team.teamName)),
+    coachName: editableText(firstDefined(contact.coachName, contact.coach_name, contact.managerName, team.managerName, team.coachName)),
+    coachPhone: editableText(firstDefined(contact.coachPhone, contact.coach_phone, contact.managerPhone, team.managerPhone, team.coachPhone)),
+    coachEmail: editableText(firstDefined(contact.coachEmail, contact.coach_email, contact.managerEmail, team.managerEmail, team.coachEmail)),
+    preferredChannel: ["whatsapp", "sms", "email"].includes(channel) ? channel : "whatsapp",
+    assistantName: editableText(firstDefined(contact.assistantName, contact.assistant_name, team.assistantName)),
+    assistantPhone: editableText(firstDefined(contact.assistantPhone, contact.assistant_phone, team.assistantPhone)),
+    assistantEmail: editableText(firstDefined(contact.assistantEmail, contact.assistant_email, team.assistantEmail)),
+    assistantEnabled: Boolean(contact.assistantEnabled ?? contact.assistant_enabled ?? team.assistantEnabled),
+    receiveMatchdayMessages: contact.receiveMatchdayMessages ?? contact.receive_matchday_messages ?? team.receiveMatchdayMessages ?? true,
+    privacyNoticeProvidedAt: contact.privacyNoticeProvidedAt || contact.privacy_notice_provided_at || team.privacyNoticeProvidedAt || null,
+    lastVerifiedAt: contact.lastVerifiedAt || contact.last_verified_at || team.contactLastVerifiedAt || null,
+    updatedAt: contact.updatedAt || contact.updated_at || null,
+  };
+}
+
 export function alignTeamContacts(teamCfg = [], contacts = []) {
   const rows = Array.isArray(teamCfg) ? teamCfg : [];
   const contactRows = Array.isArray(contacts) ? contacts : [];
@@ -85,6 +119,25 @@ export function alignTeamContacts(teamCfg = [], contacts = []) {
     const teamKey = getTeamContactKey(team, index);
     const existing = byKey.get(teamKey) || byName.get(normaliseTeamKey(team.name || team.teamName));
     return normaliseTeamContact(existing || {}, team, index);
+  });
+}
+
+export function alignTeamContactsForEditing(teamCfg = [], contacts = []) {
+  const rows = Array.isArray(teamCfg) ? teamCfg : [];
+  const contactRows = Array.isArray(contacts) ? contacts : [];
+  const byKey = new Map(contactRows.map((contact, index) => {
+    const normalised = normaliseEditableTeamContact(contact, {}, index);
+    return [normalised.teamKey, normalised];
+  }));
+  const byName = new Map(contactRows.map((contact, index) => {
+    const normalised = normaliseEditableTeamContact(contact, {}, index);
+    return [normaliseTeamKey(normalised.teamName), normalised];
+  }));
+
+  return rows.map((team, index) => {
+    const teamKey = getTeamContactKey(team, index);
+    const existing = byKey.get(teamKey) || byName.get(normaliseTeamKey(team.name || team.teamName));
+    return normaliseEditableTeamContact(existing || {}, team, index);
   });
 }
 
