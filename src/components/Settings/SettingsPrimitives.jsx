@@ -130,7 +130,7 @@ export function SecondaryButton({ children, onClick, disabled = false, type = "b
   );
 }
 
-export function SaveBar({ onSave, saved, label = "Save changes", children }) {
+export function SaveBar({ onSave, saved, label = "Save changes", children, sticky = false, className = "" }) {
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -154,10 +154,14 @@ export function SaveBar({ onSave, saved, label = "Save changes", children }) {
     }
   };
 
+  const shellClass = sticky
+    ? "sticky top-24 z-30 mt-5 flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-white/95 px-4 py-3 shadow-lg shadow-slate-950/10 backdrop-blur sm:flex-row sm:items-center sm:justify-between"
+    : "mt-7 flex flex-col gap-4 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between";
+
   return (
-    <div className="mt-7 flex flex-col gap-4 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`${shellClass} ${className}`}>
       <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm font-semibold leading-6 text-slate-500">{children}</div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-3" aria-live="polite">
         {failed ? (
           <span className="inline-flex items-center gap-1.5 text-sm font-black text-rose-700">
             <CloudAlert size={16} /> Not synced

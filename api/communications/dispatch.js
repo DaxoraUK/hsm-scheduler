@@ -5,11 +5,15 @@ import { sendProviderMessage } from "../../server/communications/providers.js";
 import { serviceRpc, userRpc, verifySupabaseUser } from "../../server/communications/supabase.js";
 
 function errorResponse(error) {
+  const databaseAmbiguity = error?.code === "42702" || /column reference.+ambiguous/i.test(String(error?.message || ""));
+  const message = databaseAmbiguity
+    ? "The communications database is missing the latest delivery fix. Apply the newest Supabase migration and retry."
+    : error?.message || "The message batch could not be processed";
   return json({
-    error: error?.message || "The message batch could not be processed",
-    code: error?.code || "COMMUNICATION_DISPATCH_FAILED",
-    detail: error?.detail || null,
-  }, Number(error?.status) || 500);
+    error: message,
+    code: databaseAmbiguity ? "COMMUNICATION_DATABASE_MIGRATION_REQUIRED" : error?.code || "COMMUNICATION_DISPATCH_FAILED",
+    detail: databaseAmbiguity ? null : error?.detail || null,
+  }, databaseAmbiguity ? 503 : Number(error?.status) || 500);
 }
 
 export async function POST(request) {
