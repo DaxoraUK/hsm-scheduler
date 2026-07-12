@@ -89,6 +89,7 @@ import {
   setTenantStorageContext,
   tenantGetItem,
   tenantGetJson,
+  tenantRemoveItem,
   tenantSetItem,
   tenantSetJson,
 } from "./lib/storage/tenantStorage.js";
@@ -100,6 +101,11 @@ import {
   getRequiredEntitlementForPage,
   hasEntitlement,
 } from "./lib/subscriptions/entitlements.js";
+import {
+  evaluatePlanCompliance,
+  formatPlanOverage,
+  getVenueCount,
+} from "./lib/subscriptions/planCompliance.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import {
@@ -653,6 +659,37 @@ function App() {
 
   const [pitchCfg, setPitchCfg] = useState(PITCHES);
 
+  const planUsage = useMemo(
+    () => ({
+      teams: teamCfg.length,
+      pitches: pitchCfg.length,
+      venues: getVenueCount(club),
+    }),
+    [club, pitchCfg.length, teamCfg.length],
+  );
+  const planCompliance = useMemo(
+    () => evaluatePlanCompliance(subscription, planUsage),
+    [planUsage, subscription],
+  );
+  const operationalWorkspaceAccess = useMemo(
+    () => ({
+      ...workspaceAccess,
+      planCompliance,
+      canOperate: Boolean(workspaceAccess.canOperate) && !planCompliance.operationalBlocked,
+      canPublish: Boolean(workspaceAccess.canPublish) && !planCompliance.operationalBlocked,
+    }),
+    [planCompliance, workspaceAccess],
+  );
+  const requirePlanCompliance = useCallback(() => {
+    if (!planCompliance.operationalBlocked) return true;
+    toast.error("Workspace is over its plan limit", {
+      description: `${formatPlanOverage(planCompliance)} Upgrade the plan or reduce active resources before rebuilding, publishing or sending messages.`,
+    });
+    setMainPage("settings");
+    setSettingsTab("subscription");
+    return false;
+  }, [planCompliance]);
+
   const onboardingInitialDraft = useMemo(
     () =>
       createOnboardingDraft({
@@ -722,9 +759,11 @@ function App() {
       setEndMin(scheduling.endMin);
       setBufferYouth(scheduling.bufferYouth);
       setBufferAdult(scheduling.bufferAdult);
-      tenantSetJson("club", securedClub);
-      tenantSetJson("teamConfig", stripTeamContactsFromConfig(teams));
-      tenantSetJson("pitches", pitches);
+      if (!isSupaConfigured() || !activeClubId) {
+        tenantSetJson("club", securedClub);
+        tenantSetJson("teamConfig", stripTeamContactsFromConfig(teams));
+        tenantSetJson("pitches", pitches);
+      }
       setDbStatus("connected");
       setOnboardingOpen(false);
       await refreshClubAccess();
@@ -936,45 +975,77 @@ function App() {
     const nextTeamCfg = stripTeamContactsFromConfig(data.teamCfg || teamCfg);
     const nextTeamContacts = alignTeamContacts(nextTeamCfg, data.teamContacts || teamContacts);
     const nextRefs = data.refs || refs;
+    const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
 
-    if (data.club) setClub(nextClub);
-    if (data.teamCfg) setTeamCfg(nextTeamCfg);
-    if (data.teamContacts) setTeamContacts(nextTeamContacts);
-    if (data.refs) setRefs(data.refs);
-
-    tenantSetJson("club", nextClub);
-    tenantSetJson("teamConfig", nextTeamCfg);
-    tenantSetJson("referees", nextRefs);
+    const applyApprovedState = () => {
+      if (data.club || ["club", "workspace", "venues", "timing"].includes(tab)) setClub(nextClub);
+      if (data.teamCfg || tab === "teams") {
+        setTeamCfg(nextTeamCfg);
+        setTeamContacts(nextTeamContacts);
+      }
+      if (data.refs || tab === "refs") setRefs(nextRefs);
+    };
 
     const performCloudSave = async () => {
-      const saves = [];
-      if (data.club || ["club", "workspace", "venues", "timing"].includes(tab))
-        saves.push(DB.saveClub(activeClubId, nextClub));
-      if (data.teamCfg || tab === "teams") {
-        saves.push(DB.saveTeamCfg(activeClubId, nextTeamCfg));
-        saves.push(DB.saveTeamContacts(activeClubId, nextTeamContacts));
+      if (data.club || ["club", "workspace", "venues", "timing"].includes(tab)) {
+        await DB.saveClub(activeClubId, nextClub);
       }
-      if (data.refs || tab === "refs")
-        saves.push(DB.saveRefs(activeClubId, nextRefs));
-      if (tab === "pitches") saves.push(DB.savePitches(activeClubId, pitchCfg));
-      await Promise.all(saves);
+      if (data.teamCfg || tab === "teams") {
+        // Save the limit-controlled collection first. If the plan rejects it,
+        // protected coach contacts are not partially updated.
+        await DB.saveTeamCfg(activeClubId, nextTeamCfg);
+        await DB.saveTeamContacts(activeClubId, nextTeamContacts);
+      }
+      if (data.refs || tab === "refs") await DB.saveRefs(activeClubId, nextRefs);
+      if (tab === "pitches") await DB.savePitches(activeClubId, pitchCfg);
+    };
+
+    const restoreServerApprovedState = async () => {
+      if (!cloudAuthoritative) return;
+      if (data.club || ["club", "workspace", "venues", "timing"].includes(tab)) {
+        const approvedClub = await DB.loadClub(activeClubId);
+        if (approvedClub) setClub({ ...DEFAULT_CLUB, ...approvedClub, id: activeClubId });
+      }
+      if (data.teamCfg || tab === "teams") {
+        const [approvedTeams, approvedContacts] = await Promise.all([
+          DB.loadTeamCfg(activeClubId),
+          DB.loadTeamContacts(activeClubId).catch(() => []),
+        ]);
+        const safeTeams = stripTeamContactsFromConfig(Array.isArray(approvedTeams) ? approvedTeams : []);
+        setTeamCfg(safeTeams);
+        setTeamContacts(alignTeamContacts(safeTeams, approvedContacts));
+      }
+      if (data.refs || tab === "refs") setRefs(await DB.loadRefs(activeClubId));
+      if (tab === "pitches") setPitchCfg(migratePitches(await DB.loadPitches(activeClubId)));
     };
 
     try {
-      if (isSupaConfigured() && activeClubId) {
+      if (cloudAuthoritative) {
         setDbStatus("saving");
         await performCloudSave();
+        applyApprovedState();
         reportSyncSuccess();
+      } else {
+        applyApprovedState();
+        tenantSetJson("club", nextClub);
+        tenantSetJson("teamConfig", nextTeamCfg);
+        tenantSetJson("referees", nextRefs);
+        if (tab === "pitches") tenantSetJson("pitches", pitchCfg);
       }
       setSavedTab(tab);
       window.setTimeout(() => setSavedTab(""), 2500);
       return true;
     } catch (error) {
+      try {
+        await restoreServerApprovedState();
+      } catch {
+        // The original save error is the useful failure to show and retry.
+      }
       reportSyncFailure(error, performCloudSave);
-      toast.error("Saved on this device only", {
+      toast.error("Changes were not saved", {
         description:
           error?.message ||
-          "Cloud sync failed. Use Retry sync before working on another device.",
+          "The secure workspace rejected the update. Ground Control restored the last server-approved data.",
       });
       return false;
     }
@@ -1055,12 +1126,17 @@ function App() {
       });
       migrateLegacyTenantStorage();
 
+      const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
+      if (cloudAuthoritative) {
+        ["club", "teamConfig", "referees", "history", "pitches", "pitchClosures"].forEach((key) => tenantRemoveItem(key));
+      }
+
       const memberClub = activeMembership?.club || {};
-      const localClub = tenantGetJson("club", null);
-      const localTeams = tenantGetJson("teamConfig", TEAM_CONFIG_DEFAULT);
-      const localRefs = tenantGetJson("referees", []);
-      const localHistory = tenantGetJson("history", []);
-      const localPitches = tenantGetJson("pitches", PITCHES);
+      const localClub = cloudAuthoritative ? null : tenantGetJson("club", null);
+      const localTeams = cloudAuthoritative ? TEAM_CONFIG_DEFAULT : tenantGetJson("teamConfig", TEAM_CONFIG_DEFAULT);
+      const localRefs = cloudAuthoritative ? [] : tenantGetJson("referees", []);
+      const localHistory = cloudAuthoritative ? [] : tenantGetJson("history", []);
+      const localPitches = cloudAuthoritative ? PITCHES : tenantGetJson("pitches", PITCHES);
       const safeLocalPitches =
         Array.isArray(localPitches) && localPitches.length
           ? migratePitches(localPitches)
@@ -1300,16 +1376,13 @@ function App() {
         reportSyncSuccess();
       } catch (error) {
         if (cancelled) return;
-        const status = Number(error?.status || 0);
-        const failClosed =
-          status >= 400 && status < 500 && ![408, 429].includes(status);
-        if (failClosed) {
+        const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
+        if (cloudAuthoritative) {
           allowLocalHydration = false;
-          clearTenantStorageContext();
           setDbStatus("error");
           setWorkspaceSecurityError(
             error?.message ||
-              "The selected club membership or database security policy could not be verified.",
+              "The secure club workspace could not be loaded. Ground Control will not use browser-cached operational data.",
           );
           return;
         }
@@ -1322,10 +1395,8 @@ function App() {
           window.location.reload();
         };
         reportSyncFailure(error, retryWorkspaceLoad);
-        toast.error("Cloud workspace unavailable", {
-          description:
-            error?.message ||
-            "Ground Control is using this club's local cache until the connection is restored.",
+        toast.error("Local workspace unavailable", {
+          description: error?.message || "The local demonstration workspace could not be loaded.",
         });
       } finally {
         if (!cancelled && allowLocalHydration) setWorkspaceHydrated(true);
@@ -1350,20 +1421,20 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (workspaceHydrated) tenantSetJson("referees", refs);
-  }, [refs, workspaceHydrated]);
+    if (workspaceHydrated && (!isSupaConfigured() || !activeClubId)) tenantSetJson("referees", refs);
+  }, [activeClubId, refs, workspaceHydrated]);
   useEffect(() => {
-    if (workspaceHydrated) tenantSetJson("club", club);
-  }, [club, workspaceHydrated]);
+    if (workspaceHydrated && (!isSupaConfigured() || !activeClubId)) tenantSetJson("club", club);
+  }, [activeClubId, club, workspaceHydrated]);
   useEffect(() => {
-    if (workspaceHydrated) tenantSetJson("pitches", pitchCfg);
-  }, [pitchCfg, workspaceHydrated]);
+    if (workspaceHydrated && (!isSupaConfigured() || !activeClubId)) tenantSetJson("pitches", pitchCfg);
+  }, [activeClubId, pitchCfg, workspaceHydrated]);
   useEffect(() => {
-    if (workspaceHydrated) tenantSetJson("history", history);
-  }, [history, workspaceHydrated]);
+    if (workspaceHydrated && (!isSupaConfigured() || !activeClubId)) tenantSetJson("history", history);
+  }, [activeClubId, history, workspaceHydrated]);
   useEffect(() => {
-    if (workspaceHydrated) tenantSetJson("teamConfig", teamCfg);
-  }, [teamCfg, workspaceHydrated]);
+    if (workspaceHydrated && (!isSupaConfigured() || !activeClubId)) tenantSetJson("teamConfig", teamCfg);
+  }, [activeClubId, teamCfg, workspaceHydrated]);
   useEffect(() => {
     if (workspaceHydrated) tenantSetJson("testSaturday", testSat);
   }, [testSat, workspaceHydrated]);
@@ -1376,7 +1447,7 @@ function App() {
 
   useEffect(() => {
     if (!workspaceHydrated || !activeClubId) return undefined;
-    persistPitchClosures(pitchClosures);
+    if (!isSupaConfigured() || !activeClubId) persistPitchClosures(pitchClosures);
     const snapshot = JSON.stringify(pitchClosures);
     if (
       closureSyncRef.current.clubId === activeClubId &&
@@ -1395,8 +1466,14 @@ function App() {
         reportSyncSuccess();
       } catch (error) {
         reportSyncFailure(error, syncClosures);
-        toast.error("Pitch closures saved locally only", {
-          description: error?.message || "Cloud sync failed.",
+        try {
+          const approvedClosures = await DB.loadPitchClosures(activeClubId);
+          setPitchClosures(Array.isArray(approvedClosures) ? approvedClosures : []);
+        } catch {
+          // Preserve the original sync failure as the actionable error.
+        }
+        toast.error("Pitch closures were not saved", {
+          description: error?.message || "The secure workspace rejected the update.",
         });
       }
     }, 350);
@@ -1444,6 +1521,7 @@ function App() {
 
   const runSat = useCallback(
     (baseFx) => {
+      if (!requirePlanCompliance()) return false;
       setSatOverrides({});
       const all = [...baseFx, ...satManual];
       const { scheduled: s, unresolved: u } = scheduleSat(
@@ -1460,6 +1538,7 @@ function App() {
       setSatScheduled(s);
       setSatUnresolved(u);
       setSatHasRun(true);
+      return true;
     },
     [
       satManual,
@@ -1473,10 +1552,12 @@ function App() {
       bufferYouth,
       bufferAdult,
       pitchCfg,
+      requirePlanCompliance,
     ],
   );
 
   const runSatTest = () => {
+    if (!requirePlanCompliance()) return false;
     setSatFetchStatus([
       {
         id: "TEST",
@@ -1489,6 +1570,7 @@ function App() {
   };
 
   const runSatLive = async () => {
+    if (!requirePlanCompliance()) return false;
     if (!satDate) {
       alert("Select a Saturday date.");
       return;
@@ -1507,6 +1589,7 @@ function App() {
 
   const runSun = useCallback(
     (baseFx) => {
+      if (!requirePlanCompliance()) return false;
       setSunOverrides({});
       const all = [...baseFx, ...sunManual];
       const { scheduled: s, unresolved: u } = scheduleSun(
@@ -1523,6 +1606,7 @@ function App() {
       setSunScheduled(s);
       setSunUnresolved(u);
       setSunHasRun(true);
+      return true;
     },
     [
       sunManual,
@@ -1537,12 +1621,17 @@ function App() {
       bufferAdult,
       pitchCfg,
       club.maxConcurrent,
+      requirePlanCompliance,
     ],
   );
 
-  const runSunTest = () => runSun(testSun);
+  const runSunTest = () => {
+    if (!requirePlanCompliance()) return false;
+    return runSun(testSun);
+  };
 
   const runSunLive = async () => {
+    if (!requirePlanCompliance()) return false;
     if (!sunDate) {
       alert("Select a Sunday date.");
       return;
@@ -1555,6 +1644,7 @@ function App() {
 
   const runMidweek = useCallback(
     (baseFx) => {
+      if (!requirePlanCompliance()) return false;
       setMidweekOverrides({});
       const all = [...baseFx, ...midweekManual];
       const { scheduled: s, unresolved: u } = scheduleSat(
@@ -1572,6 +1662,7 @@ function App() {
       setMidweekScheduled(s);
       setMidweekUnresolved(u);
       setMidweekHasRun(true);
+      return true;
     },
     [
       midweekManual,
@@ -1584,10 +1675,12 @@ function App() {
       midweekEndMins,
       pitchCfg,
       club.maxConcurrent,
+      requirePlanCompliance,
     ],
   );
 
   const runMidweekTest = () => {
+    if (!requirePlanCompliance()) return false;
     setMidweekFetchStatus([
       {
         id: "TEST",
@@ -1600,6 +1693,7 @@ function App() {
   };
 
   const runMidweekLive = async () => {
+    if (!requirePlanCompliance()) return false;
     if (!midweekDate) {
       alert("Select a midweek fixture date.");
       return;
@@ -1765,7 +1859,7 @@ function App() {
     setHistory,
     setDbStatus,
     activeClubId,
-    canPublish: workspaceAccess.canPublish,
+    canPublish: operationalWorkspaceAccess.canPublish,
     onSyncFailure: reportSyncFailure,
     onSyncSuccess: reportSyncSuccess,
   });
@@ -2049,6 +2143,26 @@ function App() {
         />
 
         <div style={S.body}>
+          {planCompliance.operationalBlocked ? (
+            <div className="np mx-auto mb-4 flex max-w-[1500px] flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-950 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-black">Workspace over plan limit</div>
+                <div className="mt-1 text-sm font-semibold text-amber-800">
+                  {formatPlanOverage(planCompliance)} Rebuilding, publishing and web messaging are paused until the workspace is within plan or upgraded.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMainPage("settings");
+                  setSettingsTab("subscription");
+                }}
+                className="h-10 shrink-0 rounded-xl bg-slate-950 px-4 text-xs font-black text-white"
+              >
+                Review plan
+              </button>
+            </div>
+          ) : null}
           {!pageEntitled && mainPage !== "settings" && (
             <Suspense fallback={<LazyPageFallback label="plan access" />}>
               <SubscriptionGate
@@ -2070,7 +2184,7 @@ function App() {
                 setDayTab={setDayTab}
                 setNavigationTarget={setNavigationTarget}
                 subscription={subscription}
-                workspaceAccess={workspaceAccess}
+                workspaceAccess={operationalWorkspaceAccess}
                 advancedOperationsEnabled={advancedOperationsEnabled}
                 matchdayScope={matchdayScope}
                 setMatchdayScope={setMatchdayScope}
@@ -2141,7 +2255,7 @@ function App() {
                     club={club}
                     mode={mode}
                     subscription={subscription}
-                    workspaceAccess={workspaceAccess}
+                    workspaceAccess={operationalWorkspaceAccess}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     testSat={testSat}
                     useAstro={useAstro}
@@ -2220,7 +2334,7 @@ function App() {
                     hdrStyle={hdrStyle}
                     mode={mode}
                     subscription={subscription}
-                    workspaceAccess={workspaceAccess}
+                    workspaceAccess={operationalWorkspaceAccess}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     sunDate={sunDate}
                     setSunDate={setSunDate}
@@ -2286,7 +2400,7 @@ function App() {
                     hdrStyle={hdrStyle}
                     mode={mode}
                     subscription={subscription}
-                    workspaceAccess={workspaceAccess}
+                    workspaceAccess={operationalWorkspaceAccess}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     midweekDate={midweekDate}
                     setMidweekDate={setMidweekDate}
@@ -2436,7 +2550,7 @@ function App() {
               <CommunicationsPage
                 club={club}
                 activeClubId={activeClubId}
-                workspaceAccess={workspaceAccess}
+                workspaceAccess={operationalWorkspaceAccess}
                 teamCfg={teamCfg}
                 teamContacts={teamContacts}
                 communicationPrivacy={communicationPrivacy}

@@ -119,11 +119,14 @@ export default function TeamSettingsPanel({
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [limitMessage, setLimitMessage] = useState("");
   const sites = getSites(club);
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
   const sortedPitches = sortPitches(pitchCfg);
   const teamLimit = getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS);
   const canAddTeam = isUnlimitedLimit(teamLimit) || teamCfg.length < teamLimit;
+  const overTeamLimit = !isUnlimitedLimit(teamLimit) && teamCfg.length > teamLimit;
+  const excessTeams = overTeamLimit ? teamCfg.length - teamLimit : 0;
   const canManageContacts = Boolean(workspaceAccess?.canManageSettings);
   const contacts = alignTeamContactsForEditing(teamCfg, teamContacts);
   const counts = teamCfg.reduce((acc, team) => {
@@ -189,7 +192,11 @@ export default function TeamSettingsPanel({
   };
 
   const addTeam = () => {
-    if (!canAddTeam) return;
+    if (!canAddTeam) {
+      setLimitMessage(`${subscription?.planName || "The current plan"} allows ${teamLimit} teams.`);
+      return;
+    }
+    setLimitMessage("");
     const nextTeam = {
       name: "New Team",
       teamType: "youth",
@@ -212,6 +219,7 @@ export default function TeamSettingsPanel({
   };
 
   const removeTeam = (index) => {
+    setLimitMessage("");
     setTeamCfg((current) => current.filter((_, rowIndex) => rowIndex !== index));
     setTeamContacts?.((current) => alignTeamContactsForEditing(teamCfg, current).filter((_, rowIndex) => rowIndex !== index));
     setSelectedIndex((current) => {
@@ -223,14 +231,23 @@ export default function TeamSettingsPanel({
 
   const importTeams = (rows, mode) => {
     const next = mode === "append" ? [...teamCfg, ...rows] : rows;
-    const limited = isUnlimitedLimit(teamLimit) ? next : next.slice(0, teamLimit);
-    setTeamCfg(limited);
-    setTeamContacts?.((current) => alignTeamContactsForEditing(limited, mode === "append" ? current : []));
+    if (!isUnlimitedLimit(teamLimit) && next.length > teamLimit) {
+      setLimitMessage(`Import blocked: ${next.length} teams exceeds the ${teamLimit}-team ${subscription?.planName || "plan"} limit.`);
+      return;
+    }
+    setLimitMessage("");
+    setTeamCfg(next);
+    setTeamContacts?.((current) => alignTeamContactsForEditing(next, mode === "append" ? current : []));
     setSelectedIndex(0);
     setQuery("");
   };
 
   const restoreDefaults = () => {
+    if (!isUnlimitedLimit(teamLimit) && TEAM_CONFIG_DEFAULT.length > teamLimit) {
+      setLimitMessage(`Demonstration defaults contain ${TEAM_CONFIG_DEFAULT.length} teams and cannot be restored on this plan.`);
+      return;
+    }
+    setLimitMessage("");
     setTeamCfg(TEAM_CONFIG_DEFAULT);
     setTeamContacts?.(alignTeamContactsForEditing(TEAM_CONFIG_DEFAULT, []));
     setSelectedIndex(0);
@@ -260,6 +277,8 @@ export default function TeamSettingsPanel({
         onSave={() => saveTab?.("teams", { teamCfg, teamContacts: contacts })}
         saved={savedTab === "teams"}
         label="Save teams and contacts"
+        disabled={overTeamLimit}
+        disabledReason={overTeamLimit ? `Remove ${excessTeams} team${excessTeams === 1 ? "" : "s"} or upgrade before saving.` : ""}
       >
         <span className="font-black text-slate-700">Editing {selectedTeam?.name || "team settings"}</span>
         <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
@@ -290,6 +309,8 @@ export default function TeamSettingsPanel({
         </div>
       </details>
 
+      {limitMessage ? <Notice tone="warning" className="mt-5">{limitMessage}</Notice> : null}
+
       {!communicationSchemaReady ? (
         <Notice tone="warning" className="mt-5">
           The secure coach-contact migration has not been detected. Apply the included Supabase migration before saving contacts.
@@ -298,7 +319,7 @@ export default function TeamSettingsPanel({
 
       {!canAddTeam ? (
         <Notice tone="warning" className="mt-5">
-          {subscription?.planName || "The current plan"} allows {teamLimit} teams. Remove a team or review Plan & subscription before adding another.
+          {subscription?.planName || "The current plan"} allows {teamLimit} teams. {overTeamLimit ? `Remove ${excessTeams} team${excessTeams === 1 ? "" : "s"} in this session and then save, or upgrade the workspace.` : "Remove a team or review Plan & subscription before adding another."}
         </Notice>
       ) : null}
 

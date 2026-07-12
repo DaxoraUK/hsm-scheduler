@@ -110,11 +110,11 @@ export const PLAN_CATALOGUE = Object.freeze({
     annualPricePence: null,
     features: Object.freeze(coreFeatures),
     limits: Object.freeze({
-      teams: 20,
+      teams: 15,
       venues: 1,
-      users: 6,
-      pitches: 20,
-      history_entries: 104,
+      users: 5,
+      pitches: 15,
+      history_entries: 52,
       history_retention_days: 365,
     }),
     launchStatus: "available",
@@ -130,11 +130,11 @@ export const PLAN_CATALOGUE = Object.freeze({
     features: Object.freeze(proFeatures),
     limits: Object.freeze({
       teams: 40,
-      venues: 3,
+      venues: 4,
       users: 15,
       pitches: 50,
-      history_entries: 260,
-      history_retention_days: 1095,
+      history_entries: 156,
+      history_retention_days: 730,
     }),
     launchStatus: "available",
     customerVisible: true,
@@ -245,17 +245,12 @@ export function normaliseSubscriptionPayload(payload = {}) {
   );
   const features = new Set([...plan.features, ...overrideRows]);
 
-  const planLimits = normaliseObject(payload.plan_limits ?? payload.planLimits);
   const limitOverrides = normaliseObject(payload.limit_overrides ?? payload.limitOverrides);
-  const hasStructuredLimitPayload = Object.keys(planLimits).length > 0
-    || Object.keys(limitOverrides).length > 0;
-  const backwardsCompatibleLimits = hasStructuredLimitPayload
-    ? {}
-    : normaliseObject(payload.limits);
+  // The launch catalogue is authoritative. A stale database plan row must not
+  // silently restore older, more generous limits. Only deliberate per-club
+  // overrides may change the package limits.
   const limits = normaliseLimits({
     ...plan.limits,
-    ...planLimits,
-    ...backwardsCompatibleLimits,
     ...limitOverrides,
   });
   const accessState = plan.code === RESTRICTED_PLAN.code

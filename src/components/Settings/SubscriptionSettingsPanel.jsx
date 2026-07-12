@@ -24,8 +24,8 @@ const FEATURE_LABELS = [
   [ENTITLEMENTS.MATCHDAY_SCHEDULING, "Saturday and Sunday scheduling"],
   [ENTITLEMENTS.MIDWEEK_SCHEDULING, "Midweek scheduling"],
   [ENTITLEMENTS.PITCH_INTELLIGENCE, "Pitch suitability and closures"],
-  [ENTITLEMENTS.PARKING_INTELLIGENCE, "Parking intelligence"],
-  [ENTITLEMENTS.WEATHER_INTELLIGENCE, "Live weather intelligence"],
+  [ENTITLEMENTS.PARKING_INTELLIGENCE, "Parking capacity checks"],
+  [ENTITLEMENTS.WEATHER_INTELLIGENCE, "Weather forecast and risk"],
   [ENTITLEMENTS.OFFICIALS_MANAGEMENT, "Officials management"],
   [
     ENTITLEMENTS.OPERATIONS_ADVANCED,

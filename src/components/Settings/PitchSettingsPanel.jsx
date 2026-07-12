@@ -88,10 +88,13 @@ export default function PitchSettingsPanel({
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [limitMessage, setLimitMessage] = useState("");
   const sites = getSites(club);
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
   const pitchLimit = getEntitlementLimit(subscription, LIMIT_KEYS.PITCHES);
   const canAddPitch = isUnlimitedLimit(pitchLimit) || pitchCfg.length < pitchLimit;
+  const overPitchLimit = !isUnlimitedLimit(pitchLimit) && pitchCfg.length > pitchLimit;
+  const excessPitches = overPitchLimit ? pitchCfg.length - pitchLimit : 0;
   const surfaces = pitchCfg.reduce((acc, pitch) => {
     const surface = inferSurface(pitch);
     acc[surface] = (acc[surface] || 0) + 1;
@@ -132,7 +135,11 @@ export default function PitchSettingsPanel({
   };
 
   const addPitch = () => {
-    if (!canAddPitch) return;
+    if (!canAddPitch) {
+      setLimitMessage(`${subscription?.planName || "The current plan"} allows ${pitchLimit} pitches.`);
+      return;
+    }
+    setLimitMessage("");
     const nextIndex = pitchCfg.length;
     setPitchCfg((current) => [...current, {
       id: `P${current.length + 1}`,
@@ -149,6 +156,7 @@ export default function PitchSettingsPanel({
   };
 
   const removePitch = (index) => {
+    setLimitMessage("");
     setPitchCfg((current) => current.filter((_, rowIndex) => rowIndex !== index));
     setSelectedIndex((current) => {
       if (current > index) return current - 1;
@@ -158,15 +166,23 @@ export default function PitchSettingsPanel({
   };
 
   const importPitches = (rows, mode) => {
-    setPitchCfg((current) => {
-      const next = mode === "append" ? [...current, ...rows] : rows;
-      return isUnlimitedLimit(pitchLimit) ? next : next.slice(0, pitchLimit);
-    });
+    const next = mode === "append" ? [...pitchCfg, ...rows] : rows;
+    if (!isUnlimitedLimit(pitchLimit) && next.length > pitchLimit) {
+      setLimitMessage(`Import blocked: ${next.length} pitches exceeds the ${pitchLimit}-pitch ${subscription?.planName || "plan"} limit.`);
+      return;
+    }
+    setLimitMessage("");
+    setPitchCfg(next);
     setSelectedIndex(0);
     setQuery("");
   };
 
   const restoreDefaults = () => {
+    if (!isUnlimitedLimit(pitchLimit) && PITCHES.length > pitchLimit) {
+      setLimitMessage(`Demonstration defaults contain ${PITCHES.length} pitches and cannot be restored on this plan.`);
+      return;
+    }
+    setLimitMessage("");
     setPitchCfg(PITCHES.map((pitch) => ({ ...pitch, siteId: pitch.siteId || primarySite?.id || null, surface: pitch.surface || inferSurface(pitch) })));
     setSelectedIndex(0);
     setQuery("");
@@ -185,7 +201,14 @@ export default function PitchSettingsPanel({
         action={<PrimaryButton icon={Plus} onClick={addPitch} disabled={!canAddPitch}>Add pitch</PrimaryButton>}
       />
 
-      <SaveBar sticky onSave={() => saveTab?.("pitches")} saved={savedTab === "pitches"} label="Save pitches">
+      <SaveBar
+        sticky
+        onSave={() => saveTab?.("pitches")}
+        saved={savedTab === "pitches"}
+        label="Save pitches"
+        disabled={overPitchLimit}
+        disabledReason={overPitchLimit ? `Remove ${excessPitches} pitch${excessPitches === 1 ? "" : "es"} or upgrade before saving.` : ""}
+      >
         <span className="font-black text-slate-700">Editing {selectedPitch?.label || selectedPitch?.id || "pitch settings"}</span>
         <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
       </SaveBar>
@@ -198,9 +221,11 @@ export default function PitchSettingsPanel({
         <StatTile label="Sites" value={new Set(pitchCfg.map((pitch) => pitch.siteId || primarySite?.id)).size} tone="amber" />
       </div>
 
+      {limitMessage ? <Notice tone="warning" className="mt-5">{limitMessage}</Notice> : null}
+
       {!canAddPitch ? (
         <Notice tone="warning" className="mt-5">
-          {subscription?.planName || "The current plan"} allows {pitchLimit} pitches. Remove a pitch or review Plan & subscription before adding another.
+          {subscription?.planName || "The current plan"} allows {pitchLimit} pitches. {overPitchLimit ? `Remove ${excessPitches} pitch${excessPitches === 1 ? "" : "es"} in this session and then save, or upgrade the workspace.` : "Remove a pitch or review Plan & subscription before adding another."}
         </Notice>
       ) : null}
 

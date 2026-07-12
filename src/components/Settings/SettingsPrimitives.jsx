@@ -130,7 +130,7 @@ export function SecondaryButton({ children, onClick, disabled = false, type = "b
   );
 }
 
-export function SaveBar({ onSave, saved, label = "Save changes", children, sticky = false, className = "" }) {
+export function SaveBar({ onSave, saved, label = "Save changes", children, sticky = false, className = "", disabled = false, disabledReason = "" }) {
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -141,7 +141,7 @@ export function SaveBar({ onSave, saved, label = "Save changes", children, stick
   }, []);
 
   const save = async () => {
-    if (saving || typeof onSave !== "function") return;
+    if (saving || disabled || typeof onSave !== "function") return;
     setSaving(true);
     setFailed(false);
     try {
@@ -162,7 +162,9 @@ export function SaveBar({ onSave, saved, label = "Save changes", children, stick
     <div className={`${shellClass} ${className}`}>
       <div className="flex min-h-10 flex-wrap items-center gap-2 text-sm font-semibold leading-6 text-slate-500">{children}</div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-3" aria-live="polite">
-        {failed ? (
+        {disabled && disabledReason ? (
+          <span className="max-w-sm text-right text-xs font-black text-amber-700">{disabledReason}</span>
+        ) : failed ? (
           <span className="inline-flex items-center gap-1.5 text-sm font-black text-rose-700">
             <CloudAlert size={16} /> Not synced
           </span>
@@ -171,7 +173,7 @@ export function SaveBar({ onSave, saved, label = "Save changes", children, stick
             <CheckCircle2 size={16} /> Saved
           </span>
         ) : null}
-        <PrimaryButton onClick={save} disabled={saving} icon={saving ? LoaderCircle : Save} className={saving ? "cursor-wait" : ""}>
+        <PrimaryButton onClick={save} disabled={saving || disabled} icon={saving ? LoaderCircle : Save} className={saving ? "cursor-wait" : ""}>
           {saving ? "Saving…" : failed ? "Retry save" : label}
         </PrimaryButton>
       </div>

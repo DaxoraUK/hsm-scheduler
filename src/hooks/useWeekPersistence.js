@@ -301,16 +301,21 @@ export function useWeekPersistence({
         cloudSaved = false;
         setDbStatus("error");
         onSyncFailure?.(error, publishToCloud);
-        toast.error("Saved on this device only", {
+        toast.error("Matchweek was not published", {
           description:
             error?.message ||
-            "Cloud sync failed. Use Retry sync before using another device.",
+            "The secure workspace rejected the update. No browser-only copy was created.",
         });
+        return false;
       }
+    } else if (activeClubId) {
+      toast.error("Secure workspace unavailable", {
+        description: "Ground Control cannot publish authenticated club data without the cloud workspace.",
+      });
+      return false;
     } else {
-      toast.info("Saved locally", {
-        description:
-          "Cloud sync is not configured. Data is stored on this device only.",
+      toast.info("Saved in local demonstration mode", {
+        description: "This local-only save is available only when no authenticated club workspace is active.",
       });
     }
 

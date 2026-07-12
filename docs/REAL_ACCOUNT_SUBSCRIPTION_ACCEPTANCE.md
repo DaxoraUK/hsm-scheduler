@@ -34,7 +34,7 @@ Confirm:
 - CSV export is available.
 - Operations Overview and Matchweek Timeline show a Pro upgrade state.
 - Funding Analytics and advanced report types show a Pro upgrade state.
-- Limits display 20 teams, 1 venue, 6 users and 20 pitches.
+- Limits display 15 teams, 1 venue, 5 users and 15 pitches.
 
 ## Scenario 2 — Pro
 
@@ -45,8 +45,8 @@ Confirm:
 - Every Core workflow still works.
 - Operations Overview and Matchweek Timeline open.
 - Advanced Reports and Funding Analytics open.
-- Multi-venue configuration allows up to 3 venues.
-- Limits display 40 teams, 3 venues, 15 users and 50 pitches.
+- Multi-venue configuration allows up to 4 venues.
+- Limits display 40 teams, 4 venues, 15 users and 50 pitches.
 - No Elite-only promise or support claim appears.
 
 ## Scenario 3 — Elite
