@@ -42,7 +42,7 @@ export const LAUNCH_ACCEPTANCE_SCENARIOS = Object.freeze([
     title: "Core",
     description: "Single-site scheduling and operational control without advanced cross-day and funding workspaces.",
     expected: Object.freeze([
-      "Mission Control, day scheduling and Communications open normally.",
+      "Mission Control, Saturday/Sunday date selection, day scheduling and Communications open normally.",
       "Core Analytics, operational reports and CSV export are available.",
       "Operations Overview, Matchweek Timeline, advanced reports and funding analytics remain locked.",
       "Resource limits show 15 teams, 1 venue, 5 users and 15 pitches.",

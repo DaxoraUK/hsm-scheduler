@@ -29,6 +29,8 @@ Assign the isolation-test club to **Core / Active** and sign in as a club owner 
 Confirm:
 
 - Mission Control, Saturday, Sunday, Midweek and Communications open.
+- Saturday and Sunday both show an editable fixture date and a Current weekend action.
+- Changing either weekend date clears the previously built weekend before scheduling continues.
 - Day scheduling, pitch intelligence, parking, weather and officials work.
 - Core Analytics and operational Reports open.
 - CSV export is available.

@@ -2261,7 +2261,9 @@ function App() {
                     useAstro={useAstro}
                     setUseAstro={setUseAstro}
                     satDate={satDate}
+                    sunDateLabel={sunDateLabel}
                     setSatDate={setSatDate}
+                    useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSatTest={runSatTest}
                     runSatLive={runSatLive}
                     onPrintReport={() =>
@@ -2337,7 +2339,9 @@ function App() {
                     workspaceAccess={operationalWorkspaceAccess}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     sunDate={sunDate}
+                    satDateLabel={satDateLabel}
                     setSunDate={setSunDate}
+                    useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSunTest={runSunTest}
                     runSunLive={runSunLive}
                     onPrintReport={() =>
