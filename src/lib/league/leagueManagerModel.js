@@ -46,6 +46,7 @@ function normaliseRow(row = {}) {
     countryCode: row.country_code || row.countryCode || "GB-ENG",
     productStatus: row.product_status || row.productStatus || "pilot",
     groundShareKey: row.ground_share_key || row.groundShareKey || "",
+    simultaneousFixtureLimit: Number(row.simultaneous_fixture_limit ?? row.simultaneousFixtureLimit ?? 1) || 1,
     teamLimit: row.team_limit ?? row.teamLimit ?? "",
     sortOrder: Number(row.sort_order ?? row.sortOrder ?? 0),
     isCurrent: asBoolean(row.is_current ?? row.isCurrent),
@@ -449,6 +450,7 @@ export function serialiseLeagueEntity(type, draft = {}) {
         surface: String(draft.surface || "").trim(),
         capacity: draft.capacity ?? "",
         ground_share_key: String(draft.groundShareKey || draft.ground_share_key || "").trim(),
+        simultaneous_fixture_limit: Math.max(1, Number(draft.simultaneousFixtureLimit ?? draft.simultaneous_fixture_limit ?? 1) || 1),
         status: draft.status || "active",
       };
     case "team":

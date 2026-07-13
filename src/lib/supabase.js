@@ -914,6 +914,104 @@ export const DB = {
     });
   },
 
+  async setLeagueVenueSchedulingCapacity(leagueId, venueId, simultaneousLimit = 1) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/set_league_venue_scheduling_capacity", {
+      target_league_id: id,
+      target_venue_id: String(venueId || "").trim(),
+      simultaneous_limit: Math.max(1, Math.min(Number(simultaneousLimit) || 1, 20)),
+    });
+  },
+
+  async listLeagueScheduleVersions(leagueId, seasonId = null) {
+    const id = requireLeagueId(leagueId);
+    return asArray(await supaFetch("POST", "rpc/list_league_schedule_versions", {
+      target_league_id: id,
+      target_season_id: seasonId ? String(seasonId).trim() : null,
+    }));
+  },
+
+  async getLeagueScheduleVersion(leagueId, versionId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_schedule_version", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+    });
+  },
+
+  async saveLeagueScheduleDraft(leagueId, {
+    seasonId,
+    name,
+    generationConfig = {},
+    entries = [],
+    parentVersionId = null,
+    source = "generated",
+  } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/save_league_schedule_draft", {
+      target_league_id: id,
+      target_season_id: String(seasonId || "").trim(),
+      draft_name: String(name || "").trim(),
+      generation_config: generationConfig && typeof generationConfig === "object" ? generationConfig : {},
+      schedule_entries: Array.isArray(entries) ? entries : [],
+      parent_version_id: parentVersionId ? String(parentVersionId).trim() : null,
+      draft_source: String(source || "generated").trim().toLowerCase(),
+    });
+  },
+
+  async updateLeagueScheduleEntry(leagueId, versionId, entryId, {
+    scheduledDate = null,
+    kickOff = null,
+    venueId = null,
+    locked = false,
+    notes = null,
+  } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_schedule_entry", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+      target_entry_id: String(entryId || "").trim(),
+      next_scheduled_date: scheduledDate || null,
+      next_kick_off: kickOff || null,
+      next_venue_id: venueId || null,
+      next_locked: Boolean(locked),
+      next_notes: notes || null,
+    });
+  },
+
+  async validateLeagueScheduleVersion(leagueId, versionId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/validate_league_schedule_version", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+    });
+  },
+
+  async publishLeagueScheduleVersion(leagueId, versionId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/publish_league_schedule_version", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+    });
+  },
+
+  async cloneLeagueScheduleVersion(leagueId, versionId, name = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/clone_league_schedule_version", {
+      target_league_id: id,
+      source_version_id: String(versionId || "").trim(),
+      next_name: String(name || "").trim() || null,
+    });
+  },
+
+  async deleteLeagueScheduleVersion(leagueId, versionId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/delete_league_schedule_version", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+    });
+  },
+
   async getPlatformOperatorContext() {
     return supaFetch("POST", "rpc/get_platform_operator_context", {});
   },

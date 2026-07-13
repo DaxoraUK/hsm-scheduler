@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { DB } from "../lib/supabase.js";
+import LeagueScheduleWorkspace from "../components/league/LeagueScheduleWorkspace.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -58,6 +59,7 @@ const TABS = Object.freeze([
   ["structure", "League structure"],
   ["availability", "Venues & availability"],
   ["fixtures", "Fixtures"],
+  ["schedule", "Schedule builder"],
   ["access", "Access & audit"],
 ]);
 
@@ -195,7 +197,7 @@ function createDraft(type, workspace) {
   if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "" };
   if (type === "parent_club") return { name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "team") return { seasonId: season?.id || "", divisionId: division?.id || "", parentClubId: club?.id || "", homeVenueId: venue?.id || "", name: "", shortName: "", externalRef: "", status: "active" };
-  if (type === "venue") return { parentClubId: club?.id || "", name: "", address: "", postcode: "", surface: "Grass", capacity: "", groundShareKey: "", status: "active" };
+  if (type === "venue") return { parentClubId: club?.id || "", name: "", address: "", postcode: "", surface: "Grass", capacity: "", groundShareKey: "", simultaneousFixtureLimit: 1, status: "active" };
   if (type === "blackout") return { seasonId: season?.id || "", scopeType: "league", scopeId: "", startsOn: "", endsOn: "", reason: "", source: "manual" };
   if (type === "playing_date") return { seasonId: season?.id || "", divisionId: "", playingDate: "", defaultKickOff: "15:00", status: "available", notes: "" };
   if (type === "fixture") return { seasonId: season?.id || "", divisionId: division?.id || "", homeTeamId: "", awayTeamId: "", venueId: venue?.id || "", scheduledDate: "", kickOff: "", status: "draft", locked: false, source: "manual", externalRef: "", notes: "" };
@@ -268,6 +270,7 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
         <Field label="Postcode"><input className={INPUT} value={draft.postcode || ""} onChange={update("postcode")} disabled={disabled} /></Field>
         <Field label="Capacity"><input type="number" min="0" className={INPUT} value={draft.capacity ?? ""} onChange={update("capacity")} disabled={disabled} placeholder="Optional" /></Field>
         <Field label="Ground-share group"><input className={INPUT} value={draft.groundShareKey || ""} onChange={update("groundShareKey")} disabled={disabled} placeholder="Shared-ground-01" /></Field>
+        <Field label="Simultaneous fixtures"><input type="number" min="1" max="20" className={INPUT} value={draft.simultaneousFixtureLimit ?? 1} onChange={update("simultaneousFixtureLimit")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">Maximum fixtures this venue or shared-ground group can host at the same kick-off time.</span></Field>
         <Field label="Status"><select className={INPUT} value={draft.status || "active"} onChange={update("status")} disabled={disabled}><option value="active">Active</option><option value="inactive">Inactive</option><option value="unavailable">Unavailable</option></select></Field>
       </div>
     );
@@ -543,6 +546,9 @@ export default function LeagueManagerPage({
     setBusy(true);
     try {
       const id = await DB.upsertLeagueEntity(activeLeagueId, type, data);
+      if (type === "venue" && id) {
+        await DB.setLeagueVenueSchedulingCapacity(activeLeagueId, id, data.simultaneous_fixture_limit || 1);
+      }
       await loadWorkspace();
       toast.success("League record saved");
       return id;
@@ -740,9 +746,9 @@ export default function LeagueManagerPage({
             <Panel className="overflow-hidden">
               <div className="bg-emerald-50 p-6"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white"><Trophy size={22} /></div><h2 className="mt-4 text-xl font-black text-slate-950">Pilot outcome</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-600">This foundation is ready for real league discovery once the league structure and sample fixtures are loaded.</p></div>
               <div className="space-y-4 p-6 text-sm font-semibold leading-6 text-slate-600">
-                <div><strong className="text-slate-950">This phase:</strong> secure workspace, bulk league setup, playing dates, postponed bank, fixture import and audit.</div>
-                <div><strong className="text-slate-950">Next phase:</strong> home-and-away matrix, playing-date rules, blackout enforcement, ground-share collision checks and draft generation.</div>
-                <div><strong className="text-slate-950">Approach point:</strong> once one real division, its teams, grounds and constraints can be loaded accurately.</div>
+                <div><strong className="text-slate-950">Available now:</strong> secure setup, home-and-away generation, date allocation, blackout and ground-share controls, schedule versions, validation and export.</div>
+                <div><strong className="text-slate-950">Pilot workflow:</strong> load one real division, generate the draft, resolve explained exceptions, lock agreed fixtures and publish the validated programme.</div>
+                <div><strong className="text-slate-950">Design-partner stage:</strong> ready to approach a league for real rules, dates, ground shares and export requirements.</div>
               </div>
             </Panel>
           </div>
@@ -775,6 +781,16 @@ export default function LeagueManagerPage({
           <SectionTabs items={FIXTURE_VIEWS} value={fixtureView} onChange={setFixtureView} />
           <RegistryWorkspace type="fixture" workspace={workspace} itemsOverride={visibleFixtures} canEdit={canOperate} busy={busy} onSave={saveEntity} onDelete={deleteEntity} />
         </div>
+      ) : null}
+
+
+      {tab === "schedule" ? (
+        <LeagueScheduleWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+          canOperate={canOperate}
+          onWorkspaceRefresh={loadWorkspace}
+        />
       ) : null}
 
       {tab === "access" ? (

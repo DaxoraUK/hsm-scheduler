@@ -172,7 +172,7 @@ describe("League Manager pilot foundation", () => {
     }));
   });
 
-  test("includes the complete pilot onboarding surface without pretending the generation engine exists", () => {
+  test("includes the complete pilot onboarding surface and hands off to the scheduling workspace", () => {
     expect(page).toContain("League structure");
     expect(page).toContain("Venues & availability");
     expect(page).toContain("Fixture CSV import");
@@ -181,7 +181,7 @@ describe("League Manager pilot foundation", () => {
     expect(page).toContain("Postponed bank");
     expect(page).toContain("Parent club registry");
     expect(page).toContain("Ground-share group");
-    expect(page).toContain("Next phase:");
-    expect(page).not.toContain("Generate full season");
+    expect(page).toContain("Schedule builder");
+    expect(page).toContain("Available now:");
   });
 });

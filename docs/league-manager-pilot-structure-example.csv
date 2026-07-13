@@ -1,0 +1,7 @@
+division,division_code,parent_club,club_short_name,club_external_ref,team,team_short_name,team_external_ref,home_venue,address,postcode,surface,ground_share_key
+Pilot Division,PILOT,Alpha Athletic,Alpha,CLUB-001,Alpha Athletic First,Alpha,FIRST-001,Alpha Sports Ground,1 Alpha Road,BL1 1AA,Grass,ALPHA-SITE
+Pilot Division,PILOT,Bravo United,Bravo,CLUB-002,Bravo United First,Bravo,FIRST-002,Bravo Park,2 Bravo Street,BL2 2BB,Grass,BRAVO-SITE
+Pilot Division,PILOT,Charlie Town,Charlie,CLUB-003,Charlie Town First,Charlie,FIRST-003,Community Stadium,3 Charlie Lane,BL3 3CC,Grass,COMMUNITY-SHARE
+Pilot Division,PILOT,Delta Rangers,Delta,CLUB-004,Delta Rangers First,Delta,FIRST-004,Delta Fields,4 Delta Avenue,BL4 4DD,Grass,DELTA-SITE
+Pilot Division,PILOT,Echo FC,Echo,CLUB-005,Echo FC First,Echo,FIRST-005,Echo Arena,5 Echo Close,BL5 5EE,3G,ECHO-SITE
+Pilot Division,PILOT,Foxtrot Rovers,Foxtrot,CLUB-006,Foxtrot Rovers First,Foxtrot,FIRST-006,Community Stadium,3 Charlie Lane,BL3 3CC,Grass,COMMUNITY-SHARE
