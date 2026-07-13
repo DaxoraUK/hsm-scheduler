@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { DB } from "../lib/supabase.js";
 import LeagueScheduleWorkspace from "../components/league/LeagueScheduleWorkspace.jsx";
+import LeagueCupWorkspace from "../components/league/LeagueCupWorkspace.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -60,6 +61,7 @@ const TABS = Object.freeze([
   ["availability", "Venues & availability"],
   ["fixtures", "Fixtures"],
   ["schedule", "Schedule builder"],
+  ["cups", "Cup Manager"],
   ["access", "Access & audit"],
 ]);
 
@@ -70,6 +72,9 @@ function currentSeasonDefaults() {
     name: `${startYear}/${String(startYear + 1).slice(-2)}`,
     startsOn: `${startYear}-08-01`,
     endsOn: `${startYear + 1}-06-30`,
+    defaultKickOff: "",
+    primaryWeekday: 6,
+    maxConsecutiveHomeAway: 2,
   };
 }
 
@@ -156,7 +161,7 @@ function SectionTabs({ items, value, onChange }) {
 
 function registryMeta(type, row, workspace) {
   if (type === "season") return `${row.status || "draft"}${row.isCurrent ? " · Current" : ""}`;
-  if (type === "division") return `${getEntityName(workspace, "season", row.seasonId)}${row.teamLimit ? ` · Limit ${row.teamLimit}` : ""}`;
+  if (type === "division") return `${getEntityName(workspace, "season", row.seasonId)} · ${row.meetingsPerPairing || 2} meeting${Number(row.meetingsPerPairing || 2) === 1 ? "" : "s"} per pairing${row.startsOn ? ` · Starts ${row.startsOn}` : ""}`;
   if (type === "parent_club") return row.shortName || row.externalRef || row.status || "Active";
   if (type === "team") return `${getEntityName(workspace, "division", row.divisionId)} · ${getEntityName(workspace, "club", row.parentClubId)}`;
   if (type === "venue") return `${getEntityName(workspace, "club", row.parentClubId)}${row.groundShareKey ? ` · Share ${row.groundShareKey}` : ""}`;
@@ -194,12 +199,12 @@ function createDraft(type, workspace) {
   const venue = workspace.venues?.[0];
   const defaults = currentSeasonDefaults();
   if (type === "season") return { ...defaults, status: workspace.seasons?.length ? "draft" : "active", isCurrent: !workspace.seasons?.length };
-  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "" };
+  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "", startsOn: season?.startsOn || "", endsOn: season?.endsOn || "", meetingsPerPairing: 2, defaultKickOff: "", playingWeekday: "", maxConsecutiveHomeAway: season?.maxConsecutiveHomeAway || 2 };
   if (type === "parent_club") return { name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "team") return { seasonId: season?.id || "", divisionId: division?.id || "", parentClubId: club?.id || "", homeVenueId: venue?.id || "", name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "venue") return { parentClubId: club?.id || "", name: "", address: "", postcode: "", surface: "Grass", capacity: "", groundShareKey: "", simultaneousFixtureLimit: 1, status: "active" };
   if (type === "blackout") return { seasonId: season?.id || "", scopeType: "league", scopeId: "", startsOn: "", endsOn: "", reason: "", source: "manual" };
-  if (type === "playing_date") return { seasonId: season?.id || "", divisionId: "", playingDate: "", defaultKickOff: "15:00", status: "available", notes: "" };
+  if (type === "playing_date") return { seasonId: season?.id || "", divisionId: "", playingDate: "", defaultKickOff: season?.defaultKickOff || "", status: "available", notes: "" };
   if (type === "fixture") return { seasonId: season?.id || "", divisionId: division?.id || "", homeTeamId: "", awayTeamId: "", venueId: venue?.id || "", scheduledDate: "", kickOff: "", status: "draft", locked: false, source: "manual", externalRef: "", notes: "" };
   return {};
 }
@@ -216,6 +221,9 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
         <Field label="Season name" className="sm:col-span-2"><input className={INPUT} value={draft.name || ""} onChange={update("name")} disabled={disabled} placeholder="2026/27" /></Field>
         <Field label="Starts"><input type="date" className={INPUT} value={draft.startsOn || ""} onChange={update("startsOn")} disabled={disabled} /></Field>
         <Field label="Ends"><input type="date" className={INPUT} value={draft.endsOn || ""} onChange={update("endsOn")} disabled={disabled} /></Field>
+        <Field label="League default kick-off"><input type="time" className={INPUT} value={draft.defaultKickOff || ""} onChange={update("defaultKickOff")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">This is the authoritative fallback for every division and cup unless that competition overrides it.</span></Field>
+        <Field label="Primary league day"><select className={INPUT} value={draft.primaryWeekday ?? 6} onChange={update("primaryWeekday")} disabled={disabled}><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></Field>
+        <Field label="Home/away run target"><input type="number" min="1" max="6" className={INPUT} value={draft.maxConsecutiveHomeAway ?? 2} onChange={update("maxConsecutiveHomeAway")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">The generator actively works toward this maximum before it reports warnings.</span></Field>
         <Field label="Status"><select className={INPUT} value={draft.status || "draft"} onChange={update("status")} disabled={disabled}><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select></Field>
         <label className="flex h-11 items-center gap-3 self-end rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-700"><input type="checkbox" checked={Boolean(draft.isCurrent)} onChange={update("isCurrent")} disabled={disabled} /> Current season</label>
       </div>
@@ -228,6 +236,12 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
         <Field label="Season" className="sm:col-span-2"><select className={INPUT} value={draft.seasonId || ""} onChange={update("seasonId")} disabled={disabled}><option value="">Select season</option>{workspace.seasons.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
         <Field label="Division name"><input className={INPUT} value={draft.name || ""} onChange={update("name")} disabled={disabled} placeholder="Premier Division" /></Field>
         <Field label="Short code"><input className={INPUT} value={draft.code || ""} onChange={update("code")} disabled={disabled} placeholder="PREM" /></Field>
+        <Field label="Division starts"><input type="date" className={INPUT} value={draft.startsOn || ""} onChange={update("startsOn")} disabled={disabled} /></Field>
+        <Field label="Division ends"><input type="date" className={INPUT} value={draft.endsOn || ""} onChange={update("endsOn")} disabled={disabled} /></Field>
+        <Field label="Meetings per pairing"><select className={INPUT} value={draft.meetingsPerPairing ?? 2} onChange={update("meetingsPerPairing")} disabled={disabled}><option value={1}>1 meeting</option><option value={2}>2 meetings — home and away</option><option value={3}>3 meetings</option><option value={4}>4 meetings</option></select></Field>
+        <Field label="Kick-off override"><input type="time" className={INPUT} value={draft.defaultKickOff || ""} onChange={update("defaultKickOff")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">Leave blank to inherit the league setting.</span></Field>
+        <Field label="Playing-day override"><select className={INPUT} value={draft.playingWeekday ?? ""} onChange={update("playingWeekday")} disabled={disabled}><option value="">Use league day</option><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></Field>
+        <Field label="Home/away run target"><input type="number" min="1" max="6" className={INPUT} value={draft.maxConsecutiveHomeAway ?? 2} onChange={update("maxConsecutiveHomeAway")} disabled={disabled} /></Field>
         <Field label="Sort order"><input type="number" min="0" className={INPUT} value={draft.sortOrder ?? 0} onChange={update("sortOrder")} disabled={disabled} /></Field>
         <Field label="Team limit"><input type="number" min="1" className={INPUT} value={draft.teamLimit ?? ""} onChange={update("teamLimit")} disabled={disabled} placeholder="Optional" /></Field>
       </div>
@@ -419,7 +433,7 @@ function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, bus
 
 function CreatePilotCard({ platformContext, onCreated }) {
   const defaults = currentSeasonDefaults();
-  const [form, setForm] = useState({ name: "", countryCode: "GB-ENG", governingBody: "", timezone: "Europe/London", seasonName: defaults.name, seasonStart: defaults.startsOn, seasonEnd: defaults.endsOn });
+  const [form, setForm] = useState({ name: "", countryCode: "GB-ENG", governingBody: "", timezone: "Europe/London", seasonName: defaults.name, seasonStart: defaults.startsOn, seasonEnd: defaults.endsOn, defaultKickOff: "", primaryWeekday: 6 });
   const [busy, setBusy] = useState(false);
   const canCreate = platformContext?.isPlatformAdmin || platformContext?.platformRole === "admin";
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -450,8 +464,10 @@ function CreatePilotCard({ platformContext, onCreated }) {
         <Field label="Timezone"><input className={INPUT} value={form.timezone} onChange={update("timezone")} /></Field>
         <Field label="Season starts"><input type="date" className={INPUT} value={form.seasonStart} onChange={update("seasonStart")} /></Field>
         <Field label="Season ends"><input type="date" className={INPUT} value={form.seasonEnd} onChange={update("seasonEnd")} /></Field>
+        <Field label="League default kick-off"><input type="time" className={INPUT} value={form.defaultKickOff} onChange={update("defaultKickOff")} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">Required. This becomes the league-controlled default, not a system assumption.</span></Field>
+        <Field label="Primary league day"><select className={INPUT} value={form.primaryWeekday} onChange={update("primaryWeekday")}><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></Field>
         <div className="sm:col-span-2 flex justify-end pt-2">
-          <button type="button" disabled={busy || form.name.trim().length < 2} onClick={async () => {
+          <button type="button" disabled={busy || form.name.trim().length < 2 || !form.defaultKickOff} onClick={async () => {
             setBusy(true);
             try {
               const result = await DB.createLeaguePilot(form);
@@ -528,6 +544,10 @@ export default function LeagueManagerPage({
     const data = serialiseLeagueEntity(type, draft);
     if (["season", "division", "parent_club", "team", "venue"].includes(type) && !data.name) {
       toast.error("A name is required");
+      return null;
+    }
+    if (type === "season" && (!data.starts_on || !data.ends_on || !data.default_kick_off)) {
+      toast.error("Season dates and the league default kick-off are required");
       return null;
     }
     if (type === "fixture" && (!data.home_team_id || !data.away_team_id)) {
@@ -639,7 +659,8 @@ export default function LeagueManagerPage({
   };
 
   const downloadCsvTemplate = () => {
-    const text = "division,home_team,away_team,date,kick_off,venue,status,external_ref,locked,notes\nPremier Division,Home Team,Away Team,2026-08-15,15:00,Home Ground,draft,FIX-001,false,";
+    const configuredKickOff = String(getCurrentLeagueSeason(workspace)?.defaultKickOff || "").slice(0, 5);
+    const text = `division,home_team,away_team,date,kick_off,venue,status,external_ref,locked,notes\nPremier Division,Home Team,Away Team,2026-08-15,${configuredKickOff},Home Ground,draft,FIX-001,false,`;
     const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -786,6 +807,17 @@ export default function LeagueManagerPage({
 
       {tab === "schedule" ? (
         <LeagueScheduleWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+          canOperate={canOperate}
+          onWorkspaceRefresh={loadWorkspace}
+        />
+      ) : null}
+
+
+
+      {tab === "cups" ? (
+        <LeagueCupWorkspace
           leagueId={activeLeagueId}
           workspace={workspace}
           canOperate={canOperate}

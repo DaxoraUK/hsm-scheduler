@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArchiveRestore,
-  CalendarClock,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -32,7 +31,8 @@ import {
 
 const INPUT = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500";
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50";
-const ENTRY_GRID = "lg:grid-cols-[90px_minmax(260px,1.5fr)_150px_105px_minmax(190px,1fr)_78px_42px]";
+const ENTRY_GRID = "lg:grid-cols-[105px_minmax(260px,1.5fr)_150px_105px_minmax(190px,1fr)_78px_42px]";
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function Panel({ children, className = "" }) {
   return <section className={`rounded-[26px] border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
@@ -76,7 +76,7 @@ function editableSnapshot(entry = {}) {
   const scheduledDate = entry.scheduledDate || "";
   return {
     scheduledDate,
-    kickOff: scheduledDate ? (entry.kickOff || "15:00").slice(0, 5) : "",
+    kickOff: scheduledDate ? String(entry.kickOff || "").slice(0, 5) : "",
     venueId: entry.venueId || "",
     locked: Boolean(entry.locked),
     notes: entry.notes || "",
@@ -125,6 +125,22 @@ const ISSUE_GROUP_COPY = {
   "missing-venue": {
     title: "Missing venues",
     description: "Placed fixtures do not have a valid home venue.",
+  },
+  "missing-kick-off": {
+    title: "Missing kick-off settings",
+    description: "Set the league or division default kick-off before publishing.",
+  },
+  "before-division-start": {
+    title: "Fixtures before division start",
+    description: "Fixtures are scheduled before the division's configured start date.",
+  },
+  "after-division-end": {
+    title: "Fixtures after division end",
+    description: "Fixtures are scheduled after the division's configured end date.",
+  },
+  "cup-team-conflict": {
+    title: "League and cup clashes",
+    description: "A league fixture clashes with a scheduled cup tie.",
   },
   "duplicate-pairing": {
     title: "Duplicate pairings",
@@ -220,6 +236,7 @@ function ScheduleEntryRow({
   issueTone,
   onChange,
   onRevert,
+  defaultKickOff,
 }) {
   const homeName = getEntityName(workspace, "team", entry.homeTeamId);
   const awayName = getEntityName(workspace, "team", entry.awayTeamId);
@@ -239,7 +256,7 @@ function ScheduleEntryRow({
     const scheduledDate = event.target.value;
     update({
       scheduledDate,
-      kickOff: scheduledDate ? (entry.kickOff || "15:00") : "",
+      kickOff: scheduledDate ? (entry.kickOff || defaultKickOff || "") : "",
     });
   };
 
@@ -250,7 +267,7 @@ function ScheduleEntryRow({
           <FieldLabel>Status</FieldLabel>
           <div className="flex flex-wrap items-center gap-1.5 lg:block">
             <Pill tone={entry.scheduledDate ? "green" : "amber"}>{entry.scheduledDate ? "Placed" : "Unplaced"}</Pill>
-            <div className="mt-0 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 lg:mt-2">Round {entry.roundNumber || "—"}</div>
+            <div className="mt-0 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 lg:mt-2">Round {entry.roundNumber || "—"} · Meeting {entry.meetingNumber || 1}</div>
           </div>
         </div>
 
@@ -314,8 +331,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const [entryEdits, setEntryEdits] = useState({});
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [config, setConfig] = useState({ name: "Initial generated draft", meetings: 2, divisionId: "all" });
-  const [calendarConfig, setCalendarConfig] = useState({ weekday: 6, defaultKickOff: "15:00" });
+  const [config, setConfig] = useState({ name: "Full league programme" });
   const [filters, setFilters] = useState({ divisionId: "all", teamId: "all", venueId: "all", status: "all", query: "" });
   const [visibleLimit, setVisibleLimit] = useState(75);
   const [compareVersionId, setCompareVersionId] = useState("");
@@ -413,17 +429,19 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     return validateLeagueSchedule(workspace, effectiveEntries, payload.version.generationConfig || {});
   }, [effectiveEntries, payload, workspace]);
 
-  const selectedDivisionIds = useMemo(() => (
-    config.divisionId === "all"
-      ? workspace.divisions.filter((division) => division.seasonId === season?.id).map((division) => division.id)
-      : [config.divisionId]
-  ), [config.divisionId, season?.id, workspace.divisions]);
+  const seasonDivisionIds = useMemo(() => (
+    workspace.divisions.filter((division) => division.seasonId === season?.id).map((division) => division.id)
+  ), [season?.id, workspace.divisions]);
 
   const preflight = useMemo(() => getLeagueSchedulePreflight(workspace, {
     seasonId: season?.id,
-    divisionIds: selectedDivisionIds,
-    meetings: Number(config.meetings),
-  }), [config.meetings, season?.id, selectedDivisionIds, workspace]);
+    divisionIds: seasonDivisionIds,
+  }), [season?.id, seasonDivisionIds, workspace]);
+
+  const defaultKickOffForEntry = useCallback((entry) => {
+    const division = workspace.divisions.find((row) => row.id === entry?.divisionId);
+    return String(division?.defaultKickOff || season?.defaultKickOff || "").slice(0, 5);
+  }, [season?.defaultKickOff, workspace.divisions]);
 
   const issueToneByEntry = useMemo(() => {
     const tones = new Map();
@@ -509,7 +527,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     const updates = Object.entries(entryEdits).map(([entryId, draft]) => ({
       id: entryId,
       scheduledDate: draft.scheduledDate || null,
-      kickOff: draft.scheduledDate ? draft.kickOff || "15:00" : null,
+      kickOff: draft.scheduledDate ? draft.kickOff || defaultKickOffForEntry(effectiveEntries.find((entry) => entry.id === entryId)) || null : null,
       venueId: draft.venueId || null,
       locked: Boolean(draft.locked),
       notes: draft.notes || null,
@@ -527,7 +545,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     } finally {
       setBusy(false);
     }
-  }, [dirtyCount, effectiveEntries, entryEdits, leagueId, loadVersion, loadVersions, payload]);
+  }, [defaultKickOffForEntry, dirtyCount, effectiveEntries, entryEdits, leagueId, loadVersion, loadVersions, payload]);
 
   useEffect(() => {
     if (!dirtyCount || !canOperate || payload?.version.status !== "draft") return undefined;
@@ -554,66 +572,56 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     return false;
   };
 
-  const generateSeasonCalendar = async () => {
-    if (!season?.id) return;
-    setBusy(true);
-    try {
-      const result = await DB.generateLeaguePlayingDateCalendar(leagueId, {
-        seasonId: season.id,
-        weekday: calendarConfig.weekday,
-        defaultKickOff: calendarConfig.defaultKickOff,
-      });
-      await onWorkspaceRefresh?.();
-      toast.success("Season playing dates generated", {
-        description: `${Number(result?.inserted || 0)} new dates added · ${Number(result?.total_available || 0)} available in the calendar.`,
-      });
-    } catch (error) {
-      toast.error("Playing-date calendar could not be generated", { description: error?.message });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const createDraft = async ({ rebuildUnresolved = false } = {}) => {
     if (!season?.id || !requireSavedDraft()) return;
-    const selectedDivisions = selectedDivisionIds;
-    const schedulePreflight = getLeagueSchedulePreflight(workspace, {
-      seasonId: season.id,
-      divisionIds: selectedDivisions,
-      meetings: Number(config.meetings),
-    });
-    if (!schedulePreflight.ready) {
-      const firstShortfall = schedulePreflight.dateShortfalls?.[0];
-      const description = firstShortfall
-        ? `${firstShortfall.name} has ${firstShortfall.availableDates} available playing date${firstShortfall.availableDates === 1 ? "" : "s"} but needs at least ${firstShortfall.requiredRounds}. Generate the season calendar first.`
-        : schedulePreflight.errors?.[0] || "Complete the schedule setup before generating a draft.";
-      toast.error("Season calendar is incomplete", { description });
-      return;
-    }
-    const generated = generateLeagueSchedule(workspace, {
-      seasonId: season.id,
-      divisionIds: selectedDivisions,
-      meetings: Number(config.meetings),
-      baseEntries: rebuildUnresolved ? payload?.entries || [] : [],
-      preservePlacedBaseEntries: rebuildUnresolved,
-    });
-    if (generated.errors.length) {
-      toast.error("Schedule setup needs attention", { description: generated.errors.slice(0, 4).join(" ") });
-      if (!generated.entries.length) return;
-    }
-    const clientValidation = validateLeagueSchedule(workspace, generated.entries, generated.config);
-    const name = rebuildUnresolved
-      ? `${payload?.version.name || "Schedule"} – unresolved rebuild`
-      : config.name.trim();
-    if (!name) {
-      toast.error("Give this schedule version a name");
+    if (!season.startsOn || !season.endsOn || !season.defaultKickOff) {
+      toast.error("Complete the league scheduling settings", { description: "Set the season dates, league default kick-off and primary playing day before generating the programme." });
       return;
     }
 
     setBusy(true);
     try {
+      await DB.synchroniseLeagueSeasonCalendar(leagueId, season.id);
+      const refreshedWorkspace = await onWorkspaceRefresh?.() || workspace;
+      const refreshedSeason = getCurrentLeagueSeason(refreshedWorkspace) || season;
+      const selectedDivisions = refreshedWorkspace.divisions
+        .filter((division) => division.seasonId === refreshedSeason.id)
+        .map((division) => division.id);
+      const schedulePreflight = getLeagueSchedulePreflight(refreshedWorkspace, {
+        seasonId: refreshedSeason.id,
+        divisionIds: selectedDivisions,
+      });
+      if (!schedulePreflight.ready) {
+        const firstShortfall = schedulePreflight.dateShortfalls?.[0];
+        const description = firstShortfall
+          ? `${firstShortfall.name} has ${firstShortfall.availableDates} valid playing date${firstShortfall.availableDates === 1 ? "" : "s"} but needs at least ${firstShortfall.requiredRounds}. Review its start/end dates, playing day or meeting rule.`
+          : schedulePreflight.errors?.[0] || "Complete the league and division scheduling settings before generating the programme.";
+        toast.error("League programme settings need attention", { description });
+        return;
+      }
+
+      const generated = generateLeagueSchedule(refreshedWorkspace, {
+        seasonId: refreshedSeason.id,
+        divisionIds: selectedDivisions,
+        baseEntries: rebuildUnresolved ? payload?.entries || [] : [],
+        preservePlacedBaseEntries: rebuildUnresolved,
+      });
+      if (generated.errors.length) {
+        toast.error("Schedule setup needs attention", { description: generated.errors.slice(0, 4).join(" ") });
+        if (!generated.entries.length) return;
+      }
+      const clientValidation = validateLeagueSchedule(refreshedWorkspace, generated.entries, generated.config);
+      const name = rebuildUnresolved
+        ? `${payload?.version.name || "Schedule"} – unresolved rebuild`
+        : config.name.trim();
+      if (!name) {
+        toast.error("Give this schedule version a name");
+        return;
+      }
+
       const versionId = await DB.saveLeagueScheduleDraft(leagueId, {
-        seasonId: season.id,
+        seasonId: refreshedSeason.id,
         name,
         generationConfig: generated.config,
         entries: serialiseScheduleEntries(generated.entries),
@@ -622,9 +630,9 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
       });
       await loadVersions({ selectVersionId: versionId });
       setSelectedVersionId(versionId);
-      toast.success("Schedule draft created", { description: `${generated.summary.placed} placed · ${generated.summary.unplaced} unresolved · ${clientValidation.warningCount} warnings` });
+      toast.success("Full league programme created", { description: `${generated.summary.placed} placed · ${generated.summary.unplaced} unresolved · ${clientValidation.warningCount} warnings · ${generated.summary.cupReservations || 0} cup reservations` });
     } catch (error) {
-      toast.error("Schedule draft could not be saved", { description: error?.message });
+      toast.error("League programme could not be generated", { description: error?.message });
     } finally {
       setBusy(false);
     }
@@ -712,33 +720,27 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     <div className="space-y-5">
       <Panel className="overflow-hidden">
         <div className="grid gap-5 bg-slate-950 p-6 text-white lg:grid-cols-[1fr_auto] lg:items-center">
-          <div><div className="flex flex-wrap gap-2"><Pill tone="green">Scheduling engine pass 1</Pill><Pill tone="navy">{season.name}</Pill></div><h2 className="mt-4 text-2xl font-black">Build, test and publish the league programme</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">Generate a balanced fixture matrix, allocate it across valid dates, preserve locked games, explain exceptions and publish only after server validation.</p></div>
-          <div className="grid min-w-[280px] gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            <button type="button" disabled={!canOperate || busy || workspace.divisions.length === 0} onClick={() => createDraft()} className={`${BUTTON} h-11 bg-emerald-500 text-slate-950 hover:bg-emerald-400`}><Sparkles size={16} /> Generate draft</button>
-            <button type="button" disabled={!canOperate || busy || !payload || payload.version.status !== "draft" || validation.totals.unplaced === 0} onClick={() => createDraft({ rebuildUnresolved: true })} className={`${BUTTON} h-11 border border-white/15 bg-white/10 text-white`}><RefreshCw size={16} /> Rebuild unresolved only</button>
+          <div><div className="flex flex-wrap gap-2"><Pill tone="green">Scheduling engine v2</Pill><Pill tone="navy">{season.name}</Pill></div><h2 className="mt-4 text-2xl font-black">Generate the complete league programme</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">Every division is generated together through one shared allocation pass. League and division settings control dates, kick-offs, meeting counts and home/away targets; cup ties reserve teams and grounds automatically.</p></div>
+          <div className="grid min-w-[300px] gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <button type="button" disabled={!canOperate || busy || seasonDivisionIds.length === 0} onClick={() => createDraft()} className={`${BUTTON} h-11 bg-emerald-500 text-slate-950 hover:bg-emerald-400`}><Sparkles size={16} /> Generate full league programme</button>
+            <button type="button" disabled={!canOperate || busy || !payload || payload.version.status !== "draft" || validation.totals.unplaced === 0} onClick={() => createDraft({ rebuildUnresolved: true })} className={`${BUTTON} h-11 border border-white/15 bg-white/10 text-white`}><RefreshCw size={16} /> Rebuild unresolved fixtures</button>
           </div>
         </div>
-        <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-[minmax(200px,1.3fr)_140px_minmax(190px,1fr)_auto]">
+        <div className="grid gap-4 p-5 lg:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)] lg:items-end">
           <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Draft name</span><input className={INPUT} value={config.name} onChange={(event) => setConfig((current) => ({ ...current, name: event.target.value }))} disabled={!canOperate || busy} /></label>
-          <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Meetings</span><select className={INPUT} value={config.meetings} onChange={(event) => setConfig((current) => ({ ...current, meetings: Number(event.target.value) }))} disabled={!canOperate || busy}><option value={2}>Home & away</option><option value={1}>Once</option></select></label>
-          <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Generate</span><select className={INPUT} value={config.divisionId} onChange={(event) => setConfig((current) => ({ ...current, divisionId: event.target.value }))} disabled={!canOperate || busy}><option value="all">All divisions</option>{workspace.divisions.filter((division) => division.seasonId === season.id).map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select></label>
-          <div className="flex items-end"><div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] font-bold leading-5 text-sky-900">Dates, blackouts, team clashes and shared-ground capacity are enforced automatically.</div></div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold leading-5 text-sky-900">No week or date selection is required. The full calendar is rebuilt from the league settings whenever a programme is generated. Division start/end dates, playing days, meetings per pairing, blackouts, cup reservations and shared-ground limits are then enforced automatically.</div>
         </div>
       </Panel>
 
       <Panel className={`p-5 ${preflight.ready ? "border-emerald-200" : "border-amber-300"}`}>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2"><Pill tone={preflight.ready ? "green" : "amber"}>Season calendar</Pill><Pill>{preflight.configuredDates} available</Pill><Pill>{preflight.minimumDates} minimum</Pill></div>
-            <h3 className="mt-3 text-lg font-black text-slate-950">{preflight.ready ? "Enough playing dates are configured" : "Generate the full playing-date calendar before scheduling"}</h3>
-            <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600">{preflight.ready ? `${preflight.totalFixtures} fixtures can be allocated across the selected divisions.` : "The previous draft used only one available date, placed the opening round and correctly left the remaining fixtures unresolved."}</p>
-            {!preflight.ready && preflight.dateShortfalls?.length ? <div className="mt-3 text-xs font-black text-amber-900">{preflight.dateShortfalls.slice(0, 3).map((division) => `${division.name}: ${division.availableDates}/${division.requiredRounds} dates`).join(" · ")}</div> : null}
+            <div className="flex flex-wrap items-center gap-2"><Pill tone={preflight.ready ? "green" : "amber"}>Settings-driven calendar</Pill><Pill>{seasonDivisionIds.length} divisions</Pill><Pill>{preflight.totalFixtures} league fixtures</Pill><Pill>{workspace.cupTies.filter((tie) => tie.seasonId === season.id && tie.scheduledDate && !["cancelled", "void", "bye", "postponed"].includes(tie.status)).length} cup reservations</Pill></div>
+            <h3 className="mt-3 text-lg font-black text-slate-950">{preflight.ready ? "League rules are ready for full-programme generation" : "Complete the highlighted league or division settings"}</h3>
+            <p className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-slate-600">League default: <strong>{String(season.defaultKickOff || "Not set").slice(0, 5)}</strong> on <strong>{WEEKDAY_NAMES[Number(season.primaryWeekday)] || "Not set"}</strong>. Individual divisions can override the date range, day, kick-off and meeting count in League structure.</p>
+            {!preflight.ready ? <div className="mt-3 text-xs font-black text-amber-900">{[...(preflight.errors || []), ...(preflight.dateShortfalls || []).map((division) => `${division.name}: ${division.availableDates}/${division.requiredRounds} valid dates`)].slice(0, 5).join(" · ")}</div> : null}
           </div>
-          <div className="grid w-full gap-3 sm:grid-cols-[150px_140px_auto] xl:w-auto">
-            <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Primary day</span><select className={INPUT} value={calendarConfig.weekday} onChange={(event) => setCalendarConfig((current) => ({ ...current, weekday: Number(event.target.value) }))} disabled={!canOperate || busy}><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></label>
-            <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Default kick-off</span><input type="time" className={INPUT} value={calendarConfig.defaultKickOff} onChange={(event) => setCalendarConfig((current) => ({ ...current, defaultKickOff: event.target.value }))} disabled={!canOperate || busy} /></label>
-            <div className="flex items-end"><button type="button" onClick={generateSeasonCalendar} disabled={!canOperate || busy} className={`${BUTTON} h-10 w-full bg-slate-950 text-white`}><CalendarClock size={15} /> Generate weekly dates</button></div>
-          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold leading-5 text-slate-700">Change the league default kick-off, primary day or division rules in <strong>League structure</strong>. The Schedule Builder no longer carries separate defaults that can drift from those settings.</div>
         </div>
       </Panel>
 
@@ -805,7 +807,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
               <div>Status</div><div>Fixture</div><div>Date</div><div>Kick-off</div><div>Venue</div><div className="text-center">Lock</div><div />
             </div>
             <div className="space-y-2">
-              {filteredEntries.slice(0, visibleLimit).map((entry) => <ScheduleEntryRow key={entry.id || entry.clientKey} entry={entry} workspace={workspace} disabled={!canOperate || payload.version.status !== "draft"} busy={busy} changed={Boolean(entryEdits[entry.id])} issueTone={issueToneByEntry.get(entry.id || entry.clientKey)} onChange={updateEntryDraft} onRevert={revertEntryDraft} />)}
+              {filteredEntries.slice(0, visibleLimit).map((entry) => <ScheduleEntryRow key={entry.id || entry.clientKey} entry={entry} workspace={workspace} disabled={!canOperate || payload.version.status !== "draft"} busy={busy} changed={Boolean(entryEdits[entry.id])} issueTone={issueToneByEntry.get(entry.id || entry.clientKey)} onChange={updateEntryDraft} onRevert={revertEntryDraft} defaultKickOff={defaultKickOffForEntry(entry)} />)}
               {!filteredEntries.length ? <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">No fixtures match these filters.</div> : null}
             </div>
             <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">

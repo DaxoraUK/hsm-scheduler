@@ -8,6 +8,7 @@ import {
 import { normaliseLeagueWorkspace } from "../../src/lib/league/leagueManagerModel.js";
 
 const migration = readFileSync("supabase/migrations/202607130009_generate_league_playing_date_calendar.sql", "utf8");
+const v2Migration = readFileSync("supabase/migrations/202607130011_league_scheduling_v2_and_cup_manager.sql", "utf8");
 const workspaceUi = readFileSync("src/components/league/LeagueScheduleWorkspace.jsx", "utf8");
 const supabase = readFileSync("src/lib/supabase.js", "utf8");
 
@@ -25,7 +26,7 @@ function workspaceWithDates(dateCount = 1) {
   return normaliseLeagueWorkspace({
     league: { id: "league-1", name: "Test League" },
     access: { role: "owner", can_manage: true, can_operate: true, read_only: false },
-    seasons: [{ id: "season-1", name: "2026/27", starts_on: "2026-08-01", ends_on: "2027-06-30", is_current: true, status: "active" }],
+    seasons: [{ id: "season-1", name: "2026/27", starts_on: "2026-08-01", ends_on: "2027-06-30", default_kick_off: "15:00:00", primary_weekday: 6, is_current: true, status: "active" }],
     divisions: [{ id: "division-1", season_id: "season-1", name: "Premier Division", sort_order: 1 }],
     clubs: teams.map((team, index) => ({ id: `club-${index + 1}`, name: team.name, status: "active" })),
     venues: teams.map((team, index) => ({
@@ -104,9 +105,10 @@ describe("League Manager season calendar and ground capacity repair", () => {
     expect(migration).toContain("generate_series");
     expect(migration).toContain("private.write_league_audit");
     expect(supabase).toContain('rpc/generate_league_playing_date_calendar');
-    expect(workspaceUi).toContain("Generate weekly dates");
-    expect(workspaceUi).toContain("Season calendar is incomplete");
-    expect(workspaceUi).toContain("Rebuild unresolved only");
+    expect(v2Migration).toContain("public.synchronise_league_season_calendar");
+    expect(workspaceUi).toContain("Generate full league programme");
+    expect(workspaceUi).toContain("League programme settings need attention");
+    expect(workspaceUi).toContain("Rebuild unresolved fixtures");
     expect(workspaceUi).toContain("fixtures are unplaced");
   });
 });

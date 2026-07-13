@@ -821,6 +821,8 @@ export const DB = {
     seasonName = "",
     seasonStart = null,
     seasonEnd = null,
+    defaultKickOff = "",
+    primaryWeekday = 6,
   } = {}) {
     return supaFetch("POST", "rpc/platform_create_league_pilot", {
       league_name: String(name || "").trim(),
@@ -830,6 +832,8 @@ export const DB = {
       initial_season_name: String(seasonName || "").trim() || null,
       initial_season_start: seasonStart || null,
       initial_season_end: seasonEnd || null,
+      initial_default_kick_off: String(defaultKickOff || "").slice(0, 5) || null,
+      initial_primary_weekday: Number(primaryWeekday),
     });
   },
 
@@ -840,9 +844,13 @@ export const DB = {
 
   async upsertLeagueEntity(leagueId, entityType, entityData = {}) {
     const id = requireLeagueId(leagueId);
-    return supaFetch("POST", "rpc/upsert_league_entity", {
+    const safeType = String(entityType || "").trim().toLowerCase();
+    const endpoint = ["season", "division"].includes(safeType)
+      ? "rpc/upsert_league_schedule_settings_entity"
+      : "rpc/upsert_league_entity";
+    return supaFetch("POST", endpoint, {
       target_league_id: id,
-      entity_type: String(entityType || "").trim().toLowerCase(),
+      entity_type: safeType,
       entity_data: entityData && typeof entityData === "object" ? entityData : {},
     });
   },
@@ -926,7 +934,7 @@ export const DB = {
   async generateLeaguePlayingDateCalendar(leagueId, {
     seasonId,
     weekday = 6,
-    defaultKickOff = "15:00",
+    defaultKickOff = "",
     divisionId = null,
   } = {}) {
     const id = requireLeagueId(leagueId);
@@ -934,8 +942,73 @@ export const DB = {
       target_league_id: id,
       target_season_id: String(seasonId || "").trim(),
       weekday_numbers: [Math.max(0, Math.min(Number(weekday) || 0, 6))],
-      default_kick_off: String(defaultKickOff || "15:00").slice(0, 5),
+      default_kick_off: String(defaultKickOff || "").slice(0, 5) || null,
       target_division_id: divisionId ? String(divisionId).trim() : null,
+    });
+  },
+
+  async synchroniseLeagueSeasonCalendar(leagueId, seasonId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/synchronise_league_season_calendar", {
+      target_league_id: id,
+      target_season_id: String(seasonId || "").trim(),
+    });
+  },
+
+  async upsertLeagueCup(leagueId, cupData = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_cup", {
+      target_league_id: id,
+      cup_data: cupData && typeof cupData === "object" ? cupData : {},
+    });
+  },
+
+  async setLeagueCupEligibility(leagueId, cupId, { divisionIds = [], includedTeamIds = [], excludedTeamIds = [] } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/set_league_cup_eligibility", {
+      target_league_id: id,
+      target_cup_id: String(cupId || "").trim(),
+      division_ids: Array.isArray(divisionIds) ? divisionIds : [],
+      included_team_ids: Array.isArray(includedTeamIds) ? includedTeamIds : [],
+      excluded_team_ids: Array.isArray(excludedTeamIds) ? excludedTeamIds : [],
+    });
+  },
+
+  async saveLeagueCupRoundDraw(leagueId, cupId, roundData = {}, ties = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/save_league_cup_round_draw", {
+      target_league_id: id,
+      target_cup_id: String(cupId || "").trim(),
+      round_data: roundData && typeof roundData === "object" ? roundData : {},
+      tie_rows: Array.isArray(ties) ? ties.map((tie) => ({
+        tie_number: Number(tie?.tieNumber || 0),
+        home_team_id: tie?.homeTeamId || null,
+        away_team_id: tie?.awayTeamId || null,
+        venue_id: tie?.venueId || null,
+        scheduled_date: tie?.scheduledDate || null,
+        kick_off: tie?.kickOff || null,
+        status: tie?.status || "scheduled",
+        winner_team_id: tie?.winnerTeamId || null,
+        locked: Boolean(tie?.locked),
+        notes: tie?.notes || null,
+      })) : [],
+    });
+  },
+
+  async updateLeagueCupTie(leagueId, tieId, tieData = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_cup_tie", {
+      target_league_id: id,
+      target_tie_id: String(tieId || "").trim(),
+      tie_data: tieData && typeof tieData === "object" ? tieData : {},
+    });
+  },
+
+  async deleteLeagueCup(leagueId, cupId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/delete_league_cup", {
+      target_league_id: id,
+      target_cup_id: String(cupId || "").trim(),
     });
   },
 
@@ -1005,7 +1078,7 @@ export const DB = {
       entry_updates: entryUpdates.map((update) => ({
         id: String(update?.id || "").trim(),
         scheduled_date: update?.scheduledDate || null,
-        kick_off: update?.scheduledDate ? update?.kickOff || "15:00" : null,
+        kick_off: update?.scheduledDate ? update?.kickOff || null : null,
         venue_id: update?.venueId || null,
         locked: Boolean(update?.locked),
         notes: update?.notes || null,

@@ -7,6 +7,11 @@ const ARRAY_KEYS = Object.freeze([
   "blackouts",
   "playingDates",
   "fixtures",
+  "cups",
+  "cupDivisions",
+  "cupTeamOverrides",
+  "cupRounds",
+  "cupTies",
   "members",
   "invitations",
   "audit",
@@ -40,6 +45,27 @@ function normaliseRow(row = {}) {
     kickOff: row.kick_off || row.kickOff || "",
     playingDate: row.playing_date || row.playingDate || "",
     defaultKickOff: row.default_kick_off || row.defaultKickOff || "",
+    primaryWeekday: Number(row.primary_weekday ?? row.primaryWeekday ?? 6),
+    playingWeekday: row.playing_weekday === null || row.playing_weekday === undefined ? (row.playingWeekday ?? "") : Number(row.playing_weekday),
+    meetingsPerPairing: Number(row.meetings_per_pairing ?? row.meetingsPerPairing ?? 2),
+    maxConsecutiveHomeAway: Number(row.max_consecutive_home_away ?? row.maxConsecutiveHomeAway ?? 2),
+    finalDate: row.final_date || row.finalDate || "",
+    finalVenueId: row.final_venue_id || row.finalVenueId || "",
+    drawMode: row.draw_mode || row.drawMode || "random",
+    roundIntervalDays: Number(row.round_interval_days ?? row.roundIntervalDays ?? 14),
+    sameClubAvoidUntilRound: Number(row.same_club_avoid_until_round ?? row.sameClubAvoidUntilRound ?? 1),
+    cupId: row.cup_id || row.cupId || "",
+    cupRoundId: row.cup_round_id || row.cupRoundId || "",
+    cupTieId: row.cup_tie_id || row.cupTieId || "",
+    competitionType: row.competition_type || row.competitionType || "league",
+    competitionId: row.competition_id || row.competitionId || "",
+    meetingNumber: Number(row.meeting_number ?? row.meetingNumber ?? 1),
+    roundNumber: Number(row.round_number ?? row.roundNumber ?? 0),
+    tieNumber: Number(row.tie_number ?? row.tieNumber ?? 0),
+    winnerTeamId: row.winner_team_id || row.winnerTeamId || "",
+    homeScore: row.home_score ?? row.homeScore ?? "",
+    awayScore: row.away_score ?? row.awayScore ?? "",
+    included: asBoolean(row.included),
     shortName: row.short_name || row.shortName || "",
     externalRef: row.external_ref || row.externalRef || "",
     governingBody: row.governing_body || row.governingBody || "",
@@ -91,7 +117,8 @@ export function normaliseLeagueWorkspace(payload = {}) {
   };
 
   ARRAY_KEYS.forEach((key) => {
-    const payloadKey = key === "playingDates" ? "playing_dates" : key;
+    const payloadKeyMap = { playingDates: "playing_dates", cupDivisions: "cup_divisions", cupTeamOverrides: "cup_team_overrides", cupRounds: "cup_rounds", cupTies: "cup_ties" };
+    const payloadKey = payloadKeyMap[key] || key;
     result[key] = asArray(payload[payloadKey] ?? payload[key]).map(normaliseRow);
   });
 
@@ -114,11 +141,12 @@ export function getLeagueReadiness(workspace = {}) {
   const venues = asArray(workspace.venues).filter((row) => row.status === "active");
   const playingDates = asArray(workspace.playingDates).filter((row) => !season || row.seasonId === season.id);
   const fixtures = asArray(workspace.fixtures).filter((row) => !season || row.seasonId === season.id);
+  const cups = asArray(workspace.cups).filter((row) => !season || row.seasonId === season.id);
   const availablePlayingDates = playingDates.filter((row) => row.status === "available");
   const requiredDatesByDivision = new Map(divisions.map((division) => {
     const teamCount = teams.filter((team) => team.divisionId === division.id && !["withdrawn", "inactive"].includes(team.status)).length;
-    const roundsPerLeg = teamCount < 2 ? 0 : teamCount % 2 === 0 ? teamCount - 1 : teamCount;
-    return [division.id, roundsPerLeg * 2];
+    const roundsPerMeeting = teamCount < 2 ? 0 : teamCount % 2 === 0 ? teamCount - 1 : teamCount;
+    return [division.id, roundsPerMeeting * Math.max(1, Math.min(Number(division.meetingsPerPairing || 2), 4))];
   }));
   const requiredPlayingDates = Math.max(0, ...requiredDatesByDivision.values());
   const availableDatesForDivision = (divisionId) => new Set(availablePlayingDates
@@ -163,8 +191,8 @@ export function getLeagueReadiness(workspace = {}) {
       label: "Playing-date calendar",
       complete: calendarComplete,
       detail: availablePlayingDates.length
-        ? `${availablePlayingDates.length} available · ${requiredPlayingDates || "—"} minimum for home & away`
-        : "Generate the standard league playing dates",
+        ? `${availablePlayingDates.length} available · ${requiredPlayingDates || "—"} minimum from division rules`
+        : "The calendar will be generated from league and division settings",
     },
     {
       id: "fixture_registry",
@@ -193,6 +221,7 @@ export function getLeagueReadiness(workspace = {}) {
       blackouts: asArray(workspace.blackouts).length,
       playingDates: playingDates.length,
       fixtures: fixtures.length,
+      cups: cups.length,
       postponed: fixtures.filter((fixture) => fixture.status === "postponed").length,
       unplaced: fixtures.filter((fixture) => !fixture.scheduledDate).length,
     },
@@ -436,6 +465,9 @@ export function serialiseLeagueEntity(type, draft = {}) {
         ends_on: draft.endsOn || draft.ends_on || null,
         status: draft.status || "draft",
         is_current: Boolean(draft.isCurrent ?? draft.is_current),
+        default_kick_off: draft.defaultKickOff || draft.default_kick_off || null,
+        primary_weekday: Number(draft.primaryWeekday ?? draft.primary_weekday ?? 6),
+        max_consecutive_home_away: Math.max(1, Math.min(Number(draft.maxConsecutiveHomeAway ?? draft.max_consecutive_home_away ?? 2) || 2, 6)),
       };
     case "division":
       return {
@@ -445,6 +477,12 @@ export function serialiseLeagueEntity(type, draft = {}) {
         code: String(draft.code || "").trim(),
         sort_order: Number(draft.sortOrder ?? draft.sort_order ?? 0),
         team_limit: draft.teamLimit ?? draft.team_limit ?? "",
+        starts_on: draft.startsOn || draft.starts_on || null,
+        ends_on: draft.endsOn || draft.ends_on || null,
+        meetings_per_pairing: Math.max(1, Math.min(Number(draft.meetingsPerPairing ?? draft.meetings_per_pairing ?? 2) || 2, 4)),
+        default_kick_off: draft.defaultKickOff || draft.default_kick_off || null,
+        playing_weekday: draft.playingWeekday === "" || draft.playing_weekday === "" ? null : Number(draft.playingWeekday ?? draft.playing_weekday ?? 6),
+        max_consecutive_home_away: Math.max(1, Math.min(Number(draft.maxConsecutiveHomeAway ?? draft.max_consecutive_home_away ?? 2) || 2, 6)),
       };
     case "parent_club":
       return {

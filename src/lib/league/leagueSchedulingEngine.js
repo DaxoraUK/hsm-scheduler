@@ -8,29 +8,19 @@ function asText(value) {
   return String(value || "").trim();
 }
 
-function asPositiveInteger(value, fallback = 1) {
+function asPositiveInteger(value, fallback = 1, maximum = 999) {
   const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+  return Number.isFinite(number) && number > 0 ? Math.min(Math.floor(number), maximum) : fallback;
 }
 
-function toTime(value, fallback = "15:00") {
+function clampMeetings(value, fallback = 2) {
+  return Math.max(1, Math.min(asPositiveInteger(value, fallback, 4), 4));
+}
+
+function toTime(value, fallback = "") {
   const text = asText(value);
   if (!text) return fallback;
   return text.slice(0, 5);
-}
-
-function pairKey(homeTeamId, awayTeamId) {
-  return `${homeTeamId}::${awayTeamId}`;
-}
-
-function unorderedPairKey(teamAId, teamBId) {
-  return [teamAId, teamBId].sort().join("::");
-}
-
-function entryPairKey(entry, meetings = 2) {
-  return meetings === 1
-    ? unorderedPairKey(entry.homeTeamId, entry.awayTeamId)
-    : pairKey(entry.homeTeamId, entry.awayTeamId);
 }
 
 function isoDate(value) {
@@ -43,8 +33,21 @@ function dateWithin(date, startsOn, endsOn) {
   return date >= startsOn && date <= endsOn;
 }
 
+function unorderedPairKey(teamAId, teamBId) {
+  return [teamAId, teamBId].sort().join("::");
+}
+
+
+function fixtureIdentity(entry) {
+  const competitionType = entry.competitionType || "league";
+  if (competitionType === "cup") {
+    return `cup:${entry.cupId || entry.competitionId || ""}:${entry.cupTieId || entry.id || entry.clientKey || ""}`;
+  }
+  return `league:${entry.divisionId || ""}:${unorderedPairKey(entry.homeTeamId, entry.awayTeamId)}:${Number(entry.meetingNumber || 1)}`;
+}
+
 function stableEntryKey(entry) {
-  return entry.id || entry.clientKey || `${entry.divisionId}:${entry.homeTeamId}:${entry.awayTeamId}`;
+  return entry.id || entry.clientKey || fixtureIdentity(entry);
 }
 
 function getSeason(workspace, seasonId = "") {
@@ -56,10 +59,26 @@ function getSeason(workspace, seasonId = "") {
     || null;
 }
 
+function getDivision(workspace, divisionId) {
+  return asArray(workspace?.divisions).find((division) => division.id === divisionId) || null;
+}
+
 function getDivisionTeams(workspace, divisionId, seasonId) {
   return asArray(workspace?.teams)
-    .filter((team) => team.seasonId === seasonId && team.divisionId === divisionId && team.status !== "withdrawn" && team.status !== "inactive")
+    .filter((team) => team.seasonId === seasonId && team.divisionId === divisionId && !["withdrawn", "inactive"].includes(team.status))
     .sort((left, right) => left.name.localeCompare(right.name, "en-GB"));
+}
+
+function divisionRule(workspace, division, season) {
+  const defaultKickOff = toTime(division?.defaultKickOff, toTime(season?.defaultKickOff, ""));
+  return {
+    startsOn: division?.startsOn || season?.startsOn || "",
+    endsOn: division?.endsOn || season?.endsOn || "",
+    meetings: clampMeetings(division?.meetingsPerPairing ?? division?.meetings ?? 2),
+    defaultKickOff,
+    weekday: Number.isInteger(Number(division?.playingWeekday)) ? Number(division.playingWeekday) : Number(season?.primaryWeekday ?? 6),
+    maxConsecutive: asPositiveInteger(division?.maxConsecutiveHomeAway ?? season?.maxConsecutiveHomeAway ?? 2, 2, 6),
+  };
 }
 
 function rotateRoundRobin(list) {
@@ -67,79 +86,145 @@ function rotateRoundRobin(list) {
   return [list[0], list[list.length - 1], ...list.slice(1, -1)];
 }
 
+function orientationPenalty(fixtures, teamIds, maxRun, meetings) {
+  let penalty = 0;
+  teamIds.forEach((teamId) => {
+    const rows = fixtures
+      .filter((fixture) => fixture.homeTeamId === teamId || fixture.awayTeamId === teamId)
+      .sort((left, right) => Number(left.roundNumber || 0) - Number(right.roundNumber || 0) || Number(left.meetingNumber || 1) - Number(right.meetingNumber || 1));
+    let run = 0;
+    let side = "";
+    let homes = 0;
+    let aways = 0;
+    rows.forEach((fixture) => {
+      const nextSide = fixture.homeTeamId === teamId ? "home" : "away";
+      if (nextSide === "home") homes += 1;
+      else aways += 1;
+      if (nextSide === side) run += 1;
+      else {
+        side = nextSide;
+        run = 1;
+      }
+      if (run > maxRun) penalty += (run - maxRun) * (run - maxRun) * 40;
+      if (run > 2) penalty += 4;
+    });
+    const games = rows.length;
+    const allowedDifference = games % 2;
+    const imbalance = Math.max(0, Math.abs(homes - aways) - allowedDifference);
+    penalty += imbalance * imbalance * 60;
+    if (meetings % 2 === 0 && homes !== aways) penalty += Math.abs(homes - aways) * 100;
+  });
+  return penalty;
+}
+
+function flipFixture(fixture) {
+  return { ...fixture, homeTeamId: fixture.awayTeamId, awayTeamId: fixture.homeTeamId };
+}
+
+function optimiseFixtureOrientation(fixtures, teams, { maxRun = 2, meetings = 2 } = {}) {
+  const result = fixtures.map((fixture) => ({ ...fixture }));
+  const teamIds = teams.map((team) => team.id);
+  const groups = [];
+  const groupedByPair = new Map();
+  result.forEach((fixture, index) => {
+    const key = unorderedPairKey(fixture.homeTeamId, fixture.awayTeamId);
+    if (!groupedByPair.has(key)) groupedByPair.set(key, []);
+    groupedByPair.get(key).push(index);
+  });
+  groupedByPair.forEach((indices) => {
+    const ordered = indices.sort((a, b) => result[a].meetingNumber - result[b].meetingNumber);
+    for (let index = 0; index < ordered.length; index += 2) {
+      groups.push(ordered.slice(index, index + 2));
+    }
+  });
+
+  let currentPenalty = orientationPenalty(result, teamIds, maxRun, meetings);
+  for (let pass = 0; pass < 8; pass += 1) {
+    let improved = false;
+    for (const indexes of groups) {
+      const candidate = result.map((fixture, index) => indexes.includes(index) ? flipFixture(fixture) : fixture);
+      const nextPenalty = orientationPenalty(candidate, teamIds, maxRun, meetings);
+      if (nextPenalty < currentPenalty) {
+        indexes.forEach((index) => { result[index] = flipFixture(result[index]); });
+        currentPenalty = nextPenalty;
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return result;
+}
+
 /**
- * Builds a deterministic Berger-style fixture matrix.
- * `meetings` is either one (single round robin) or two (home and away).
+ * Builds a deterministic round-robin matrix supporting one to four meetings per pairing.
+ * Meeting numbers are stable and are part of the fixture identity.
  */
-export function buildDivisionFixtureMatrix(teams = [], { meetings = 2 } = {}) {
+export function buildDivisionFixtureMatrix(teams = [], { meetings = 2, maxConsecutive = 2 } = {}) {
   const activeTeams = asArray(teams).filter((team) => team?.id);
   if (activeTeams.length < 2) return [];
 
-  const matchCount = Number(meetings) === 1 ? 1 : 2;
+  const meetingCount = clampMeetings(meetings);
   const rotation = [...activeTeams];
   if (rotation.length % 2 === 1) rotation.push(null);
-
-  const pairings = [];
-  const rounds = rotation.length - 1;
+  const roundsPerCycle = rotation.length - 1;
   let current = [...rotation];
+  const firstCycle = [];
 
-  for (let roundIndex = 0; roundIndex < rounds; roundIndex += 1) {
+  for (let roundIndex = 0; roundIndex < roundsPerCycle; roundIndex += 1) {
     for (let pairIndex = 0; pairIndex < current.length / 2; pairIndex += 1) {
       const left = current[pairIndex];
       const right = current[current.length - 1 - pairIndex];
       if (!left || !right) continue;
-      pairings.push({ roundNumber: roundIndex + 1, pairIndex, left, right });
+      const flip = pairIndex === 0 ? roundIndex % 2 === 1 : (roundIndex + pairIndex) % 2 === 0;
+      firstCycle.push({
+        roundNumber: roundIndex + 1,
+        pairIndex,
+        homeTeamId: flip ? right.id : left.id,
+        awayTeamId: flip ? left.id : right.id,
+        meetingNumber: 1,
+      });
     }
     current = rotateRoundRobin(current);
   }
 
-  // Orient each pairing greedily so every team finishes a single round robin
-  // with an equal home/away split (odd team count) or a one-game difference.
-  const balance = new Map(activeTeams.map((team) => [team.id, 0]));
-  const firstLeg = pairings.map(({ roundNumber, pairIndex, left, right }) => {
-    const leftBalance = balance.get(left.id) || 0;
-    const rightBalance = balance.get(right.id) || 0;
-    let home = left;
-    let away = right;
-    if (rightBalance < leftBalance || (rightBalance === leftBalance && (roundNumber + pairIndex) % 2 === 1)) {
-      home = right;
-      away = left;
-    }
-    balance.set(home.id, (balance.get(home.id) || 0) + 1);
-    balance.set(away.id, (balance.get(away.id) || 0) - 1);
-    return { roundNumber, homeTeamId: home.id, awayTeamId: away.id };
+  const fixtures = [];
+  for (let meetingNumber = 1; meetingNumber <= meetingCount; meetingNumber += 1) {
+    const cycleIndex = meetingNumber - 1;
+    firstCycle.forEach((baseFixture) => {
+      const oddExtraFlip = meetingNumber > 2 && ((baseFixture.roundNumber + baseFixture.pairIndex + meetingNumber) % 2 === 0);
+      const reverse = meetingNumber % 2 === 0;
+      const shouldFlip = reverse !== oddExtraFlip;
+      fixtures.push({
+        roundNumber: baseFixture.roundNumber + (cycleIndex * roundsPerCycle),
+        homeTeamId: shouldFlip ? baseFixture.awayTeamId : baseFixture.homeTeamId,
+        awayTeamId: shouldFlip ? baseFixture.homeTeamId : baseFixture.awayTeamId,
+        meetingNumber,
+      });
+    });
+  }
+
+  return optimiseFixtureOrientation(fixtures, activeTeams, {
+    maxRun: asPositiveInteger(maxConsecutive, 2, 6),
+    meetings: meetingCount,
   });
-
-  if (matchCount === 1) return firstLeg;
-
-  const secondLeg = firstLeg.map((fixture) => ({
-    roundNumber: fixture.roundNumber + rounds,
-    homeTeamId: fixture.awayTeamId,
-    awayTeamId: fixture.homeTeamId,
-  }));
-
-  return [...firstLeg, ...secondLeg];
 }
 
 function playingDatesForDivision(workspace, seasonId, divisionId) {
   const season = getSeason(workspace, seasonId);
+  const division = getDivision(workspace, divisionId);
+  const rule = divisionRule(workspace, division, season);
   const rows = asArray(workspace?.playingDates)
     .filter((row) => row.seasonId === seasonId)
     .filter((row) => !row.divisionId || row.divisionId === divisionId)
     .filter((row) => row.status === "available")
-    .filter((row) => {
-      if (!season?.startsOn || !season?.endsOn) return true;
-      return dateWithin(row.playingDate, season.startsOn, season.endsOn);
-    });
+    .filter((row) => !rule.startsOn || !rule.endsOn || dateWithin(row.playingDate, rule.startsOn, rule.endsOn));
 
   const byDate = new Map();
   rows.forEach((row) => {
+    const normalised = { ...row, defaultKickOff: toTime(row.defaultKickOff, rule.defaultKickOff) };
     const existing = byDate.get(row.playingDate);
-    if (!existing || (!existing.divisionId && row.divisionId === divisionId)) {
-      byDate.set(row.playingDate, row);
-    }
+    if (!existing || (!existing.divisionId && row.divisionId === divisionId)) byDate.set(row.playingDate, normalised);
   });
-
   return [...byDate.values()].sort((left, right) => left.playingDate.localeCompare(right.playingDate));
 }
 
@@ -163,28 +248,17 @@ function groundKeyForVenue(venue) {
 function groundCapacityMap(workspace) {
   const capacities = new Map();
   asArray(workspace?.venues).forEach((venue) => {
-    if (!venue?.id || venue.status === "inactive" || venue.status === "unavailable") return;
+    if (!venue?.id || ["inactive", "unavailable"].includes(venue.status)) return;
     const key = groundKeyForVenue(venue);
-    capacities.set(
-      key,
-      (capacities.get(key) || 0) + asPositiveInteger(venue.simultaneousFixtureLimit, 1),
-    );
+    capacities.set(key, (capacities.get(key) || 0) + asPositiveInteger(venue.simultaneousFixtureLimit, 1, 20));
   });
   return capacities;
 }
 
-function applicableBlackouts(workspace, {
-  seasonId,
-  divisionId,
-  homeTeam,
-  awayTeam,
-  venueId,
-  scheduledDate,
-}) {
+function applicableBlackouts(workspace, { seasonId, divisionId, homeTeam, awayTeam, venueId, scheduledDate }) {
   if (!scheduledDate) return [];
   const clubIds = new Set([homeTeam?.parentClubId, awayTeam?.parentClubId].filter(Boolean));
   const teamIds = new Set([homeTeam?.id, awayTeam?.id].filter(Boolean));
-
   return asArray(workspace?.blackouts).filter((blackout) => {
     if (blackout.seasonId && blackout.seasonId !== seasonId) return false;
     if (!dateWithin(scheduledDate, blackout.startsOn, blackout.endsOn || blackout.startsOn)) return false;
@@ -197,8 +271,29 @@ function applicableBlackouts(workspace, {
   });
 }
 
-function createResourceState(workspace) {
-  return {
+function cupReservations(workspace, seasonId) {
+  return asArray(workspace?.cupTies)
+    .filter((tie) => tie.seasonId === seasonId && tie.scheduledDate && !["cancelled", "void", "bye", "postponed"].includes(tie.status))
+    .filter((tie) => tie.homeTeamId || tie.awayTeamId)
+    .map((tie) => ({
+      id: tie.id,
+      clientKey: `cup:${tie.cupId}:${tie.id}`,
+      competitionType: "cup",
+      cupId: tie.cupId,
+      cupTieId: tie.id,
+      seasonId: tie.seasonId,
+      divisionId: "",
+      homeTeamId: tie.homeTeamId || tie.winnerTeamId || "",
+      awayTeamId: tie.awayTeamId || "",
+      venueId: tie.venueId || "",
+      scheduledDate: tie.scheduledDate,
+      kickOff: tie.kickOff || "",
+      locked: true,
+    }));
+}
+
+function createResourceState(workspace, reservedEntries = []) {
+  const state = {
     teamDates: new Set(),
     venueSlots: new Map(),
     groundSlots: new Map(),
@@ -206,18 +301,19 @@ function createResourceState(workspace) {
     teamById: teamMap(workspace),
     groundCapacities: groundCapacityMap(workspace),
   };
+  reservedEntries.forEach((entry) => reserveEntry(state, entry));
+  return state;
 }
 
 function reserveEntry(state, entry) {
   if (!entry.scheduledDate) return;
   const kickOff = toTime(entry.kickOff);
-  state.teamDates.add(`${entry.scheduledDate}|${entry.homeTeamId}`);
-  state.teamDates.add(`${entry.scheduledDate}|${entry.awayTeamId}`);
+  if (entry.homeTeamId) state.teamDates.add(`${entry.scheduledDate}|${entry.homeTeamId}`);
+  if (entry.awayTeamId) state.teamDates.add(`${entry.scheduledDate}|${entry.awayTeamId}`);
   const venue = state.venueById.get(entry.venueId);
-  if (venue?.id) {
-    const venueSlotKey = `${entry.scheduledDate}|${kickOff}|${venue.id}`;
-    state.venueSlots.set(venueSlotKey, (state.venueSlots.get(venueSlotKey) || 0) + 1);
-  }
+  if (!venue?.id) return;
+  const venueSlotKey = `${entry.scheduledDate}|${kickOff}|${venue.id}`;
+  state.venueSlots.set(venueSlotKey, (state.venueSlots.get(venueSlotKey) || 0) + 1);
   const groundKey = groundKeyForVenue(venue);
   const slotKey = `${entry.scheduledDate}|${kickOff}|${groundKey}`;
   state.groundSlots.set(slotKey, (state.groundSlots.get(slotKey) || 0) + 1);
@@ -225,7 +321,10 @@ function reserveEntry(state, entry) {
 
 function checkPlacement(workspace, state, fixture, dateRow) {
   const scheduledDate = dateRow.playingDate;
-  const kickOff = toTime(dateRow.defaultKickOff);
+  const season = getSeason(workspace, fixture.seasonId);
+  const division = getDivision(workspace, fixture.divisionId);
+  const rule = divisionRule(workspace, division, season);
+  const kickOff = toTime(dateRow.defaultKickOff, rule.defaultKickOff);
   const homeTeam = state.teamById.get(fixture.homeTeamId);
   const awayTeam = state.teamById.get(fixture.awayTeamId);
   const venueId = fixture.venueId || homeTeam?.homeVenueId || "";
@@ -234,52 +333,44 @@ function checkPlacement(workspace, state, fixture, dateRow) {
 
   if (!homeTeam || !awayTeam) blockers.push({ code: "missing-team", label: "team record missing" });
   if (!venue) blockers.push({ code: "missing-venue", label: "home venue missing" });
+  if (!kickOff) blockers.push({ code: "missing-kick-off", label: "league kick-off setting missing" });
+  if (rule.startsOn && scheduledDate < rule.startsOn) blockers.push({ code: "before-division-start", label: `${division?.name || "Division"} has not started` });
+  if (rule.endsOn && scheduledDate > rule.endsOn) blockers.push({ code: "after-division-end", label: `${division?.name || "Division"} has ended` });
   if (state.teamDates.has(`${scheduledDate}|${fixture.homeTeamId}`)) blockers.push({ code: "home-team-clash", label: `${homeTeam?.name || "Home team"} already plays` });
   if (state.teamDates.has(`${scheduledDate}|${fixture.awayTeamId}`)) blockers.push({ code: "away-team-clash", label: `${awayTeam?.name || "Away team"} already plays` });
 
-  const blackouts = applicableBlackouts(workspace, {
-    seasonId: fixture.seasonId,
-    divisionId: fixture.divisionId,
-    homeTeam,
-    awayTeam,
-    venueId,
-    scheduledDate,
-  });
-  blackouts.forEach((blackout) => blockers.push({
-    code: `blackout-${blackout.scopeType}`,
-    label: blackout.reason || `${blackout.scopeType} blackout`,
-  }));
+  applicableBlackouts(workspace, { seasonId: fixture.seasonId, divisionId: fixture.divisionId, homeTeam, awayTeam, venueId, scheduledDate })
+    .forEach((blackout) => blockers.push({ code: `blackout-${blackout.scopeType}`, label: blackout.reason || `${blackout.scopeType} blackout` }));
 
   if (venue) {
     const venueSlotKey = `${scheduledDate}|${kickOff}|${venue.id}`;
     const venueUsed = state.venueSlots.get(venueSlotKey) || 0;
-    const venueCapacity = asPositiveInteger(venue.simultaneousFixtureLimit, 1);
+    const venueCapacity = asPositiveInteger(venue.simultaneousFixtureLimit, 1, 20);
     if (venueUsed >= venueCapacity) blockers.push({ code: "venue-capacity", label: `${venue.name} is already in use` });
-
     const groundKey = groundKeyForVenue(venue);
     const slotKey = `${scheduledDate}|${kickOff}|${groundKey}`;
     const used = state.groundSlots.get(slotKey) || 0;
     const capacity = state.groundCapacities.get(groundKey) || 1;
     if (used >= capacity) blockers.push({ code: "ground-capacity", label: `${venue.name} has no simultaneous-fixture capacity` });
   }
-
   return { blockers, scheduledDate, kickOff, venueId };
 }
 
 function reasonFromBlockers(blockerCounts, datesCount) {
-  if (!datesCount) return "No available playing dates are configured for this division.";
+  if (!datesCount) return "No available playing dates are configured inside this division's start and end dates.";
   const ranked = [...blockerCounts.entries()].sort((left, right) => right[1] - left[1]);
   if (!ranked.length) return "No valid playing date remained for this fixture.";
-  const labels = ranked.slice(0, 2).map(([label, count]) => `${label}${count > 1 ? ` (${count} dates)` : ""}`);
-  return `No valid playing date remained: ${labels.join("; ")}.`;
+  return `No valid playing date remained: ${ranked.slice(0, 2).map(([label, count]) => `${label}${count > 1 ? ` (${count} dates)` : ""}`).join("; ")}.`;
 }
 
-function candidateRowsForRound(rows, roundNumber) {
+function candidateRowsForRound(rows, roundNumber, totalRounds) {
   if (!rows.length) return [];
-  const targetIndex = Math.min(Math.max(roundNumber - 1, 0), rows.length - 1);
+  const targetIndex = totalRounds > 1
+    ? Math.min(rows.length - 1, Math.max(0, Math.round(((roundNumber - 1) / (totalRounds - 1)) * (rows.length - 1))))
+    : 0;
   return rows
-    .map((row, index) => ({ row, index, distance: Math.abs(index - targetIndex), later: index >= targetIndex ? 0 : 1 }))
-    .sort((left, right) => left.distance - right.distance || left.later - right.later || left.index - right.index)
+    .map((row, index) => ({ row, index, distance: Math.abs(index - targetIndex), earlierPenalty: index < targetIndex ? 1 : 0 }))
+    .sort((left, right) => left.distance - right.distance || left.earlierPenalty - right.earlierPenalty || left.index - right.index)
     .map((item) => item.row);
 }
 
@@ -291,12 +382,17 @@ function normaliseBaseEntry(entry = {}) {
     sourceFixtureId: entry.sourceFixtureId || "",
     seasonId: entry.seasonId || "",
     divisionId: entry.divisionId || "",
+    competitionType: entry.competitionType || "league",
+    competitionId: entry.competitionId || entry.cupId || "",
+    cupId: entry.cupId || entry.competitionId || "",
+    cupTieId: entry.cupTieId || "",
     homeTeamId: entry.homeTeamId || "",
     awayTeamId: entry.awayTeamId || "",
     venueId: entry.venueId || "",
     scheduledDate: isoDate(entry.scheduledDate),
-    kickOff: toTime(entry.kickOff),
+    kickOff: toTime(entry.kickOff, ""),
     roundNumber: Number(entry.roundNumber || 0),
+    meetingNumber: Number(entry.meetingNumber || 1),
     placementStatus: entry.scheduledDate ? "placed" : "unplaced",
     locked: Boolean(entry.locked),
     unresolvedReason: entry.unresolvedReason || "",
@@ -304,235 +400,195 @@ function normaliseBaseEntry(entry = {}) {
   };
 }
 
-function existingFixtureLookup(workspace, seasonId, meetings) {
+function existingFixtureLookup(workspace, seasonId) {
   const lookup = new Map();
   asArray(workspace?.fixtures)
     .filter((fixture) => fixture.seasonId === seasonId && !["cancelled", "played"].includes(fixture.status))
     .forEach((fixture) => {
-      const key = meetings === 1
-        ? unorderedPairKey(fixture.homeTeamId, fixture.awayTeamId)
-        : pairKey(fixture.homeTeamId, fixture.awayTeamId);
+      const key = `league:${fixture.divisionId || ""}:${unorderedPairKey(fixture.homeTeamId, fixture.awayTeamId)}:${Number(fixture.meetingNumber || 1)}`;
       if (!lookup.has(key) || fixture.locked) lookup.set(key, fixture);
     });
   return lookup;
 }
 
+function selectedDivisions(workspace, season, divisionIds = []) {
+  const selected = new Set(asArray(divisionIds).filter(Boolean));
+  return asArray(workspace?.divisions)
+    .filter((division) => division.seasonId === season.id)
+    .filter((division) => !selected.size || selected.has(division.id))
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.name.localeCompare(right.name, "en-GB"));
+}
+
 export function getLeagueSchedulePreflight(workspace = {}, options = {}) {
   const season = getSeason(workspace, options.seasonId);
-  if (!season) {
-    return {
-      ready: false,
-      season: null,
-      meetings: Number(options.meetings) === 1 ? 1 : 2,
-      divisions: [],
-      totalFixtures: 0,
-      minimumDates: 0,
-      configuredDates: 0,
-      errors: ["Create a current season before generating a schedule."],
-    };
-  }
-
-  const meetings = Number(options.meetings) === 1 ? 1 : 2;
-  const selectedDivisionIds = new Set(asArray(options.divisionIds).filter(Boolean));
-  const divisions = asArray(workspace.divisions)
-    .filter((division) => division.seasonId === season.id)
-    .filter((division) => !selectedDivisionIds.size || selectedDivisionIds.has(division.id))
-    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.name.localeCompare(right.name, "en-GB"))
-    .map((division) => {
-      const teams = getDivisionTeams(workspace, division.id, season.id);
-      const matrix = buildDivisionFixtureMatrix(teams, { meetings });
-      const requiredRounds = matrix.reduce((maximum, fixture) => Math.max(maximum, Number(fixture.roundNumber || 0)), 0);
-      const availableDates = playingDatesForDivision(workspace, season.id, division.id).length;
-      return {
-        id: division.id,
-        name: division.name,
-        teams: teams.length,
-        fixtures: matrix.length,
-        requiredRounds,
-        availableDates,
-        shortfall: Math.max(requiredRounds - availableDates, 0),
-      };
-    });
-
-  const errors = divisions
-    .filter((division) => division.teams < 2)
-    .map((division) => `${division.name} needs at least two active teams.`);
+  if (!season) return { ready: false, season: null, divisions: [], totalFixtures: 0, minimumDates: 0, configuredDates: 0, dateShortfalls: [], errors: ["Create a current season before generating a schedule."] };
+  const divisions = selectedDivisions(workspace, season, options.divisionIds).map((division) => {
+    const rule = divisionRule(workspace, division, season);
+    const teams = getDivisionTeams(workspace, division.id, season.id);
+    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
+    const requiredRounds = matrix.reduce((maximum, fixture) => Math.max(maximum, fixture.roundNumber), 0);
+    const availableDates = playingDatesForDivision(workspace, season.id, division.id).length;
+    return { id: division.id, name: division.name, teams: teams.length, fixtures: matrix.length, requiredRounds, availableDates, shortfall: Math.max(requiredRounds - availableDates, 0), ...rule };
+  });
+  const errors = [];
+  if (!season.startsOn || !season.endsOn) errors.push("Set the season start and end dates.");
+  if (!season.defaultKickOff) errors.push("Set the league default kick-off in the season settings.");
+  if (season.primaryWeekday === null || season.primaryWeekday === undefined || season.primaryWeekday === "") errors.push("Set the league primary playing day.");
+  divisions.forEach((division) => {
+    if (division.teams < 2) errors.push(`${division.name} needs at least two active teams.`);
+    if (!division.startsOn || !division.endsOn) errors.push(`${division.name} needs a valid start and end date.`);
+    if (division.startsOn && division.endsOn && division.endsOn < division.startsOn) errors.push(`${division.name} ends before it starts.`);
+    if (!division.defaultKickOff) errors.push(`${division.name} has no kick-off setting to inherit or override.`);
+  });
   const dateShortfalls = divisions.filter((division) => division.shortfall > 0);
-  const configuredDates = divisions.length
-    ? Math.min(...divisions.map((division) => division.availableDates))
-    : 0;
-
   return {
-    ready: errors.length === 0 && dateShortfalls.length === 0 && divisions.length > 0,
+    ready: divisions.length > 0 && errors.length === 0 && dateShortfalls.length === 0,
     season,
-    meetings,
     divisions,
     totalFixtures: divisions.reduce((total, division) => total + division.fixtures, 0),
     minimumDates: divisions.reduce((maximum, division) => Math.max(maximum, division.requiredRounds), 0),
-    configuredDates,
+    configuredDates: divisions.length ? Math.min(...divisions.map((division) => division.availableDates)) : 0,
     dateShortfalls,
     errors,
   };
 }
 
-/**
- * Generates a complete draft schedule in memory. The result is deterministic for
- * the same workspace and options, which makes schedule comparisons auditable.
- */
+/** Generates the full league programme in one shared allocation pass. */
 export function generateLeagueSchedule(workspace = {}, options = {}) {
   const season = getSeason(workspace, options.seasonId);
-  if (!season) {
-    return {
-      entries: [],
-      config: { meetings: Number(options.meetings) === 1 ? 1 : 2 },
-      summary: { divisions: 0, fixtures: 0, placed: 0, unplaced: 0, locked: 0 },
-      errors: ["Create a current season before generating a schedule."],
-    };
-  }
+  if (!season) return { entries: [], config: {}, summary: { divisions: 0, fixtures: 0, placed: 0, unplaced: 0, locked: 0 }, errors: ["Create a current season before generating a schedule."] };
 
-  const meetings = Number(options.meetings) === 1 ? 1 : 2;
-  const selectedDivisionIds = new Set(asArray(options.divisionIds).filter(Boolean));
-  const divisions = asArray(workspace.divisions)
-    .filter((division) => division.seasonId === season.id)
-    .filter((division) => !selectedDivisionIds.size || selectedDivisionIds.has(division.id))
-    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.name.localeCompare(right.name, "en-GB"));
-
+  const divisions = selectedDivisions(workspace, season, options.divisionIds);
   const baseEntries = asArray(options.baseEntries).map(normaliseBaseEntry);
   const preservePlacedBaseEntries = Boolean(options.preservePlacedBaseEntries);
-  const baseByPair = new Map();
-  baseEntries.forEach((entry) => {
-    if (!entry.homeTeamId || !entry.awayTeamId) return;
-    if (preservePlacedBaseEntries && !entry.scheduledDate) return;
-    baseByPair.set(entryPairKey(entry, meetings), entry);
-  });
-
-  const state = createResourceState(workspace);
-  const existingByPair = existingFixtureLookup(workspace, season.id, meetings);
+  const baseByIdentity = new Map(baseEntries.filter((entry) => entry.homeTeamId && entry.awayTeamId).map((entry) => [fixtureIdentity(entry), entry]));
+  const existingByIdentity = existingFixtureLookup(workspace, season.id);
+  const reservations = [
+    ...cupReservations(workspace, season.id),
+    ...asArray(options.reservedEntries).map(normaliseBaseEntry),
+  ];
+  const state = createResourceState(workspace, reservations);
   const entries = [];
   const errors = [];
+  const queue = [];
+  const divisionRules = {};
 
   divisions.forEach((division) => {
     const teams = getDivisionTeams(workspace, division.id, season.id);
+    const rule = divisionRule(workspace, division, season);
+    divisionRules[division.id] = rule;
     if (teams.length < 2) {
       errors.push(`${division.name} needs at least two active teams.`);
       return;
     }
-
+    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
     const dates = playingDatesForDivision(workspace, season.id, division.id);
-    const matrix = buildDivisionFixtureMatrix(teams, { meetings });
-    const matrixPairKeys = new Set(matrix.map((fixture) => entryPairKey(fixture, meetings)));
-
-    // Preserve placed entries from the selected version before allocating new work.
-    matrix.forEach((fixture) => {
-      const key = entryPairKey(fixture, meetings);
-      const base = baseByPair.get(key);
-      const existing = existingByPair.get(key);
-      const fixed = base || (existing?.locked ? normaliseBaseEntry({
-        ...existing,
-        sourceFixtureId: existing.id,
-        roundNumber: fixture.roundNumber,
-      }) : null);
-      if (!fixed || !fixed.scheduledDate) return;
-
-      const entry = {
-        ...fixed,
-        clientKey: fixed.clientKey || `${division.id}:${fixture.homeTeamId}:${fixture.awayTeamId}`,
-        seasonId: season.id,
-        divisionId: division.id,
-        roundNumber: fixed.roundNumber || fixture.roundNumber,
-        placementStatus: "placed",
-        sourceFixtureId: fixed.sourceFixtureId || existing?.id || "",
-      };
-      entries.push(entry);
-      reserveEntry(state, entry);
-    });
+    const totalRounds = matrix.reduce((max, fixture) => Math.max(max, fixture.roundNumber), 0);
 
     matrix.forEach((fixture) => {
-      const key = entryPairKey(fixture, meetings);
-      if (entries.some((entry) => entry.divisionId === division.id && entryPairKey(entry, meetings) === key)) return;
-
-      const homeTeam = state.teamById.get(fixture.homeTeamId);
-      const existing = existingByPair.get(key);
-      const placementFixture = {
-        ...fixture,
-        seasonId: season.id,
-        divisionId: division.id,
-        venueId: homeTeam?.homeVenueId || existing?.venueId || "",
-      };
-      const blockerCounts = new Map();
-      let placed = null;
-
-      for (const dateRow of candidateRowsForRound(dates, fixture.roundNumber)) {
-        const result = checkPlacement(workspace, state, placementFixture, dateRow);
-        if (!result.blockers.length) {
-          placed = {
-            clientKey: `${division.id}:${fixture.homeTeamId}:${fixture.awayTeamId}`,
-            sourceFixtureId: existing?.id || "",
-            seasonId: season.id,
-            divisionId: division.id,
-            homeTeamId: fixture.homeTeamId,
-            awayTeamId: fixture.awayTeamId,
-            venueId: result.venueId,
-            scheduledDate: result.scheduledDate,
-            kickOff: result.kickOff,
-            roundNumber: fixture.roundNumber,
-            placementStatus: "placed",
-            locked: false,
-            unresolvedReason: "",
-            notes: "",
-          };
-          break;
-        }
-        result.blockers.forEach((blocker) => {
-          blockerCounts.set(blocker.label, (blockerCounts.get(blocker.label) || 0) + 1);
-        });
-      }
-
-      if (!placed) {
-        placed = {
-          clientKey: `${division.id}:${fixture.homeTeamId}:${fixture.awayTeamId}`,
-          sourceFixtureId: existing?.id || "",
+      const template = { ...fixture, seasonId: season.id, divisionId: division.id, competitionType: "league" };
+      const identity = fixtureIdentity(template);
+      const base = baseByIdentity.get(identity);
+      const existing = existingByIdentity.get(identity);
+      const fixed = base && preservePlacedBaseEntries && base.scheduledDate
+        ? base
+        : existing?.locked
+          ? normaliseBaseEntry({ ...existing, meetingNumber: fixture.meetingNumber, roundNumber: fixture.roundNumber, sourceFixtureId: existing.id })
+          : null;
+      if (fixed?.scheduledDate) {
+        const entry = {
+          ...fixed,
+          clientKey: fixed.clientKey || identity,
           seasonId: season.id,
           divisionId: division.id,
-          homeTeamId: fixture.homeTeamId,
-          awayTeamId: fixture.awayTeamId,
-          venueId: homeTeam?.homeVenueId || existing?.venueId || "",
-          scheduledDate: "",
-          kickOff: "",
-          roundNumber: fixture.roundNumber,
-          placementStatus: "unplaced",
-          locked: false,
-          unresolvedReason: reasonFromBlockers(blockerCounts, dates.length),
-          notes: "",
+          competitionType: "league",
+          meetingNumber: fixture.meetingNumber,
+          roundNumber: fixed.roundNumber || fixture.roundNumber,
+          kickOff: fixed.kickOff || rule.defaultKickOff,
+          placementStatus: "placed",
         };
-      } else {
-        reserveEntry(state, placed);
+        entries.push(entry);
+        reserveEntry(state, entry);
+        return;
       }
-
-      entries.push(placed);
+      queue.push({ division, teams, rule, dates, totalRounds, fixture, identity, base, existing });
     });
-
-    // Surface base entries that no longer belong to the matrix instead of silently losing them.
-    baseEntries
-      .filter((entry) => entry.divisionId === division.id)
-      .filter((entry) => !matrixPairKeys.has(entryPairKey(entry, meetings)))
-      .forEach(() => errors.push(`A preserved fixture in ${division.name} no longer matches the active team matrix.`));
   });
 
-  entries.sort((left, right) => (
-    Number(left.roundNumber || 0) - Number(right.roundNumber || 0)
-    || String(left.scheduledDate || "9999-12-31").localeCompare(String(right.scheduledDate || "9999-12-31"))
-    || left.homeTeamId.localeCompare(right.homeTeamId)
+  queue.sort((left, right) => (
+    left.fixture.roundNumber - right.fixture.roundNumber
+    || left.dates.length - right.dates.length
+    || Number(left.division.sortOrder || 0) - Number(right.division.sortOrder || 0)
+    || left.identity.localeCompare(right.identity)
   ));
+
+  queue.forEach(({ division, rule, dates, totalRounds, fixture, identity, base, existing }) => {
+    const homeTeam = state.teamById.get(fixture.homeTeamId);
+    const placementFixture = { ...fixture, seasonId: season.id, divisionId: division.id, venueId: homeTeam?.homeVenueId || existing?.venueId || base?.venueId || "" };
+    const blockerCounts = new Map();
+    let placed = null;
+    for (const dateRow of candidateRowsForRound(dates, fixture.roundNumber, totalRounds)) {
+      const result = checkPlacement(workspace, state, placementFixture, dateRow);
+      if (!result.blockers.length) {
+        placed = {
+          clientKey: identity,
+          sourceFixtureId: existing?.id || base?.sourceFixtureId || "",
+          seasonId: season.id,
+          divisionId: division.id,
+          competitionType: "league",
+          homeTeamId: fixture.homeTeamId,
+          awayTeamId: fixture.awayTeamId,
+          venueId: result.venueId,
+          scheduledDate: result.scheduledDate,
+          kickOff: result.kickOff || rule.defaultKickOff,
+          roundNumber: fixture.roundNumber,
+          meetingNumber: fixture.meetingNumber,
+          placementStatus: "placed",
+          locked: false,
+          unresolvedReason: "",
+          notes: base?.notes || "",
+        };
+        break;
+      }
+      result.blockers.forEach((blocker) => blockerCounts.set(blocker.label, (blockerCounts.get(blocker.label) || 0) + 1));
+    }
+    const entry = placed || {
+      clientKey: identity,
+      sourceFixtureId: existing?.id || base?.sourceFixtureId || "",
+      seasonId: season.id,
+      divisionId: division.id,
+      competitionType: "league",
+      homeTeamId: fixture.homeTeamId,
+      awayTeamId: fixture.awayTeamId,
+      venueId: placementFixture.venueId,
+      scheduledDate: "",
+      kickOff: "",
+      roundNumber: fixture.roundNumber,
+      meetingNumber: fixture.meetingNumber,
+      placementStatus: "unplaced",
+      locked: false,
+      unresolvedReason: reasonFromBlockers(blockerCounts, dates.length),
+      notes: base?.notes || "",
+    };
+    entries.push(entry);
+    if (placed) reserveEntry(state, entry);
+  });
+
+  entries.sort((left, right) => Number(left.roundNumber || 0) - Number(right.roundNumber || 0)
+    || String(left.scheduledDate || "9999-12-31").localeCompare(String(right.scheduledDate || "9999-12-31"))
+    || left.divisionId.localeCompare(right.divisionId)
+    || left.homeTeamId.localeCompare(right.homeTeamId));
 
   return {
     entries,
     config: {
       seasonId: season.id,
-      meetings,
+      allDivisions: !asArray(options.divisionIds).length,
       divisionIds: divisions.map((division) => division.id),
-      preservePlacedBaseEntries,
-      generatedAt: new Date().toISOString(),
+      divisionRules,
+      defaultKickOff: toTime(season.defaultKickOff, ""),
+      primaryWeekday: Number(season.primaryWeekday ?? 6),
+      cupReservations: reservations.length,
     },
     summary: {
       divisions: divisions.length,
@@ -540,40 +596,35 @@ export function generateLeagueSchedule(workspace = {}, options = {}) {
       placed: entries.filter((entry) => entry.scheduledDate).length,
       unplaced: entries.filter((entry) => !entry.scheduledDate).length,
       locked: entries.filter((entry) => entry.locked).length,
+      cupReservations: reservations.length,
     },
     errors,
   };
 }
 
-function issue({ code, severity = "blocking", message, entryIds = [], divisionId = "", teamId = "", date = "" }) {
-  return {
-    id: `${code}:${divisionId || teamId || date || entryIds.join("-") || message}`,
-    code,
-    severity,
-    message,
-    entryIds,
-    divisionId,
-    teamId,
-    date,
-  };
+function issue({ code, severity = "blocking", message, entryIds = [], teamId = "", divisionId = "", date = "" }) {
+  return { id: `${code}:${divisionId}:${teamId}:${date}:${entryIds.join("-")}`, code, severity, message, entryIds, teamId, divisionId, date };
 }
 
 function nameOf(map, id, fallback) {
-  return map.get(id)?.name || fallback || id || "Unknown";
+  return map.get(id)?.name || fallback;
 }
 
-function consecutiveRunIssues(entries, workspace, maxRun = 3) {
+function consecutiveRunIssues(entries, workspace) {
   const teams = teamMap(workspace);
+  const divisions = divisionMap(workspace);
   const fixturesByTeam = new Map();
-  entries.filter((entry) => entry.scheduledDate).forEach((entry) => {
-    for (const teamId of [entry.homeTeamId, entry.awayTeamId]) {
+  entries.filter((entry) => entry.scheduledDate && entry.competitionType !== "cup").forEach((entry) => {
+    [entry.homeTeamId, entry.awayTeamId].forEach((teamId) => {
       if (!fixturesByTeam.has(teamId)) fixturesByTeam.set(teamId, []);
       fixturesByTeam.get(teamId).push(entry);
-    }
+    });
   });
-
   const issues = [];
   fixturesByTeam.forEach((teamEntries, teamId) => {
+    const division = divisions.get(teamEntries[0]?.divisionId);
+    const season = getSeason(workspace, teamEntries[0]?.seasonId);
+    const maxRun = divisionRule(workspace, division, season).maxConsecutive;
     const sorted = [...teamEntries].sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate) || left.kickOff.localeCompare(right.kickOff));
     let lastSide = "";
     let run = 0;
@@ -581,245 +632,140 @@ function consecutiveRunIssues(entries, workspace, maxRun = 3) {
     sorted.forEach((entry) => {
       const side = entry.homeTeamId === teamId ? "home" : "away";
       if (side === lastSide) run += 1;
-      else {
-        lastSide = side;
-        run = 1;
-      }
+      else { lastSide = side; run = 1; }
       maxObserved = Math.max(maxObserved, run);
     });
-    if (maxObserved > maxRun) {
-      issues.push(issue({
-        code: "long-home-away-run",
-        severity: "warning",
-        teamId,
-        message: `${nameOf(teams, teamId, "Team")} has a run of ${maxObserved} consecutive home or away fixtures.`,
-      }));
-    }
+    if (maxObserved > maxRun) issues.push(issue({
+      code: "long-home-away-run",
+      severity: "warning",
+      teamId,
+      divisionId: division?.id || "",
+      message: `${nameOf(teams, teamId, "Team")} has a run of ${maxObserved} consecutive home or away league fixtures; the division target is ${maxRun}.`,
+    }));
   });
   return issues;
 }
 
-/** Validates a generated or persisted schedule version. */
 export function validateLeagueSchedule(workspace = {}, entriesInput = [], config = {}) {
   const entries = asArray(entriesInput).map(normaliseBaseEntry);
-  const meetings = Number(config.meetings) === 1 ? 1 : 2;
   const season = getSeason(workspace, config.seasonId || entries[0]?.seasonId);
   const teams = teamMap(workspace);
   const venues = venueMap(workspace);
   const divisions = divisionMap(workspace);
   const capacities = groundCapacityMap(workspace);
   const issues = [];
+  const reservations = cupReservations(workspace, season?.id || "");
 
   entries.forEach((entry) => {
     if (!entry.scheduledDate) {
-      issues.push(issue({
-        code: "unplaced-fixture",
-        message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} is unplaced. ${entry.unresolvedReason || ""}`.trim(),
-        entryIds: [stableEntryKey(entry)],
-        divisionId: entry.divisionId,
-      }));
+      issues.push(issue({ code: "unplaced-fixture", message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} is unplaced. ${entry.unresolvedReason || ""}`.trim(), entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId }));
       return;
     }
-    if (!entry.venueId || !venues.has(entry.venueId)) {
-      issues.push(issue({
-        code: "missing-venue",
-        message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} has no valid venue.`,
-        entryIds: [stableEntryKey(entry)],
-        divisionId: entry.divisionId,
-        date: entry.scheduledDate,
-      }));
-    }
-
+    const division = divisions.get(entry.divisionId);
+    const rule = divisionRule(workspace, division, season);
+    if (rule.startsOn && entry.scheduledDate < rule.startsOn) issues.push(issue({ code: "before-division-start", message: `${nameOf(divisions, entry.divisionId, "Division")} fixture is scheduled before its ${rule.startsOn} start date.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate }));
+    if (rule.endsOn && entry.scheduledDate > rule.endsOn) issues.push(issue({ code: "after-division-end", message: `${nameOf(divisions, entry.divisionId, "Division")} fixture is scheduled after its ${rule.endsOn} end date.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate }));
+    if (!entry.venueId || !venues.has(entry.venueId)) issues.push(issue({ code: "missing-venue", message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} has no valid venue.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate }));
+    if (!toTime(entry.kickOff, rule.defaultKickOff)) issues.push(issue({ code: "missing-kick-off", message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} has no kick-off time and the league/division default is blank.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate }));
     const availableDates = playingDatesForDivision(workspace, entry.seasonId || season?.id, entry.divisionId);
-    if (!availableDates.some((row) => row.playingDate === entry.scheduledDate)) {
-      issues.push(issue({
-        code: "unavailable-playing-date",
-        message: `${entry.scheduledDate} is not an available playing date for ${nameOf(divisions, entry.divisionId, "this division")}.`,
-        entryIds: [stableEntryKey(entry)],
-        divisionId: entry.divisionId,
-        date: entry.scheduledDate,
-      }));
-    }
-
+    if (!availableDates.some((row) => row.playingDate === entry.scheduledDate)) issues.push(issue({ code: "unavailable-playing-date", message: `${entry.scheduledDate} is not an available playing date for ${nameOf(divisions, entry.divisionId, "this division")}.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate }));
     const homeTeam = teams.get(entry.homeTeamId);
     const awayTeam = teams.get(entry.awayTeamId);
-    const blackouts = applicableBlackouts(workspace, {
-      seasonId: entry.seasonId || season?.id,
-      divisionId: entry.divisionId,
-      homeTeam,
-      awayTeam,
-      venueId: entry.venueId,
-      scheduledDate: entry.scheduledDate,
-    });
-    blackouts.forEach((blackout) => issues.push(issue({
-      code: "blackout-violation",
-      message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} conflicts with “${blackout.reason}”.`,
-      entryIds: [stableEntryKey(entry)],
-      divisionId: entry.divisionId,
-      date: entry.scheduledDate,
-    })));
+    applicableBlackouts(workspace, { seasonId: entry.seasonId || season?.id, divisionId: entry.divisionId, homeTeam, awayTeam, venueId: entry.venueId, scheduledDate: entry.scheduledDate })
+      .forEach((blackout) => issues.push(issue({ code: "blackout-violation", message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} conflicts with “${blackout.reason}”.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate })));
+    reservations.filter((cup) => cup.scheduledDate === entry.scheduledDate && [cup.homeTeamId, cup.awayTeamId].some((teamId) => teamId && [entry.homeTeamId, entry.awayTeamId].includes(teamId)))
+      .forEach(() => issues.push(issue({ code: "cup-team-conflict", message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} clashes with a cup tie on ${entry.scheduledDate}.`, entryIds: [stableEntryKey(entry)], divisionId: entry.divisionId, date: entry.scheduledDate })));
   });
 
+  const allResourceEntries = [...entries.filter((entry) => entry.scheduledDate), ...reservations];
   const teamDateGroups = new Map();
-  entries.filter((entry) => entry.scheduledDate).forEach((entry) => {
-    for (const teamId of [entry.homeTeamId, entry.awayTeamId]) {
-      const key = `${entry.scheduledDate}|${teamId}`;
-      if (!teamDateGroups.has(key)) teamDateGroups.set(key, []);
-      teamDateGroups.get(key).push(entry);
-    }
-  });
+  allResourceEntries.forEach((entry) => [entry.homeTeamId, entry.awayTeamId].filter(Boolean).forEach((teamId) => {
+    const key = `${entry.scheduledDate}|${teamId}`;
+    if (!teamDateGroups.has(key)) teamDateGroups.set(key, []);
+    teamDateGroups.get(key).push(entry);
+  }));
   teamDateGroups.forEach((group, key) => {
     if (group.length < 2) return;
     const [date, teamId] = key.split("|");
-    issues.push(issue({
-      code: "team-double-booking",
-      message: `${nameOf(teams, teamId, "Team")} has ${group.length} fixtures on ${date}.`,
-      entryIds: group.map(stableEntryKey),
-      teamId,
-      date,
-    }));
+    issues.push(issue({ code: "team-double-booking", message: `${nameOf(teams, teamId, "Team")} has ${group.length} league/cup fixtures on ${date}.`, entryIds: group.filter((entry) => entry.competitionType !== "cup").map(stableEntryKey), teamId, date }));
   });
 
   const venueGroups = new Map();
-  entries.filter((entry) => entry.scheduledDate && entry.venueId).forEach((entry) => {
+  allResourceEntries.filter((entry) => entry.venueId).forEach((entry) => {
     const key = `${entry.scheduledDate}|${toTime(entry.kickOff)}|${entry.venueId}`;
     if (!venueGroups.has(key)) venueGroups.set(key, []);
     venueGroups.get(key).push(entry);
   });
-  venueGroups.forEach((groupedEntries, key) => {
+  venueGroups.forEach((group, key) => {
     const [date, kickOff, venueId] = key.split("|");
     const venue = venues.get(venueId);
-    const capacity = asPositiveInteger(venue?.simultaneousFixtureLimit, 1);
-    if (groupedEntries.length <= capacity) return;
-    issues.push(issue({
-      code: "venue-capacity-conflict",
-      message: `${venue?.name || "Venue"} has ${groupedEntries.length} simultaneous fixtures at ${kickOff} on ${date}, above its limit of ${capacity}.`,
-      entryIds: groupedEntries.map(stableEntryKey),
-      date,
-    }));
+    if (group.length > asPositiveInteger(venue?.simultaneousFixtureLimit, 1, 20)) issues.push(issue({ code: "venue-capacity-conflict", message: `${venue?.name || "Venue"} has ${group.length} simultaneous league/cup fixtures at ${kickOff} on ${date}.`, entryIds: group.filter((entry) => entry.competitionType !== "cup").map(stableEntryKey), date }));
   });
 
   const groundGroups = new Map();
-  entries.filter((entry) => entry.scheduledDate && entry.venueId).forEach((entry) => {
+  allResourceEntries.filter((entry) => entry.venueId).forEach((entry) => {
     const venue = venues.get(entry.venueId);
     const groundKey = groundKeyForVenue(venue);
     const key = `${entry.scheduledDate}|${toTime(entry.kickOff)}|${groundKey}`;
     if (!groundGroups.has(key)) groundGroups.set(key, { entries: [], venue, groundKey });
     groundGroups.get(key).entries.push(entry);
   });
-  groundGroups.forEach(({ entries: groupedEntries, venue, groundKey }, key) => {
+  groundGroups.forEach(({ entries: group, venue, groundKey }, key) => {
     const capacity = capacities.get(groundKey) || 1;
-    if (groupedEntries.length <= capacity) return;
+    if (group.length <= capacity) return;
     const [date, kickOff] = key.split("|");
-    issues.push(issue({
-      code: "ground-capacity-conflict",
-      message: `${venue?.name || "Shared ground"} has ${groupedEntries.length} simultaneous fixtures at ${kickOff} on ${date}, above its limit of ${capacity}.`,
-      entryIds: groupedEntries.map(stableEntryKey),
-      date,
-    }));
+    issues.push(issue({ code: "ground-capacity-conflict", message: `${venue?.name || "Shared ground"} has ${group.length} simultaneous league/cup fixtures at ${kickOff} on ${date}, above its limit of ${capacity}.`, entryIds: group.filter((entry) => entry.competitionType !== "cup").map(stableEntryKey), date }));
   });
 
-  const pairGroups = new Map();
+  const identityGroups = new Map();
   entries.forEach((entry) => {
-    const key = entryPairKey(entry, meetings);
-    if (!pairGroups.has(key)) pairGroups.set(key, []);
-    pairGroups.get(key).push(entry);
+    const key = fixtureIdentity(entry);
+    if (!identityGroups.has(key)) identityGroups.set(key, []);
+    identityGroups.get(key).push(entry);
   });
-  pairGroups.forEach((group) => {
-    if (group.length < 2) return;
-    issues.push(issue({
-      code: "duplicate-pairing",
-      message: `${nameOf(teams, group[0].homeTeamId, "Home team")} and ${nameOf(teams, group[0].awayTeamId, "Away team")} appear more than once for the selected fixture frequency.`,
-      entryIds: group.map(stableEntryKey),
-      divisionId: group[0].divisionId,
-    }));
+  identityGroups.forEach((group) => {
+    if (group.length > 1) issues.push(issue({ code: "duplicate-pairing", message: `A league pairing and meeting number appears more than once.`, entryIds: group.map(stableEntryKey), divisionId: group[0].divisionId }));
   });
 
-  const selectedDivisionIds = new Set(asArray(config.divisionIds).filter(Boolean));
-  const activeDivisions = asArray(workspace.divisions)
-    .filter((division) => !season || division.seasonId === season.id)
-    .filter((division) => !selectedDivisionIds.size || selectedDivisionIds.has(division.id));
-
-  activeDivisions.forEach((division) => {
+  selectedDivisions(workspace, season || { id: "" }, config.divisionIds).forEach((division) => {
+    const rule = divisionRule(workspace, division, season);
     const divisionTeams = getDivisionTeams(workspace, division.id, season?.id || "");
-    const expected = buildDivisionFixtureMatrix(divisionTeams, { meetings });
-    const actualKeys = new Set(entries.filter((entry) => entry.divisionId === division.id).map((entry) => entryPairKey(entry, meetings)));
-    const missing = expected.filter((fixture) => !actualKeys.has(entryPairKey(fixture, meetings)));
-    if (missing.length) {
-      issues.push(issue({
-        code: "missing-required-fixtures",
-        message: `${division.name} is missing ${missing.length} required fixture${missing.length === 1 ? "" : "s"}.`,
-        divisionId: division.id,
-      }));
-    }
-
+    const expected = buildDivisionFixtureMatrix(divisionTeams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
+    const actualKeys = new Set(entries.filter((entry) => entry.divisionId === division.id).map(fixtureIdentity));
+    const missing = expected.filter((fixture) => !actualKeys.has(fixtureIdentity({ ...fixture, divisionId: division.id })));
+    if (missing.length) issues.push(issue({ code: "missing-required-fixtures", message: `${division.name} is missing ${missing.length} required fixture${missing.length === 1 ? "" : "s"}.`, divisionId: division.id }));
     divisionTeams.forEach((team) => {
-      const teamEntries = entries.filter((entry) => entry.divisionId === division.id && (entry.homeTeamId === team.id || entry.awayTeamId === team.id));
-      const homeCount = teamEntries.filter((entry) => entry.homeTeamId === team.id).length;
-      const awayCount = teamEntries.filter((entry) => entry.awayTeamId === team.id).length;
-      const allowedDifference = meetings === 1 ? 1 : 0;
-      if (Math.abs(homeCount - awayCount) > allowedDifference) {
-        issues.push(issue({
-          code: "home-away-imbalance",
-          severity: "warning",
-          message: `${team.name} has ${homeCount} home and ${awayCount} away fixtures.`,
-          teamId: team.id,
-          divisionId: division.id,
-        }));
-      }
+      const rows = entries.filter((entry) => entry.divisionId === division.id && [entry.homeTeamId, entry.awayTeamId].includes(team.id));
+      const homeCount = rows.filter((entry) => entry.homeTeamId === team.id).length;
+      const awayCount = rows.filter((entry) => entry.awayTeamId === team.id).length;
+      const allowed = rows.length % 2;
+      if (Math.abs(homeCount - awayCount) > allowed) issues.push(issue({ code: "home-away-imbalance", severity: "warning", message: `${team.name} has ${homeCount} home and ${awayCount} away league fixtures.`, teamId: team.id, divisionId: division.id }));
     });
   });
 
   issues.push(...consecutiveRunIssues(entries, workspace));
-
   const blocking = issues.filter((item) => item.severity === "blocking");
   const warnings = issues.filter((item) => item.severity === "warning");
-  return {
-    valid: blocking.length === 0,
-    blockingCount: blocking.length,
-    warningCount: warnings.length,
-    issues,
-    totals: {
-      fixtures: entries.length,
-      placed: entries.filter((entry) => entry.scheduledDate).length,
-      unplaced: entries.filter((entry) => !entry.scheduledDate).length,
-      locked: entries.filter((entry) => entry.locked).length,
-    },
-  };
+  return { valid: blocking.length === 0, blockingCount: blocking.length, warningCount: warnings.length, issues, totals: { fixtures: entries.length, placed: entries.filter((entry) => entry.scheduledDate).length, unplaced: entries.filter((entry) => !entry.scheduledDate).length, locked: entries.filter((entry) => entry.locked).length } };
 }
 
 export function compareLeagueScheduleVersions(leftEntries = [], rightEntries = []) {
-  const left = new Map(asArray(leftEntries).map((entry) => [pairKey(entry.homeTeamId, entry.awayTeamId), normaliseBaseEntry(entry)]));
-  const right = new Map(asArray(rightEntries).map((entry) => [pairKey(entry.homeTeamId, entry.awayTeamId), normaliseBaseEntry(entry)]));
+  const left = new Map(asArray(leftEntries).map((entry) => [fixtureIdentity(entry), normaliseBaseEntry(entry)]));
+  const right = new Map(asArray(rightEntries).map((entry) => [fixtureIdentity(entry), normaliseBaseEntry(entry)]));
   const keys = new Set([...left.keys(), ...right.keys()]);
   const details = [];
   let unchanged = 0;
   let moved = 0;
   let added = 0;
   let removed = 0;
-
   keys.forEach((key) => {
     const before = left.get(key);
     const after = right.get(key);
-    if (!before) {
-      added += 1;
-      details.push({ type: "added", key, before: null, after });
-      return;
-    }
-    if (!after) {
-      removed += 1;
-      details.push({ type: "removed", key, before, after: null });
-      return;
-    }
-    const changed = ["scheduledDate", "kickOff", "venueId", "locked"].some((field) => before[field] !== after[field]);
-    if (changed) {
-      moved += 1;
-      details.push({ type: "moved", key, before, after });
-    } else {
-      unchanged += 1;
-    }
+    if (!before) { added += 1; details.push({ type: "added", key, before: null, after }); return; }
+    if (!after) { removed += 1; details.push({ type: "removed", key, before, after: null }); return; }
+    const changed = ["scheduledDate", "kickOff", "venueId", "locked", "homeTeamId", "awayTeamId"].some((field) => before[field] !== after[field]);
+    if (changed) { moved += 1; details.push({ type: "moved", key, before, after }); } else unchanged += 1;
   });
-
   return { unchanged, moved, added, removed, total: keys.size, details };
 }
 
@@ -832,16 +778,13 @@ export function leagueScheduleToCsv(entriesInput = [], workspace = {}, version =
   const teams = teamMap(workspace);
   const venues = venueMap(workspace);
   const divisions = divisionMap(workspace);
-  const rows = [
-    ["schedule_version", "division", "round", "date", "kick_off", "home_team", "away_team", "venue", "locked", "status", "unresolved_reason"],
-  ];
-
-  asArray(entriesInput)
-    .map(normaliseBaseEntry)
-    .sort((left, right) => String(left.scheduledDate || "9999-12-31").localeCompare(String(right.scheduledDate || "9999-12-31")) || Number(left.roundNumber || 0) - Number(right.roundNumber || 0))
+  const rows = [["schedule_version", "division", "meeting", "round", "date", "kick_off", "home_team", "away_team", "venue", "locked", "status", "unresolved_reason"]];
+  asArray(entriesInput).map(normaliseBaseEntry)
+    .sort((left, right) => String(left.scheduledDate || "9999-12-31").localeCompare(String(right.scheduledDate || "9999-12-31")) || left.roundNumber - right.roundNumber)
     .forEach((entry) => rows.push([
       version.name || `Version ${version.versionNumber || ""}`.trim(),
       divisions.get(entry.divisionId)?.name || "",
+      entry.meetingNumber || 1,
       entry.roundNumber || "",
       entry.scheduledDate || "",
       entry.kickOff || "",
@@ -852,7 +795,6 @@ export function leagueScheduleToCsv(entriesInput = [], workspace = {}, version =
       entry.scheduledDate ? "placed" : "unplaced",
       entry.unresolvedReason || "",
     ]));
-
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
@@ -860,12 +802,16 @@ export function serialiseScheduleEntries(entries = []) {
   return asArray(entries).map((entry) => ({
     source_fixture_id: entry.sourceFixtureId || null,
     division_id: entry.divisionId || null,
+    competition_type: entry.competitionType || "league",
+    competition_id: entry.competitionId || entry.cupId || null,
+    cup_tie_id: entry.cupTieId || null,
     home_team_id: entry.homeTeamId,
     away_team_id: entry.awayTeamId,
     venue_id: entry.venueId || null,
     scheduled_date: entry.scheduledDate || null,
     kick_off: entry.kickOff || null,
     round_number: Number(entry.roundNumber || 0),
+    meeting_number: Number(entry.meetingNumber || 1),
     placement_status: entry.scheduledDate ? "placed" : "unplaced",
     locked: Boolean(entry.locked),
     unresolved_reason: entry.unresolvedReason || null,
@@ -900,22 +846,24 @@ export function normaliseScheduleEntry(row = {}) {
     sourceFixtureId: row.source_fixture_id || row.sourceFixtureId || "",
     seasonId: row.season_id || row.seasonId || "",
     divisionId: row.division_id || row.divisionId || "",
+    competitionType: row.competition_type || row.competitionType || "league",
+    competitionId: row.competition_id || row.competitionId || "",
+    cupId: row.competition_id || row.cupId || "",
+    cupTieId: row.cup_tie_id || row.cupTieId || "",
     homeTeamId: row.home_team_id || row.homeTeamId || "",
     awayTeamId: row.away_team_id || row.awayTeamId || "",
     venueId: row.venue_id || row.venueId || "",
     scheduledDate: row.scheduled_date || row.scheduledDate || "",
     kickOff: row.kick_off || row.kickOff || "",
     roundNumber: row.round_number ?? row.roundNumber ?? 0,
+    meetingNumber: row.meeting_number ?? row.meetingNumber ?? 1,
     placementStatus: row.placement_status || row.placementStatus || "",
     unresolvedReason: row.unresolved_reason || row.unresolvedReason || "",
   });
 }
 
 export function normaliseScheduleVersionPayload(payload = {}) {
-  return {
-    version: normaliseScheduleVersion(payload.version || {}),
-    entries: asArray(payload.entries).map(normaliseScheduleEntry),
-  };
+  return { version: normaliseScheduleVersion(payload.version || {}), entries: asArray(payload.entries).map(normaliseScheduleEntry) };
 }
 
 export function daysBetween(left, right) {

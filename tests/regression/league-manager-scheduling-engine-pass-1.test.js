@@ -40,7 +40,7 @@ function createWorkspace({ sharedGround = false } = {}) {
   return normaliseLeagueWorkspace({
     league: { id: "league-1", name: "Test League", slug: "test-league" },
     access: { role: "owner", can_manage: true, can_operate: true, read_only: false },
-    seasons: [{ id: "season-1", name: "2026/27", starts_on: "2026-08-01", ends_on: "2027-06-30", is_current: true, status: "active" }],
+    seasons: [{ id: "season-1", name: "2026/27", starts_on: "2026-08-01", ends_on: "2027-06-30", default_kick_off: "15:00:00", primary_weekday: 6, is_current: true, status: "active" }],
     divisions: [{ id: "division-1", season_id: "season-1", name: "Premier Division", sort_order: 1 }],
     clubs: teams.map((team, index) => ({ id: `club-${index + 1}`, name: team.name, status: "active" })),
     venues: teams.map((team, index) => ({
@@ -174,7 +174,7 @@ describe("League Manager scheduling engine pass 1", () => {
     expect(comparison.unchanged).toBe(generated.entries.length - 1);
 
     const csv = leagueScheduleToCsv(moved, workspace, { name: "Pilot draft", versionNumber: 1 });
-    expect(csv).toContain("schedule_version,division,round,date");
+    expect(csv).toContain("schedule_version,division,meeting,round,date");
     expect(csv).toContain("Pilot draft");
     expect(csv).toContain("Alpha FC");
     expect(serialiseScheduleEntries(moved)[0]).toEqual(expect.objectContaining({ home_team_id: expect.any(String), placement_status: "placed" }));
@@ -200,8 +200,8 @@ describe("League Manager scheduling engine pass 1", () => {
   test("exposes the complete pilot scheduling workflow without mixing it into club plans", () => {
     expect(page).toContain('"schedule", "Schedule builder"');
     expect(page).toContain("Simultaneous fixtures");
-    expect(scheduleWorkspace).toContain("Generate draft");
-    expect(scheduleWorkspace).toContain("Rebuild unresolved only");
+    expect(scheduleWorkspace).toContain("Generate full league programme");
+    expect(scheduleWorkspace).toContain("Rebuild unresolved fixtures");
     expect(scheduleWorkspace).toContain("Compare versions");
     expect(scheduleWorkspace).toContain("Restore as new draft");
     expect(scheduleWorkspace).toContain("Publish schedule");
