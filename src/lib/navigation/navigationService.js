@@ -32,6 +32,10 @@ export function resolveSearchNavigation(query = "") {
   const timelineTarget =
     NAV_TARGETS.TIMELINE || NAV_TARGETS.OPERATIONS_TIMELINE || NAV_TARGETS.OPERATIONS;
 
+  if (q.includes("executive") || q.includes("organisation command") || q.includes("organization command") || q.includes("board pack") || q.includes("site readiness")) {
+    return { target: NAV_TARGETS.EXECUTIVE, options: {} };
+  }
+
   if (q.includes("timeline") || q.includes("control room")) {
     return { target: timelineTarget, options: { scroll: false } };
   }
@@ -177,6 +181,7 @@ export function createNavigationController({
   return {
     goTo,
     goToMissionControl: () => goTo(NAV_TARGETS.MISSION_CONTROL),
+    goToExecutive: () => goTo(NAV_TARGETS.EXECUTIVE),
     goToOperations: (options) => goTo(NAV_TARGETS.OPERATIONS, options),
     goToOperationsTimeline: (options) => goTo(timelineTarget, options),
     goToFixtures: (options) => goTo(NAV_TARGETS.FIXTURES, options),

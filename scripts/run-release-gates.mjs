@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,7 +7,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = join(root, ".release-evidence");
 mkdirSync(outputDir, { recursive: true });
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const startedAt = new Date();
 const runId = startedAt.toISOString().replaceAll(":", "-").replaceAll(".", "-");
 
@@ -15,22 +14,61 @@ function tail(text = "", lines = 60) {
   return String(text || "").split(/\r?\n/).slice(-lines).join("\n");
 }
 
-function run(name, command, args) {
+function run(name, command, args, options = {}) {
   const started = Date.now();
   const result = spawnSync(command, args, {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, CI: "true" },
     maxBuffer: 20 * 1024 * 1024,
+    windowsHide: true,
+    shell: false,
+    ...options,
   });
-  const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
+  const output = [
+    result.stdout || "",
+    result.stderr || "",
+    result.error ? `${result.error.name}: ${result.error.message}` : "",
+  ].filter(Boolean).join("\n").trim();
   return {
     name,
     passed: result.status === 0,
     status: result.status ?? 1,
+    signal: result.signal || null,
     durationMs: Date.now() - started,
     outputTail: tail(output),
   };
+}
+
+function resolveNpmInvocation() {
+  const npmExecPath = String(process.env.npm_execpath || "").trim();
+  if (npmExecPath && existsSync(npmExecPath)) {
+    return {
+      command: process.execPath,
+      prefixArgs: [npmExecPath],
+      description: `node ${npmExecPath}`,
+      shell: false,
+    };
+  }
+
+  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  return {
+    command: npmCommand,
+    prefixArgs: [],
+    description: npmCommand,
+    shell: process.platform === "win32",
+  };
+}
+
+const npmInvocation = resolveNpmInvocation();
+
+function runNpm(name, scriptName) {
+  return run(
+    name,
+    npmInvocation.command,
+    [...npmInvocation.prefixArgs, "run", scriptName],
+    { shell: npmInvocation.shell },
+  );
 }
 
 function listFiles(directory, output = []) {
@@ -45,7 +83,7 @@ function listFiles(directory, output = []) {
 
 function repositoryChecks() {
   const checks = [];
-  const gitResult = spawnSync("git", ["ls-files"], { cwd: root, encoding: "utf8" });
+  const gitResult = spawnSync("git", ["ls-files"], { cwd: root, encoding: "utf8", windowsHide: true });
   if (gitResult.status === 0) {
     const tracked = String(gitResult.stdout || "").split(/\r?\n/).filter(Boolean);
     const trackedSecrets = tracked.filter((path) => path === ".env" || path === ".env.local" || /^\.env\..*\.local$/.test(path));
@@ -96,19 +134,19 @@ function repositoryChecks() {
 }
 
 const commands = [
-  run("Lint", npmCommand, ["run", "lint"]),
-  run("Regression tests", npmCommand, ["run", "test"]),
+  runNpm("Lint", "lint"),
+  runNpm("Regression tests", "test"),
   run("Launch acceptance matrix", process.execPath, ["scripts/launch-acceptance.mjs", "--check-only"]),
-  run("Production build", npmCommand, ["run", "build"]),
+  runNpm("Production build", "build"),
 ];
 const repository = repositoryChecks();
 const requiredPassed = commands.every((item) => item.passed) && repository.filter((item) => !item.advisory).every((item) => item.passed);
 
-const gitSha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" });
-const branch = spawnSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8" });
+const gitSha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8", windowsHide: true });
+const branch = spawnSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8", windowsHide: true });
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const evidence = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   environment: process.env.RELEASE_ENVIRONMENT || "local",
   release: process.env.RELEASE_ID || process.env.GITHUB_SHA?.slice(0, 12) || "unlabelled-local-release",
@@ -119,6 +157,7 @@ const evidence = {
     branch: branch.status === 0 ? branch.stdout.trim() : "unavailable",
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
+    npmInvocation: npmInvocation.description,
   },
   result: requiredPassed ? "pass" : "fail",
   commands,
@@ -132,11 +171,23 @@ const latestMarkdownPath = join(outputDir, "latest.md");
 writeFileSync(jsonPath, `${JSON.stringify(evidence, null, 2)}\n`);
 writeFileSync(latestJsonPath, `${JSON.stringify(evidence, null, 2)}\n`);
 
-const markdown = `# Ground Control release evidence\n\n- **Generated:** ${evidence.generatedAt}\n- **Environment:** ${evidence.environment}\n- **Release:** ${evidence.release}\n- **Result:** ${evidence.result.toUpperCase()}\n- **Git:** ${evidence.repository.gitSha} (${evidence.repository.branch})\n- **Node:** ${evidence.repository.node}\n\n## Automated release checks\n\n${commands.map((item) => `- **${item.name}:** ${item.passed ? "PASS" : "FAIL"} (${Math.round(item.durationMs / 1000)}s)`).join("\n")}\n\n## Repository safety checks\n\n${repository.map((item) => `- **${item.name}:** ${item.passed ? "PASS" : item.advisory ? "REVIEW" : "FAIL"} — ${item.detail}`).join("\n")}\n\n## Recording in Ground Control\n\nRecord this run against the **Automated lint, test and production-build evidence recorded** launch gate. Upload this folder as a CI artifact or link the relevant GitHub Actions run, then store that HTTPS link in the structured evidence register.\n`;
+const markdown = `# Ground Control release evidence\n\n- **Generated:** ${evidence.generatedAt}\n- **Environment:** ${evidence.environment}\n- **Release:** ${evidence.release}\n- **Result:** ${evidence.result.toUpperCase()}\n- **Git:** ${evidence.repository.gitSha} (${evidence.repository.branch})\n- **Node:** ${evidence.repository.node}\n- **npm runner:** ${evidence.repository.npmInvocation}\n\n## Automated release checks\n\n${commands.map((item) => `- **${item.name}:** ${item.passed ? "PASS" : "FAIL"} (${Math.round(item.durationMs / 1000)}s)`).join("\n")}\n\n## Repository safety checks\n\n${repository.map((item) => `- **${item.name}:** ${item.passed ? "PASS" : item.advisory ? "REVIEW" : "FAIL"} — ${item.detail}`).join("\n")}\n\n## Recording in Ground Control\n\nRecord this run against the **Automated lint, test and production-build evidence recorded** launch gate. Upload this folder as a CI artifact or link the relevant GitHub Actions run, then store that HTTPS link in the structured evidence register.\n`;
 writeFileSync(markdownPath, markdown);
 writeFileSync(latestMarkdownPath, markdown);
 
 console.log(`Ground Control release evidence: ${evidence.result.toUpperCase()}`);
 console.log(`JSON: ${relative(root, jsonPath)}`);
 console.log(`Markdown: ${relative(root, markdownPath)}`);
+
+if (!requiredPassed) {
+  console.error("\nFailed release checks:");
+  for (const item of commands.filter((entry) => !entry.passed)) {
+    console.error(`\n[${item.name}] exit ${item.status}${item.signal ? `, signal ${item.signal}` : ""}`);
+    console.error(item.outputTail || "No command output was captured.");
+  }
+  for (const item of repository.filter((entry) => !entry.passed && !entry.advisory)) {
+    console.error(`\n[${item.name}] ${item.detail}`);
+  }
+}
+
 process.exit(requiredPassed ? 0 : 1);

@@ -22,6 +22,7 @@ import CommunicationsPrivacyPanel from "../components/Settings/CommunicationsPri
 import OnboardingSettingsPanel from "../components/Settings/OnboardingSettingsPanel.jsx";
 import SubscriptionSettingsPanel from "../components/Settings/SubscriptionSettingsPanel.jsx";
 import BillingLegalPanel from "../components/Settings/BillingLegalPanel.jsx";
+import EliteGovernanceSettingsPanel from "../components/Settings/EliteGovernanceSettingsPanel.jsx";
 import {
   ENTITLEMENTS,
   hasEntitlement,
@@ -51,6 +52,10 @@ const TAB_TITLES = {
   privacy: [
     "Privacy & coach contacts",
     "Document the purpose, lawful basis, privacy notice and retention controls for adult coach communications.",
+  ],
+  governance: [
+    "Organisation governance",
+    "Define executive accountability, site ownership and the reporting rhythm used by Elite Organisation Command.",
   ],
   onboarding: [
     "Setup wizard",
@@ -109,6 +114,7 @@ const TAB_ENTITLEMENTS = {
   timing: ENTITLEMENTS.MATCHDAY_SCHEDULING,
   history: ENTITLEMENTS.MATCHDAY_SCHEDULING,
   refs: ENTITLEMENTS.OFFICIALS_MANAGEMENT,
+  governance: ENTITLEMENTS.GOVERNANCE_CONTROLS,
 };
 
 export default function SettingsPage(props) {
@@ -176,6 +182,7 @@ export default function SettingsPage(props) {
     if (activeTab === "subscription")
       return <SubscriptionSettingsPanel {...props} />;
     if (activeTab === "billing") return <BillingLegalPanel {...props} />;
+    if (activeTab === "governance") return <EliteGovernanceSettingsPanel {...props} />;
     if (activeTab === "access") return <AccessSecurityPanel {...props} />;
     if (activeTab === "privacy") return <CommunicationsPrivacyPanel {...props} />;
     if (activeTab === "onboarding")

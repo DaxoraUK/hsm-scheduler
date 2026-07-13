@@ -10,6 +10,7 @@ import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index
 import { canOpenPage, ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 import {
+  Building2,
   CalendarDays,
   ChartNoAxesCombined,
   Clock3,
@@ -95,6 +96,7 @@ export default function ProductShell({
 
   const workspaceNavItems = platformOnly ? [] : [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
+    ["executive", "Organisation Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],

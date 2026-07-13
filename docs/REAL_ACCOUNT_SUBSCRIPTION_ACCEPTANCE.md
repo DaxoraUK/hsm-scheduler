@@ -58,9 +58,10 @@ Assign **Elite / Active**.
 Confirm:
 
 - Every Pro route and action opens.
-- Teams, venues, users, pitches and history display Unlimited.
-- No Core or Pro upgrade prompt appears.
-- The package wording describes scale and tailored implementation without claiming an unimplemented service level.
+- Organisation Command opens and Organisation governance appears in Settings.
+- The starting Elite 60 band displays 60 teams, 8 venues, 25 users, 80 pitches, 260 saved matchweeks and 1,095-day history.
+- A board-pack download uses the current site, fixture and governance data.
+- Pro accounts cannot open Organisation Command or Organisation governance.
 
 ## Scenario 4 — Read-only club role
 

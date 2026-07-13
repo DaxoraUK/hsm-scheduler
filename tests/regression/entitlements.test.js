@@ -130,7 +130,7 @@ describe("plan entitlement model", () => {
     expect(getEntitlementLimit(unknown, LIMIT_KEYS.TEAMS)).toBe(0);
   });
 
-  test("internal billing-exempt Elite receives the delivered Elite matrix and unlimited limits", () => {
+  test("internal billing-exempt Elite receives the delivered Elite organisation matrix and contracted starting band", () => {
     const internalElite = normaliseSubscriptionPayload({
       club_id: "club-test",
       plan_code: "elite",
@@ -153,7 +153,10 @@ describe("plan entitlement model", () => {
     expect(hasEntitlement(internalElite, ENTITLEMENTS.PREMIUM_SUPPORT)).toBe(
       false,
     );
-    expect(getEntitlementLimit(internalElite, LIMIT_KEYS.TEAMS)).toBe(-1);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.ORGANISATION_COMMAND)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.EXECUTIVE_REPORTING)).toBe(true);
+    expect(hasEntitlement(internalElite, ENTITLEMENTS.GOVERNANCE_CONTROLS)).toBe(true);
+    expect(getEntitlementLimit(internalElite, LIMIT_KEYS.TEAMS)).toBe(60);
   });
 
   test("a suspended subscription removes mutation rights without removing owner administration", () => {

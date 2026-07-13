@@ -128,6 +128,7 @@ const SubscriptionGate = lazy(
   () => import("./components/SubscriptionGate.jsx"),
 );
 const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const EliteCommandCentrePage = lazy(() => import("./pages/EliteCommandCentrePage.jsx"));
 const OperationsPage = lazy(() => import("./pages/OperationsPage.jsx"));
 const DayTabs = lazy(() => import("./components/Operations/DayTabs.jsx"));
 const SaturdayPage = lazy(() => import("./pages/SaturdayPage.jsx"));
@@ -2173,6 +2174,28 @@ function App() {
                     ? openSubscriptionSettings
                     : undefined
                 }
+              />
+            </Suspense>
+          )}
+
+          {mainPage === "executive" && pageEntitled && (
+            <Suspense fallback={<LazyPageFallback label="Organisation Command" />}>
+              <EliteCommandCentrePage
+                club={club}
+                teamCfg={teamCfg}
+                pitchCfg={pitchCfg}
+                memberships={memberships}
+                satFinal={satFinal}
+                sunFinal={sunFinal}
+                midweekFinal={activeMidweekFinal}
+                satUnresolved={satUnresolved}
+                sunUnresolved={sunUnresolved}
+                midweekUnresolved={activeMidweekUnresolved}
+                closedPitches={closedPitches}
+                midweekEnabled={midweekEnabled}
+                setMainPage={setMainPage}
+                setDayTab={setDayTab}
+                setSettingsTab={setSettingsTab}
               />
             </Suspense>
           )}

@@ -37,6 +37,9 @@ export const ENTITLEMENTS = Object.freeze({
   PRIORITY_SUPPORT: "priority_support",
   PREMIUM_SUPPORT: "premium_support",
   ADVANCED_INTEGRATIONS: "advanced_integrations",
+  ORGANISATION_COMMAND: "organisation_command",
+  EXECUTIVE_REPORTING: "executive_reporting",
+  GOVERNANCE_CONTROLS: "governance_controls",
 });
 
 export const LIMIT_KEYS = Object.freeze({
@@ -80,6 +83,13 @@ const proFeatures = [
   ENTITLEMENTS.REPORTS_ADVANCED,
   ENTITLEMENTS.ANALYTICS_ADVANCED,
   ENTITLEMENTS.MULTI_VENUE,
+];
+
+const eliteFeatures = [
+  ...proFeatures,
+  ENTITLEMENTS.ORGANISATION_COMMAND,
+  ENTITLEMENTS.EXECUTIVE_REPORTING,
+  ENTITLEMENTS.GOVERNANCE_CONTROLS,
 ];
 
 export const PLAN_CATALOGUE = Object.freeze({
@@ -143,17 +153,21 @@ export const PLAN_CATALOGUE = Object.freeze({
   [PLAN_CODES.ELITE]: Object.freeze({
     code: PLAN_CODES.ELITE,
     name: "Elite",
-    strapline: "Unlimited multi-site operations with tailored implementation and scale.",
+    strapline: "Organisation-wide command, governance and executive evidence for complex multi-site clubs.",
     monthlyPricePence: 39900,
     annualPricePence: null,
-    features: Object.freeze(proFeatures),
+    features: Object.freeze(eliteFeatures),
     limits: Object.freeze({
-      teams: -1,
-      venues: -1,
-      users: -1,
-      pitches: -1,
-      history_entries: -1,
-      history_retention_days: -1,
+      teams: 60,
+      venues: 8,
+      users: 25,
+      pitches: 80,
+      history_entries: 260,
+      history_retention_days: 1095,
+    }),
+    contractModel: Object.freeze({
+      band: "Elite 60",
+      largerOrganisations: "Custom contracted capacity",
     }),
     launchStatus: "contact",
     customerVisible: true,
@@ -187,6 +201,7 @@ export const ROUTE_ENTITLEMENTS = Object.freeze({
   communications: ENTITLEMENTS.COMMUNICATIONS,
   analytics: ENTITLEMENTS.ANALYTICS_CORE,
   reports: ENTITLEMENTS.REPORTS_OPERATIONS,
+  executive: ENTITLEMENTS.ORGANISATION_COMMAND,
 });
 
 export function getLaunchPlans() {

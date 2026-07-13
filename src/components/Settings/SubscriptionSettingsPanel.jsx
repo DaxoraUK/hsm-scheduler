@@ -37,7 +37,16 @@ const FEATURE_LABELS = [
   [ENTITLEMENTS.ANALYTICS_ADVANCED, "Funding evidence analytics"],
   [ENTITLEMENTS.DATA_EXPORT, "CSV data export"],
   [ENTITLEMENTS.MULTI_VENUE, "Multi-venue operations"],
+  [ENTITLEMENTS.ORGANISATION_COMMAND, "Organisation Command Centre"],
+  [ENTITLEMENTS.EXECUTIVE_REPORTING, "Executive and board reporting"],
+  [ENTITLEMENTS.GOVERNANCE_CONTROLS, "Organisation governance controls"],
 ];
+
+const PLAN_HIGHLIGHTS = Object.freeze({
+  core: ["15 active teams", "Single-site matchday control", "Operational reports and export"],
+  pro: ["40 active teams and 4 sites", "Complete advanced operations", "Funding evidence and web email"],
+  elite: ["60 active teams and 8 sites", "Organisation Command and site governance", "Executive board packs and contracted scale"],
+});
 
 const LIMIT_LABELS = [
   [LIMIT_KEYS.TEAMS, "Teams", UsersRound],
@@ -302,6 +311,14 @@ export default function SubscriptionSettingsPanel({
                 <p className="mt-3 text-sm font-semibold leading-5 text-slate-500">
                   {plan.strapline}
                 </p>
+                <div className="mt-4 space-y-2">
+                  {(PLAN_HIGHLIGHTS[plan.code] || []).map((item) => (
+                    <div key={item} className="flex items-start gap-2 text-xs font-bold leading-5 text-slate-600">
+                      <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
               </article>
             );
           })}

@@ -15,7 +15,10 @@ Use separate staging accounts for Core, Pro, Elite, viewer/read-only, suspended 
 | Funding evidence and advanced analytics | Upgrade notice | Yes | Yes |
 | Operational reports and CSV | Yes | Yes | Yes |
 | Advanced and funding reports | Upgrade notice | Yes | Yes |
-| Multi-venue limits | 1 | 3 | Unlimited |
+| Multi-venue limits | 1 | 4 | 8 (Elite 60) |
+| Organisation Command | No | No | Yes |
+| Organisation governance | No | No | Yes |
+| Executive board-pack export | No | No | Yes |
 
 Confirm that viewer and suspended accounts can read permitted data but cannot save schedules, contacts, communications, settings or funding evidence. Confirm an invalid plan fails closed and shows no customer capability.
 

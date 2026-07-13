@@ -35,7 +35,8 @@ describe("subscription package authority", () => {
     expect(
       hasEntitlement(subscription, ENTITLEMENTS.ADVANCED_INTEGRATIONS),
     ).toBe(false);
-    expect(getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS)).toBe(-1);
+    expect(hasEntitlement(subscription, ENTITLEMENTS.ORGANISATION_COMMAND)).toBe(true);
+    expect(getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS)).toBe(60);
   });
 
   test("explicit true overrides can add a controlled extra without removing package rights", () => {

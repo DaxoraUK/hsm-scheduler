@@ -2,6 +2,7 @@ import React from "react";
 import {
   BadgePoundSterling,
   Building2,
+  Crown,
   CalendarClock,
   Database,
   LayoutGrid,
@@ -66,6 +67,13 @@ export const SETTINGS_GROUPS = Object.freeze([
     ],
   },
   {
+    key: "organisation",
+    label: "Organisation",
+    description: "Elite governance and site accountability",
+    icon: Crown,
+    tabs: [["governance", "Organisation governance"]],
+  },
+  {
     key: "plan",
     label: "Plan & billing",
     description: "Package, limits, billing and legal",
@@ -108,6 +116,7 @@ function isTabVisible({
     return false;
   }
   if (key === "access" && !workspaceAccess?.canViewAudit) return false;
+  if (key === "governance" && !hasEntitlement(subscription, ENTITLEMENTS.GOVERNANCE_CONTROLS)) return false;
   if (key === "privacy" && !workspaceAccess?.canManageSettings) return false;
   if (
     ["timing", "history"].includes(key) &&

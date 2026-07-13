@@ -34,7 +34,7 @@ function limitsFor(planCode) {
   ));
 }
 
-const ROUTES = Object.freeze(["dashboard", "operations", "communications", "analytics", "reports"]);
+const ROUTES = Object.freeze(["dashboard", "operations", "communications", "analytics", "reports", "executive"]);
 
 export const LAUNCH_ACCEPTANCE_SCENARIOS = Object.freeze([
   Object.freeze({
@@ -64,12 +64,12 @@ export const LAUNCH_ACCEPTANCE_SCENARIOS = Object.freeze([
   Object.freeze({
     id: "elite",
     title: "Elite",
-    description: "Pro capability with unlimited launch resource limits and tailored implementation.",
+    description: "Organisation-wide command, governance and executive evidence for complex multi-site clubs.",
     expected: Object.freeze([
       "All Pro routes and actions are available.",
-      "Teams, venues, users, pitches and history limits show Unlimited.",
-      "No Core or Pro upgrade prompt appears anywhere in the customer workspace.",
-      "Customer-facing copy avoids unsupported premium-service promises.",
+      "Organisation Command and Organisation governance are available only to Elite.",
+      "The starting Elite 60 band shows 60 teams, 8 venues, 25 users and 80 pitches.",
+      "Executive board-pack exports use current organisation data rather than unsupported service promises.",
     ]),
     limits: limitsFor(PLAN_CODES.ELITE),
   }),
@@ -117,8 +117,8 @@ export function buildLaunchAcceptanceReport() {
   const invalid = normaliseSubscriptionPayload({ plan_code: "damaged-plan", status: "active", access_state: "full" });
 
   const routeExpectations = {
-    [PLAN_CODES.CORE]: Object.fromEntries(ROUTES.map((route) => [route, true])),
-    [PLAN_CODES.PRO]: Object.fromEntries(ROUTES.map((route) => [route, true])),
+    [PLAN_CODES.CORE]: Object.fromEntries(ROUTES.map((route) => [route, route !== "executive"])),
+    [PLAN_CODES.PRO]: Object.fromEntries(ROUTES.map((route) => [route, route !== "executive"])),
     [PLAN_CODES.ELITE]: Object.fromEntries(ROUTES.map((route) => [route, true])),
   };
 
@@ -159,9 +159,23 @@ export function buildLaunchAcceptanceReport() {
       "Pro: cross-day operations, advanced reports, funding analytics and multi-venue enabled.",
     ),
     check(
-      "elite-limits",
-      "Elite has unlimited launch resource limits",
-      Object.values(LIMIT_KEYS).every((key) => getEntitlementLimit(elite, key) === -1),
+      "elite-distinction",
+      "Elite adds organisation command, governance and executive reporting",
+      [
+        ENTITLEMENTS.ORGANISATION_COMMAND,
+        ENTITLEMENTS.EXECUTIVE_REPORTING,
+        ENTITLEMENTS.GOVERNANCE_CONTROLS,
+      ].every((entitlement) => hasEntitlement(elite, entitlement))
+        && !hasEntitlement(pro, ENTITLEMENTS.ORGANISATION_COMMAND),
+      "Elite-only operating layer is present and unavailable to Pro.",
+    ),
+    check(
+      "elite-band-limits",
+      "Elite uses a controlled starting capacity band",
+      getEntitlementLimit(elite, LIMIT_KEYS.TEAMS) === 60
+        && getEntitlementLimit(elite, LIMIT_KEYS.VENUES) === 8
+        && getEntitlementLimit(elite, LIMIT_KEYS.USERS) === 25
+        && getEntitlementLimit(elite, LIMIT_KEYS.PITCHES) === 80,
       Object.values(LIMIT_KEYS).map((key) => `${key}=${getEntitlementLimit(elite, key)}`).join(", "),
     ),
     ...Object.entries(routeExpectations).map(([planCode, routes]) => {
