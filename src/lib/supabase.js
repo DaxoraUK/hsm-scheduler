@@ -995,6 +995,24 @@ export const DB = {
     });
   },
 
+  async updateLeagueScheduleEntries(leagueId, versionId, updates = []) {
+    const id = requireLeagueId(leagueId);
+    const entryUpdates = Array.isArray(updates) ? updates : [];
+    if (!entryUpdates.length) return { updated: 0 };
+    return supaFetch("POST", "rpc/update_league_schedule_entries", {
+      target_league_id: id,
+      target_version_id: String(versionId || "").trim(),
+      entry_updates: entryUpdates.map((update) => ({
+        id: String(update?.id || "").trim(),
+        scheduled_date: update?.scheduledDate || null,
+        kick_off: update?.scheduledDate ? update?.kickOff || "15:00" : null,
+        venue_id: update?.venueId || null,
+        locked: Boolean(update?.locked),
+        notes: update?.notes || null,
+      })),
+    });
+  },
+
   async validateLeagueScheduleVersion(leagueId, versionId) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/validate_league_schedule_version", {

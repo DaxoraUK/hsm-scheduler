@@ -10,6 +10,7 @@ import {
   GitCompareArrows,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Send,
   Sparkles,
@@ -31,6 +32,7 @@ import {
 
 const INPUT = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500";
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50";
+const ENTRY_GRID = "lg:grid-cols-[90px_minmax(260px,1.5fr)_150px_105px_minmax(190px,1fr)_78px_42px]";
 
 function Panel({ children, className = "" }) {
   return <section className={`rounded-[26px] border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
@@ -58,12 +60,6 @@ function Metric({ label, value, tone = "slate" }) {
   return <div className={`rounded-2xl border p-3 ${tones[tone] || tones.slate}`}><div className="text-[9px] font-black uppercase tracking-[0.17em] opacity-60">{label}</div><div className="mt-1 text-xl font-black">{value}</div></div>;
 }
 
-function formatDate(value) {
-  if (!value) return "Unplaced";
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-}
-
 function downloadText(filename, text, type = "text/csv;charset=utf-8") {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
@@ -76,45 +72,236 @@ function downloadText(filename, text, type = "text/csv;charset=utf-8") {
   URL.revokeObjectURL(url);
 }
 
-function VersionRow({ version, active, onSelect }) {
-  const tone = version.status === "published" ? "green" : version.status === "draft" ? "blue" : "slate";
-  const summary = version.validationSummary || {};
+function editableSnapshot(entry = {}) {
+  const scheduledDate = entry.scheduledDate || "";
+  return {
+    scheduledDate,
+    kickOff: scheduledDate ? (entry.kickOff || "15:00").slice(0, 5) : "",
+    venueId: entry.venueId || "",
+    locked: Boolean(entry.locked),
+    notes: entry.notes || "",
+  };
+}
+
+function sameEditableValues(left, right) {
+  const leftValue = editableSnapshot(left);
+  const rightValue = editableSnapshot(right);
+  return Object.keys(leftValue).every((key) => leftValue[key] === rightValue[key]);
+}
+
+const ISSUE_GROUP_COPY = {
+  "unplaced-fixture": {
+    title: "Unplaced fixtures",
+    description: "Some fixtures are unplaced and still need a valid date, time or venue.",
+  },
+  "long-home-away-run": {
+    title: "Home and away sequences",
+    description: "Advisory balance warnings. They do not prevent publication.",
+  },
+  "home-away-imbalance": {
+    title: "Home and away totals",
+    description: "Teams whose home and away totals are not evenly balanced.",
+  },
+  "team-double-booking": {
+    title: "Team clashes",
+    description: "A team has more than one fixture on the same date.",
+  },
+  "venue-capacity-conflict": {
+    title: "Pitch capacity",
+    description: "A pitch is scheduled above its simultaneous-fixture limit.",
+  },
+  "ground-capacity-conflict": {
+    title: "Shared-ground capacity",
+    description: "A physical ground is scheduled above its combined capacity.",
+  },
+  "blackout-violation": {
+    title: "Blackout conflicts",
+    description: "Fixtures are placed inside a blocked period.",
+  },
+  "unavailable-playing-date": {
+    title: "Unavailable dates",
+    description: "Fixtures are placed on dates not enabled for the division.",
+  },
+  "missing-venue": {
+    title: "Missing venues",
+    description: "Placed fixtures do not have a valid home venue.",
+  },
+  "duplicate-pairing": {
+    title: "Duplicate pairings",
+    description: "A pairing appears more times than the selected schedule format allows.",
+  },
+  "missing-required-fixtures": {
+    title: "Missing fixtures",
+    description: "The generated programme is missing required pairings.",
+  },
+};
+
+function groupValidationIssues(issues = []) {
+  const grouped = new Map();
+  issues.forEach((item) => {
+    const existing = grouped.get(item.code) || {
+      code: item.code,
+      severity: item.severity,
+      items: [],
+    };
+    existing.items.push(item);
+    if (item.severity === "blocking") existing.severity = "blocking";
+    grouped.set(item.code, existing);
+  });
+  return [...grouped.values()].sort((left, right) => {
+    if (left.severity !== right.severity) return left.severity === "blocking" ? -1 : 1;
+    return right.items.length - left.items.length;
+  });
+}
+
+function ValidationFindings({ validation }) {
+  const groups = groupValidationIssues(validation.issues);
+  if (!groups.length) return null;
+
   return (
-    <button type="button" onClick={onSelect} className={`w-full rounded-2xl border p-3.5 text-left transition ${active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}>
-      <div className="flex items-center justify-between gap-2"><div className="truncate text-sm font-black">v{version.versionNumber} · {version.name}</div><Pill tone={active ? "navy" : tone}>{version.status}</Pill></div>
-      <div className={`mt-2 text-[11px] font-semibold ${active ? "text-slate-300" : "text-slate-500"}`}>{version.createdAt ? new Date(version.createdAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : ""}{summary.blockingCount !== undefined ? ` · ${summary.blockingCount} blocking` : ""}</div>
-    </button>
+    <Panel className="overflow-hidden">
+      <details open={!validation.valid}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className={validation.valid ? "text-amber-600" : "text-rose-600"} size={20} />
+            <div>
+              <div className="text-sm font-black text-slate-950">Validation findings</div>
+              <div className="mt-0.5 text-xs font-semibold text-slate-500">{validation.blockingCount} blocking · {validation.warningCount} warnings · {groups.length} categories</div>
+            </div>
+          </div>
+          <ChevronDown className="text-slate-400" size={18} />
+        </summary>
+        <div className="space-y-2 border-t border-slate-200 bg-slate-50/60 p-4">
+          {groups.map((group) => {
+            const copy = ISSUE_GROUP_COPY[group.code] || {
+              title: group.code.split("-").map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" "),
+              description: "Review the affected fixtures before publication.",
+            };
+            const blocking = group.severity === "blocking";
+            return (
+              <details key={group.code} className={`overflow-hidden rounded-2xl border bg-white ${blocking ? "border-rose-200" : "border-amber-200"}`}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className={`text-sm font-black ${blocking ? "text-rose-900" : "text-amber-900"}`}>{copy.title}</div>
+                    <div className="mt-0.5 text-xs font-semibold text-slate-500">{copy.description}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Pill tone={blocking ? "rose" : "amber"}>{group.items.length}</Pill>
+                    <ChevronDown className="text-slate-400" size={16} />
+                  </div>
+                </summary>
+                <div className="border-t border-slate-100 px-4 py-3">
+                  <div className="grid gap-2 lg:grid-cols-2">
+                    {group.items.slice(0, 40).map((item) => (
+                      <div key={item.id} className={`rounded-xl px-3 py-2 text-xs font-bold leading-5 ${blocking ? "bg-rose-50 text-rose-900" : "bg-amber-50 text-amber-900"}`}>{item.message}</div>
+                    ))}
+                  </div>
+                  {group.items.length > 40 ? <div className="mt-3 text-xs font-black text-slate-500">Showing 40 of {group.items.length}. Use the schedule filters to inspect the remaining fixtures.</div> : null}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </details>
+    </Panel>
   );
 }
 
-function EntryEditor({ entry, workspace, disabled, busy, highlighted, onSave }) {
-  const [draft, setDraft] = useState(entry);
-  useEffect(() => setDraft(entry), [entry]);
-  const update = (key) => (event) => setDraft((current) => ({ ...current, [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value }));
+function FieldLabel({ children }) {
+  return <span className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 lg:hidden">{children}</span>;
+}
+
+function ScheduleEntryRow({
+  entry,
+  workspace,
+  disabled,
+  busy,
+  changed,
+  issueTone,
+  onChange,
+  onRevert,
+}) {
   const homeName = getEntityName(workspace, "team", entry.homeTeamId);
   const awayName = getEntityName(workspace, "team", entry.awayTeamId);
   const divisionName = getEntityName(workspace, "division", entry.divisionId);
+  const rowTone = issueTone === "blocking"
+    ? "border-rose-300 bg-rose-50/40 ring-1 ring-rose-100"
+    : issueTone === "warning"
+      ? "border-amber-300 bg-amber-50/35"
+      : changed
+        ? "border-sky-300 bg-sky-50/40 ring-1 ring-sky-100"
+        : entry.scheduledDate
+          ? "border-slate-200 bg-white"
+          : "border-amber-300 bg-amber-50/50";
+
+  const update = (patch) => onChange(entry.id, patch);
+  const updateDate = (event) => {
+    const scheduledDate = event.target.value;
+    update({
+      scheduledDate,
+      kickOff: scheduledDate ? (entry.kickOff || "15:00") : "",
+    });
+  };
 
   return (
-    <div className={`rounded-2xl border p-4 transition ${highlighted ? "border-rose-300 bg-rose-50/40 ring-2 ring-rose-100" : entry.scheduledDate ? "border-slate-200 bg-white" : "border-amber-300 bg-amber-50/50"}`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2"><Pill tone={entry.scheduledDate ? "green" : "amber"}>{entry.scheduledDate ? "Placed" : "Unplaced"}</Pill><Pill>Round {entry.roundNumber || "—"}</Pill>{entry.locked ? <Pill tone="navy">Locked</Pill> : null}</div>
-          <div className="mt-3 text-base font-black text-slate-950">{homeName} <span className="text-slate-400">v</span> {awayName}</div>
-          <div className="mt-1 text-xs font-semibold text-slate-500">{divisionName} · {formatDate(entry.scheduledDate)}{entry.kickOff ? ` at ${entry.kickOff}` : ""}</div>
-          {!entry.scheduledDate && entry.unresolvedReason ? <div className="mt-3 max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">{entry.unresolvedReason}</div> : null}
+    <div className={`rounded-2xl border px-3 py-3 transition ${rowTone}`}>
+      <div className={`grid gap-3 ${ENTRY_GRID} lg:items-center`}>
+        <div>
+          <FieldLabel>Status</FieldLabel>
+          <div className="flex flex-wrap items-center gap-1.5 lg:block">
+            <Pill tone={entry.scheduledDate ? "green" : "amber"}>{entry.scheduledDate ? "Placed" : "Unplaced"}</Pill>
+            <div className="mt-0 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 lg:mt-2">Round {entry.roundNumber || "—"}</div>
+          </div>
         </div>
-        <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-[610px] lg:grid-cols-[150px_110px_minmax(180px,1fr)_90px_auto]">
-          <input aria-label={`Date for ${homeName} v ${awayName}`} type="date" className={INPUT} value={draft.scheduledDate || ""} onChange={update("scheduledDate")} disabled={disabled || busy} />
-          <input aria-label={`Kick-off for ${homeName} v ${awayName}`} type="time" className={INPUT} value={draft.kickOff || ""} onChange={update("kickOff")} disabled={disabled || busy || !draft.scheduledDate} />
-          <select aria-label={`Venue for ${homeName} v ${awayName}`} className={INPUT} value={draft.venueId || ""} onChange={update("venueId")} disabled={disabled || busy}>
+
+        <div className="min-w-0">
+          <FieldLabel>Fixture</FieldLabel>
+          <div className="text-sm font-black leading-5 text-slate-950">
+            <span>{homeName}</span> <span className="text-slate-400">v</span> <span>{awayName}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+            <span>{divisionName}</span>
+            {entry.locked ? <Pill tone="navy">Locked</Pill> : null}
+            {changed ? <Pill tone="blue">Unsaved</Pill> : null}
+          </div>
+        </div>
+
+        <label>
+          <FieldLabel>Date</FieldLabel>
+          <input aria-label={`Date for ${homeName} v ${awayName}`} type="date" className={INPUT} value={entry.scheduledDate || ""} onChange={updateDate} disabled={disabled || busy} />
+        </label>
+
+        <label>
+          <FieldLabel>Kick-off</FieldLabel>
+          <input aria-label={`Kick-off for ${homeName} v ${awayName}`} type="time" className={INPUT} value={entry.kickOff || ""} onChange={(event) => update({ kickOff: event.target.value })} disabled={disabled || busy || !entry.scheduledDate} />
+        </label>
+
+        <label>
+          <FieldLabel>Venue</FieldLabel>
+          <select aria-label={`Venue for ${homeName} v ${awayName}`} className={INPUT} value={entry.venueId || ""} onChange={(event) => update({ venueId: event.target.value })} disabled={disabled || busy}>
             <option value="">Select venue</option>
             {workspace.venues.filter((venue) => venue.status === "active").map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
           </select>
-          <label className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 text-[11px] font-black text-slate-700"><input type="checkbox" checked={Boolean(draft.locked)} onChange={update("locked")} disabled={disabled || busy} /> Lock</label>
-          <button type="button" onClick={() => onSave(entry.id, draft)} disabled={disabled || busy || !entry.id || !draft.venueId} className={`${BUTTON} bg-slate-950 text-white`}><Save size={14} /> Save</button>
-        </div>
+        </label>
+
+        <label className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 text-[11px] font-black text-slate-700">
+          <input type="checkbox" checked={Boolean(entry.locked)} onChange={(event) => update({ locked: event.target.checked })} disabled={disabled || busy} />
+          Lock
+        </label>
+
+        <button
+          type="button"
+          aria-label={`Revert changes for ${homeName} v ${awayName}`}
+          title={changed ? "Discard changes to this fixture" : "No unsaved changes"}
+          onClick={() => onRevert(entry.id)}
+          disabled={!changed || busy}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30"
+        >
+          <RotateCcw size={15} />
+        </button>
       </div>
+
+      {!entry.scheduledDate && entry.unresolvedReason ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">{entry.unresolvedReason}</div> : null}
     </div>
   );
 }
@@ -124,6 +311,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const [versions, setVersions] = useState([]);
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [payload, setPayload] = useState(null);
+  const [entryEdits, setEntryEdits] = useState({});
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({ name: "Initial generated draft", meetings: 2, divisionId: "all" });
@@ -133,6 +321,8 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const [compareVersionId, setCompareVersionId] = useState("");
   const [comparePayload, setComparePayload] = useState(null);
   const [serverValidation, setServerValidation] = useState(null);
+
+  const dirtyCount = Object.keys(entryEdits).length;
 
   const loadVersions = useCallback(async ({ selectVersionId = "", autoSelect = false } = {}) => {
     if (!leagueId || !season?.id) {
@@ -163,12 +353,14 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const loadVersion = useCallback(async (versionId) => {
     if (!versionId) {
       setPayload(null);
+      setEntryEdits({});
       return null;
     }
     setLoading(true);
     try {
       const next = normaliseScheduleVersionPayload(await DB.getLeagueScheduleVersion(leagueId, versionId));
       setPayload(next);
+      setEntryEdits({});
       setServerValidation(next.version.validationSummary || null);
       return next;
     } catch (error) {
@@ -201,10 +393,25 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
       .catch((error) => toast.error("Comparison version could not be loaded", { description: error?.message }));
   }, [compareVersionId, leagueId]);
 
+  useEffect(() => {
+    if (!dirtyCount) return undefined;
+    const warnBeforeLeaving = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [dirtyCount]);
+
+  const effectiveEntries = useMemo(() => {
+    if (!payload) return [];
+    return payload.entries.map((entry) => entryEdits[entry.id] ? { ...entry, ...entryEdits[entry.id] } : entry);
+  }, [entryEdits, payload]);
+
   const validation = useMemo(() => {
     if (!payload) return { valid: false, blockingCount: 0, warningCount: 0, issues: [], totals: { fixtures: 0, placed: 0, unplaced: 0, locked: 0 } };
-    return validateLeagueSchedule(workspace, payload.entries, payload.version.generationConfig || {});
-  }, [payload, workspace]);
+    return validateLeagueSchedule(workspace, effectiveEntries, payload.version.generationConfig || {});
+  }, [effectiveEntries, payload, workspace]);
 
   const selectedDivisionIds = useMemo(() => (
     config.divisionId === "all"
@@ -218,34 +425,27 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     meetings: Number(config.meetings),
   }), [config.meetings, season?.id, selectedDivisionIds, workspace]);
 
-  const visibleValidationIssues = useMemo(() => {
-    if (validation.issues.length <= 24) return validation.issues;
-    const unplaced = validation.issues.filter((item) => item.code === "unplaced-fixture");
-    const others = validation.issues.filter((item) => item.code !== "unplaced-fixture");
-    const result = [];
-    if (unplaced.length) {
-      result.push({
-        id: "unplaced-fixture-summary",
-        code: "unplaced-fixture-summary",
-        severity: "blocking",
-        message: `${unplaced.length} fixtures are unplaced. Generate enough playing dates, then use “Rebuild unresolved only”; individual reasons remain available in the Unplaced schedule filter.`,
+  const issueToneByEntry = useMemo(() => {
+    const tones = new Map();
+    validation.issues.forEach((item) => {
+      (item.entryIds || []).forEach((entryId) => {
+        const current = tones.get(entryId);
+        if (item.severity === "blocking" || !current) tones.set(entryId, item.severity);
       });
-    }
-    return [...result, ...others.slice(0, 23)];
+    });
+    return tones;
   }, [validation.issues]);
 
-  const issueEntryIds = useMemo(() => new Set(validation.issues.filter((item) => item.severity === "blocking").flatMap((item) => item.entryIds || [])), [validation]);
-
   const filteredEntries = useMemo(() => {
-    if (!payload) return [];
     const query = filters.query.trim().toLowerCase();
-    return payload.entries.filter((entry) => {
+    return effectiveEntries.filter((entry) => {
       if (filters.divisionId !== "all" && entry.divisionId !== filters.divisionId) return false;
       if (filters.teamId !== "all" && ![entry.homeTeamId, entry.awayTeamId].includes(filters.teamId)) return false;
       if (filters.venueId !== "all" && entry.venueId !== filters.venueId) return false;
       if (filters.status === "placed" && !entry.scheduledDate) return false;
       if (filters.status === "unplaced" && entry.scheduledDate) return false;
       if (filters.status === "locked" && !entry.locked) return false;
+      if (filters.status === "changed" && !entryEdits[entry.id]) return false;
       if (!query) return true;
       const text = [
         getEntityName(workspace, "team", entry.homeTeamId),
@@ -256,12 +456,103 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
       ].join(" ").toLowerCase();
       return text.includes(query);
     });
-  }, [filters, payload, workspace]);
+  }, [effectiveEntries, entryEdits, filters, workspace]);
 
   const comparison = useMemo(() => {
     if (!payload || !comparePayload) return null;
-    return compareLeagueScheduleVersions(comparePayload.entries, payload.entries);
-  }, [comparePayload, payload]);
+    return compareLeagueScheduleVersions(comparePayload.entries, effectiveEntries);
+  }, [comparePayload, effectiveEntries, payload]);
+
+  const selectedVersion = useMemo(() => versions.find((version) => version.id === selectedVersionId) || payload?.version || null, [payload?.version, selectedVersionId, versions]);
+
+  const updateEntryDraft = useCallback((entryId, patch) => {
+    if (!payload || !entryId) return;
+    const original = payload.entries.find((entry) => entry.id === entryId);
+    if (!original) return;
+
+    setEntryEdits((current) => {
+      const existing = current[entryId] || editableSnapshot(original);
+      const nextValue = editableSnapshot({ ...original, ...existing, ...patch });
+      const next = { ...current };
+      if (sameEditableValues(original, nextValue)) delete next[entryId];
+      else next[entryId] = nextValue;
+      return next;
+    });
+    setServerValidation(null);
+  }, [payload]);
+
+  const revertEntryDraft = useCallback((entryId) => {
+    setEntryEdits((current) => {
+      if (!current[entryId]) return current;
+      const next = { ...current };
+      delete next[entryId];
+      return next;
+    });
+  }, []);
+
+  const discardAllChanges = () => {
+    if (!dirtyCount) return;
+    if (!window.confirm(`Discard ${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"}?`)) return;
+    setEntryEdits({});
+    setServerValidation(payload?.version.validationSummary || null);
+    toast.success("Unsaved fixture changes discarded");
+  };
+
+  const saveAllChanges = useCallback(async () => {
+    if (!payload || !dirtyCount) return;
+    const invalidPlaced = effectiveEntries.filter((entry) => entryEdits[entry.id] && entry.scheduledDate && !entry.venueId);
+    if (invalidPlaced.length) {
+      toast.error("A placed fixture needs a venue", { description: `${invalidPlaced.length} changed fixture${invalidPlaced.length === 1 ? " is" : "s are"} missing a venue.` });
+      return;
+    }
+
+    const updates = Object.entries(entryEdits).map(([entryId, draft]) => ({
+      id: entryId,
+      scheduledDate: draft.scheduledDate || null,
+      kickOff: draft.scheduledDate ? draft.kickOff || "15:00" : null,
+      venueId: draft.venueId || null,
+      locked: Boolean(draft.locked),
+      notes: draft.notes || null,
+    }));
+
+    setBusy(true);
+    try {
+      const result = await DB.updateLeagueScheduleEntries(leagueId, payload.version.id, updates);
+      setEntryEdits({});
+      await loadVersion(payload.version.id);
+      await loadVersions({ selectVersionId: payload.version.id });
+      toast.success("Schedule changes saved", { description: `${Number(result?.updated || updates.length)} fixture${updates.length === 1 ? "" : "s"} updated together.` });
+    } catch (error) {
+      toast.error("Schedule changes could not be saved", { description: error?.message });
+    } finally {
+      setBusy(false);
+    }
+  }, [dirtyCount, effectiveEntries, entryEdits, leagueId, loadVersion, loadVersions, payload]);
+
+  useEffect(() => {
+    if (!dirtyCount || !canOperate || payload?.version.status !== "draft") return undefined;
+    const saveShortcut = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveAllChanges();
+      }
+    };
+    window.addEventListener("keydown", saveShortcut);
+    return () => window.removeEventListener("keydown", saveShortcut);
+  }, [canOperate, dirtyCount, payload?.version.status, saveAllChanges]);
+
+  const chooseVersion = (nextVersionId) => {
+    if (nextVersionId === selectedVersionId) return;
+    if (dirtyCount && !window.confirm(`Discard ${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"} and open another version?`)) return;
+    setEntryEdits({});
+    setSelectedVersionId(nextVersionId);
+  };
+
+  const requireSavedDraft = () => {
+    if (!dirtyCount) return true;
+    toast.error("Save the schedule changes first", { description: `${dirtyCount} fixture change${dirtyCount === 1 ? " is" : "s are"} still only in this browser.` });
+    return false;
+  };
 
   const generateSeasonCalendar = async () => {
     if (!season?.id) return;
@@ -284,7 +575,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const createDraft = async ({ rebuildUnresolved = false } = {}) => {
-    if (!season?.id) return;
+    if (!season?.id || !requireSavedDraft()) return;
     const selectedDivisions = selectedDivisionIds;
     const schedulePreflight = getLeagueSchedulePreflight(workspace, {
       seasonId: season.id,
@@ -339,28 +630,8 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     }
   };
 
-  const saveEntry = async (entryId, draft) => {
-    setBusy(true);
-    try {
-      await DB.updateLeagueScheduleEntry(leagueId, payload.version.id, entryId, {
-        scheduledDate: draft.scheduledDate || null,
-        kickOff: draft.scheduledDate ? draft.kickOff || "15:00" : null,
-        venueId: draft.venueId || null,
-        locked: draft.locked,
-        notes: draft.notes || null,
-      });
-      await loadVersion(payload.version.id);
-      await loadVersions({ selectVersionId: payload.version.id });
-      toast.success("Fixture placement saved");
-    } catch (error) {
-      toast.error("Fixture could not be updated", { description: error?.message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const validateOnServer = async () => {
-    if (!payload) return null;
+    if (!payload || !requireSavedDraft()) return null;
     setBusy(true);
     try {
       const result = await DB.validateLeagueScheduleVersion(leagueId, payload.version.id);
@@ -377,6 +648,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const exportSchedule = async () => {
+    if (!requireSavedDraft()) return;
     const result = await validateOnServer();
     if (!result?.valid) return;
     const filename = `${workspace.league.slug || "league"}-${season?.name || "season"}-schedule-v${payload.version.versionNumber}.csv`.replaceAll(/[^a-zA-Z0-9._-]+/g, "-").toLowerCase();
@@ -385,7 +657,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const publishSchedule = async () => {
-    if (!payload || !window.confirm("Publish this version as the official league schedule? The previously published generated schedule will be archived.")) return;
+    if (!payload || !requireSavedDraft() || !window.confirm("Publish this version as the official league schedule? The previously published generated schedule will be archived.")) return;
     setBusy(true);
     try {
       const result = await DB.publishLeagueScheduleVersion(leagueId, payload.version.id);
@@ -401,7 +673,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const restoreVersion = async () => {
-    if (!payload) return;
+    if (!payload || !requireSavedDraft()) return;
     setBusy(true);
     try {
       const versionId = await DB.cloneLeagueScheduleVersion(leagueId, payload.version.id, `${payload.version.name} – restored`);
@@ -422,6 +694,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
       await DB.deleteLeagueScheduleVersion(leagueId, payload.version.id);
       setSelectedVersionId("");
       setPayload(null);
+      setEntryEdits({});
       await loadVersions({ autoSelect: true });
       toast.success("Draft schedule deleted");
     } catch (error) {
@@ -469,48 +742,81 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
         </div>
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <Panel className="overflow-hidden xl:sticky xl:top-5 xl:self-start">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4"><div><div className="text-sm font-black text-slate-950">Schedule versions</div><div className="mt-1 text-xs font-semibold text-slate-500">{versions.length} saved</div></div>{loading ? <RefreshCw className="animate-spin text-emerald-600" size={18} /> : <CalendarClock className="text-slate-400" size={18} />}</div>
-          <div className="max-h-[540px] space-y-2 overflow-y-auto p-3">{versions.length ? versions.map((version) => <VersionRow key={version.id} version={version} active={version.id === selectedVersionId} onSelect={() => setSelectedVersionId(version.id)} />) : <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">Generate the first draft schedule.</div>}</div>
-          {payload ? <div className="space-y-2 border-t border-slate-200 p-3">
-            <button type="button" onClick={restoreVersion} disabled={!canOperate || busy} className={`${BUTTON} w-full border border-slate-200 bg-white text-slate-800`}><ArchiveRestore size={15} /> Restore as new draft</button>
-            {payload.version.status === "draft" ? <button type="button" onClick={deleteVersion} disabled={!canOperate || busy} className={`${BUTTON} w-full border border-rose-200 bg-rose-50 text-rose-700`}><Trash2 size={15} /> Delete draft</button> : null}
+      <Panel className="p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(280px,1fr)_auto] md:items-end">
+            <label>
+              <span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Schedule version</span>
+              <select className={INPUT} value={selectedVersionId} onChange={(event) => chooseVersion(event.target.value)} disabled={loading || !versions.length}>
+                {!versions.length ? <option value="">No saved versions</option> : null}
+                {versions.map((version) => <option key={version.id} value={version.id}>v{version.versionNumber} · {version.name} · {version.status}</option>)}
+              </select>
+            </label>
+            <div className="flex flex-wrap items-center gap-2 pb-0.5">
+              {selectedVersion ? <Pill tone={selectedVersion.status === "published" ? "green" : selectedVersion.status === "draft" ? "blue" : "slate"}>{selectedVersion.status}</Pill> : null}
+              <Pill>{versions.length} saved</Pill>
+              {loading ? <RefreshCw className="animate-spin text-emerald-600" size={17} /> : null}
+            </div>
+          </div>
+          {payload ? <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={restoreVersion} disabled={!canOperate || busy} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><ArchiveRestore size={15} /> Restore as new draft</button>
+            {payload.version.status === "draft" ? <button type="button" onClick={deleteVersion} disabled={!canOperate || busy} className={`${BUTTON} border border-rose-200 bg-rose-50 text-rose-700`}><Trash2 size={15} /> Delete draft</button> : null}
           </div> : null}
+        </div>
+      </Panel>
+
+      {!payload ? <Panel className="p-10 text-center"><Sparkles className="mx-auto text-emerald-600" size={30} /><h3 className="mt-4 text-xl font-black text-slate-950">No schedule version selected</h3><p className="mt-2 text-sm font-semibold text-slate-500">Generate a draft to begin the pilot scheduling workflow.</p></Panel> : <>
+        <Panel className="p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div><div className="flex flex-wrap gap-2"><Pill tone={payload.version.status === "published" ? "green" : payload.version.status === "draft" ? "blue" : "slate"}>{payload.version.status}</Pill><Pill>Version {payload.version.versionNumber}</Pill>{payload.version.source === "restored" ? <Pill tone="amber">Restored</Pill> : null}{dirtyCount ? <Pill tone="blue">{dirtyCount} unsaved</Pill> : null}</div><h3 className="mt-3 text-2xl font-black text-slate-950">{payload.version.name}</h3><p className="mt-1 text-xs font-semibold text-slate-500">Created {payload.version.createdAt ? new Date(payload.version.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : ""}</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={validateOnServer} disabled={busy || dirtyCount > 0} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><CheckCircle2 size={15} /> Validate</button>
+              <button type="button" onClick={exportSchedule} disabled={busy || dirtyCount > 0 || !payload.entries.length} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><Download size={15} /> Export CSV</button>
+              {payload.version.status === "draft" ? <button type="button" onClick={publishSchedule} disabled={!canOperate || busy || dirtyCount > 0 || !validation.valid} className={`${BUTTON} bg-emerald-600 text-white`}><Send size={15} /> Publish schedule</button> : null}
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5"><Metric label="Fixtures" value={validation.totals.fixtures} /><Metric label="Placed" value={validation.totals.placed} tone="green" /><Metric label="Unplaced" value={validation.totals.unplaced} tone={validation.totals.unplaced ? "amber" : "green"} /><Metric label="Blocking" value={validation.blockingCount} tone={validation.blockingCount ? "rose" : "green"} /><Metric label="Warnings" value={validation.warningCount} tone={validation.warningCount ? "amber" : "green"} /></div>
+          <div className={`mt-4 rounded-2xl border p-4 ${validation.valid ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}><div className="flex items-start gap-3">{validation.valid ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-700" size={18} /> : <AlertTriangle className="mt-0.5 shrink-0 text-rose-700" size={18} />}<div><div className={`text-sm font-black ${validation.valid ? "text-emerald-950" : "text-rose-950"}`}>{validation.valid ? "Ready for server validation and publication" : `${validation.blockingCount} blocking issue${validation.blockingCount === 1 ? "" : "s"} must be resolved`}</div><div className={`mt-1 text-xs font-semibold leading-5 ${validation.valid ? "text-emerald-800" : "text-rose-800"}`}>{dirtyCount ? `${dirtyCount} local change${dirtyCount === 1 ? " is" : "s are"} included in this preview. Save them before validation or publication.` : serverValidation?.valid === true ? "The stored version has also passed server validation." : "The browser preview is immediate; publication repeats the checks securely on the server."}</div></div></div></div>
         </Panel>
 
-        <div className="min-w-0 space-y-5">
-          {!payload ? <Panel className="p-10 text-center"><Sparkles className="mx-auto text-emerald-600" size={30} /><h3 className="mt-4 text-xl font-black text-slate-950">No schedule version selected</h3><p className="mt-2 text-sm font-semibold text-slate-500">Generate a draft to begin the pilot scheduling workflow.</p></Panel> : <>
-            <Panel className="p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div><div className="flex flex-wrap gap-2"><Pill tone={payload.version.status === "published" ? "green" : payload.version.status === "draft" ? "blue" : "slate"}>{payload.version.status}</Pill><Pill>Version {payload.version.versionNumber}</Pill>{payload.version.source === "restored" ? <Pill tone="amber">Restored</Pill> : null}</div><h3 className="mt-3 text-2xl font-black text-slate-950">{payload.version.name}</h3><p className="mt-1 text-xs font-semibold text-slate-500">Created {payload.version.createdAt ? new Date(payload.version.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : ""}</p></div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={validateOnServer} disabled={busy} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><CheckCircle2 size={15} /> Validate</button>
-                  <button type="button" onClick={exportSchedule} disabled={busy || !payload.entries.length} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><Download size={15} /> Export CSV</button>
-                  {payload.version.status === "draft" ? <button type="button" onClick={publishSchedule} disabled={!canOperate || busy || !validation.valid} className={`${BUTTON} bg-emerald-600 text-white`}><Send size={15} /> Publish schedule</button> : null}
-                </div>
-              </div>
-              <div className="mt-5 grid gap-3 grid-cols-2 lg:grid-cols-5"><Metric label="Fixtures" value={validation.totals.fixtures} /><Metric label="Placed" value={validation.totals.placed} tone="green" /><Metric label="Unplaced" value={validation.totals.unplaced} tone={validation.totals.unplaced ? "amber" : "green"} /><Metric label="Blocking" value={validation.blockingCount} tone={validation.blockingCount ? "rose" : "green"} /><Metric label="Warnings" value={validation.warningCount} tone={validation.warningCount ? "amber" : "green"} /></div>
-              <div className={`mt-4 rounded-2xl border p-4 ${validation.valid ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}><div className="flex items-start gap-3">{validation.valid ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-700" size={18} /> : <AlertTriangle className="mt-0.5 shrink-0 text-rose-700" size={18} />}<div><div className={`text-sm font-black ${validation.valid ? "text-emerald-950" : "text-rose-950"}`}>{validation.valid ? "Ready for server validation and publication" : `${validation.blockingCount} blocking issue${validation.blockingCount === 1 ? "" : "s"} must be resolved`}</div><div className={`mt-1 text-xs font-semibold leading-5 ${validation.valid ? "text-emerald-800" : "text-rose-800"}`}>{serverValidation?.valid === true ? "The stored version has also passed server validation." : "The browser preview is immediate; publication repeats the checks securely on the server."}</div></div></div></div>
-            </Panel>
+        <Panel className="p-5">
+          <div className="flex items-center gap-3"><GitCompareArrows className="text-sky-600" size={20} /><div><h3 className="text-base font-black text-slate-950">Compare versions</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">See how this schedule differs from another saved version.</p></div></div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,1fr)_repeat(4,110px)]"><select className={INPUT} value={compareVersionId} onChange={(event) => setCompareVersionId(event.target.value)}><option value="">Select comparison version</option>{versions.filter((version) => version.id !== payload.version.id).map((version) => <option key={version.id} value={version.id}>v{version.versionNumber} · {version.name}</option>)}</select><Metric label="Moved" value={comparison?.moved ?? "—"} tone={comparison?.moved ? "amber" : "slate"} /><Metric label="Added" value={comparison?.added ?? "—"} /><Metric label="Removed" value={comparison?.removed ?? "—"} /><Metric label="Unchanged" value={comparison?.unchanged ?? "—"} tone="green" /></div>
+          {comparison?.details?.length ? <div className="mt-4 max-h-48 space-y-2 overflow-y-auto rounded-2xl bg-slate-50 p-3">{comparison.details.slice(0, 30).map((change) => <div key={`${change.type}:${change.key}`} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-xs"><span className="font-black text-slate-800">{change.after ? `${getEntityName(workspace, "team", change.after.homeTeamId)} v ${getEntityName(workspace, "team", change.after.awayTeamId)}` : `${getEntityName(workspace, "team", change.before.homeTeamId)} v ${getEntityName(workspace, "team", change.before.awayTeamId)}`}</span><span className="font-bold text-slate-500">{change.type === "moved" ? `${change.before.scheduledDate || "unplaced"} → ${change.after.scheduledDate || "unplaced"}` : change.type}</span></div>)}</div> : null}
+        </Panel>
 
-            <Panel className="p-5">
-              <div className="flex items-center gap-3"><GitCompareArrows className="text-sky-600" size={20} /><div><h3 className="text-base font-black text-slate-950">Compare versions</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">See how this draft differs from another saved schedule.</p></div></div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,1fr)_repeat(4,110px)]"><select className={INPUT} value={compareVersionId} onChange={(event) => setCompareVersionId(event.target.value)}><option value="">Select comparison version</option>{versions.filter((version) => version.id !== payload.version.id).map((version) => <option key={version.id} value={version.id}>v{version.versionNumber} · {version.name}</option>)}</select><Metric label="Moved" value={comparison?.moved ?? "—"} tone={comparison?.moved ? "amber" : "slate"} /><Metric label="Added" value={comparison?.added ?? "—"} /><Metric label="Removed" value={comparison?.removed ?? "—"} /><Metric label="Unchanged" value={comparison?.unchanged ?? "—"} tone="green" /></div>
-              {comparison?.details?.length ? <div className="mt-4 max-h-48 space-y-2 overflow-y-auto rounded-2xl bg-slate-50 p-3">{comparison.details.slice(0, 30).map((change) => <div key={`${change.type}:${change.key}`} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-xs"><span className="font-black text-slate-800">{change.after ? `${getEntityName(workspace, "team", change.after.homeTeamId)} v ${getEntityName(workspace, "team", change.after.awayTeamId)}` : `${getEntityName(workspace, "team", change.before.homeTeamId)} v ${getEntityName(workspace, "team", change.before.awayTeamId)}`}</span><span className="font-bold text-slate-500">{change.type === "moved" ? `${change.before.scheduledDate || "unplaced"} → ${change.after.scheduledDate || "unplaced"}` : change.type}</span></div>)}</div> : null}
-            </Panel>
+        <ValidationFindings validation={validation} />
 
-            {validation.issues.length ? <Panel className="overflow-hidden"><details open={!validation.valid}><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4"><div className="flex items-center gap-3"><AlertTriangle className={validation.valid ? "text-amber-600" : "text-rose-600"} size={20} /><div><div className="text-sm font-black text-slate-950">Validation findings</div><div className="mt-0.5 text-xs font-semibold text-slate-500">{validation.blockingCount} blocking · {validation.warningCount} warnings</div></div></div><ChevronDown className="text-slate-400" size={18} /></summary><div className="space-y-2 border-t border-slate-200 p-4">{visibleValidationIssues.map((item) => <div key={item.id} className={`rounded-xl border px-3 py-2.5 text-xs font-bold leading-5 ${item.severity === "blocking" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{item.message}</div>)}</div></details></Panel> : null}
+        <Panel className="overflow-hidden">
+          <div className="border-b border-slate-200 p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center gap-3"><Filter className="text-slate-600" size={19} /><div><h3 className="text-base font-black text-slate-950">Draft schedule</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">Edit the schedule in place, then save all changed fixtures together.</p></div></div>
+              {payload.version.status === "draft" ? <div className="flex flex-wrap items-center gap-2">
+                {dirtyCount ? <Pill tone="blue">{dirtyCount} unsaved change{dirtyCount === 1 ? "" : "s"}</Pill> : <Pill tone="green">All changes saved</Pill>}
+                <button type="button" onClick={discardAllChanges} disabled={!dirtyCount || busy} className={`${BUTTON} border border-slate-200 bg-white text-slate-700`}><RotateCcw size={14} /> Discard</button>
+                <button type="button" onClick={saveAllChanges} disabled={!canOperate || !dirtyCount || busy} className={`${BUTTON} bg-slate-950 text-white`}><Save size={15} /> Save all changes</button>
+              </div> : null}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><input className={INPUT} value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Find a team or venue" /><select className={INPUT} value={filters.divisionId} onChange={(event) => setFilters((current) => ({ ...current, divisionId: event.target.value }))}><option value="all">All divisions</option>{workspace.divisions.filter((division) => division.seasonId === season.id).map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select><select className={INPUT} value={filters.teamId} onChange={(event) => setFilters((current) => ({ ...current, teamId: event.target.value }))}><option value="all">All teams</option>{workspace.teams.filter((team) => team.seasonId === season.id).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select><select className={INPUT} value={filters.venueId} onChange={(event) => setFilters((current) => ({ ...current, venueId: event.target.value }))}><option value="all">All venues</option>{workspace.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select><select className={INPUT} value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}><option value="all">All statuses</option><option value="placed">Placed</option><option value="unplaced">Unplaced</option><option value="locked">Locked</option><option value="changed">Unsaved changes</option></select></div>
+          </div>
 
-            <Panel className="p-5">
-              <div className="flex items-center gap-3"><Filter className="text-slate-600" size={19} /><div><h3 className="text-base font-black text-slate-950">Draft schedule</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">Filter, manually move and lock fixtures. Locked placements survive future regeneration.</p></div></div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><input className={INPUT} value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Find a team or venue" /><select className={INPUT} value={filters.divisionId} onChange={(event) => setFilters((current) => ({ ...current, divisionId: event.target.value }))}><option value="all">All divisions</option>{workspace.divisions.filter((division) => division.seasonId === season.id).map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}</select><select className={INPUT} value={filters.teamId} onChange={(event) => setFilters((current) => ({ ...current, teamId: event.target.value }))}><option value="all">All teams</option>{workspace.teams.filter((team) => team.seasonId === season.id).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select><select className={INPUT} value={filters.venueId} onChange={(event) => setFilters((current) => ({ ...current, venueId: event.target.value }))}><option value="all">All venues</option>{workspace.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select><select className={INPUT} value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}><option value="all">All statuses</option><option value="placed">Placed</option><option value="unplaced">Unplaced</option><option value="locked">Locked</option></select></div>
-              <div className="mt-5 space-y-3">{filteredEntries.slice(0, visibleLimit).map((entry) => <EntryEditor key={entry.id || entry.clientKey} entry={entry} workspace={workspace} disabled={!canOperate || payload.version.status !== "draft"} busy={busy} highlighted={issueEntryIds.has(entry.id || entry.clientKey)} onSave={saveEntry} />)}{!filteredEntries.length ? <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">No fixtures match these filters.</div> : null}</div>
-              {filteredEntries.length > visibleLimit ? <div className="mt-5 flex justify-center"><button type="button" onClick={() => setVisibleLimit((current) => current + 75)} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><Plus size={14} /> Show 75 more</button></div> : null}
-            </Panel>
-          </>}
-        </div>
-      </div>
+          <div className="p-4">
+            <div className={`mb-2 hidden gap-3 px-3 text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 lg:grid ${ENTRY_GRID}`}>
+              <div>Status</div><div>Fixture</div><div>Date</div><div>Kick-off</div><div>Venue</div><div className="text-center">Lock</div><div />
+            </div>
+            <div className="space-y-2">
+              {filteredEntries.slice(0, visibleLimit).map((entry) => <ScheduleEntryRow key={entry.id || entry.clientKey} entry={entry} workspace={workspace} disabled={!canOperate || payload.version.status !== "draft"} busy={busy} changed={Boolean(entryEdits[entry.id])} issueTone={issueToneByEntry.get(entry.id || entry.clientKey)} onChange={updateEntryDraft} onRevert={revertEntryDraft} />)}
+              {!filteredEntries.length ? <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">No fixtures match these filters.</div> : null}
+            </div>
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-bold text-slate-500">Showing {Math.min(filteredEntries.length, visibleLimit)} of {filteredEntries.length} matching fixtures · Ctrl+S saves all changes</div>
+              {filteredEntries.length > visibleLimit ? <button type="button" onClick={() => setVisibleLimit((current) => current + 75)} className={`${BUTTON} border border-slate-200 bg-white text-slate-800`}><Plus size={14} /> Show 75 more</button> : null}
+            </div>
+          </div>
+
+          {payload.version.status === "draft" && dirtyCount ? <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-sky-200 bg-sky-50/95 px-5 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-black text-sky-950">{dirtyCount} unsaved fixture change{dirtyCount === 1 ? "" : "s"}</div><div className="mt-0.5 text-xs font-semibold text-sky-800">Nothing is sent to the league database until you save the batch.</div></div><div className="flex gap-2"><button type="button" onClick={discardAllChanges} disabled={busy} className={`${BUTTON} border border-sky-200 bg-white text-sky-900`}><RotateCcw size={14} /> Discard</button><button type="button" onClick={saveAllChanges} disabled={!canOperate || busy} className={`${BUTTON} bg-slate-950 text-white`}><Save size={15} /> Save all changes</button></div></div> : null}
+        </Panel>
+      </>}
     </div>
   );
 }
