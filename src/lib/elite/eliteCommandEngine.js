@@ -87,7 +87,18 @@ function membershipUserId(membership = {}) {
 }
 
 function membershipLabel(membership = {}) {
-  return clean(membership.display_name || membership.displayName || membership.email || membershipUserId(membership)) || "Club member";
+  return clean(membership.display_name || membership.displayName || membership.email);
+}
+
+function responsibilityLabel(responsibility = {}, membership = {}) {
+  return clean(
+    responsibility.userLabel
+      || responsibility.userDisplayName
+      || responsibility.display_name
+      || responsibility.userEmail
+      || responsibility.email
+      || membershipLabel(membership),
+  ) || "Assigned club member";
 }
 
 function fixtureRowsByDay({ satFinal, sunFinal, midweekFinal, midweekEnabled }) {
@@ -152,11 +163,11 @@ export function buildEliteCommandModel({
     const closedAtSite = sitePitches.filter((pitch) => closed.has(pitch.id));
     const siteLead = siteLeadMap.get(site.id) || null;
     const siteLeadMember = siteLead ? memberMap.get(clean(siteLead.userId || siteLead.user_id)) : null;
-    const siteLeadName = siteLead ? membershipLabel(siteLeadMember || { userId: siteLead.userId || siteLead.user_id }) : "";
+    const siteLeadName = siteLead ? responsibilityLabel(siteLead, siteLeadMember) : "";
     const configurationChecks = [
       !site.postcode,
       parkingEnabled && site.carParkSpaces <= 0,
-      !siteLeadName,
+      !siteLead,
     ];
     const missingConfiguration = configurationChecks.filter(Boolean).length;
     const status = statusFromChecks({
@@ -173,7 +184,7 @@ export function buildEliteCommandModel({
       ...(!site.postcode ? ["Weather postcode missing"] : []),
       ...(parkingEnabled && site.carParkSpaces <= 0 ? ["Parking capacity missing"] : []),
       ...(siteFixtures.some((fixture) => !fixtureOfficialName(fixture)) ? [`${siteFixtures.filter((fixture) => !fixtureOfficialName(fixture)).length} official gap${siteFixtures.filter((fixture) => !fixtureOfficialName(fixture)).length === 1 ? "" : "s"}`] : []),
-      ...(!siteLeadName ? ["Site lead not assigned"] : []),
+      ...(!siteLead ? ["Site lead not assigned"] : []),
     ];
 
     return Object.freeze({

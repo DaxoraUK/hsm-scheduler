@@ -86,11 +86,16 @@ export function normaliseEliteApprovalPolicy(row = {}) {
 }
 
 export function normaliseEliteResponsibility(row = {}) {
+  const userDisplayName = clean(row.display_name || row.user_display_name || row.userDisplayName);
+  const userEmail = clean(row.email || row.user_email || row.userEmail);
   return {
     id: row.id || createId("responsibility"),
     clubId: row.club_id || row.clubId || "",
     siteId: row.site_id || row.siteId || "",
     userId: row.user_id || row.userId || "",
+    userDisplayName,
+    userEmail,
+    userLabel: userDisplayName || userEmail || "",
     responsibility: row.responsibility || "site_lead",
     active: row.active !== false,
     createdAt: row.created_at || row.createdAt || null,
@@ -188,8 +193,9 @@ export async function loadEliteGovernanceWorkspace(clubId) {
 }
 
 export async function loadEliteSiteResponsibilities(clubId) {
-  const club = encode(clubId);
-  const rows = await supaFetch("GET", `elite_site_responsibilities?select=*&club_id=eq.${club}&active=eq.true&order=site_id.asc,created_at.asc`);
+  const rows = await supaFetch("POST", "rpc/list_elite_site_responsibilities", {
+    target_club_id: clubId,
+  });
   return asArray(rows).map(normaliseEliteResponsibility);
 }
 
