@@ -37,6 +37,7 @@ import {
   loadDeliveryCapabilities,
 } from "../lib/communications/deliveryService.js";
 import { buildCommunicationApprovalKey, communicationRowSignature, findStaleCommunicationRows } from "../lib/communications/queueSafety.js";
+import { buildCommunicationApprovalSnapshot } from "../lib/elite/eliteApprovalSnapshots.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import {
   ELITE_APPROVAL_TYPES,
@@ -443,24 +444,21 @@ export default function CommunicationsPage(props) {
       return;
     }
 
-    const requestKey = buildCommunicationApprovalKey(webEligibleRows);
+    const approvalSnapshot = buildCommunicationApprovalSnapshot(webEligibleRows, plan);
+    const requestKey = buildCommunicationApprovalKey(webEligibleRows, plan);
     const eliteGovernance = eliteCommunicationGovernance;
     if (eliteGovernance) {
       try {
         const approvalState = await loadEliteApprovalState(props.activeClubId, ELITE_APPROVAL_TYPES.COMMUNICATIONS, requestKey);
-        if (approvalState.policy.communicationsApprovalRequired && !approvalState.approved) {
+        const approvalRequired = approvalState.policy.communicationsApprovalRequired || approvalSnapshot.approvalRequired;
+        if (approvalRequired && !approvalState.approved) {
           if (!approvalState.pending) {
             await createEliteApprovalRequest(props.activeClubId, {
               approvalType: ELITE_APPROVAL_TYPES.COMMUNICATIONS,
               entityKey: requestKey,
               title: `Coach message batch · ${plan.messages.length} recipient${plan.messages.length === 1 ? "" : "s"}`,
-              summary: "Exact recipient, fixture and message content snapshot prepared from the current matchweek queue.",
-              snapshot: {
-                recipientCount: plan.messages.length,
-                unavailableCount: plan.unavailable.length,
-                messageKeys: webEligibleRows.map((row) => row.id),
-                messageHashes: webEligibleRows.map((row) => row.messageHash),
-              },
+              summary: "Exact recipient, fixture, template and message content snapshot prepared from the current matchweek queue.",
+              snapshot: approvalSnapshot,
             });
           }
           const failure = {

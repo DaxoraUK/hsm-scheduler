@@ -10,25 +10,11 @@ import { getParkingSettings } from "../lib/intelligence/parking/parkingService.j
 import { weatherService } from "../lib/services/weatherService.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
-import { ELITE_APPROVAL_TYPES, buildEliteEntityKey, createEliteApprovalRequest, loadEliteApprovalState } from "../lib/elite/eliteGovernanceService.js";
-
-
-function approvalFixtureSignature(day = {}) {
-  const rows = [
-    ...(Array.isArray(day.scheduled) ? day.scheduled : []),
-    ...(Array.isArray(day.postponed) ? day.postponed : []),
-    ...(Array.isArray(day.cancelled) ? day.cancelled : []),
-  ];
-  return rows.map((fixture) => [
-    day.key || day.label || "",
-    fixture.id || fixture.fixtureId || "",
-    fixture.homeTeam || fixture.team || fixture.teamName || "",
-    fixture.awayTeam || fixture.opposition || "",
-    fixture.ko || fixture.kickOff || fixture.time || "",
-    fixture.pitchId || fixture.pitch || fixture.pitchName || "",
-    fixture.status || "scheduled",
-  ].join("~"));
-}
+import { ELITE_APPROVAL_TYPES, createEliteApprovalRequest, loadEliteApprovalState } from "../lib/elite/eliteGovernanceService.js";
+import {
+  buildMatchweekApprovalKey,
+  buildMatchweekApprovalSnapshot,
+} from "../lib/elite/eliteApprovalSnapshots.js";
 
 function splitFixtures(fixtures = [], dayKey) {
   const decorated = decorateFixturesForDay(fixtures, dayKey);
@@ -248,10 +234,8 @@ export function useWeekPersistence({
 
     let approvalEntityKey = "";
     if (hasEntitlement(subscription, ENTITLEMENTS.APPROVAL_WORKFLOWS) && activeClubId) {
-      approvalEntityKey = buildEliteEntityKey(
-        ELITE_APPROVAL_TYPES.MATCHWEEK,
-        publishedDays.flatMap(approvalFixtureSignature),
-      );
+      const approvalSnapshot = buildMatchweekApprovalSnapshot(publishedDays);
+      approvalEntityKey = buildMatchweekApprovalKey(approvalSnapshot);
       try {
         const approvalState = await loadEliteApprovalState(activeClubId, ELITE_APPROVAL_TYPES.MATCHWEEK, approvalEntityKey);
         if (approvalState.policy.matchweekApprovalRequired && !approvalState.approved) {
@@ -260,10 +244,8 @@ export function useWeekPersistence({
               approvalType: ELITE_APPROVAL_TYPES.MATCHWEEK,
               entityKey: approvalEntityKey,
               title: "Current matchweek release",
-              summary: `${publishedDays.reduce((total, day) => total + (day.scheduled?.length || 0), 0)} scheduled fixtures across ${publishedDays.length} operating day${publishedDays.length === 1 ? "" : "s"}.`,
-              snapshot: {
-                days: publishedDays.map((day) => ({ key: day.key, date: day.date, scheduled: day.scheduled?.length || 0, postponed: day.postponed?.length || 0, cancelled: day.cancelled?.length || 0 })),
-              },
+              summary: `${approvalSnapshot.fixtureCount} fixtures across ${approvalSnapshot.days.length} operating day${approvalSnapshot.days.length === 1 ? "" : "s"}.`,
+              snapshot: approvalSnapshot,
             });
           }
           toast.info("Elite approval required", {
@@ -312,6 +294,7 @@ export function useWeekPersistence({
           : midweekDate || undefined,
       savedAt: new Date().toISOString(),
       approvalEntityKey: approvalEntityKey || undefined,
+      approvalSnapshotHash: approvalEntityKey ? approvalEntityKey.split(":").at(-1) : undefined,
       carParkSpaces: parkingCapacity,
       parking: {
         enabled: parkingSettings.enabled,

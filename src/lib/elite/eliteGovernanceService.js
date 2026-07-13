@@ -99,6 +99,12 @@ export function normaliseEliteResponsibility(row = {}) {
 }
 
 export function normaliseEliteApproval(row = {}) {
+  const rawStatus = row.status || "pending";
+  const expiresAt = row.expires_at || row.expiresAt || null;
+  const expiry = expiresAt ? new Date(expiresAt).getTime() : null;
+  const status = rawStatus === "pending" && Number.isFinite(expiry) && expiry <= Date.now()
+    ? "expired"
+    : rawStatus;
   return {
     id: row.id || createId("approval"),
     clubId: row.club_id || row.clubId || "",
@@ -107,7 +113,7 @@ export function normaliseEliteApproval(row = {}) {
     title: row.title || "Approval request",
     summary: row.summary || "",
     siteId: row.site_id || row.siteId || "",
-    status: row.status || "pending",
+    status,
     requestedBy: row.requested_by || row.requestedBy || "",
     requestedByLabel: row.requested_by_label || row.requestedByLabel || "",
     requestedAt: row.requested_at || row.requestedAt || null,
@@ -115,7 +121,7 @@ export function normaliseEliteApproval(row = {}) {
     decisionByLabel: row.decision_by_label || row.decisionByLabel || "",
     decisionAt: row.decision_at || row.decisionAt || null,
     decisionNote: row.decision_note || row.decisionNote || "",
-    expiresAt: row.expires_at || row.expiresAt || null,
+    expiresAt,
     snapshot: row.snapshot && typeof row.snapshot === "object" ? row.snapshot : {},
   };
 }
@@ -140,34 +146,70 @@ function memberLabel(member = {}) {
 
 export async function loadEliteGovernanceWorkspace(clubId) {
   const club = encode(clubId);
-  const [policyRows, responsibilityRows, approvalRows, templateRows, members, funding, auditEvents] = await Promise.all([
-    supaFetch("GET", `elite_approval_policies?select=*&club_id=eq.${club}&limit=1`),
-    supaFetch("GET", `elite_site_responsibilities?select=*&club_id=eq.${club}&active=eq.true&order=site_id.asc,created_at.asc`),
-    supaFetch("GET", `elite_approval_requests?select=*&club_id=eq.${club}&order=requested_at.desc&limit=100`),
-    supaFetch("GET", `elite_communication_templates?select=*&club_id=eq.${club}&order=template_key.asc`),
-    DB.listClubMembers(clubId),
-    loadFundingWorkspace(clubId),
-    DB.listAuditEvents(clubId, 100),
-  ]);
-  const memberRows = asArray(members);
+  const requests = [
+    ["policy", () => supaFetch("GET", `elite_approval_policies?select=*&club_id=eq.${club}&limit=1`)],
+    ["responsibilities", () => supaFetch("GET", `elite_site_responsibilities?select=*&club_id=eq.${club}&active=eq.true&order=site_id.asc,created_at.asc`)],
+    ["approvals", () => supaFetch("GET", `elite_approval_requests?select=*&club_id=eq.${club}&order=requested_at.desc&limit=100`)],
+    ["templates", () => supaFetch("GET", `elite_communication_templates?select=*&club_id=eq.${club}&order=template_key.asc`)],
+    ["members", () => DB.listClubMembers(clubId)],
+    ["funding", () => loadFundingWorkspace(clubId)],
+    ["audit", () => DB.listAuditEvents(clubId, 100)],
+  ];
+  const settled = await Promise.allSettled(requests.map(([, load]) => load()));
+  const values = {};
+  const errors = {};
+  settled.forEach((result, index) => {
+    const key = requests[index][0];
+    if (result.status === "fulfilled") values[key] = result.value;
+    else errors[key] = result.reason?.message || `${key} could not be loaded`;
+  });
+
+  const memberRows = asArray(values.members);
   const memberMap = new Map(memberRows.map((member) => [member.user_id || member.userId, memberLabel(member)]));
-  const approvals = asArray(approvalRows).map((row) => normaliseEliteApproval({
+  const approvals = asArray(values.approvals).map((row) => normaliseEliteApproval({
     ...row,
     requested_by_label: memberMap.get(row.requested_by) || "Club member",
     decision_by_label: memberMap.get(row.decision_by) || "",
   }));
-  const templates = asArray(templateRows).length
-    ? asArray(templateRows).map(normaliseEliteTemplate)
+  const templates = asArray(values.templates).length
+    ? asArray(values.templates).map(normaliseEliteTemplate)
     : DEFAULT_COMMUNICATION_TEMPLATES.map((item) => normaliseEliteTemplate({ ...item, clubId }));
+
   return {
-    policy: normaliseEliteApprovalPolicy(asArray(policyRows)[0] || { clubId }),
-    responsibilities: asArray(responsibilityRows).map(normaliseEliteResponsibility),
+    policy: normaliseEliteApprovalPolicy(asArray(values.policy)[0] || { clubId }),
+    responsibilities: asArray(values.responsibilities).map(normaliseEliteResponsibility),
     approvals,
     templates,
     members: memberRows,
-    funding,
-    auditEvents: asArray(auditEvents),
+    funding: values.funding || { projects: [], applications: [], applicationTasks: [], monitoringObligations: [] },
+    auditEvents: asArray(values.audit),
+    errors,
   };
+}
+
+export async function loadEliteSiteResponsibilities(clubId) {
+  const club = encode(clubId);
+  const rows = await supaFetch("GET", `elite_site_responsibilities?select=*&club_id=eq.${club}&active=eq.true&order=site_id.asc,created_at.asc`);
+  return asArray(rows).map(normaliseEliteResponsibility);
+}
+
+export async function authoriseEliteGovernedExport(clubId, exportRequest) {
+  return supaFetch("POST", "rpc/authorise_elite_governed_export", {
+    target_club_id: clubId,
+    request_type: exportRequest.approvalType,
+    request_entity_key: clean(exportRequest.entityKey),
+    export_format: clean(exportRequest.format || "html"),
+    export_snapshot: exportRequest.snapshot && typeof exportRequest.snapshot === "object" ? exportRequest.snapshot : {},
+  });
+}
+
+export async function cancelEliteApprovalRequest(clubId, approvalId, note = "") {
+  const result = await supaFetch("POST", "rpc/cancel_elite_approval_request", {
+    target_club_id: clubId,
+    approval_id: approvalId,
+    cancellation_note: clean(note),
+  });
+  return normaliseEliteApproval(result || { id: approvalId, status: "cancelled" });
 }
 
 export async function saveEliteApprovalPolicy(clubId, policy) {

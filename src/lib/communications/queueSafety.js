@@ -1,3 +1,8 @@
+import {
+  buildCommunicationApprovalKeyFromSnapshot,
+  buildCommunicationApprovalSnapshot,
+} from "../elite/eliteApprovalSnapshots.js";
+
 export function communicationRowSignature(row = {}) {
   const recipients = (Array.isArray(row.recipients) ? row.recipients : [])
     .map((recipient) => [recipient.type, recipient.channel, recipient.destination, recipient.message || row.message])
@@ -23,20 +28,9 @@ export function findStaleCommunicationRows(rows = [], currentRows = [], snapshot
   });
 }
 
-function fnv1a(value) {
-  let hash = 2166136261;
-  const text = String(value || "");
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
 
-export function buildCommunicationApprovalKey(rows = []) {
-  const signatures = (Array.isArray(rows) ? rows : [])
-    .map((row) => communicationRowSignature(row))
-    .sort()
-    .join("|");
-  return `elite:communications:${fnv1a(signatures)}`;
+export function buildCommunicationApprovalKey(rows = [], prepared = {}) {
+  return buildCommunicationApprovalKeyFromSnapshot(
+    buildCommunicationApprovalSnapshot(rows, prepared),
+  );
 }

@@ -25,6 +25,13 @@ import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.
 import { buildFundingEvidencePack, downloadFundingApplicationPack, downloadFundingEvidencePack } from "../lib/grants/fundingEvidencePack.js";
 import { loadFundingImpactEvidence } from "../lib/grants/fundingImpactEvidenceService.js";
 import { loadFundingWorkspace } from "../lib/grants/fundingWorkspaceService.js";
+import { buildFundingPackApprovalKey, buildFundingPackSnapshot } from "../lib/elite/eliteApprovalSnapshots.js";
+import {
+  ELITE_APPROVAL_TYPES,
+  authoriseEliteGovernedExport,
+  createEliteApprovalRequest,
+  loadEliteApprovalState,
+} from "../lib/elite/eliteGovernanceService.js";
 
 const ADVANCED_REPORT_IDS = new Set(["analytics", "funding"]);
 
@@ -106,8 +113,9 @@ export default function ReportsPage({
   const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
   const [pendingAutoPrint, setPendingAutoPrint] = useState(false);
   const [impactEvidence, setImpactEvidence] = useState([]);
-  const [fundingProjects, setFundingProjects] = useState([]);
+  const [fundingWorkspace, setFundingWorkspace] = useState({ projects: [], applications: [], applicationTasks: [], monitoringObligations: [] });
   const [fundingProjectId, setFundingProjectId] = useState("");
+  const [fundingExporting, setFundingExporting] = useState(false);
   const advancedReportsEnabled = authoritativeAdvancedReportsEnabled
     ?? hasEntitlement(subscription, ENTITLEMENTS.REPORTS_ADVANCED);
   const dataExportEnabled = hasEntitlement(subscription, ENTITLEMENTS.DATA_EXPORT);
@@ -173,7 +181,7 @@ export default function ReportsPage({
     ]).then(([impactResult, workspaceResult]) => {
       if (cancelled) return;
       setImpactEvidence(impactResult.records || []);
-      setFundingProjects(workspaceResult.projects || []);
+      setFundingWorkspace(workspaceResult || { projects: [], applications: [], applicationTasks: [], monitoringObligations: [] });
       setFundingProjectId((current) => current || workspaceResult.projects?.[0]?.id || "");
     });
     return () => { cancelled = true; };
@@ -195,6 +203,7 @@ export default function ReportsPage({
     if (!midweekEnabled && ["matchweek", "midweek"].includes(scope)) setScope("weekend");
   }, [midweekEnabled, scope]);
 
+  const fundingProjects = fundingWorkspace.projects || [];
   const selectedFundingProject = fundingProjects.find((project) => project.id === fundingProjectId) || null;
   const selectedImpactEvidence = fundingProjectId
     ? impactEvidence.filter((record) => record.projectId === fundingProjectId)
@@ -230,15 +239,63 @@ export default function ReportsPage({
     toast.success("Funding evidence draft downloaded", { description: "Review every claim and re-check official programme guidance before submission." });
   };
 
-  const exportFundingApplication = () => {
-    if (!advancedReportsEnabled || reportType !== "funding") return;
+  const exportFundingApplication = async () => {
+    if (!advancedReportsEnabled || reportType !== "funding" || fundingExporting) return;
     if (!selectedFundingProject) {
       toast.error("Select a funding project", { description: "Application-ready packs must be tied to a saved funding project." });
       return;
     }
     const pack = buildSelectedFundingPack();
-    downloadFundingApplicationPack(pack);
-    toast.success("Application evidence pack downloaded", { description: "Open the HTML file to review, print or save it as PDF." });
+    const eliteFundingGovernance = hasEntitlement(subscription, ENTITLEMENTS.FUNDING_PORTFOLIO);
+    if (!eliteFundingGovernance) {
+      downloadFundingApplicationPack(pack);
+      toast.success("Application evidence pack downloaded", { description: "Open the HTML file to review, print or save it as PDF." });
+      return;
+    }
+
+    setFundingExporting(true);
+    try {
+      const clubId = club.id || club.organisationId || String(club.name || "local-club").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const snapshot = buildFundingPackSnapshot({
+        project: selectedFundingProject,
+        applications: fundingWorkspace.applications,
+        tasks: fundingWorkspace.applicationTasks,
+        obligations: fundingWorkspace.monitoringObligations,
+        impactEvidence: selectedImpactEvidence,
+        pack,
+      });
+      const entityKey = buildFundingPackApprovalKey(snapshot);
+      const approvalState = await loadEliteApprovalState(clubId, ELITE_APPROVAL_TYPES.FUNDING_PACK, entityKey);
+      if (approvalState.policy.fundingPackApprovalRequired && !approvalState.approved) {
+        if (!approvalState.pending) {
+          await createEliteApprovalRequest(clubId, {
+            approvalType: ELITE_APPROVAL_TYPES.FUNDING_PACK,
+            entityKey,
+            title: `${selectedFundingProject.title || "Funding project"} application pack`,
+            summary: "Exact project, application, task, obligation and impact-evidence snapshot prepared for release.",
+            snapshot,
+          });
+        }
+        toast.info("Funding pack approval required", {
+          description: approvalState.pending
+            ? "This exact pack is already waiting for a reviewer in Organisation Command."
+            : "A request has been created in Organisation Command. Approve this exact snapshot before downloading it.",
+        });
+        return;
+      }
+      await authoriseEliteGovernedExport(clubId, {
+        approvalType: ELITE_APPROVAL_TYPES.FUNDING_PACK,
+        entityKey,
+        format: "html",
+        snapshot,
+      });
+      downloadFundingApplicationPack(pack);
+      toast.success("Governed application evidence pack downloaded", { description: "The release was recorded in the Elite audit trail." });
+    } catch (error) {
+      toast.error("Funding pack export was blocked", { description: error?.message });
+    } finally {
+      setFundingExporting(false);
+    }
   };
 
   const printReport = () => {
@@ -300,10 +357,10 @@ export default function ReportsPage({
                 <button
                   type="button"
                   onClick={exportFundingApplication}
-                  disabled={!model.hasData || !selectedFundingProject}
+                  disabled={fundingExporting || !model.hasData || !selectedFundingProject}
                   className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FileCheck2 size={17} /> Application pack
+                  <FileCheck2 size={17} /> {fundingExporting ? "Authorising…" : "Application pack"}
                 </button>
                 <button
                   type="button"

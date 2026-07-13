@@ -23,7 +23,7 @@ import {
   ELITE_APPROVAL_TYPES,
   ELITE_RESPONSIBILITIES,
   assignEliteSiteResponsibility,
-  buildEliteEntityKey,
+  cancelEliteApprovalRequest,
   createEliteApprovalRequest,
   decideEliteApproval,
   loadEliteGovernanceWorkspace,
@@ -32,6 +32,7 @@ import {
   saveEliteCommunicationTemplate,
   summariseEliteFundingPortfolio,
 } from "../../lib/elite/eliteGovernanceService.js";
+import { buildFundingPackApprovalKey, buildFundingPackSnapshot } from "../../lib/elite/eliteApprovalSnapshots.js";
 
 const TABS = Object.freeze([
   ["approvals", "Approvals", ClipboardCheck],
@@ -45,6 +46,19 @@ const inputClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3
 const textareaClass = "min-h-[110px] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold leading-6 text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100";
 const buttonPrimary = "inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40";
 const buttonSecondary = "inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40";
+
+const SUPPORTED_TEMPLATE_TOKENS = new Set(["coach", "team", "opposition", "date", "kickoff", "venue", "pitch"]);
+
+function templateTokenWarnings(template = {}) {
+  const content = `${template.subjectTemplate || ""}\n${template.bodyTemplate || ""}`;
+  const tokens = [...content.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)].map((match) => clean(match[1]).toLowerCase());
+  return [...new Set(tokens.filter((token) => !SUPPORTED_TEMPLATE_TOKENS.has(token)))];
+}
+
+function previewTemplate(value = "") {
+  const sample = { coach: "Jamie", team: "U16 Cheetahs", opposition: "Rovers", date: "Saturday 18 July", kickoff: "10:00", venue: "Main Ground", pitch: "Pitch 2" };
+  return String(value || "").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, token) => sample[clean(token).toLowerCase()] || `{{${token}}}`);
+}
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -129,7 +143,29 @@ function ToggleRow({ label, detail, checked, onChange, disabled }) {
   );
 }
 
-function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview, onRefresh }) {
+function SnapshotDetails({ snapshot = {} }) {
+  const rows = [
+    ["Content hash", snapshot.contentHash],
+    ["Fixtures", snapshot.fixtureCount],
+    ["Unresolved", snapshot.unresolvedCount],
+    ["Recipients", snapshot.recipientCount],
+    ["Sites", snapshot.metrics?.siteCount],
+    ["Governance score", snapshot.metrics?.governanceScore != null ? `${snapshot.metrics.governanceScore}%` : null],
+    ["Project", snapshot.project?.title],
+    ["Templates", Array.isArray(snapshot.templates) ? snapshot.templates.join(", ") : null],
+  ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  return (
+    <details className="mt-4 rounded-2xl border border-amber-200 bg-white/80 p-3">
+      <summary className="cursor-pointer text-xs font-black text-slate-800">Review exact approval snapshot</summary>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {rows.map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 px-3 py-2"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</div><div className="mt-1 break-words text-xs font-bold text-slate-800">{String(value)}</div></div>)}
+      </div>
+      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[10px] leading-5 text-slate-200">{JSON.stringify(snapshot, null, 2)}</pre>
+    </details>
+  );
+}
+
+function ApprovalsPanel({ data, model, clubId, canManage, canOperate, activeUserId, approvalArtifacts, onRefresh }) {
   const [policy, setPolicy] = useState(data.policy);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [decisionNotes, setDecisionNotes] = useState({});
@@ -137,21 +173,10 @@ function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview,
 
   useEffect(() => setPolicy(data.policy), [data.policy]);
 
-  const matchweekKey = useMemo(() => buildEliteEntityKey(ELITE_APPROVAL_TYPES.MATCHWEEK, [
-    model.fixtureCount,
-    model.unresolvedCount,
-    model.closedPitchCount,
-    model.dayCounts.saturday,
-    model.dayCounts.sunday,
-    model.dayCounts.midweek,
-    ...model.boardRows.map((row) => `${row.site}:${row.fixtures}:${row.unresolved}:${row.closedPitches}`),
-  ]), [model]);
-  const executiveKey = useMemo(() => buildEliteEntityKey(ELITE_APPROVAL_TYPES.EXECUTIVE_REPORT, [
-    model.generatedAt.slice(0, 10),
-    model.governanceScore,
-    model.fixtureCount,
-    model.actions.length,
-  ]), [model]);
+  const matchweekArtifact = approvalArtifacts?.matchweek || {};
+  const executiveArtifact = approvalArtifacts?.executive || {};
+  const matchweekKey = matchweekArtifact.entityKey || "";
+  const executiveKey = executiveArtifact.entityKey || "";
 
   const savePolicy = async () => {
     setSavingPolicy(true);
@@ -192,6 +217,19 @@ function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview,
     }
   };
 
+  const cancel = async (approval) => {
+    setWorking(approval.id);
+    try {
+      await cancelEliteApprovalRequest(clubId, approval.id, decisionNotes[approval.id] || "Cancelled by requester");
+      toast.success("Approval request cancelled");
+      await onRefresh();
+    } catch (error) {
+      toast.error("Approval request could not be cancelled", { description: error?.message });
+    } finally {
+      setWorking("");
+    }
+  };
+
   const pending = data.approvals.filter((item) => item.status === "pending");
 
   return (
@@ -213,11 +251,11 @@ function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview,
 
       <Panel eyebrow="Release control" title="Request approval" description="Create a recorded request from the current organisation state. Coach-message requests are created automatically from the exact sending queue.">
         <div className="grid gap-3 lg:grid-cols-2">
-          <button type="button" disabled={!canOperate || working === matchweekKey} onClick={() => requestApproval(ELITE_APPROVAL_TYPES.MATCHWEEK, matchweekKey, "Current matchweek release", `${model.fixtureCount} scheduled fixtures across ${model.siteCount} sites, with ${model.unresolvedCount} unresolved.`, { fixtureCount: model.fixtureCount, unresolvedCount: model.unresolvedCount, closedPitchCount: model.closedPitchCount, dayCounts: model.dayCounts })} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-40">
+          <button type="button" disabled={!canOperate || !matchweekKey || working === matchweekKey} onClick={() => requestApproval(ELITE_APPROVAL_TYPES.MATCHWEEK, matchweekKey, `${model.periodLabel || "Current matchweek"} release`, `${model.fixtureCount} scheduled fixtures across ${model.siteCount} sites, with ${model.unresolvedCount} unresolved.`, matchweekArtifact.snapshot || {})} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-40">
             <div className="flex items-center gap-3 text-sm font-black text-slate-950"><FileCheck2 size={18} className="text-emerald-700" /> Current matchweek</div>
             <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">Request release approval for the exact cross-site schedule currently shown in Organisation Command.</div>
           </button>
-          <button type="button" disabled={!canOperate || working === executiveKey} onClick={() => requestApproval(ELITE_APPROVAL_TYPES.EXECUTIVE_REPORT, executiveKey, "Executive organisation report", `${model.governanceScore}% governance readiness and ${model.actions.length} open organisation actions.`, { governanceScore: model.governanceScore, openActions: model.actions.length, siteCount: model.siteCount })} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-40">
+          <button type="button" disabled={!canOperate || !executiveKey || working === executiveKey} onClick={() => requestApproval(ELITE_APPROVAL_TYPES.EXECUTIVE_REPORT, executiveKey, `${model.periodLabel || "Current"} executive organisation report`, `${model.governanceScore}% governance readiness and ${model.actions.length} open organisation actions.`, executiveArtifact.snapshot || {})} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-40">
             <div className="flex items-center gap-3 text-sm font-black text-slate-950"><FileText size={18} className="text-emerald-700" /> Executive board report</div>
             <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">Request approval for the current executive operating picture and governance summary.</div>
           </button>
@@ -227,7 +265,10 @@ function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview,
       <Panel eyebrow="Decision queue" title={`Pending approvals · ${pending.length}`} description="Approvers see the exact snapshot requested, the requester and the expiry time.">
         {!pending.length ? <EmptyBlock title="No approvals waiting" description="New requests will appear here for a separate reviewer or administrator." /> : (
           <div className="space-y-3">
-            {pending.map((approval) => (
+            {pending.map((approval) => {
+              const canReviewApproval = canManage || Boolean(approval.siteId && data.responsibilities.some((item) => item.userId === activeUserId && item.siteId === approval.siteId && ["site_admin", "reviewer"].includes(item.responsibility)));
+              const canCancelApproval = canManage || approval.requestedBy === activeUserId;
+              return (
               <article key={approval.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
@@ -237,21 +278,24 @@ function ApprovalsPanel({ data, model, clubId, canManage, canOperate, canReview,
                     </div>
                     <h4 className="mt-3 text-base font-black text-slate-950">{approval.title}</h4>
                     <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{approval.summary || "No additional summary was supplied."}</p>
-                    <div className="mt-2 text-xs font-bold text-slate-500">Requested by {approval.requestedByLabel || "Club member"} · {formatDate(approval.requestedAt)}</div>
+                    <div className="mt-2 text-xs font-bold text-slate-500">Requested by {approval.requestedByLabel || "Club member"} · {formatDate(approval.requestedAt)}{approval.siteId ? ` · Site ${approval.siteId}` : " · Organisation-wide"}</div>
+                    <SnapshotDetails snapshot={approval.snapshot} />
                   </div>
                   <span className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${statusTone(approval.status)}`}>{approval.status}</span>
                 </div>
-                {canReview ? (
+                {canReviewApproval ? (
                   <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-                    <input className={inputClass} value={decisionNotes[approval.id] || ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [approval.id]: event.target.value }))} placeholder="Decision note (recommended)" />
+                    <input className={inputClass} value={decisionNotes[approval.id] || ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [approval.id]: event.target.value }))} placeholder="Decision note (required for rejection)" />
                     <div className="flex gap-2">
                       <button type="button" disabled={working === approval.id} onClick={() => decide(approval, "approved")} className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:opacity-40"><Check size={15} /> Approve</button>
-                      <button type="button" disabled={working === approval.id} onClick={() => decide(approval, "rejected")} className="inline-flex h-11 items-center gap-2 rounded-xl bg-rose-600 px-4 text-xs font-black text-white disabled:opacity-40"><X size={15} /> Reject</button>
+                      <button type="button" disabled={working === approval.id || clean(decisionNotes[approval.id]).length < 3} onClick={() => decide(approval, "rejected")} className="inline-flex h-11 items-center gap-2 rounded-xl bg-rose-600 px-4 text-xs font-black text-white disabled:opacity-40"><X size={15} /> Reject</button>
                     </div>
                   </div>
-                ) : <div className="mt-4 text-xs font-bold text-amber-900">A club owner, administrator or assigned reviewer must make this decision.</div>}
+                ) : <div className="mt-4 text-xs font-bold text-amber-900">Organisation-wide decisions require a club owner or administrator. Site reviewers can only decide requests scoped to their assigned site.</div>}
+                {canCancelApproval ? <button type="button" disabled={working === approval.id} onClick={() => cancel(approval)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-black text-slate-700"><Trash2 size={14} /> Cancel request</button> : null}
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </Panel>
@@ -343,16 +387,27 @@ function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) 
   const portfolio = useMemo(() => summariseEliteFundingPortfolio(data.funding), [data.funding]);
   const [working, setWorking] = useState("");
 
+  const fundingArtifact = (project) => {
+    const snapshot = buildFundingPackSnapshot({
+      project,
+      applications: data.funding.applications,
+      tasks: data.funding.applicationTasks,
+      obligations: data.funding.monitoringObligations,
+      impactEvidence: data.funding.impactEvidence,
+    });
+    return { snapshot, entityKey: buildFundingPackApprovalKey(snapshot) };
+  };
+
   const requestPack = async (project) => {
-    const entityKey = `elite:funding_pack:${project.id}`;
+    const artifact = fundingArtifact(project);
     setWorking(project.id);
     try {
       await createEliteApprovalRequest(clubId, {
         approvalType: ELITE_APPROVAL_TYPES.FUNDING_PACK,
-        entityKey,
+        entityKey: artifact.entityKey,
         title: `${project.title || "Funding project"} application pack`,
         summary: `${formatMoney(project.targetFunding)} target funding. Project status: ${project.status || "planning"}.`,
-        snapshot: { projectId: project.id, title: project.title, targetFunding: project.targetFunding, estimatedCost: project.estimatedCost, status: project.status },
+        snapshot: artifact.snapshot,
       });
       toast.success("Funding pack approval requested");
       await onRefresh();
@@ -380,7 +435,8 @@ function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) 
         {!portfolio.projects.length ? <EmptyBlock title="No funding projects" description="Create projects in Analytics → Funding before using organisation-wide funding control." /> : (
           <div className="grid gap-3 lg:grid-cols-2">
             {portfolio.projects.map((project) => {
-              const approval = data.approvals.find((item) => item.approvalType === ELITE_APPROVAL_TYPES.FUNDING_PACK && item.entityKey === `elite:funding_pack:${project.id}` && ["pending", "approved"].includes(item.status));
+              const artifact = fundingArtifact(project);
+              const approval = data.approvals.find((item) => item.approvalType === ELITE_APPROVAL_TYPES.FUNDING_PACK && item.entityKey === artifact.entityKey && ["pending", "approved"].includes(item.status));
               return <article key={project.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3"><div><div className="text-base font-black text-slate-950">{project.title || "Untitled funding project"}</div><div className="mt-1 text-xs font-bold text-slate-500">{project.status || "planning"} · target {formatMoney(project.targetFunding)}</div></div>{approval ? <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${statusTone(approval.status)}`}>{approval.status}</span> : null}</div>
                 <p className="mt-3 line-clamp-3 text-sm font-semibold leading-6 text-slate-600">{project.summary || "No project summary has been recorded."}</p>
@@ -424,11 +480,13 @@ function CommunicationsGovernancePanel({ data, clubId, canManage, onRefresh, onO
       </Panel>
       <div className="grid gap-4 xl:grid-cols-2">
         {templates.map((template) => (
-          <Panel key={template.templateKey} eyebrow={template.templateKey.replaceAll("_", " ")} title={template.name} description="Controlled operational wording; never combine service messages with marketing content." action={canManage ? <button type="button" onClick={() => save(template)} disabled={saving === template.templateKey} className={buttonPrimary}>{saving === template.templateKey ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save</button> : null}>
+          <Panel key={template.templateKey} eyebrow={template.templateKey.replaceAll("_", " ")} title={template.name} description="Controlled operational wording; never combine service messages with marketing content." action={canManage ? <button type="button" onClick={() => save(template)} disabled={saving === template.templateKey || templateTokenWarnings(template).length > 0} className={buttonPrimary}>{saving === template.templateKey ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save</button> : null}>
             <div className="space-y-3">
               <label><span className="mb-1.5 block text-xs font-black text-slate-700">Template name</span><input className={inputClass} value={template.name} onChange={(event) => update(template.templateKey, { name: event.target.value })} disabled={!canManage} /></label>
               <label><span className="mb-1.5 block text-xs font-black text-slate-700">Subject</span><input className={inputClass} value={template.subjectTemplate} onChange={(event) => update(template.templateKey, { subjectTemplate: event.target.value })} disabled={!canManage} /></label>
               <label><span className="mb-1.5 block text-xs font-black text-slate-700">Message body</span><textarea className={textareaClass} value={template.bodyTemplate} onChange={(event) => update(template.templateKey, { bodyTemplate: event.target.value })} disabled={!canManage} /></label>
+              {templateTokenWarnings(template).length ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-900">Unsupported token{templateTokenWarnings(template).length === 1 ? "" : "s"}: {templateTokenWarnings(template).map((token) => `{{${token}}}`).join(", ")}. Remove or replace before saving.</div> : null}
+              <details className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><summary className="cursor-pointer text-xs font-black text-slate-800">Preview with sample fixture</summary><div className="mt-3 rounded-xl bg-white p-3"><div className="text-xs font-black text-slate-950">{previewTemplate(template.subjectTemplate)}</div><div className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-600">{previewTemplate(template.bodyTemplate)}</div></div></details>
               <div className="grid gap-3 sm:grid-cols-2">
                 <ToggleRow label="Template active" detail="Available to the organisation message workflow." checked={template.active !== false} onChange={(value) => update(template.templateKey, { active: value })} disabled={!canManage} />
                 <ToggleRow label="Approval required" detail="Exact batches using this template need release approval." checked={Boolean(template.approvalRequired)} onChange={(value) => update(template.templateKey, { approvalRequired: value })} disabled={!canManage} />
@@ -442,7 +500,10 @@ function CommunicationsGovernancePanel({ data, clubId, canManage, onRefresh, onO
 }
 
 function AuditPanel({ data }) {
-  const eliteEvents = asArray(data.auditEvents).filter((event) => clean(event.action || event.event_type || event.eventType).startsWith("elite."));
+  const eliteEvents = asArray(data.auditEvents).filter((event) => {
+    const action = clean(event.action || event.event_type || event.eventType);
+    return action.startsWith("elite.") || ["matchweek.publish", "communication.batch.create", "communication.delivery.complete"].includes(action);
+  });
   const approvalHistory = data.approvals.filter((item) => item.status !== "pending");
   return (
     <div className="space-y-5">
@@ -462,6 +523,8 @@ export default function EliteControlWorkspace({
   model,
   workspaceAccess,
   activeUserId,
+  approvalArtifacts,
+  onResponsibilitiesChange,
   onOpenAnalytics,
   onOpenCommunications,
 }) {
@@ -475,21 +538,20 @@ export default function EliteControlWorkspace({
     setStatus("loading");
     setError("");
     try {
-      setData(await loadEliteGovernanceWorkspace(clubId));
+      const nextData = await loadEliteGovernanceWorkspace(clubId);
+      setData(nextData);
+      onResponsibilitiesChange?.(nextData.responsibilities);
       setStatus("ready");
     } catch (loadError) {
       setStatus("error");
       setError(loadError?.message || "Elite governance information could not be loaded.");
     }
-  }, [clubId]);
+  }, [clubId, onResponsibilitiesChange]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   const canManage = Boolean(workspaceAccess?.canManageSettings) && !workspaceAccess?.isReadOnly;
   const canOperate = Boolean(workspaceAccess?.canOperate) && !workspaceAccess?.isReadOnly;
-  const canReview = Boolean(
-    canManage || data?.responsibilities?.some((item) => item.userId === activeUserId && ["site_admin", "reviewer"].includes(item.responsibility)),
-  );
 
   return (
     <section className="space-y-5">
@@ -504,7 +566,8 @@ export default function EliteControlWorkspace({
 
       {status === "ready" && data ? (
         <>
-          {tab === "approvals" ? <ApprovalsPanel data={data} model={model} clubId={clubId} canManage={canManage} canOperate={canOperate} canReview={canReview} onRefresh={refresh} /> : null}
+          {Object.keys(data.errors || {}).length ? <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">Some Elite sections could not be loaded: {Object.entries(data.errors).map(([key, value]) => `${key}: ${value}`).join(" · ")}</div> : null}
+          {tab === "approvals" ? <ApprovalsPanel data={data} model={model} clubId={clubId} canManage={canManage} canOperate={canOperate} activeUserId={activeUserId} approvalArtifacts={approvalArtifacts} onRefresh={refresh} /> : null}
           {tab === "responsibilities" ? <ResponsibilitiesPanel data={data} sites={sites} clubId={clubId} canManage={canManage} activeUserId={activeUserId} onRefresh={refresh} /> : null}
           {tab === "funding" ? <FundingPanel data={data} clubId={clubId} canOperate={canOperate} onRefresh={refresh} onOpenAnalytics={onOpenAnalytics} /> : null}
           {tab === "communications" ? <CommunicationsGovernancePanel data={data} clubId={clubId} canManage={canManage} onRefresh={refresh} onOpenCommunications={onOpenCommunications} /> : null}

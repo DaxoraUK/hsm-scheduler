@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -16,6 +16,7 @@ import {
   Workflow,
 } from "lucide-react";
 import PageContainer from "@/ui/PageContainer.jsx";
+import { toast } from "sonner";
 import {
   buildEliteBoardCsv,
   buildEliteBoardHtml,
@@ -23,6 +24,19 @@ import {
 } from "../lib/elite/eliteCommandEngine.js";
 import { downloadCsv } from "../lib/reports/csvExport.js";
 import EliteControlWorkspace from "../components/elite/EliteControlWorkspace.jsx";
+import {
+  buildExecutiveReportApprovalKey,
+  buildExecutiveReportSnapshot,
+  buildMatchweekApprovalKey,
+  buildMatchweekApprovalSnapshot,
+} from "../lib/elite/eliteApprovalSnapshots.js";
+import {
+  ELITE_APPROVAL_TYPES,
+  authoriseEliteGovernedExport,
+  createEliteApprovalRequest,
+  loadEliteApprovalState,
+  loadEliteSiteResponsibilities,
+} from "../lib/elite/eliteGovernanceService.js";
 
 const STATUS_STYLES = Object.freeze({
   ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -83,12 +97,12 @@ function SiteCard({ site }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-xl font-black text-slate-950">{site.name}</h3>
+            <h3 className="break-words text-xl font-black text-slate-950">{site.name}</h3>
             {site.isPrimary ? (
               <span className="rounded-full bg-slate-950 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white">Primary</span>
             ) : null}
           </div>
-          <p className="mt-1 truncate text-sm font-semibold text-slate-500">{site.venue || site.postcode || "Site details incomplete"}</p>
+          <p className="mt-1 break-words text-sm font-semibold text-slate-500">{site.venue || site.postcode || "Site details incomplete"}</p>
         </div>
         <span className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${style}`}>{site.status.label}</span>
       </div>
@@ -123,6 +137,7 @@ function SiteCard({ site }) {
               <span>{issue}</span>
             </div>
           ))}
+          {site.issues.length > 4 ? <div className="text-xs font-black text-slate-500">+{site.issues.length - 4} more site action{site.issues.length - 4 === 1 ? "" : "s"}</div> : null}
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-2 text-sm font-black text-emerald-700">
@@ -146,6 +161,15 @@ export default function EliteCommandCentrePage({
   midweekUnresolved,
   closedPitches,
   midweekEnabled,
+  satDate = "",
+  sunDate = "",
+  midweekDate = "",
+  satDateLabel = "Saturday",
+  sunDateLabel = "Sunday",
+  midweekDateLabel = "Midweek",
+  satHasRun = true,
+  sunHasRun = true,
+  midweekHasRun = true,
   setMainPage,
   setDayTab,
   setSettingsTab,
@@ -154,32 +178,77 @@ export default function EliteCommandCentrePage({
   activeUserId,
 }) {
   const [view, setView] = useState("command");
+  const [periodScope, setPeriodScope] = useState(midweekEnabled ? "matchweek" : "weekend");
+  const [siteResponsibilities, setSiteResponsibilities] = useState([]);
+  const [exporting, setExporting] = useState("");
+
+  useEffect(() => {
+    if (!midweekEnabled && periodScope === "matchweek") setPeriodScope("weekend");
+  }, [midweekEnabled, periodScope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeClubId) return undefined;
+    loadEliteSiteResponsibilities(activeClubId)
+      .then((rows) => { if (!cancelled) setSiteResponsibilities(rows); })
+      .catch(() => { if (!cancelled) setSiteResponsibilities([]); });
+    return () => { cancelled = true; };
+  }, [activeClubId]);
+
+  const includeMidweek = midweekEnabled && periodScope === "matchweek";
+  const periodDates = [satDate, sunDate, includeMidweek ? midweekDate : ""].filter(Boolean).sort();
+  const period = {
+    label: includeMidweek ? "Current matchweek" : "Current weekend",
+    start: periodDates[0] || "",
+    end: periodDates.at(-1) || "",
+  };
+
   const model = useMemo(() => buildEliteCommandModel({
     club,
     teamCfg,
     pitchCfg,
     memberships,
+    siteResponsibilities,
     satFinal,
     sunFinal,
-    midweekFinal,
+    midweekFinal: includeMidweek ? midweekFinal : [],
     satUnresolved,
     sunUnresolved,
-    midweekUnresolved,
+    midweekUnresolved: includeMidweek ? midweekUnresolved : [],
     closedPitches,
-    midweekEnabled,
+    midweekEnabled: includeMidweek,
+    periodStart: period.start,
+    periodEnd: period.end,
+    periodLabel: period.label,
   }), [
-    club,
-    teamCfg,
-    pitchCfg,
-    memberships,
-    satFinal,
-    sunFinal,
-    midweekFinal,
-    satUnresolved,
-    sunUnresolved,
-    midweekUnresolved,
-    closedPitches,
-    midweekEnabled,
+    club, teamCfg, pitchCfg, memberships, siteResponsibilities, satFinal, sunFinal,
+    midweekFinal, satUnresolved, sunUnresolved, midweekUnresolved, closedPitches,
+    includeMidweek, period.start, period.end, period.label,
+  ]);
+
+  const approvalArtifacts = useMemo(() => {
+    const matchweekSnapshot = buildMatchweekApprovalSnapshot([
+      { key: "saturday", date: satDate, dateLabel: satDateLabel, scheduled: satFinal, unresolved: satUnresolved, hasRun: satHasRun },
+      { key: "sunday", date: sunDate, dateLabel: sunDateLabel, scheduled: sunFinal, unresolved: sunUnresolved, hasRun: sunHasRun },
+      ...(includeMidweek ? [{ key: "midweek", date: midweekDate, dateLabel: midweekDateLabel, scheduled: midweekFinal, unresolved: midweekUnresolved, hasRun: midweekHasRun }] : []),
+    ]);
+    const executiveSnapshot = buildExecutiveReportSnapshot(model, period);
+    return {
+      matchweek: {
+        approvalType: ELITE_APPROVAL_TYPES.MATCHWEEK,
+        entityKey: buildMatchweekApprovalKey(matchweekSnapshot),
+        snapshot: matchweekSnapshot,
+      },
+      executive: {
+        approvalType: ELITE_APPROVAL_TYPES.EXECUTIVE_REPORT,
+        entityKey: buildExecutiveReportApprovalKey(executiveSnapshot),
+        snapshot: executiveSnapshot,
+      },
+    };
+  }, [
+    includeMidweek, midweekDate, midweekDateLabel, midweekFinal, midweekHasRun, midweekUnresolved, model,
+    satDate, satDateLabel, satFinal, satHasRun, satUnresolved, sunDate, sunDateLabel, sunFinal, sunHasRun, sunUnresolved,
+    period.start, period.end, period.label,
   ]);
 
   const openOperations = () => {
@@ -194,14 +263,65 @@ export default function EliteCommandCentrePage({
     if (destination === "operations") return openOperations();
     openSettings(destination === "venues" ? "venues" : "governance");
   };
-  const exportCsv = () => downloadCsv(
-    buildEliteBoardCsv(model),
-    `${model.organisationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "organisation"}-elite-board-summary.csv`,
-  );
-  const exportHtml = () => downloadHtml(
-    buildEliteBoardHtml(model),
-    `${model.organisationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "organisation"}-elite-board-pack.html`,
-  );
+
+  const authoriseExecutiveExport = async (format) => {
+    const artifact = approvalArtifacts.executive;
+    const approvalState = await loadEliteApprovalState(activeClubId, artifact.approvalType, artifact.entityKey);
+    if (approvalState.policy.executiveReportApprovalRequired && !approvalState.approved) {
+      if (!approvalState.pending) {
+        await createEliteApprovalRequest(activeClubId, {
+          approvalType: artifact.approvalType,
+          entityKey: artifact.entityKey,
+          title: `${period.label} executive organisation report`,
+          summary: `${model.governanceScore}% governance readiness, ${model.fixtureCount} fixtures and ${model.actions.length} open organisation actions.`,
+          snapshot: artifact.snapshot,
+        });
+      }
+      setView("control");
+      toast.info("Executive report approval required", {
+        description: approvalState.pending
+          ? "This exact report is already waiting for a separate reviewer."
+          : "A request has been created. Approve the exact report snapshot before exporting it.",
+      });
+      return null;
+    }
+    return authoriseEliteGovernedExport(activeClubId, {
+      approvalType: artifact.approvalType,
+      entityKey: artifact.entityKey,
+      format,
+      snapshot: artifact.snapshot,
+    });
+  };
+
+  const exportCsv = async () => {
+    setExporting("csv");
+    try {
+      const authorisation = await authoriseExecutiveExport("csv");
+      if (!authorisation) return;
+      downloadCsv(
+        buildEliteBoardCsv(model),
+        `${model.organisationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "organisation"}-elite-board-summary.csv`,
+      );
+      toast.success("Governed site data exported");
+    } catch (error) {
+      toast.error("Executive export was blocked", { description: error?.message });
+    } finally { setExporting(""); }
+  };
+
+  const exportHtml = async () => {
+    setExporting("html");
+    try {
+      const authorisation = await authoriseExecutiveExport("html");
+      if (!authorisation) return;
+      downloadHtml(
+        buildEliteBoardHtml(model, { authorisation, snapshot: approvalArtifacts.executive.snapshot }),
+        `${model.organisationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "organisation"}-elite-board-pack.html`,
+      );
+      toast.success("Governed board pack downloaded");
+    } catch (error) {
+      toast.error("Board pack export was blocked", { description: error?.message });
+    } finally { setExporting(""); }
+  };
 
   return (
     <PageContainer className="space-y-6">
@@ -222,7 +342,15 @@ export default function EliteCommandCentrePage({
               <button type="button" onClick={() => setView("control")} className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-4 text-sm font-black text-white hover:bg-white/[0.1]">
                 Governance & approvals <ShieldCheck size={16} />
               </button>
+              <label className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-3 text-xs font-black text-white">
+                Period
+                <select value={periodScope} onChange={(event) => setPeriodScope(event.target.value)} className="bg-transparent text-xs font-black text-white outline-none">
+                  <option value="weekend" className="text-slate-950">Current weekend</option>
+                  {midweekEnabled ? <option value="matchweek" className="text-slate-950">Current matchweek</option> : null}
+                </select>
+              </label>
             </div>
+            <div className="mt-3 text-xs font-bold text-slate-400">{period.label}{period.start ? ` · ${period.start}${period.end && period.end !== period.start ? ` to ${period.end}` : ""}` : ""}</div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Metric icon={MapPinned} label="Sites" value={`${model.readySites}/${model.siteCount}`} detail="ready now" />
@@ -247,6 +375,8 @@ export default function EliteCommandCentrePage({
           model={model}
           workspaceAccess={workspaceAccess}
           activeUserId={activeUserId}
+          approvalArtifacts={approvalArtifacts}
+          onResponsibilitiesChange={setSiteResponsibilities}
           onOpenAnalytics={() => setMainPage?.("analytics")}
           onOpenCommunications={() => setMainPage?.("communications")}
         />
@@ -258,8 +388,8 @@ export default function EliteCommandCentrePage({
           description="Every venue is assessed from its assigned teams, pitches, current fixtures, closures and governance configuration."
           action={(
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={exportCsv} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-black text-slate-700 hover:bg-slate-50"><Download size={15} /> Export site data</button>
-              <button type="button" onClick={exportHtml} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-3.5 text-xs font-black text-white"><FileText size={15} /> Download board pack</button>
+              <button type="button" onClick={exportCsv} disabled={Boolean(exporting)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download size={15} /> {exporting === "csv" ? "Authorising…" : "Export site data"}</button>
+              <button type="button" onClick={exportHtml} disabled={Boolean(exporting)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-3.5 text-xs font-black text-white disabled:opacity-50"><FileText size={15} /> {exporting === "html" ? "Authorising…" : "Download board pack"}</button>
             </div>
           )}
         />

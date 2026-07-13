@@ -157,6 +157,8 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     message,
     subject,
     governedTemplateKey: governedTemplate?.templateKey || "",
+    governedTemplateVersion: governedTemplate?.updatedAt || "default",
+    governedTemplateApprovalRequired: Boolean(governedTemplate?.approvalRequired),
     raw: fixture,
   };
 }

@@ -122,6 +122,9 @@ export function buildDeliveryMessages(rows = [], capabilities = EMPTY_DELIVERY_C
         pitch: row.pitch,
         format: row.format,
         referee: row.referee,
+        templateKey: row.governedTemplateKey || null,
+        templateVersion: row.governedTemplateVersion || null,
+        templateApprovalRequired: Boolean(row.governedTemplateApprovalRequired),
       };
       if (capabilities.channels?.[recipient.channel]?.enabled) messages.push(item);
       else unavailable.push(item);

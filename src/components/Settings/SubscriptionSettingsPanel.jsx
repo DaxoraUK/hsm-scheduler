@@ -5,10 +5,12 @@ import {
   Check,
   CreditCard,
   Gauge,
+  HardDrive,
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   UsersRound,
 } from "lucide-react";
 import {
@@ -40,11 +42,16 @@ const FEATURE_LABELS = [
   [ENTITLEMENTS.ORGANISATION_COMMAND, "Organisation Command Centre"],
   [ENTITLEMENTS.EXECUTIVE_REPORTING, "Executive and board reporting"],
   [ENTITLEMENTS.GOVERNANCE_CONTROLS, "Organisation governance controls"],
+  [ENTITLEMENTS.APPROVAL_WORKFLOWS, "Recorded approval workflows"],
+  [ENTITLEMENTS.SITE_RESPONSIBILITY, "Site-scoped responsibility and reviewers"],
+  [ENTITLEMENTS.COMMUNICATION_GOVERNANCE, "Controlled communication templates"],
+  [ENTITLEMENTS.FUNDING_PORTFOLIO, "Organisation funding portfolio"],
+  [ENTITLEMENTS.ENHANCED_AUDIT, "Enhanced governance audit trail"],
 ];
 
 const PLAN_HIGHLIGHTS = Object.freeze({
   core: ["15 active teams", "Single-site matchday control", "Operational reports and export"],
-  pro: ["40 active teams and 4 sites", "Complete advanced operations", "Funding evidence and web email"],
+  pro: ["40 active teams and 4 sites", "Complete advanced operations", "Funding evidence and configured email delivery"],
   elite: ["60 active teams and 8 sites", "Organisation Command and site governance", "Executive board packs and contracted scale"],
 });
 
@@ -90,12 +97,26 @@ function statusTone(status) {
   return "bg-rose-50 text-rose-700 border-rose-200";
 }
 
+function UsageMeter({ label, current = 0, limit = 0, over = false }) {
+  const unlimited = Number(limit) < 0;
+  const percentage = unlimited ? 0 : Math.min(100, Math.round((Number(current) / Math.max(Number(limit), 1)) * 100));
+  return (
+    <div className={`rounded-2xl border p-4 ${over ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
+      <div className="flex items-center justify-between gap-3 text-xs font-black text-slate-700"><span>{label}</span><span>{current} / {unlimited ? "Unlimited" : limit}</span></div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${over ? "bg-rose-500" : percentage >= 85 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${unlimited ? 0 : percentage}%` }} /></div>
+      <div className="mt-2 text-[10px] font-bold text-slate-500">{unlimited ? "No package ceiling" : over ? `${current - limit} over the contracted limit` : `${Math.max(0, limit - current)} remaining`}</div>
+    </div>
+  );
+}
+
 export default function SubscriptionSettingsPanel({
   subscription,
   subscriptionStatus = "idle",
   subscriptionError = "",
   onRefreshSubscription,
   workspaceAccess,
+  planUsage = {},
+  planCompliance = null,
 }) {
   if (subscriptionStatus === "loading" || subscriptionStatus === "idle") {
     return (
@@ -218,18 +239,16 @@ export default function SubscriptionSettingsPanel({
             </div>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-            {LIMIT_LABELS.map(([key, label, Icon]) => (
-              <Metric
-                key={key}
-                icon={Icon}
-                label={label}
-                value={formatEntitlementLimit(
-                  getEntitlementLimit(subscription, key),
-                )}
-                compact
-              />
-            ))}
+            {LIMIT_LABELS.map(([key, label, Icon]) => {
+              const current = planUsage?.[key];
+              const limit = getEntitlementLimit(subscription, key);
+              const check = planCompliance?.checks?.find((item) => item.key === key);
+              return current === undefined
+                ? <Metric key={key} icon={Icon} label={label} value={formatEntitlementLimit(limit)} compact />
+                : <UsageMeter key={key} label={label} current={Number(current) || 0} limit={limit} over={Boolean(check?.over)} />;
+            })}
           </div>
+          {planCompliance?.overages?.length ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">This workspace exceeds {planCompliance.overages.map((item) => item.label).join(", ")}. Operations remain protected until capacity is increased or inactive resources are reduced.</div> : null}
         </div>
 
         <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -266,6 +285,27 @@ export default function SubscriptionSettingsPanel({
             })}
           </div>
         </div>
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700"><TrendingUp size={20} /></span>
+          <div>
+            <h3 className="text-lg font-black text-slate-950">Commercial safeguards</h3>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">Capacity can be extended without forcing a club into the wrong feature package. Provider usage, evidence storage, support and offboarding terms must be explicit before paid activation.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {[
+            ["Capacity extensions", subscription.plan.commercial?.capacityExtensions ? "Available by agreement" : "Not available"],
+            ["Communications allowance", subscription.plan.commercial?.communications || "Confirmed before activation"],
+            ["Evidence storage", subscription.plan.commercial?.storage || "Confirmed before activation"],
+            ["Support and onboarding", subscription.plan.commercial?.support || "Confirmed in the order form"],
+            ["Cancellation and data exit", subscription.plan.commercial?.offboarding || "Data export available before closure"],
+            ["Retention", `${formatEntitlementLimit(getEntitlementLimit(subscription, LIMIT_KEYS.HISTORY_RETENTION_DAYS))} days of saved matchweek history`],
+          ].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400"><HardDrive size={14} /> {label}</div><div className="mt-2 text-sm font-black leading-5 text-slate-900">{value}</div></div>)}
+        </div>
+        {subscription.cancelAtPeriodEnd ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">Cancellation is scheduled for the end of the current billing period. Export operational and governance evidence before the workspace becomes read only.</div> : null}
       </section>
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">

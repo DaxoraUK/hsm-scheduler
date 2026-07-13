@@ -98,6 +98,9 @@ export function sanitiseOutboundMessages(clubId, rows = []) {
       pitch: text(row?.pitch, 120),
       format: text(row?.format, 80),
       referee: text(row?.referee, 180),
+      templateKey: text(row?.templateKey, 120) || null,
+      templateVersion: text(row?.templateVersion, 180) || null,
+      templateApprovalRequired: Boolean(row?.templateApprovalRequired),
     };
   });
 }

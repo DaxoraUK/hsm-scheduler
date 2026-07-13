@@ -88,6 +88,7 @@ export async function POST(request) {
     await userRpc(token, "assert_elite_communication_approval", {
       target_club_id: clubId,
       request_entity_key: requestKey,
+      request_template_keys: [...new Set(messages.map((item) => item.templateKey).filter(Boolean))],
     });
 
     const databaseMessages = messages.map((item) => ({

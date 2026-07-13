@@ -137,6 +137,13 @@ export const PLAN_CATALOGUE = Object.freeze({
       history_entries: 52,
       history_retention_days: 365,
     }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Support and onboarding scope confirmed in the order form",
+      communications: "Provider usage allowance confirmed before paid activation",
+      storage: "Evidence storage allowance confirmed before paid activation",
+      offboarding: "Data export available before workspace closure",
+    }),
     launchStatus: "available",
     customerVisible: true,
     assignable: true,
@@ -155,6 +162,13 @@ export const PLAN_CATALOGUE = Object.freeze({
       pitches: 50,
       history_entries: 156,
       history_retention_days: 730,
+    }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Priority support and onboarding scope confirmed in the order form",
+      communications: "Provider usage allowance confirmed before paid activation",
+      storage: "Expanded evidence storage allowance confirmed before paid activation",
+      offboarding: "Data export available before workspace closure",
     }),
     launchStatus: "available",
     customerVisible: true,
@@ -178,6 +192,13 @@ export const PLAN_CATALOGUE = Object.freeze({
     contractModel: Object.freeze({
       band: "Elite 60",
       largerOrganisations: "Custom contracted capacity",
+    }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Named onboarding, support and governance scope agreed in the Elite order form",
+      communications: "Provider volumes and any overage rates agreed before activation",
+      storage: "Evidence storage and retention requirements agreed before activation",
+      offboarding: "Governed export and retention handover agreed at contract start",
     }),
     launchStatus: "contact",
     customerVisible: true,
@@ -250,11 +271,13 @@ function normaliseObject(value) {
   return value;
 }
 
+const KNOWN_ENTITLEMENT_KEYS = new Set(Object.values(ENTITLEMENTS));
+
 function enabledOverrideKeys(value) {
   return Object.entries(normaliseObject(value))
     .filter(([, enabled]) => enabled === true || String(enabled).toLowerCase() === "true")
     .map(([key]) => String(key || "").trim())
-    .filter(Boolean);
+    .filter((key) => KNOWN_ENTITLEMENT_KEYS.has(key));
 }
 
 export function normaliseSubscriptionPayload(payload = {}) {

@@ -15,9 +15,12 @@
     "release:evidence": "node scripts/run-release-gates.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
     "preflight:staging": "node scripts/staging-preflight.mjs",
-    "acceptance:launch": "node scripts/launch-acceptance.mjs"
+    "acceptance:launch": "node scripts/launch-acceptance.mjs",
+    "release:package": "powershell -ExecutionPolicy Bypass -File scripts/create-release-package.ps1"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.21.0",

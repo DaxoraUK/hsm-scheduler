@@ -665,8 +665,9 @@ function App() {
       teams: teamCfg.length,
       pitches: pitchCfg.length,
       venues: getVenueCount(club),
+      users: memberships.filter((membership) => !membership.status || membership.status === "active").length,
     }),
-    [club, pitchCfg.length, teamCfg.length],
+    [club, memberships, pitchCfg.length, teamCfg.length],
   );
   const planCompliance = useMemo(
     () => evaluatePlanCompliance(subscription, planUsage),
@@ -2194,6 +2195,15 @@ function App() {
                 midweekUnresolved={activeMidweekUnresolved}
                 closedPitches={closedPitches}
                 midweekEnabled={midweekEnabled}
+                satDate={satDate}
+                sunDate={sunDate}
+                midweekDate={midweekDate}
+                satDateLabel={satDateLabel}
+                sunDateLabel={sunDateLabel}
+                midweekDateLabel={midweekDateLabel}
+                satHasRun={satHasRun}
+                sunHasRun={sunHasRun}
+                midweekHasRun={midweekHasRun}
                 setMainPage={setMainPage}
                 setDayTab={setDayTab}
                 setSettingsTab={setSettingsTab}
@@ -2714,6 +2724,8 @@ function App() {
                 subscriptionStatus={subscriptionStatus}
                 subscriptionError={subscriptionError}
                 onRefreshSubscription={refreshSubscription}
+                planUsage={planUsage}
+                planCompliance={planCompliance}
                 billing={billing}
                 billingStatus={billingStatus}
                 billingError={billingError}

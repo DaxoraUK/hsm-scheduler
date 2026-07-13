@@ -67,7 +67,13 @@ describe("Elite organisation operating layer", () => {
         { id: "N1", label: "North 1", siteId: "north" },
         { id: "S1", label: "South 1", siteId: "south" },
       ],
-      memberships: [{ role: "owner" }, { role: "admin" }],
+      memberships: [
+        { user_id: "owner-1", display_name: "North Lead", role: "owner" },
+        { user_id: "admin-1", display_name: "Club Admin", role: "admin" },
+      ],
+      siteResponsibilities: [
+        { siteId: "north", userId: "owner-1", responsibility: "site_lead", active: true },
+      ],
       satFinal: [
         { homeTeam: "U14", pitchId: "N1", referee: "Official A" },
         { homeTeam: "First Team", pitchId: "S1" },

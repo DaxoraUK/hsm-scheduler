@@ -1,0 +1,17 @@
+.git
+.github
+.vscode
+node_modules
+coverage
+.release-evidence
+.release-packages
+.daxora-backups
+.env
+.env.*
+!.env.production.example
+!.env.edge.example
+*.zip
+*.patch
+*.log
+tests
+docs
