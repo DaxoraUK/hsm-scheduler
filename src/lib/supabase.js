@@ -305,6 +305,14 @@ function requireClubId(clubId) {
   return value;
 }
 
+function requireLeagueId(leagueId) {
+  const value = String(leagueId || "").trim();
+  if (!value) {
+    throw new SupabaseRequestError("No league workspace is selected", { code: "LEAGUE_CONTEXT_REQUIRED" });
+  }
+  return value;
+}
+
 function encodeFilter(value) {
   return encodeURIComponent(String(value));
 }
@@ -797,6 +805,112 @@ export const DB = {
       next_entitlement_overrides: entitlementOverrides && typeof entitlementOverrides === "object" ? entitlementOverrides : {},
       next_limit_overrides: limitOverrides && typeof limitOverrides === "object" ? limitOverrides : {},
       change_reason: String(reason || "Manual platform assignment").trim(),
+    });
+  },
+
+
+  async listAccessibleLeagues() {
+    return asArray(await supaFetch("POST", "rpc/list_accessible_leagues", {}));
+  },
+
+  async createLeaguePilot({
+    name,
+    countryCode = "GB-ENG",
+    governingBody = "",
+    timezone = "Europe/London",
+    seasonName = "",
+    seasonStart = null,
+    seasonEnd = null,
+  } = {}) {
+    return supaFetch("POST", "rpc/platform_create_league_pilot", {
+      league_name: String(name || "").trim(),
+      league_country_code: String(countryCode || "GB-ENG").trim(),
+      league_governing_body: String(governingBody || "").trim() || null,
+      league_timezone: String(timezone || "Europe/London").trim(),
+      initial_season_name: String(seasonName || "").trim() || null,
+      initial_season_start: seasonStart || null,
+      initial_season_end: seasonEnd || null,
+    });
+  },
+
+  async getLeagueWorkspace(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_workspace", { target_league_id: id });
+  },
+
+  async upsertLeagueEntity(leagueId, entityType, entityData = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_entity", {
+      target_league_id: id,
+      entity_type: String(entityType || "").trim().toLowerCase(),
+      entity_data: entityData && typeof entityData === "object" ? entityData : {},
+    });
+  },
+
+  async deleteLeagueEntity(leagueId, entityType, entityId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/delete_league_entity", {
+      target_league_id: id,
+      entity_type: String(entityType || "").trim().toLowerCase(),
+      target_entity_id: String(entityId || "").trim(),
+    });
+  },
+
+  async importLeagueStructure(leagueId, seasonId, rows = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/import_league_structure", {
+      target_league_id: id,
+      target_season_id: String(seasonId || "").trim(),
+      structure_rows: Array.isArray(rows) ? rows : [],
+    });
+  },
+
+  async importLeagueFixtures(leagueId, rows = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/import_league_fixtures", {
+      target_league_id: id,
+      fixture_rows: Array.isArray(rows) ? rows : [],
+    });
+  },
+
+  async createLeagueInvitation(leagueId, { email, role = "viewer", expiryHours = 168 } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/create_league_invitation", {
+      target_league_id: id,
+      invite_email: String(email || "").trim(),
+      invite_role: String(role || "viewer").trim().toLowerCase(),
+      expiry_hours: Math.max(1, Math.min(Number(expiryHours) || 168, 720)),
+    });
+  },
+
+  async acceptLeagueInvitation(token) {
+    return supaFetch("POST", "rpc/accept_league_invitation", {
+      invitation_token: String(token || "").trim(),
+    });
+  },
+
+  async revokeLeagueInvitation(leagueId, invitationId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/revoke_league_invitation", {
+      target_league_id: id,
+      invitation_id: String(invitationId || "").trim(),
+    });
+  },
+
+  async updateLeagueMemberRole(leagueId, userId, role) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_member_role", {
+      target_league_id: id,
+      target_user_id: String(userId || "").trim(),
+      next_role: String(role || "viewer").trim().toLowerCase(),
+    });
+  },
+
+  async removeLeagueMember(leagueId, userId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/remove_league_member", {
+      target_league_id: id,
+      target_user_id: String(userId || "").trim(),
     });
   },
 

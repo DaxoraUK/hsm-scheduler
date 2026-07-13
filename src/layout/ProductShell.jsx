@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  Trophy,
   WifiOff,
   X,
 } from "lucide-react";
@@ -81,6 +82,9 @@ export default function ProductShell({
   subscription = null,
   platformContext = null,
   platformOnly = false,
+  leagueOnly = false,
+  leagueMemberships = [],
+  activeLeague = null,
   dbStatus = "connected",
   syncError = "",
   sessionStatus = "active",
@@ -94,7 +98,9 @@ export default function ProductShell({
   const { online } = useConnectivity();
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
 
-  const workspaceNavItems = platformOnly ? [] : [
+  const leagueMode = mainPage === "league";
+  const clubWorkspaceAvailable = !platformOnly && !leagueOnly;
+  const workspaceNavItems = clubWorkspaceAvailable ? [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
     ["executive", "Organisation Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
@@ -105,17 +111,22 @@ export default function ProductShell({
   ].filter(([key]) => {
     if (key === "settings") return workspaceAccess?.canManageSettings;
     return canOpenPage(subscription, key);
-  });
+  }) : [];
+
+  const leagueAvailable = Boolean(platformContext?.isPlatformStaff || leagueMemberships.length);
+  const leagueNavItems = leagueAvailable
+    ? [["league", "League Manager", Trophy, null]]
+    : [];
 
   const advancedOperationsEnabled = hasEntitlement(subscription, ENTITLEMENTS.OPERATIONS_ADVANCED);
 
   const navItems = platformContext?.isPlatformStaff
-    ? [...workspaceNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
-    : workspaceNavItems;
+    ? [...workspaceNavItems, ...leagueNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
+    : [...workspaceNavItems, ...leagueNavItems];
 
   const navigate = (key, target) => {
-    if (key === "platform") {
-      setMainPage("platform");
+    if (key === "platform" || key === "league") {
+      setMainPage(key);
       setMobileOpen(false);
       return;
     }
@@ -158,7 +169,16 @@ export default function ProductShell({
 
   const syncBanner = getSyncBanner({ online, dbStatus, syncError, sessionStatus });
 
-  const workspaceCard = platformOnly ? (
+  const workspaceCard = leagueMode || leagueOnly ? (
+    <div className="rounded-2xl border border-slate-800 bg-white/[0.04] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">League Manager</div>
+        <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-300">Pilot</span>
+      </div>
+      <div className="mt-2 truncate text-sm font-black text-white">{activeLeague?.name || "League workspace"}</div>
+      <div className="mt-1 text-xs font-bold text-slate-500">{activeLeague?.role?.replaceAll?.("_", " ") || "Secure league access"}</div>
+    </div>
+  ) : platformOnly ? (
     <div className="rounded-2xl border border-slate-800 bg-white/[0.04] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">Daxora platform</div>
@@ -214,7 +234,7 @@ export default function ProductShell({
             </div>
             <div className="mt-5">{workspaceCard}</div>
             <div className="mt-5 border-t border-slate-800 pt-5">
-              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
+              <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{leagueOnly ? "League workspace" : platformOnly ? "Platform" : "Operations"}</div>
               <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
             </div>
           </aside>
@@ -226,7 +246,7 @@ export default function ProductShell({
           <div className="mb-5"><GroundControlBrand /></div>
           <div>{workspaceCard}</div>
           <div className="mt-5 border-t border-slate-800 pt-5">
-            <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{platformOnly ? "Platform" : "Operations"}</div>
+            <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{leagueOnly ? "League workspace" : platformOnly ? "Platform" : "Operations"}</div>
             <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
           </div>
         </aside>
@@ -238,7 +258,12 @@ export default function ProductShell({
                 <Menu size={21} />
               </button>
               <div className="hidden min-w-0 flex-1 md:block">
-                {platformOnly ? (
+                {leagueMode || leagueOnly ? (
+                  <div>
+                    <div className="text-sm font-black text-slate-950">Daxora League Manager</div>
+                    <div className="mt-0.5 text-xs font-semibold text-slate-500">Secure league scheduling and competition operations</div>
+                  </div>
+                ) : platformOnly ? (
                   <div>
                     <div className="text-sm font-black text-slate-950">Daxora platform operations</div>
                     <div className="mt-0.5 text-xs font-semibold text-slate-500">Secure administration, subscriptions and support cases</div>
@@ -248,19 +273,19 @@ export default function ProductShell({
                 )}
               </div>
               <div className="min-w-0 md:hidden">
-                <div className="truncate text-sm font-black text-slate-950">Ground Control</div>
-                <div className="truncate text-[11px] font-bold text-slate-500">{platformOnly ? "Daxora platform" : club?.name}</div>
+                <div className="truncate text-sm font-black text-slate-950">{leagueMode || leagueOnly ? "League Manager" : "Ground Control"}</div>
+                <div className="truncate text-[11px] font-bold text-slate-500">{leagueMode || leagueOnly ? activeLeague?.name : platformOnly ? "Daxora platform" : club?.name}</div>
               </div>
             </div>
             <HeaderProfile
               session={authSession}
-              clubName={platformOnly ? "Daxora Platform" : club?.name}
-              memberships={memberships}
-              activeClubId={activeClubId}
-              activeRole={workspaceAccess?.role || activeMembership?.role || "viewer"}
-              workspaceAccess={workspaceAccess}
-              roleLabelOverride={platformOnly ? platformContext?.roleLabel : ""}
-              platformMode={platformOnly}
+              clubName={leagueMode || leagueOnly ? (activeLeague?.name || "League Manager") : platformOnly ? "Daxora Platform" : club?.name}
+              memberships={leagueMode || leagueOnly ? [] : memberships}
+              activeClubId={leagueMode || leagueOnly ? "" : activeClubId}
+              activeRole={leagueMode || leagueOnly ? (activeLeague?.role || "viewer") : workspaceAccess?.role || activeMembership?.role || "viewer"}
+              workspaceAccess={leagueMode || leagueOnly ? { role: activeLeague?.role || "viewer", canManageSettings: false } : workspaceAccess}
+              roleLabelOverride={leagueMode || leagueOnly ? String(activeLeague?.role || "League user").replaceAll("_", " ") : platformOnly ? platformContext?.roleLabel : ""}
+              platformMode={platformOnly || leagueMode || leagueOnly}
               onClubChange={onClubChange}
               onOpenSettings={(settingsTab = "overview") => nav.goToSettings({ settingsTab, scroll: false })}
               onProfileUpdated={onProfileUpdated}
@@ -287,7 +312,7 @@ export default function ProductShell({
             <div role="status" className="flex items-center gap-2 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-800 sm:px-6"><RefreshCw className="animate-spin" size={14} /> {syncBanner.title}</div>
           ) : null}
 
-          {!platformOnly ? (
+          {clubWorkspaceAvailable && !leagueMode ? (
             subscription?.status === "trialing" ? (
               <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black text-sky-900 sm:px-6">
                 <span>{subscription.planName} trial{subscription.trialEndsAt ? ` ends ${subscription.trialEndsAt.toLocaleDateString("en-GB")}` : " is active"}.</span>
@@ -306,7 +331,7 @@ export default function ProductShell({
             ) : null
           ) : null}
 
-          {!platformOnly ? (
+          {clubWorkspaceAvailable && !leagueMode ? (
             workspaceAccess?.isSupport ? (
               <div className="flex flex-col gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                 <div className="flex items-start gap-3">
@@ -322,9 +347,9 @@ export default function ProductShell({
 
           <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
             <div
-              className={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
-              inert={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
-              aria-disabled={!platformOnly && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+              className={clubWorkspaceAvailable && !leagueMode && workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
+              inert={clubWorkspaceAvailable && !leagueMode && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
+              aria-disabled={clubWorkspaceAvailable && !leagueMode && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}
             >
               {children}
             </div>

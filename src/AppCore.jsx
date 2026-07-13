@@ -17,6 +17,7 @@ import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
+import { useLeagueAccess } from "./hooks/useLeagueAccess.js";
 import { useClubOnboarding } from "./hooks/useClubOnboarding.js";
 import { useClubEntitlements } from "./hooks/useClubEntitlements.js";
 import { useBillingReadiness } from "./hooks/useBillingReadiness.js";
@@ -146,6 +147,7 @@ const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"));
 const PlatformAdminPage = lazy(() => import("./pages/PlatformAdminPage.jsx"));
+const LeagueManagerPage = lazy(() => import("./pages/LeagueManagerPage.jsx"));
 
 function LazyPageFallback({ label = "workspace" }) {
   return (
@@ -498,6 +500,16 @@ function App() {
     selectClub,
     bootstrapFirstWorkspace,
   } = useClubAccess(authSession);
+
+  const {
+    leagues: leagueMemberships,
+    activeLeague,
+    activeLeagueId,
+    status: leagueAccessStatus,
+    error: leagueAccessError,
+    refresh: refreshLeagueAccess,
+    selectLeague,
+  } = useLeagueAccess(authSession);
 
   const roleWorkspaceAccess = useMemo(
     () => createWorkspaceAccess(activeMembership),
@@ -1910,8 +1922,9 @@ function App() {
       setAuthSession(nextSession);
       refreshPlatformContext?.();
       refreshClubAccess?.();
+      refreshLeagueAccess?.();
     },
-    [refreshClubAccess, refreshPlatformContext],
+    [refreshClubAccess, refreshLeagueAccess, refreshPlatformContext],
   );
 
   const handleSignOut = useCallback(async () => {
@@ -1978,21 +1991,40 @@ function App() {
   if (["idle", "loading"].includes(platformStatus))
     return <BrandSplash message="Verifying account access" />;
 
-  if (clubAccessStatus !== "ready" && platformContext.isPlatformStaff)
+  const hasLeagueAccess = leagueAccessStatus === "ready" && leagueMemberships.length > 0;
+  const canOpenStandaloneWorkspace = clubAccessStatus !== "ready"
+    && (platformContext.isPlatformStaff || hasLeagueAccess);
+
+  if (["idle", "loading"].includes(clubAccessStatus))
+    return <BrandSplash message="Verifying workspace access" />;
+
+  if (clubAccessStatus !== "ready"
+      && !platformContext.isPlatformStaff
+      && ["idle", "loading"].includes(leagueAccessStatus))
+    return <BrandSplash message="Verifying League Manager access" />;
+
+  if (canOpenStandaloneWorkspace) {
+    const standalonePage = platformContext.isPlatformStaff
+      ? (mainPage === "league" ? "league" : "platform")
+      : "league";
     return (
       <ProductShell
-        mainPage="platform"
+        mainPage={standalonePage}
         setMainPage={setMainPage}
         setDayTab={setDayTab}
         setSettingsTab={setSettingsTab}
         setNavigationTarget={setNavigationTarget}
-        club={{ name: "Daxora Platform" }}
+        club={{ name: platformContext.isPlatformStaff ? "Daxora Platform" : "League Manager" }}
         authSession={authSession}
         memberships={memberships}
         activeClubId={activeClubId}
         activeMembership={activeMembership}
         platformContext={platformContext}
-        platformOnly
+        platformOnly={platformContext.isPlatformStaff}
+        leagueOnly={!platformContext.isPlatformStaff}
+        leagueMemberships={leagueMemberships}
+        activeLeagueId={activeLeagueId}
+        activeLeague={activeLeague}
         dbStatus={dbStatus}
         syncError={syncError}
         sessionStatus={sessionStatus}
@@ -2001,32 +2033,45 @@ function App() {
         onProfileUpdated={handleProfileUpdated}
         onSignOut={handleSignOut}
       >
-        <Suspense fallback={<LazyPageFallback label="Daxora administration" />}>
-          <PlatformAdminPage
-            platformContext={platformContext}
-            platformStatus={platformStatus}
-            platformError={platformError}
-            onRefreshPlatformContext={refreshPlatformContext}
-            memberships={memberships}
-            onOpenClub={handlePlatformOpenClub}
-          />
-        </Suspense>
+        {standalonePage === "league" ? (
+          <Suspense fallback={<LazyPageFallback label="League Manager" />}>
+            <LeagueManagerPage
+              leagues={leagueMemberships}
+              activeLeague={activeLeague}
+              activeLeagueId={activeLeagueId}
+              leagueStatus={leagueAccessStatus}
+              leagueError={leagueAccessError}
+              onRefreshLeagues={refreshLeagueAccess}
+              onSelectLeague={selectLeague}
+              platformContext={platformContext}
+            />
+          </Suspense>
+        ) : (
+          <Suspense fallback={<LazyPageFallback label="Daxora administration" />}>
+            <PlatformAdminPage
+              platformContext={platformContext}
+              platformStatus={platformStatus}
+              platformError={platformError}
+              onRefreshPlatformContext={refreshPlatformContext}
+              memberships={memberships}
+              onOpenClub={handlePlatformOpenClub}
+            />
+          </Suspense>
+        )}
       </ProductShell>
     );
-
-  if (["idle", "loading"].includes(clubAccessStatus))
-    return <BrandSplash message="Verifying club access" />;
+  }
 
   if (clubAccessStatus !== "ready")
     return (
       <Suspense fallback={<BrandSplash message="Preparing workspace access" />}>
         <WorkspaceAccessGate
           status={clubAccessStatus}
-          error={clubAccessError}
+          error={clubAccessError || (leagueAccessStatus === "error" ? leagueAccessError : "")}
           canBootstrap={canBootstrap}
           defaultClubName={DEFAULT_CLUB.name}
           onBootstrap={bootstrapFirstWorkspace}
-          onRetry={refreshClubAccess}
+          onRetry={() => Promise.all([refreshClubAccess(), refreshLeagueAccess()])}
           onSignOut={handleSignOut}
         />
       </Suspense>
@@ -2070,7 +2115,8 @@ function App() {
     return <BrandSplash message="Loading secure club workspace" />;
 
   const requiredPageEntitlement = getRequiredEntitlementForPage(mainPage);
-  const pageEntitled = canOpenPage(subscription, mainPage);
+  const independentWorkspacePage = mainPage === "league" || mainPage === "platform";
+  const pageEntitled = independentWorkspacePage || canOpenPage(subscription, mainPage);
   const openSubscriptionSettings = () => {
     setMainPage("settings");
     setSettingsTab("subscription");
@@ -2140,6 +2186,9 @@ function App() {
         workspaceAccess={workspaceAccess}
         subscription={subscription}
         platformContext={platformContext}
+        leagueMemberships={leagueMemberships}
+        activeLeagueId={activeLeagueId}
+        activeLeague={activeLeague}
         dbStatus={dbStatus}
         syncError={syncError}
         sessionStatus={sessionStatus}
@@ -2169,7 +2218,7 @@ function App() {
         />
 
         <div style={S.body}>
-          {planCompliance.operationalBlocked ? (
+          {mainPage !== "league" && planCompliance.operationalBlocked ? (
             <div className="np mx-auto mb-4 flex max-w-[1500px] flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-950 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm font-black">Workspace over plan limit</div>
@@ -2189,7 +2238,7 @@ function App() {
               </button>
             </div>
           ) : null}
-          {!pageEntitled && mainPage !== "settings" && (
+          {!pageEntitled && mainPage !== "settings" && !independentWorkspacePage && (
             <Suspense fallback={<LazyPageFallback label="plan access" />}>
               <SubscriptionGate
                 entitlement={requiredPageEntitlement}
@@ -2700,6 +2749,20 @@ function App() {
                 midweekEnabled={midweekEnabled}
                 navigationTarget={navigationTarget}
                 clearNavigationTarget={clearNavigationTarget}
+              />
+            </Suspense>
+          )}
+          {mainPage === "league" && (
+            <Suspense fallback={<LazyPageFallback label="League Manager" />}>
+              <LeagueManagerPage
+                leagues={leagueMemberships}
+                activeLeague={activeLeague}
+                activeLeagueId={activeLeagueId}
+                leagueStatus={leagueAccessStatus}
+                leagueError={leagueAccessError}
+                onRefreshLeagues={refreshLeagueAccess}
+                onSelectLeague={selectLeague}
+                platformContext={platformContext}
               />
             </Suspense>
           )}
