@@ -33,7 +33,10 @@ const workspace = normaliseLeagueWorkspace({
     { id: "team-2", season_id: "season-1", division_id: "division-1", parent_club_id: "club-2", home_venue_id: "venue-2", name: "Beta FC" },
   ],
   blackouts: [],
-  playing_dates: [{ id: "date-1", season_id: "season-1", playing_date: "2026-08-15", default_kick_off: "15:00:00", status: "available" }],
+  playing_dates: [
+    { id: "date-1", season_id: "season-1", playing_date: "2026-08-15", default_kick_off: "15:00:00", status: "available" },
+    { id: "date-2", season_id: "season-1", playing_date: "2026-08-22", default_kick_off: "15:00:00", status: "available" },
+  ],
   fixtures: [],
 });
 
@@ -101,7 +104,7 @@ describe("League Manager pilot foundation", () => {
     const readiness = getLeagueReadiness(workspace);
     expect(readiness.readyForScheduling).toBe(true);
     expect(readiness.percentage).toBe(100);
-    expect(readiness.totals).toEqual(expect.objectContaining({ divisions: 1, clubs: 2, teams: 2, venues: 2, playingDates: 1 }));
+    expect(readiness.totals).toEqual(expect.objectContaining({ divisions: 1, clubs: 2, teams: 2, venues: 2, playingDates: 2 }));
 
     const incomplete = getLeagueReadiness({ ...workspace, venues: [], teams: workspace.teams.map((team) => ({ ...team, homeVenueId: "" })) });
     expect(incomplete.readyForScheduling).toBe(false);

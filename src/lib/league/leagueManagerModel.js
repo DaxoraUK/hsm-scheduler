@@ -114,6 +114,18 @@ export function getLeagueReadiness(workspace = {}) {
   const venues = asArray(workspace.venues).filter((row) => row.status === "active");
   const playingDates = asArray(workspace.playingDates).filter((row) => !season || row.seasonId === season.id);
   const fixtures = asArray(workspace.fixtures).filter((row) => !season || row.seasonId === season.id);
+  const availablePlayingDates = playingDates.filter((row) => row.status === "available");
+  const requiredDatesByDivision = new Map(divisions.map((division) => {
+    const teamCount = teams.filter((team) => team.divisionId === division.id && !["withdrawn", "inactive"].includes(team.status)).length;
+    const roundsPerLeg = teamCount < 2 ? 0 : teamCount % 2 === 0 ? teamCount - 1 : teamCount;
+    return [division.id, roundsPerLeg * 2];
+  }));
+  const requiredPlayingDates = Math.max(0, ...requiredDatesByDivision.values());
+  const availableDatesForDivision = (divisionId) => new Set(availablePlayingDates
+    .filter((row) => !row.divisionId || row.divisionId === divisionId)
+    .map((row) => row.playingDate)).size;
+  const calendarComplete = requiredPlayingDates > 0
+    && divisions.every((division) => availableDatesForDivision(division.id) >= (requiredDatesByDivision.get(division.id) || 0));
 
   const checks = [
     {
@@ -149,8 +161,10 @@ export function getLeagueReadiness(workspace = {}) {
     {
       id: "playing_dates",
       label: "Playing-date calendar",
-      complete: playingDates.some((row) => row.status === "available"),
-      detail: playingDates.length ? `${playingDates.length} dates configured` : "Add the standard league playing dates",
+      complete: calendarComplete,
+      detail: availablePlayingDates.length
+        ? `${availablePlayingDates.length} available · ${requiredPlayingDates || "—"} minimum for home & away`
+        : "Generate the standard league playing dates",
     },
     {
       id: "fixture_registry",

@@ -163,11 +163,12 @@ function groundKeyForVenue(venue) {
 function groundCapacityMap(workspace) {
   const capacities = new Map();
   asArray(workspace?.venues).forEach((venue) => {
+    if (!venue?.id || venue.status === "inactive" || venue.status === "unavailable") return;
     const key = groundKeyForVenue(venue);
-    capacities.set(key, Math.max(
-      capacities.get(key) || 1,
-      asPositiveInteger(venue.simultaneousFixtureLimit, 1),
-    ));
+    capacities.set(
+      key,
+      (capacities.get(key) || 0) + asPositiveInteger(venue.simultaneousFixtureLimit, 1),
+    );
   });
   return capacities;
 }
@@ -199,6 +200,7 @@ function applicableBlackouts(workspace, {
 function createResourceState(workspace) {
   return {
     teamDates: new Set(),
+    venueSlots: new Map(),
     groundSlots: new Map(),
     venueById: venueMap(workspace),
     teamById: teamMap(workspace),
@@ -212,6 +214,10 @@ function reserveEntry(state, entry) {
   state.teamDates.add(`${entry.scheduledDate}|${entry.homeTeamId}`);
   state.teamDates.add(`${entry.scheduledDate}|${entry.awayTeamId}`);
   const venue = state.venueById.get(entry.venueId);
+  if (venue?.id) {
+    const venueSlotKey = `${entry.scheduledDate}|${kickOff}|${venue.id}`;
+    state.venueSlots.set(venueSlotKey, (state.venueSlots.get(venueSlotKey) || 0) + 1);
+  }
   const groundKey = groundKeyForVenue(venue);
   const slotKey = `${entry.scheduledDate}|${kickOff}|${groundKey}`;
   state.groundSlots.set(slotKey, (state.groundSlots.get(slotKey) || 0) + 1);
@@ -245,6 +251,11 @@ function checkPlacement(workspace, state, fixture, dateRow) {
   }));
 
   if (venue) {
+    const venueSlotKey = `${scheduledDate}|${kickOff}|${venue.id}`;
+    const venueUsed = state.venueSlots.get(venueSlotKey) || 0;
+    const venueCapacity = asPositiveInteger(venue.simultaneousFixtureLimit, 1);
+    if (venueUsed >= venueCapacity) blockers.push({ code: "venue-capacity", label: `${venue.name} is already in use` });
+
     const groundKey = groundKeyForVenue(venue);
     const slotKey = `${scheduledDate}|${kickOff}|${groundKey}`;
     const used = state.groundSlots.get(slotKey) || 0;
@@ -304,6 +315,64 @@ function existingFixtureLookup(workspace, seasonId, meetings) {
       if (!lookup.has(key) || fixture.locked) lookup.set(key, fixture);
     });
   return lookup;
+}
+
+export function getLeagueSchedulePreflight(workspace = {}, options = {}) {
+  const season = getSeason(workspace, options.seasonId);
+  if (!season) {
+    return {
+      ready: false,
+      season: null,
+      meetings: Number(options.meetings) === 1 ? 1 : 2,
+      divisions: [],
+      totalFixtures: 0,
+      minimumDates: 0,
+      configuredDates: 0,
+      errors: ["Create a current season before generating a schedule."],
+    };
+  }
+
+  const meetings = Number(options.meetings) === 1 ? 1 : 2;
+  const selectedDivisionIds = new Set(asArray(options.divisionIds).filter(Boolean));
+  const divisions = asArray(workspace.divisions)
+    .filter((division) => division.seasonId === season.id)
+    .filter((division) => !selectedDivisionIds.size || selectedDivisionIds.has(division.id))
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.name.localeCompare(right.name, "en-GB"))
+    .map((division) => {
+      const teams = getDivisionTeams(workspace, division.id, season.id);
+      const matrix = buildDivisionFixtureMatrix(teams, { meetings });
+      const requiredRounds = matrix.reduce((maximum, fixture) => Math.max(maximum, Number(fixture.roundNumber || 0)), 0);
+      const availableDates = playingDatesForDivision(workspace, season.id, division.id).length;
+      return {
+        id: division.id,
+        name: division.name,
+        teams: teams.length,
+        fixtures: matrix.length,
+        requiredRounds,
+        availableDates,
+        shortfall: Math.max(requiredRounds - availableDates, 0),
+      };
+    });
+
+  const errors = divisions
+    .filter((division) => division.teams < 2)
+    .map((division) => `${division.name} needs at least two active teams.`);
+  const dateShortfalls = divisions.filter((division) => division.shortfall > 0);
+  const configuredDates = divisions.length
+    ? Math.min(...divisions.map((division) => division.availableDates))
+    : 0;
+
+  return {
+    ready: errors.length === 0 && dateShortfalls.length === 0 && divisions.length > 0,
+    season,
+    meetings,
+    divisions,
+    totalFixtures: divisions.reduce((total, division) => total + division.fixtures, 0),
+    minimumDates: divisions.reduce((maximum, division) => Math.max(maximum, division.requiredRounds), 0),
+    configuredDates,
+    dateShortfalls,
+    errors,
+  };
 }
 
 /**
@@ -607,6 +676,25 @@ export function validateLeagueSchedule(workspace = {}, entriesInput = [], config
       message: `${nameOf(teams, teamId, "Team")} has ${group.length} fixtures on ${date}.`,
       entryIds: group.map(stableEntryKey),
       teamId,
+      date,
+    }));
+  });
+
+  const venueGroups = new Map();
+  entries.filter((entry) => entry.scheduledDate && entry.venueId).forEach((entry) => {
+    const key = `${entry.scheduledDate}|${toTime(entry.kickOff)}|${entry.venueId}`;
+    if (!venueGroups.has(key)) venueGroups.set(key, []);
+    venueGroups.get(key).push(entry);
+  });
+  venueGroups.forEach((groupedEntries, key) => {
+    const [date, kickOff, venueId] = key.split("|");
+    const venue = venues.get(venueId);
+    const capacity = asPositiveInteger(venue?.simultaneousFixtureLimit, 1);
+    if (groupedEntries.length <= capacity) return;
+    issues.push(issue({
+      code: "venue-capacity-conflict",
+      message: `${venue?.name || "Venue"} has ${groupedEntries.length} simultaneous fixtures at ${kickOff} on ${date}, above its limit of ${capacity}.`,
+      entryIds: groupedEntries.map(stableEntryKey),
       date,
     }));
   });

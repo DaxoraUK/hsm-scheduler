@@ -156,13 +156,13 @@ describe("League Manager scheduling engine pass 1", () => {
     const generated = generateLeagueSchedule(workspace, { seasonId: "season-1", divisionIds: ["division-1"], meetings: 1 });
     const [first, second, ...rest] = generated.entries;
     const conflicted = [
-      first,
-      { ...second, scheduledDate: first.scheduledDate, kickOff: first.kickOff, venueId: "venue-2" },
+      { ...first, venueId: "venue-1" },
+      { ...second, scheduledDate: first.scheduledDate, kickOff: first.kickOff, venueId: "venue-1" },
       ...rest,
     ];
     const validation = validateLeagueSchedule(workspace, conflicted, generated.config);
     expect(validation.valid).toBe(false);
-    expect(validation.issues.some((item) => ["team-double-booking", "ground-capacity-conflict"].includes(item.code))).toBe(true);
+    expect(validation.issues.some((item) => ["team-double-booking", "venue-capacity-conflict", "ground-capacity-conflict"].includes(item.code))).toBe(true);
   });
 
   test("compares versions and creates a readable league export", () => {

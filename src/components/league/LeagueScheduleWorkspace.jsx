@@ -21,6 +21,7 @@ import { getCurrentLeagueSeason, getEntityName } from "../../lib/league/leagueMa
 import {
   compareLeagueScheduleVersions,
   generateLeagueSchedule,
+  getLeagueSchedulePreflight,
   leagueScheduleToCsv,
   normaliseScheduleVersion,
   normaliseScheduleVersionPayload,
@@ -126,6 +127,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({ name: "Initial generated draft", meetings: 2, divisionId: "all" });
+  const [calendarConfig, setCalendarConfig] = useState({ weekday: 6, defaultKickOff: "15:00" });
   const [filters, setFilters] = useState({ divisionId: "all", teamId: "all", venueId: "all", status: "all", query: "" });
   const [visibleLimit, setVisibleLimit] = useState(75);
   const [compareVersionId, setCompareVersionId] = useState("");
@@ -204,6 +206,34 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     return validateLeagueSchedule(workspace, payload.entries, payload.version.generationConfig || {});
   }, [payload, workspace]);
 
+  const selectedDivisionIds = useMemo(() => (
+    config.divisionId === "all"
+      ? workspace.divisions.filter((division) => division.seasonId === season?.id).map((division) => division.id)
+      : [config.divisionId]
+  ), [config.divisionId, season?.id, workspace.divisions]);
+
+  const preflight = useMemo(() => getLeagueSchedulePreflight(workspace, {
+    seasonId: season?.id,
+    divisionIds: selectedDivisionIds,
+    meetings: Number(config.meetings),
+  }), [config.meetings, season?.id, selectedDivisionIds, workspace]);
+
+  const visibleValidationIssues = useMemo(() => {
+    if (validation.issues.length <= 24) return validation.issues;
+    const unplaced = validation.issues.filter((item) => item.code === "unplaced-fixture");
+    const others = validation.issues.filter((item) => item.code !== "unplaced-fixture");
+    const result = [];
+    if (unplaced.length) {
+      result.push({
+        id: "unplaced-fixture-summary",
+        code: "unplaced-fixture-summary",
+        severity: "blocking",
+        message: `${unplaced.length} fixtures are unplaced. Generate enough playing dates, then use “Rebuild unresolved only”; individual reasons remain available in the Unplaced schedule filter.`,
+      });
+    }
+    return [...result, ...others.slice(0, 23)];
+  }, [validation.issues]);
+
   const issueEntryIds = useMemo(() => new Set(validation.issues.filter((item) => item.severity === "blocking").flatMap((item) => item.entryIds || [])), [validation]);
 
   const filteredEntries = useMemo(() => {
@@ -233,9 +263,42 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     return compareLeagueScheduleVersions(comparePayload.entries, payload.entries);
   }, [comparePayload, payload]);
 
+  const generateSeasonCalendar = async () => {
+    if (!season?.id) return;
+    setBusy(true);
+    try {
+      const result = await DB.generateLeaguePlayingDateCalendar(leagueId, {
+        seasonId: season.id,
+        weekday: calendarConfig.weekday,
+        defaultKickOff: calendarConfig.defaultKickOff,
+      });
+      await onWorkspaceRefresh?.();
+      toast.success("Season playing dates generated", {
+        description: `${Number(result?.inserted || 0)} new dates added · ${Number(result?.total_available || 0)} available in the calendar.`,
+      });
+    } catch (error) {
+      toast.error("Playing-date calendar could not be generated", { description: error?.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const createDraft = async ({ rebuildUnresolved = false } = {}) => {
     if (!season?.id) return;
-    const selectedDivisions = config.divisionId === "all" ? workspace.divisions.filter((division) => division.seasonId === season.id).map((division) => division.id) : [config.divisionId];
+    const selectedDivisions = selectedDivisionIds;
+    const schedulePreflight = getLeagueSchedulePreflight(workspace, {
+      seasonId: season.id,
+      divisionIds: selectedDivisions,
+      meetings: Number(config.meetings),
+    });
+    if (!schedulePreflight.ready) {
+      const firstShortfall = schedulePreflight.dateShortfalls?.[0];
+      const description = firstShortfall
+        ? `${firstShortfall.name} has ${firstShortfall.availableDates} available playing date${firstShortfall.availableDates === 1 ? "" : "s"} but needs at least ${firstShortfall.requiredRounds}. Generate the season calendar first.`
+        : schedulePreflight.errors?.[0] || "Complete the schedule setup before generating a draft.";
+      toast.error("Season calendar is incomplete", { description });
+      return;
+    }
     const generated = generateLeagueSchedule(workspace, {
       seasonId: season.id,
       divisionIds: selectedDivisions,
@@ -390,6 +453,22 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
         </div>
       </Panel>
 
+      <Panel className={`p-5 ${preflight.ready ? "border-emerald-200" : "border-amber-300"}`}>
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2"><Pill tone={preflight.ready ? "green" : "amber"}>Season calendar</Pill><Pill>{preflight.configuredDates} available</Pill><Pill>{preflight.minimumDates} minimum</Pill></div>
+            <h3 className="mt-3 text-lg font-black text-slate-950">{preflight.ready ? "Enough playing dates are configured" : "Generate the full playing-date calendar before scheduling"}</h3>
+            <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600">{preflight.ready ? `${preflight.totalFixtures} fixtures can be allocated across the selected divisions.` : "The previous draft used only one available date, placed the opening round and correctly left the remaining fixtures unresolved."}</p>
+            {!preflight.ready && preflight.dateShortfalls?.length ? <div className="mt-3 text-xs font-black text-amber-900">{preflight.dateShortfalls.slice(0, 3).map((division) => `${division.name}: ${division.availableDates}/${division.requiredRounds} dates`).join(" · ")}</div> : null}
+          </div>
+          <div className="grid w-full gap-3 sm:grid-cols-[150px_140px_auto] xl:w-auto">
+            <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Primary day</span><select className={INPUT} value={calendarConfig.weekday} onChange={(event) => setCalendarConfig((current) => ({ ...current, weekday: Number(event.target.value) }))} disabled={!canOperate || busy}><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></label>
+            <label><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">Default kick-off</span><input type="time" className={INPUT} value={calendarConfig.defaultKickOff} onChange={(event) => setCalendarConfig((current) => ({ ...current, defaultKickOff: event.target.value }))} disabled={!canOperate || busy} /></label>
+            <div className="flex items-end"><button type="button" onClick={generateSeasonCalendar} disabled={!canOperate || busy} className={`${BUTTON} h-10 w-full bg-slate-950 text-white`}><CalendarClock size={15} /> Generate weekly dates</button></div>
+          </div>
+        </div>
+      </Panel>
+
       <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Panel className="overflow-hidden xl:sticky xl:top-5 xl:self-start">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4"><div><div className="text-sm font-black text-slate-950">Schedule versions</div><div className="mt-1 text-xs font-semibold text-slate-500">{versions.length} saved</div></div>{loading ? <RefreshCw className="animate-spin text-emerald-600" size={18} /> : <CalendarClock className="text-slate-400" size={18} />}</div>
@@ -421,7 +500,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
               {comparison?.details?.length ? <div className="mt-4 max-h-48 space-y-2 overflow-y-auto rounded-2xl bg-slate-50 p-3">{comparison.details.slice(0, 30).map((change) => <div key={`${change.type}:${change.key}`} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-xs"><span className="font-black text-slate-800">{change.after ? `${getEntityName(workspace, "team", change.after.homeTeamId)} v ${getEntityName(workspace, "team", change.after.awayTeamId)}` : `${getEntityName(workspace, "team", change.before.homeTeamId)} v ${getEntityName(workspace, "team", change.before.awayTeamId)}`}</span><span className="font-bold text-slate-500">{change.type === "moved" ? `${change.before.scheduledDate || "unplaced"} → ${change.after.scheduledDate || "unplaced"}` : change.type}</span></div>)}</div> : null}
             </Panel>
 
-            {validation.issues.length ? <Panel className="overflow-hidden"><details open={!validation.valid}><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4"><div className="flex items-center gap-3"><AlertTriangle className={validation.valid ? "text-amber-600" : "text-rose-600"} size={20} /><div><div className="text-sm font-black text-slate-950">Validation findings</div><div className="mt-0.5 text-xs font-semibold text-slate-500">{validation.blockingCount} blocking · {validation.warningCount} warnings</div></div></div><ChevronDown className="text-slate-400" size={18} /></summary><div className="space-y-2 border-t border-slate-200 p-4">{validation.issues.slice(0, 60).map((item) => <div key={item.id} className={`rounded-xl border px-3 py-2.5 text-xs font-bold leading-5 ${item.severity === "blocking" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{item.message}</div>)}</div></details></Panel> : null}
+            {validation.issues.length ? <Panel className="overflow-hidden"><details open={!validation.valid}><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4"><div className="flex items-center gap-3"><AlertTriangle className={validation.valid ? "text-amber-600" : "text-rose-600"} size={20} /><div><div className="text-sm font-black text-slate-950">Validation findings</div><div className="mt-0.5 text-xs font-semibold text-slate-500">{validation.blockingCount} blocking · {validation.warningCount} warnings</div></div></div><ChevronDown className="text-slate-400" size={18} /></summary><div className="space-y-2 border-t border-slate-200 p-4">{visibleValidationIssues.map((item) => <div key={item.id} className={`rounded-xl border px-3 py-2.5 text-xs font-bold leading-5 ${item.severity === "blocking" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{item.message}</div>)}</div></details></Panel> : null}
 
             <Panel className="p-5">
               <div className="flex items-center gap-3"><Filter className="text-slate-600" size={19} /><div><h3 className="text-base font-black text-slate-950">Draft schedule</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">Filter, manually move and lock fixtures. Locked placements survive future regeneration.</p></div></div>

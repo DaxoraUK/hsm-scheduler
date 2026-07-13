@@ -923,6 +923,22 @@ export const DB = {
     });
   },
 
+  async generateLeaguePlayingDateCalendar(leagueId, {
+    seasonId,
+    weekday = 6,
+    defaultKickOff = "15:00",
+    divisionId = null,
+  } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/generate_league_playing_date_calendar", {
+      target_league_id: id,
+      target_season_id: String(seasonId || "").trim(),
+      weekday_numbers: [Math.max(0, Math.min(Number(weekday) || 0, 6))],
+      default_kick_off: String(defaultKickOff || "15:00").slice(0, 5),
+      target_division_id: divisionId ? String(divisionId).trim() : null,
+    });
+  },
+
   async listLeagueScheduleVersions(leagueId, seasonId = null) {
     const id = requireLeagueId(leagueId);
     return asArray(await supaFetch("POST", "rpc/list_league_schedule_versions", {
