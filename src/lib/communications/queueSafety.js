@@ -22,3 +22,21 @@ export function findStaleCommunicationRows(rows = [], currentRows = [], snapshot
     return expected !== communicationRowSignature(latest);
   });
 }
+
+function fnv1a(value) {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function buildCommunicationApprovalKey(rows = []) {
+  const signatures = (Array.isArray(rows) ? rows : [])
+    .map((row) => communicationRowSignature(row))
+    .sort()
+    .join("|");
+  return `elite:communications:${fnv1a(signatures)}`;
+}

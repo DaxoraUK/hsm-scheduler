@@ -1860,6 +1860,7 @@ function App() {
     setHistory,
     setDbStatus,
     activeClubId,
+    subscription,
     canPublish: operationalWorkspaceAccess.canPublish,
     onSyncFailure: reportSyncFailure,
     onSyncSuccess: reportSyncSuccess,
@@ -2196,6 +2197,9 @@ function App() {
                 setMainPage={setMainPage}
                 setDayTab={setDayTab}
                 setSettingsTab={setSettingsTab}
+                activeClubId={activeClubId}
+                workspaceAccess={workspaceAccess}
+                activeUserId={authSession?.user?.id || ""}
               />
             </Suspense>
           )}
@@ -2578,6 +2582,7 @@ function App() {
                 club={club}
                 activeClubId={activeClubId}
                 workspaceAccess={operationalWorkspaceAccess}
+                subscription={subscription}
                 teamCfg={teamCfg}
                 teamContacts={teamContacts}
                 communicationPrivacy={communicationPrivacy}

@@ -111,7 +111,7 @@ export function buildDeliveryMessages(rows = [], capabilities = EMPTY_DELIVERY_C
         recipientHint: maskContactDestination(recipient.destination),
         channel: recipient.channel,
         destination: recipient.destination,
-        subject: deliverySubject(row),
+        subject: row.subject || deliverySubject(row),
         message: recipient.message || row.message,
         clubName: row.clubName,
         status: row.status,

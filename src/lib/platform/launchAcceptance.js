@@ -160,14 +160,19 @@ export function buildLaunchAcceptanceReport() {
     ),
     check(
       "elite-distinction",
-      "Elite adds organisation command, governance and executive reporting",
+      "Elite adds organisation command, approvals, delegated responsibility and executive reporting",
       [
         ENTITLEMENTS.ORGANISATION_COMMAND,
         ENTITLEMENTS.EXECUTIVE_REPORTING,
         ENTITLEMENTS.GOVERNANCE_CONTROLS,
+        ENTITLEMENTS.APPROVAL_WORKFLOWS,
+        ENTITLEMENTS.SITE_RESPONSIBILITY,
+        ENTITLEMENTS.COMMUNICATION_GOVERNANCE,
+        ENTITLEMENTS.FUNDING_PORTFOLIO,
+        ENTITLEMENTS.ENHANCED_AUDIT,
       ].every((entitlement) => hasEntitlement(elite, entitlement))
         && !hasEntitlement(pro, ENTITLEMENTS.ORGANISATION_COMMAND),
-      "Elite-only operating layer is present and unavailable to Pro.",
+      "Elite-only command, approval and governance layer is present and unavailable to Pro.",
     ),
     check(
       "elite-band-limits",

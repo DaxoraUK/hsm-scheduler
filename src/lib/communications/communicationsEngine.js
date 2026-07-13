@@ -35,6 +35,23 @@ function stableId(fixture = {}, day = "matchday", index = 0) {
   ].join(":");
 }
 
+function templateKeyForStatus(status) {
+  if (status === "postponed") return "fixture_postponed";
+  if (status === "cancelled") return "fixture_cancelled";
+  if (status === "scheduled") return "fixture_confirmed";
+  return "";
+}
+
+function renderTemplate(value, tokens = {}) {
+  return String(value || "").replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key) => String(tokens[key] ?? ""));
+}
+
+function governedTemplateForStatus(templates, status) {
+  const key = templateKeyForStatus(status);
+  if (!key) return null;
+  return asArray(templates).find((item) => item?.active !== false && item?.templateKey === key) || null;
+}
+
 function buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName }) {
   const greeting = contactName ? `Hi ${contactName},` : "Hi,";
 
@@ -53,7 +70,7 @@ function buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, form
   return `${greeting}\n\n${teamName} are at home on ${dateLabel}.\n\nOpposition: ${opposition}\nKick-off: ${ko}\nPitch: ${pitch}\nFormat: ${format}\nReferee: ${referee}\n\nPlease confirm receipt and let the club know promptly if there are any issues.`;
 }
 
-function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, teamCfg, teamContacts }) {
+function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, teamCfg, teamContacts, governedTemplates }) {
   const status = fixtureStatus(fixture, forcedStatus);
   const teamName = cleanName(fixture.homeTeam || fixture.team || fixture.home || "Home team", club?.name) || "Home team";
   const opposition = String(fixture.awayTeam || fixture.opponent || fixture.away || "Opposition TBC").trim();
@@ -92,23 +109,31 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
 
   const blocked = status === "unresolved" || (status === "scheduled" && (ko === "TBC" || pitch === "TBC"));
   const readyState = blocked ? "blocked" : issues.length ? "review" : "ready";
-  const message = buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName: contact.coachName });
+  const governedTemplate = governedTemplateForStatus(governedTemplates, status);
+  const templateTokens = {
+    team: teamName,
+    opposition,
+    date: dateLabel,
+    kickoff: ko,
+    pitch,
+    venue: venue || "TBC",
+    format,
+    referee,
+    club: String(club?.name || "Your club").trim() || "Your club",
+  };
+  const buildRecipientMessage = (contactName) => governedTemplate?.bodyTemplate
+    ? renderTemplate(governedTemplate.bodyTemplate, { ...templateTokens, coach: contactName || "coach" }).trim()
+    : buildMessage({ status, teamName, opposition, dateLabel, ko, pitch, format, referee, contactName });
+  const message = buildRecipientMessage(contact.coachName);
   const recipients = recipientRecords.map((recipient) => ({
     ...recipient,
-    message: buildMessage({
-      status,
-      teamName,
-      opposition,
-      dateLabel,
-      ko,
-      pitch,
-      format,
-      referee,
-      contactName: recipient.name,
-    }),
+    message: buildRecipientMessage(recipient.name),
   }));
+  const subject = governedTemplate?.subjectTemplate
+    ? renderTemplate(governedTemplate.subjectTemplate, templateTokens).trim()
+    : "";
   const id = stableId(fixture, day, index);
-  const messageHash = [id, status, dateLabel, ko, pitch, format, referee, ...recipients.map((recipient) => recipient.message)].join("|");
+  const messageHash = [id, status, dateLabel, ko, pitch, format, referee, governedTemplate?.templateKey || "default", governedTemplate?.updatedAt || "", subject, ...recipients.map((recipient) => recipient.message)].join("|");
 
   return {
     id,
@@ -130,14 +155,16 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     contact,
     recipients,
     message,
+    subject,
+    governedTemplateKey: governedTemplate?.templateKey || "",
     raw: fixture,
   };
 }
 
-function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg, teamContacts }) {
+function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg, teamContacts, governedTemplates }) {
   if (!hasRun && !asArray(final).length && !asArray(unresolved).length) return [];
-  const scheduledRows = asArray(final).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg, teamContacts }));
-  const unresolvedRows = asArray(unresolved).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg, teamContacts }));
+  const scheduledRows = asArray(final).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg, teamContacts, governedTemplates }));
+  const unresolvedRows = asArray(unresolved).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg, teamContacts, governedTemplates }));
   const byId = new Map();
   [...scheduledRows, ...unresolvedRows].forEach((row) => {
     const current = byId.get(row.id);
@@ -164,11 +191,12 @@ export function buildCommunicationsModel({
   sunDateLabel = "Sunday",
   midweekDateLabel = "Midweek",
   midweekEnabled = true,
+  governedTemplates = [],
 } = {}) {
   const rows = [
-    ...(midweekEnabled ? dayRows({ day: "midweek", dateLabel: midweekDateLabel, hasRun: midweekHasRun, final: midweekFinal, unresolved: midweekUnresolved, club, teamCfg, teamContacts }) : []),
-    ...dayRows({ day: "saturday", dateLabel: satDateLabel, hasRun: satHasRun, final: satFinal, unresolved: satUnresolved, club, teamCfg, teamContacts }),
-    ...dayRows({ day: "sunday", dateLabel: sunDateLabel, hasRun: sunHasRun, final: sunFinal, unresolved: sunUnresolved, club, teamCfg, teamContacts }),
+    ...(midweekEnabled ? dayRows({ day: "midweek", dateLabel: midweekDateLabel, hasRun: midweekHasRun, final: midweekFinal, unresolved: midweekUnresolved, club, teamCfg, teamContacts, governedTemplates }) : []),
+    ...dayRows({ day: "saturday", dateLabel: satDateLabel, hasRun: satHasRun, final: satFinal, unresolved: satUnresolved, club, teamCfg, teamContacts, governedTemplates }),
+    ...dayRows({ day: "sunday", dateLabel: sunDateLabel, hasRun: sunHasRun, final: sunFinal, unresolved: sunUnresolved, club, teamCfg, teamContacts, governedTemplates }),
   ];
 
   const counts = rows.reduce((result, row) => {

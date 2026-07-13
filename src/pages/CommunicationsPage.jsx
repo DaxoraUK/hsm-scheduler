@@ -36,7 +36,14 @@ import {
   EMPTY_DELIVERY_CAPABILITIES,
   loadDeliveryCapabilities,
 } from "../lib/communications/deliveryService.js";
-import { communicationRowSignature, findStaleCommunicationRows } from "../lib/communications/queueSafety.js";
+import { buildCommunicationApprovalKey, communicationRowSignature, findStaleCommunicationRows } from "../lib/communications/queueSafety.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import {
+  ELITE_APPROVAL_TYPES,
+  createEliteApprovalRequest,
+  loadEliteApprovalState,
+  loadEliteCommunicationTemplates,
+} from "../lib/elite/eliteGovernanceService.js";
 
 const FILTERS = [
   ["all", "All"],
@@ -249,7 +256,9 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
 }
 
 export default function CommunicationsPage(props) {
-  const model = useMemo(() => buildCommunicationsModel(props), [props]);
+  const eliteCommunicationGovernance = hasEntitlement(props.subscription, ENTITLEMENTS.COMMUNICATION_GOVERNANCE);
+  const [governedTemplates, setGovernedTemplates] = useState([]);
+  const model = useMemo(() => buildCommunicationsModel({ ...props, governedTemplates }), [props, governedTemplates]);
   const privacy = useMemo(() => normaliseCommunicationPrivacy(props.communicationPrivacy), [props.communicationPrivacy]);
   const [day, setDay] = useState("all");
   const [filter, setFilter] = useState("all");
@@ -303,6 +312,25 @@ export default function CommunicationsPage(props) {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!eliteCommunicationGovernance || !props.activeClubId) {
+      setGovernedTemplates([]);
+      return () => { active = false; };
+    }
+    loadEliteCommunicationTemplates(props.activeClubId)
+      .then((templates) => {
+        if (active) setGovernedTemplates(templates);
+      })
+      .catch((error) => {
+        if (active) {
+          setGovernedTemplates([]);
+          toast.warning("Elite communication templates could not be loaded", { description: error?.message });
+        }
+      });
+    return () => { active = false; };
+  }, [eliteCommunicationGovernance, props.activeClubId]);
 
   const record = async (row, action, recipient = null, detail = {}, refresh = true) => {
     if (!auditAvailable) return null;
@@ -396,7 +424,7 @@ export default function CommunicationsPage(props) {
     await record(row, "channel_opened", recipient);
   };
 
-  const sendSelectedViaWeb = (selectedRows) => {
+  const sendSelectedViaWeb = async (selectedRows) => {
     const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
     if (staleRows.length) {
       toast.error("The message queue changed", { description: "Fixture or contact details changed after the queue was opened. Close and reopen the queue before sending." });
@@ -415,12 +443,56 @@ export default function CommunicationsPage(props) {
       return;
     }
 
+    const requestKey = buildCommunicationApprovalKey(webEligibleRows);
+    const eliteGovernance = eliteCommunicationGovernance;
+    if (eliteGovernance) {
+      try {
+        const approvalState = await loadEliteApprovalState(props.activeClubId, ELITE_APPROVAL_TYPES.COMMUNICATIONS, requestKey);
+        if (approvalState.policy.communicationsApprovalRequired && !approvalState.approved) {
+          if (!approvalState.pending) {
+            await createEliteApprovalRequest(props.activeClubId, {
+              approvalType: ELITE_APPROVAL_TYPES.COMMUNICATIONS,
+              entityKey: requestKey,
+              title: `Coach message batch · ${plan.messages.length} recipient${plan.messages.length === 1 ? "" : "s"}`,
+              summary: "Exact recipient, fixture and message content snapshot prepared from the current matchweek queue.",
+              snapshot: {
+                recipientCount: plan.messages.length,
+                unavailableCount: plan.unavailable.length,
+                messageKeys: webEligibleRows.map((row) => row.id),
+                messageHashes: webEligibleRows.map((row) => row.messageHash),
+              },
+            });
+          }
+          const failure = {
+            title: "Elite approval required",
+            description: approvalState.pending
+              ? "This exact coach-message batch is already waiting for a separate reviewer in Organisation Command."
+              : "An approval request has been created in Organisation Command. A separate reviewer must approve this exact batch before it can be sent.",
+            code: "ELITE_COMMUNICATION_APPROVAL_REQUIRED",
+          };
+          setSendFailure(failure);
+          toast.info(failure.title, { description: failure.description });
+          return;
+        }
+      } catch (error) {
+        const failure = {
+          title: "Elite approval check failed",
+          description: error?.message || "The secure approval state could not be checked.",
+          code: error?.code || "ELITE_APPROVAL_CHECK_FAILED",
+        };
+        setSendFailure(failure);
+        toast.error(failure.title, { description: failure.description });
+        return;
+      }
+    }
+
     setSendFailure(null);
     setSendConfirmation({
       rows: webEligibleRows,
       recipientCount: plan.messages.length,
       unavailableCount: plan.unavailable.length,
       emailPilot,
+      requestKey,
       signatures: Object.fromEntries(webEligibleRows.map((row) => [row.id, communicationRowSignature(row)])),
     });
   };
@@ -437,7 +509,7 @@ export default function CommunicationsPage(props) {
     }
     setSending(true);
     try {
-      const requestKey = globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const requestKey = confirmation.requestKey || buildCommunicationApprovalKey(confirmation.rows);
       const result = await dispatchCommunicationBatch({
         clubId: props.activeClubId,
         rows: confirmation.rows,

@@ -40,6 +40,11 @@ export const ENTITLEMENTS = Object.freeze({
   ORGANISATION_COMMAND: "organisation_command",
   EXECUTIVE_REPORTING: "executive_reporting",
   GOVERNANCE_CONTROLS: "governance_controls",
+  APPROVAL_WORKFLOWS: "approval_workflows",
+  SITE_RESPONSIBILITY: "site_responsibility",
+  COMMUNICATION_GOVERNANCE: "communication_governance",
+  FUNDING_PORTFOLIO: "funding_portfolio",
+  ENHANCED_AUDIT: "enhanced_audit",
 });
 
 export const LIMIT_KEYS = Object.freeze({
@@ -90,6 +95,11 @@ const eliteFeatures = [
   ENTITLEMENTS.ORGANISATION_COMMAND,
   ENTITLEMENTS.EXECUTIVE_REPORTING,
   ENTITLEMENTS.GOVERNANCE_CONTROLS,
+  ENTITLEMENTS.APPROVAL_WORKFLOWS,
+  ENTITLEMENTS.SITE_RESPONSIBILITY,
+  ENTITLEMENTS.COMMUNICATION_GOVERNANCE,
+  ENTITLEMENTS.FUNDING_PORTFOLIO,
+  ENTITLEMENTS.ENHANCED_AUDIT,
 ];
 
 export const PLAN_CATALOGUE = Object.freeze({

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -13,6 +13,7 @@ import {
   MapPinned,
   ShieldCheck,
   UsersRound,
+  Workflow,
 } from "lucide-react";
 import PageContainer from "@/ui/PageContainer.jsx";
 import {
@@ -21,6 +22,7 @@ import {
   buildEliteCommandModel,
 } from "../lib/elite/eliteCommandEngine.js";
 import { downloadCsv } from "../lib/reports/csvExport.js";
+import EliteControlWorkspace from "../components/elite/EliteControlWorkspace.jsx";
 
 const STATUS_STYLES = Object.freeze({
   ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -147,7 +149,11 @@ export default function EliteCommandCentrePage({
   setMainPage,
   setDayTab,
   setSettingsTab,
+  activeClubId,
+  workspaceAccess,
+  activeUserId,
 }) {
+  const [view, setView] = useState("command");
   const model = useMemo(() => buildEliteCommandModel({
     club,
     teamCfg,
@@ -213,8 +219,8 @@ export default function EliteCommandCentrePage({
               <button type="button" onClick={openOperations} className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-emerald-950/20">
                 Open Operations <ArrowRight size={16} />
               </button>
-              <button type="button" onClick={() => openSettings("governance")} className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-4 text-sm font-black text-white hover:bg-white/[0.1]">
-                Organisation governance <ShieldCheck size={16} />
+              <button type="button" onClick={() => setView("control")} className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-4 text-sm font-black text-white hover:bg-white/[0.1]">
+                Governance & approvals <ShieldCheck size={16} />
               </button>
             </div>
           </div>
@@ -227,6 +233,24 @@ export default function EliteCommandCentrePage({
         </div>
       </section>
 
+      <nav className="overflow-x-auto rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm" aria-label="Elite organisation workspace">
+        <div className="flex min-w-max gap-1">
+          <button type="button" onClick={() => setView("command")} aria-pressed={view === "command"} className={`inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-xs font-black transition ${view === "command" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}><Building2 size={16} /> Command overview</button>
+          <button type="button" onClick={() => setView("control")} aria-pressed={view === "control"} className={`inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-xs font-black transition ${view === "control" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}><Workflow size={16} /> Governance & approvals</button>
+        </div>
+      </nav>
+
+      {view === "control" ? (
+        <EliteControlWorkspace
+          clubId={activeClubId}
+          sites={model.sites}
+          model={model}
+          workspaceAccess={workspaceAccess}
+          activeUserId={activeUserId}
+          onOpenAnalytics={() => setMainPage?.("analytics")}
+          onOpenCommunications={() => setMainPage?.("communications")}
+        />
+      ) : (<>
       <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm lg:p-7">
         <SectionHeader
           eyebrow="Portfolio control"
@@ -299,6 +323,7 @@ export default function EliteCommandCentrePage({
           </div>
         ))}
       </section>
+      </>)}
     </PageContainer>
   );
 }

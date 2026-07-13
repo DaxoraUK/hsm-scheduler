@@ -82,6 +82,14 @@ export async function POST(request) {
     });
 
     const requestKey = text(body?.requestKey, 240) || sha256(messages.map((item) => item.idempotencyKey).sort().join("|"));
+
+    // Pro workspaces pass through unchanged. Elite workspaces can require an
+    // approved exact message snapshot before any provider reservation occurs.
+    await userRpc(token, "assert_elite_communication_approval", {
+      target_club_id: clubId,
+      request_entity_key: requestKey,
+    });
+
     const databaseMessages = messages.map((item) => ({
       clientKey: item.clientKey,
       idempotencyKey: item.idempotencyKey,
