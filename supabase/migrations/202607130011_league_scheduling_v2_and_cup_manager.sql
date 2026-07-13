@@ -87,13 +87,165 @@ alter table public.league_schedule_entries
   add column if not exists competition_id uuid,
   add column if not exists cup_tie_id uuid;
 
+-- Pass 1 stored one row per home/away orientation and did not have a meeting
+-- number. Before adding the v2 unordered-pair uniqueness rule, remove the old
+-- directional unique constraint by inspecting its columns rather than relying on
+-- PostgreSQL's truncated generated constraint name.
+do $$
+declare
+  constraint_row record;
+begin
+  for constraint_row in
+    select constraint_value.conname
+    from pg_catalog.pg_constraint constraint_value
+    join pg_catalog.pg_class table_value on table_value.oid = constraint_value.conrelid
+    join pg_catalog.pg_namespace namespace_value on namespace_value.oid = table_value.relnamespace
+    where namespace_value.nspname = 'public'
+      and table_value.relname = 'league_schedule_entries'
+      and constraint_value.contype = 'u'
+      and (
+        select array_agg(attribute_value.attname::text order by key_value.ordinality)
+        from unnest(constraint_value.conkey) with ordinality as key_value(attnum, ordinality)
+        join pg_catalog.pg_attribute attribute_value
+          on attribute_value.attrelid = table_value.oid
+         and attribute_value.attnum = key_value.attnum
+      ) = array['version_id', 'home_team_id', 'away_team_id']::text[]
+  loop
+    execute format('alter table public.league_schedule_entries drop constraint %I', constraint_row.conname);
+  end loop;
+end;
+$$;
+
 alter table public.league_schedule_entries
-  drop constraint if exists league_schedule_entries_version_id_home_team_id_away_team_id_key,
   drop constraint if exists league_schedule_entries_meeting_number_check,
   drop constraint if exists league_schedule_entries_competition_type_check;
 alter table public.league_schedule_entries
   add constraint league_schedule_entries_meeting_number_check check (meeting_number between 1 and 4),
   add constraint league_schedule_entries_competition_type_check check (competition_type in ('league', 'cup'));
+
+-- Existing v1 drafts have both A v B and B v A recorded as meeting 1. Assign
+-- stable meeting numbers inside each version/division/pair before creating the
+-- new unique index. The old directional constraint means a valid v1 draft can
+-- contain at most two rows for an unordered pair, but the guard is deliberately
+-- written for the v2 maximum of four.
+do $$
+declare
+  oversized_pair record;
+begin
+  select
+    schedule_entry.version_id,
+    schedule_entry.division_id,
+    least(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text) as first_team_id,
+    greatest(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text) as second_team_id,
+    count(*) as fixture_count
+  into oversized_pair
+  from public.league_schedule_entries schedule_entry
+  where schedule_entry.competition_type = 'league'
+  group by
+    schedule_entry.version_id,
+    schedule_entry.division_id,
+    least(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text),
+    greatest(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text)
+  having count(*) > 4
+  limit 1;
+
+  if found then
+    raise exception
+      'Schedule version % contains % fixtures for one team pairing; v2 supports at most four meetings per pairing',
+      oversized_pair.version_id,
+      oversized_pair.fixture_count
+      using errcode = '23505';
+  end if;
+end;
+$$;
+
+with ranked_schedule_entries as (
+  select
+    schedule_entry.id,
+    row_number() over (
+      partition by
+        schedule_entry.version_id,
+        schedule_entry.division_id,
+        least(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text),
+        greatest(schedule_entry.home_team_id::text, schedule_entry.away_team_id::text)
+      order by
+        schedule_entry.round_number,
+        schedule_entry.scheduled_date nulls last,
+        schedule_entry.kick_off nulls last,
+        schedule_entry.home_team_id::text,
+        schedule_entry.away_team_id::text,
+        schedule_entry.created_at,
+        schedule_entry.id
+    )::integer as inferred_meeting_number
+  from public.league_schedule_entries schedule_entry
+  where schedule_entry.competition_type = 'league'
+)
+update public.league_schedule_entries schedule_entry
+set meeting_number = ranked_schedule_entries.inferred_meeting_number
+from ranked_schedule_entries
+where ranked_schedule_entries.id = schedule_entry.id
+  and schedule_entry.meeting_number is distinct from ranked_schedule_entries.inferred_meeting_number;
+
+-- Apply the same deterministic backfill to the currently published fixture
+-- registry so locked/source fixtures retain separate v2 identities.
+do $$
+declare
+  oversized_pair record;
+begin
+  select
+    fixture_value.season_id,
+    fixture_value.division_id,
+    least(fixture_value.home_team_id::text, fixture_value.away_team_id::text) as first_team_id,
+    greatest(fixture_value.home_team_id::text, fixture_value.away_team_id::text) as second_team_id,
+    count(*) as fixture_count
+  into oversized_pair
+  from public.league_fixtures fixture_value
+  where fixture_value.competition_type = 'league'
+    and fixture_value.status <> 'cancelled'
+  group by
+    fixture_value.season_id,
+    fixture_value.division_id,
+    least(fixture_value.home_team_id::text, fixture_value.away_team_id::text),
+    greatest(fixture_value.home_team_id::text, fixture_value.away_team_id::text)
+  having count(*) > 4
+  limit 1;
+
+  if found then
+    raise exception
+      'Season % contains % active fixtures for one team pairing; v2 supports at most four meetings per pairing',
+      oversized_pair.season_id,
+      oversized_pair.fixture_count
+      using errcode = '23505';
+  end if;
+end;
+$$;
+
+with ranked_league_fixtures as (
+  select
+    fixture_value.id,
+    row_number() over (
+      partition by
+        fixture_value.season_id,
+        fixture_value.division_id,
+        least(fixture_value.home_team_id::text, fixture_value.away_team_id::text),
+        greatest(fixture_value.home_team_id::text, fixture_value.away_team_id::text)
+      order by
+        fixture_value.scheduled_date nulls last,
+        fixture_value.kick_off nulls last,
+        fixture_value.home_team_id::text,
+        fixture_value.away_team_id::text,
+        fixture_value.created_at,
+        fixture_value.id
+    )::integer as inferred_meeting_number
+  from public.league_fixtures fixture_value
+  where fixture_value.competition_type = 'league'
+    and fixture_value.status <> 'cancelled'
+)
+update public.league_fixtures fixture_value
+set meeting_number = ranked_league_fixtures.inferred_meeting_number
+from ranked_league_fixtures
+where ranked_league_fixtures.id = fixture_value.id
+  and fixture_value.meeting_number is distinct from ranked_league_fixtures.inferred_meeting_number;
 
 create unique index if not exists league_schedule_entries_unique_league_meeting_idx
   on public.league_schedule_entries (
