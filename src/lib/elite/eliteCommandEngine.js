@@ -1,3 +1,5 @@
+import { getClubSites, getPrimarySite, resolveSiteId } from "../siteAssignments.js";
+
 const DAY_LABELS = Object.freeze({
   saturday: "Saturday",
   sunday: "Sunday",
@@ -10,15 +12,6 @@ function asArray(value) {
 
 function clean(value) {
   return String(value ?? "").trim();
-}
-
-function normaliseKey(value) {
-  return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-function finite(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function activeFixture(fixture = {}) {
@@ -38,33 +31,6 @@ function fixtureOfficialName(fixture = {}) {
   return clean(fixture.referee || fixture.official || fixture.ref || fixture.matchOfficial);
 }
 
-function getSites(club = {}) {
-  const sites = asArray(club.sites);
-  if (sites.length) {
-    return sites.map((site, index) => ({
-      id: clean(site.id) || normaliseKey(site.name || site.venue) || `site-${index + 1}`,
-      name: clean(site.name || site.venue) || `Site ${index + 1}`,
-      venue: clean(site.venue || site.name),
-      postcode: clean(site.postcode).toUpperCase(),
-      isPrimary: Boolean(site.isPrimary) || site.id === club.primarySiteId || (!club.primarySiteId && index === 0),
-      carParkSpaces: Math.max(0, finite(site.carParkSpaces ?? club.carParkSpaces)),
-      weatherEnabled: site.weatherEnabled !== false,
-      notes: clean(site.notes),
-    }));
-  }
-
-  return [{
-    id: clean(club.primarySiteId) || "main-ground",
-    name: clean(club.venue) || "Main Ground",
-    venue: clean(club.venue),
-    postcode: clean(club.postcode || club.weatherPostcode).toUpperCase(),
-    isPrimary: true,
-    carParkSpaces: Math.max(0, finite(club.carParkSpaces)),
-    weatherEnabled: true,
-    notes: "",
-  }];
-}
-
 function getGovernance(club = {}) {
   const source = club.eliteGovernance && typeof club.eliteGovernance === "object"
     ? club.eliteGovernance
@@ -78,23 +44,27 @@ function getGovernance(club = {}) {
   };
 }
 
-function getTeamSiteId(team = {}, primarySiteId = "") {
-  return clean(team.homeSiteId || team.siteId || team.venueId || team.groundId || primarySiteId);
+function getTeamSiteId(team = {}, sites = [], primarySiteId = "") {
+  return resolveSiteId(
+    team.homeSiteId || team.siteId || team.venueId || team.groundId,
+    sites,
+    primarySiteId,
+  );
 }
 
-function getFixtureSiteId(fixture, pitchMap, teamMap, primarySiteId) {
+function getFixtureSiteId(fixture, pitchMap, teamMap, sites, primarySiteId) {
   const direct = clean(fixture?.siteId || fixture?.venueId || fixture?.groundId || fixture?.homeSiteId);
-  if (direct) return direct;
+  if (direct) return resolveSiteId(direct, sites, primarySiteId);
   const pitchId = fixturePitchId(fixture);
   const pitchSite = pitchMap.get(pitchId)?.siteId;
   if (pitchSite) return pitchSite;
   const team = teamMap.get(fixtureTeamName(fixture).toLowerCase());
-  return getTeamSiteId(team, primarySiteId) || primarySiteId;
+  return getTeamSiteId(team, sites, primarySiteId) || primarySiteId;
 }
 
-function unresolvedSiteId(item, pitchMap, teamMap, primarySiteId) {
+function unresolvedSiteId(item, pitchMap, teamMap, sites, primarySiteId) {
   const source = item?.fixture || item?.game || item || {};
-  return getFixtureSiteId(source, pitchMap, teamMap, primarySiteId);
+  return getFixtureSiteId(source, pitchMap, teamMap, sites, primarySiteId);
 }
 
 function statusFromChecks({ unresolved, closedPitches, pitchCount, missingConfiguration, officialGaps }) {
@@ -146,8 +116,8 @@ export function buildEliteCommandModel({
   periodEnd = "",
   periodLabel = "Current matchweek",
 } = {}) {
-  const sites = getSites(club);
-  const primarySite = sites.find((site) => site.isPrimary) || sites[0];
+  const sites = getClubSites(club);
+  const primarySite = getPrimarySite(sites);
   const primarySiteId = primarySite?.id || "main-ground";
   const governance = getGovernance(club);
   const memberMap = new Map(asArray(memberships).map((membership) => [membershipUserId(membership), membership]));
@@ -160,7 +130,7 @@ export function buildEliteCommandModel({
   const pitches = asArray(pitchCfg).map((pitch) => ({
     ...pitch,
     id: clean(pitch.id || pitch.pitchId || pitch.label),
-    siteId: clean(pitch.siteId || pitch.venueId || pitch.groundId || primarySiteId) || primarySiteId,
+    siteId: resolveSiteId(pitch.siteId || pitch.venueId || pitch.groundId, sites, primarySiteId) || primarySiteId,
   }));
   const pitchMap = new Map(pitches.map((pitch) => [pitch.id, pitch]));
   const teams = asArray(teamCfg);
@@ -176,9 +146,9 @@ export function buildEliteCommandModel({
   const parkingEnabled = club?.features?.parkingEnabled !== false;
   const siteModels = sites.map((site) => {
     const sitePitches = pitches.filter((pitch) => pitch.siteId === site.id);
-    const siteTeams = teams.filter((team) => getTeamSiteId(team, primarySiteId) === site.id);
-    const siteFixtures = activeFixtures.filter((fixture) => getFixtureSiteId(fixture, pitchMap, teamMap, primarySiteId) === site.id);
-    const siteUnresolved = unresolved.filter((item) => unresolvedSiteId(item, pitchMap, teamMap, primarySiteId) === site.id);
+    const siteTeams = teams.filter((team) => getTeamSiteId(team, sites, primarySiteId) === site.id);
+    const siteFixtures = activeFixtures.filter((fixture) => getFixtureSiteId(fixture, pitchMap, teamMap, sites, primarySiteId) === site.id);
+    const siteUnresolved = unresolved.filter((item) => unresolvedSiteId(item, pitchMap, teamMap, sites, primarySiteId) === site.id);
     const closedAtSite = sitePitches.filter((pitch) => closed.has(pitch.id));
     const siteLead = siteLeadMap.get(site.id) || null;
     const siteLeadMember = siteLead ? memberMap.get(clean(siteLead.userId || siteLead.user_id)) : null;

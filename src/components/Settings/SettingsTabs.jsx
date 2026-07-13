@@ -200,7 +200,7 @@ export default function SettingsTabs({
                   {group.label}
                 </span>
                 <span
-                  className={`mt-0.5 hidden truncate text-[11px] font-bold xl:block ${
+                  className={`mt-0.5 hidden truncate text-[11px] font-bold 2xl:block ${
                     active ? "text-slate-300" : "text-slate-400"
                   }`}
                 >

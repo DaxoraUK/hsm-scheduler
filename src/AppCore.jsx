@@ -107,6 +107,7 @@ import {
   getVenueCount,
 } from "./lib/subscriptions/planCompliance.js";
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
+import { reconcileSiteAssignments } from "./lib/siteAssignments.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import {
   alignTeamContacts,
@@ -974,7 +975,14 @@ function App() {
             },
           }
         : baseClub;
-    const nextTeamCfg = stripTeamContactsFromConfig(data.teamCfg || teamCfg);
+    const rawNextTeamCfg = stripTeamContactsFromConfig(data.teamCfg || teamCfg);
+    const siteAssignments = reconcileSiteAssignments({
+      club: nextClub,
+      teams: rawNextTeamCfg,
+      pitches: data.pitchCfg || pitchCfg,
+    });
+    const nextTeamCfg = siteAssignments.teams;
+    const nextPitchCfg = siteAssignments.pitches;
     const nextTeamContacts = alignTeamContacts(nextTeamCfg, data.teamContacts || teamContacts);
     const nextRefs = data.refs || refs;
     const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
@@ -986,6 +994,7 @@ function App() {
         setTeamContacts(nextTeamContacts);
       }
       if (data.refs || tab === "refs") setRefs(nextRefs);
+      if (data.pitchCfg || tab === "pitches") setPitchCfg(nextPitchCfg);
     };
 
     const performCloudSave = async () => {
@@ -999,7 +1008,7 @@ function App() {
         await DB.saveTeamContacts(activeClubId, nextTeamContacts);
       }
       if (data.refs || tab === "refs") await DB.saveRefs(activeClubId, nextRefs);
-      if (tab === "pitches") await DB.savePitches(activeClubId, pitchCfg);
+      if (data.pitchCfg || tab === "pitches") await DB.savePitches(activeClubId, nextPitchCfg);
     };
 
     const restoreServerApprovedState = async () => {
@@ -1014,11 +1023,15 @@ function App() {
           DB.loadTeamContacts(activeClubId).catch(() => []),
         ]);
         const safeTeams = stripTeamContactsFromConfig(Array.isArray(approvedTeams) ? approvedTeams : []);
-        setTeamCfg(safeTeams);
-        setTeamContacts(alignTeamContacts(safeTeams, approvedContacts));
+        const approvedAssignments = reconcileSiteAssignments({ club: nextClub, teams: safeTeams });
+        setTeamCfg(approvedAssignments.teams);
+        setTeamContacts(alignTeamContacts(approvedAssignments.teams, approvedContacts));
       }
       if (data.refs || tab === "refs") setRefs(await DB.loadRefs(activeClubId));
-      if (tab === "pitches") setPitchCfg(migratePitches(await DB.loadPitches(activeClubId)));
+      if (data.pitchCfg || tab === "pitches") {
+        const approvedPitches = migratePitches(await DB.loadPitches(activeClubId));
+        setPitchCfg(reconcileSiteAssignments({ club: nextClub, pitches: approvedPitches }).pitches);
+      }
     };
 
     try {
@@ -1032,7 +1045,7 @@ function App() {
         tenantSetJson("club", nextClub);
         tenantSetJson("teamConfig", nextTeamCfg);
         tenantSetJson("referees", nextRefs);
-        if (tab === "pitches") tenantSetJson("pitches", pitchCfg);
+        if (data.pitchCfg || tab === "pitches") tenantSetJson("pitches", nextPitchCfg);
       }
       setSavedTab(tab);
       window.setTimeout(() => setSavedTab(""), 2500);
@@ -1171,13 +1184,18 @@ function App() {
       setEndMin(fallbackTiming.endMin);
       setBufferYouth(fallbackTiming.bufferYouth);
       setBufferAdult(fallbackTiming.bufferAdult);
-      setTeamCfg(fallbackTeams);
+      const fallbackAssignments = reconcileSiteAssignments({
+        club: fallbackClub,
+        teams: fallbackTeams,
+        pitches: safeLocalPitches,
+      });
+      setTeamCfg(fallbackAssignments.teams);
       setTeamContacts(fallbackContacts);
       setCommunicationPrivacy(DEFAULT_COMMUNICATION_PRIVACY);
       setCommunicationSchemaReady(false);
       setRefs(Array.isArray(localRefs) ? localRefs : []);
       setHistory(Array.isArray(localHistory) ? localHistory : []);
-      setPitchCfg(safeLocalPitches);
+      setPitchCfg(fallbackAssignments.pitches);
       setPitchClosures(Array.isArray(localClosures) ? localClosures : []);
       const nextProductionMode = tenantGetItem("productionMode", "0") === "1";
       setProductionMode(nextProductionMode);
@@ -1306,6 +1324,11 @@ function App() {
               ? []
               : PITCHES;
         const nextClosures = Array.isArray(closureData) ? closureData : [];
+        const resolvedAssignments = reconcileSiteAssignments({
+          club: nextClub,
+          teams: nextTeams,
+          pitches: nextPitches,
+        });
 
         setClub(nextClub);
         const nextTiming = readClubTiming(nextClub);
@@ -1317,7 +1340,7 @@ function App() {
         setBufferAdult(nextTiming.bufferAdult);
         setHistory(Array.isArray(histData) ? histData : []);
         setRefs(Array.isArray(refData) ? refData : []);
-        setTeamCfg(nextTeams);
+        setTeamCfg(resolvedAssignments.teams);
         setTeamContacts(nextTeamContacts);
         setCommunicationPrivacy(normaliseCommunicationPrivacy(communicationContext.privacy));
         setCommunicationSchemaReady(Boolean(communicationContext.available));
@@ -1325,8 +1348,8 @@ function App() {
           isUnconfiguredWorkspace
             ? []
             : nextPitches.length
-              ? nextPitches
-              : PITCHES,
+              ? resolvedAssignments.pitches
+              : reconcileSiteAssignments({ club: nextClub, pitches: PITCHES }).pitches,
         );
         setPitchClosures(nextClosures);
         setTestSat(
@@ -1337,7 +1360,7 @@ function App() {
                 seed: "ground-control-saturday",
                 scenario: "standard",
                 club: nextClub,
-                teams: nextTeams,
+                teams: resolvedAssignments.teams,
               }),
         );
         setTestSun(
@@ -1348,7 +1371,7 @@ function App() {
                 seed: "ground-control-sunday",
                 scenario: "standard",
                 club: nextClub,
-                teams: nextTeams,
+                teams: resolvedAssignments.teams,
               }),
         );
         setTestMidweek(
@@ -1359,7 +1382,7 @@ function App() {
                 seed: "ground-control-midweek",
                 scenario: "standard",
                 club: nextClub,
-                teams: nextTeams,
+                teams: resolvedAssignments.teams,
               }),
         );
         closureSyncRef.current = {

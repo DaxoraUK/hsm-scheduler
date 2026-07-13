@@ -230,7 +230,7 @@ export default function SettingsPage(props) {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="self-start xl:sticky xl:top-24">
           <SettingsTabs {...props} settingsTab={activeTab} />
         </aside>

@@ -40,18 +40,19 @@ describe("communications provider and settings registry stability", () => {
     })).toMatchObject({ title: "Resend blocked the test email" });
   });
 
-  test("uses a wide-screen-only master-detail split and keeps save controls near the top", () => {
-    expect(teams).toContain("2xl:grid-cols-[320px_minmax(0,1fr)]");
-    expect(teams).toContain("sm:grid-cols-2 lg:grid-cols-3 2xl:block");
+  test("uses container-aware resource editors and keeps save controls near the top", () => {
+    expect(teams).toContain("@4xl:grid-cols-[230px_minmax(0,1fr)]");
+    expect(teams).toContain("grid-cols-[repeat(auto-fill,minmax(190px,1fr))]");
     expect(teams.indexOf("<SaveBar")).toBeLessThan(teams.indexOf('label="Teams"'));
-    expect(teams).toContain("md:grid-cols-2");
-    expect(teams).not.toContain("xl:grid-cols-[300px_minmax(0,1fr)]");
+    expect(teams).toContain("grid-cols-[repeat(auto-fit,minmax(210px,1fr))]");
+    expect(teams).toContain("Protected coach contact");
+    expect(teams).not.toContain("2xl:grid-cols-[320px_minmax(0,1fr)]");
 
-    expect(pitches).toContain("2xl:grid-cols-[320px_minmax(0,1fr)]");
-    expect(pitches).toContain("sm:grid-cols-2 lg:grid-cols-3 2xl:block");
-    expect(pitches.indexOf("<SaveBar sticky")).toBeLessThan(pitches.indexOf('label="Pitches"'));
-    expect(pitches).toContain("md:grid-cols-2");
-    expect(pitches).not.toContain("xl:grid-cols-[300px_minmax(0,1fr)]");
+    expect(pitches).toContain("@4xl:grid-cols-[230px_minmax(0,1fr)]");
+    expect(pitches).toContain("grid-cols-[repeat(auto-fill,minmax(190px,1fr))]");
+    expect(pitches.indexOf("<SaveBar")).toBeLessThan(pitches.indexOf('label="Pitches"'));
+    expect(pitches).toContain("grid-cols-[repeat(auto-fit,minmax(210px,1fr))]");
+    expect(pitches).not.toContain("2xl:grid-cols-[320px_minmax(0,1fr)]");
   });
 
   test("hardens all downstream delivery functions against PL/pgSQL identifier ambiguity", () => {

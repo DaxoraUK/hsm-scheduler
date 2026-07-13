@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Plus,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
+import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
 import {
   alignTeamContactsForEditing,
   getTeamContactKey,
@@ -30,7 +32,6 @@ import {
   SecondaryButton,
   SettingsPanel,
   SettingsSectionHeader,
-  StatTile,
   inputClass,
   selectClass,
 } from "./SettingsPrimitives.jsx";
@@ -56,18 +57,6 @@ const TEAM_COLUMNS = [
   { key: "gameMins", label: "Match Minutes", aliases: ["Minutes", "Mins"] },
   { key: "ageOrder", label: "Age Order" },
 ];
-
-function getSites(club = {}) {
-  const sites = Array.isArray(club.sites) ? club.sites : [];
-  if (sites.length) {
-    return sites.map((site, index) => ({
-      id: site.id || `site-${index + 1}`,
-      name: site.name || site.venue || `Site ${index + 1}`,
-      isPrimary: !!site.isPrimary || site.id === club.primarySiteId || (!club.primarySiteId && index === 0),
-    }));
-  }
-  return [{ id: club.primarySiteId || "main-ground", name: club.venue || "Main Ground", isPrimary: true }];
-}
 
 function classifyFallback(team = {}) {
   if (team.teamType) return team.teamType;
@@ -103,6 +92,27 @@ function normaliseImportedTeam(row, index, primarySiteId) {
   };
 }
 
+function CompactMetric({ label, value, detail, tone = "slate" }) {
+  const tones = {
+    slate: "border-slate-200 bg-slate-50 text-slate-950",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-950",
+    blue: "border-blue-200 bg-blue-50 text-blue-950",
+    violet: "border-violet-200 bg-violet-50 text-violet-950",
+    rose: "border-rose-200 bg-rose-50 text-rose-950",
+  };
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${tones[tone] || tones.slate}`}>
+      <div className="text-[9px] font-black uppercase tracking-[0.16em] opacity-55">{label}</div>
+      <div className="mt-1 text-xl font-black tracking-tight">{value}</div>
+      {detail ? <div className="mt-0.5 text-[11px] font-bold opacity-60">{detail}</div> : null}
+    </div>
+  );
+}
+
+function hasContactData(contact = {}) {
+  return Boolean(contact.coachName || contact.coachPhone || contact.coachEmail || contact.assistantName || contact.assistantPhone || contact.assistantEmail);
+}
+
 export default function TeamSettingsPanel({
   club = {},
   teamCfg = [],
@@ -120,9 +130,10 @@ export default function TeamSettingsPanel({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [limitMessage, setLimitMessage] = useState("");
-  const sites = getSites(club);
-  const primarySite = sites.find((site) => site.isPrimary) || sites[0];
-  const sortedPitches = sortPitches(pitchCfg);
+  const sites = useMemo(() => getClubSites(club), [club]);
+  const primarySite = getPrimarySite(sites);
+  const assignments = useMemo(() => reconcileSiteAssignments({ club, teams: teamCfg, pitches: pitchCfg }), [club, teamCfg, pitchCfg]);
+  const sortedPitches = useMemo(() => sortPitches(assignments.pitches), [assignments.pitches]);
   const teamLimit = getEntitlementLimit(subscription, LIMIT_KEYS.TEAMS);
   const canAddTeam = isUnlimitedLimit(teamLimit) || teamCfg.length < teamLimit;
   const overTeamLimit = !isUnlimitedLimit(teamLimit) && teamCfg.length > teamLimit;
@@ -149,16 +160,12 @@ export default function TeamSettingsPanel({
       .map((team, index) => ({ team, index, contact: contacts[index] }))
       .filter(({ team, contact }) => {
         if (!needle) return true;
-        return [
-          team.name,
-          team.day,
-          team.format,
-          teamTypeLabel(team),
-          contact?.coachName,
-          contact?.coachEmail,
-        ].some((value) => String(value || "").toLowerCase().includes(needle));
+        const resolvedSiteId = resolveSiteId(team.siteId || team.homeSiteId, sites, primarySite?.id);
+        const siteName = sites.find((site) => site.id === resolvedSiteId)?.name || "";
+        return [team.name, team.day, team.format, teamTypeLabel(team), siteName, contact?.coachName, contact?.coachEmail]
+          .some((value) => String(value || "").toLowerCase().includes(needle));
       });
-  }, [contacts, query, teamCfg]);
+  }, [contacts, primarySite?.id, query, sites, teamCfg]);
 
   const setAlignedContacts = (updater) => {
     setTeamContacts?.((current) => updater(alignTeamContactsForEditing(teamCfg, current)));
@@ -189,6 +196,12 @@ export default function TeamSettingsPanel({
         ? normaliseEditableTeamContact({ teamKey: contact.teamKey, teamName: contact.teamName, receiveMatchdayMessages: false })
         : contact
     )));
+  };
+
+  const saveTeams = () => {
+    const nextTeams = reconcileSiteAssignments({ club, teams: teamCfg }).teams;
+    if (nextTeams.some((team, index) => team.siteId !== teamCfg[index]?.siteId)) setTeamCfg(nextTeams);
+    return saveTab?.("teams", { teamCfg: nextTeams, teamContacts: contacts });
   };
 
   const addTeam = () => {
@@ -235,9 +248,10 @@ export default function TeamSettingsPanel({
       setLimitMessage(`Import blocked: ${next.length} teams exceeds the ${teamLimit}-team ${subscription?.planName || "plan"} limit.`);
       return;
     }
+    const resolved = reconcileSiteAssignments({ club, teams: next }).teams;
     setLimitMessage("");
-    setTeamCfg(next);
-    setTeamContacts?.((current) => alignTeamContactsForEditing(next, mode === "append" ? current : []));
+    setTeamCfg(resolved);
+    setTeamContacts?.((current) => alignTeamContactsForEditing(resolved, mode === "append" ? current : []));
     setSelectedIndex(0);
     setQuery("");
   };
@@ -247,9 +261,10 @@ export default function TeamSettingsPanel({
       setLimitMessage(`Demonstration defaults contain ${TEAM_CONFIG_DEFAULT.length} teams and cannot be restored on this plan.`);
       return;
     }
+    const resolved = reconcileSiteAssignments({ club, teams: TEAM_CONFIG_DEFAULT }).teams;
     setLimitMessage("");
-    setTeamCfg(TEAM_CONFIG_DEFAULT);
-    setTeamContacts?.(alignTeamContactsForEditing(TEAM_CONFIG_DEFAULT, []));
+    setTeamCfg(resolved);
+    setTeamContacts?.(alignTeamContactsForEditing(resolved, []));
     setSelectedIndex(0);
     setQuery("");
   };
@@ -258,48 +273,54 @@ export default function TeamSettingsPanel({
   const selectedContact = selectedTeam
     ? contacts[selectedIndex] || normaliseEditableTeamContact({}, selectedTeam, selectedIndex)
     : null;
-  const selectedHomeSiteId = selectedTeam?.siteId || primarySite?.id || "";
-  const selectedSitePitches = sortedPitches.filter((pitch) => (pitch.siteId || primarySite?.id) === selectedHomeSiteId);
+  const selectedHomeSiteId = resolveSiteId(selectedTeam?.siteId || selectedTeam?.homeSiteId, sites, primarySite?.id);
+  const selectedSitePitches = sortedPitches.filter((pitch) => resolveSiteId(pitch.siteId, sites, primarySite?.id) === selectedHomeSiteId);
   const selectedPitchOptions = selectedSitePitches.length ? selectedSitePitches : sortedPitches;
+  const selectedContactReady = hasContactData(selectedContact);
 
   return (
-    <SettingsPanel>
+    <SettingsPanel className="p-5 sm:p-6">
       <SettingsSectionHeader
         icon={UsersRound}
         eyebrow="Matchday setup"
         title="Teams and coach contacts"
-        description="Choose a team from the list, edit it in one place and save without scrolling through every team. Adult coach contact details remain separately protected."
+        description="Select a team, manage its scheduling details and open the protected contact record only when needed."
         action={<PrimaryButton icon={Plus} onClick={addTeam} disabled={!canAddTeam}>Add team</PrimaryButton>}
       />
 
       <SaveBar
         sticky
-        onSave={() => saveTab?.("teams", { teamCfg, teamContacts: contacts })}
+        onSave={saveTeams}
         saved={savedTab === "teams"}
         label="Save teams and contacts"
         disabled={overTeamLimit}
         disabledReason={overTeamLimit ? `Remove ${excessTeams} team${excessTeams === 1 ? "" : "s"} or upgrade before saving.` : ""}
       >
         <span className="font-black text-slate-700">Editing {selectedTeam?.name || "team settings"}</span>
-        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore demonstration defaults</SecondaryButton>
+        <SecondaryButton icon={RotateCcw} onClick={restoreDefaults}>Restore defaults</SecondaryButton>
       </SaveBar>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatTile label="Teams" value={teamCfg.length} detail={isUnlimitedLimit(teamLimit) ? "Unlimited plan limit" : `${teamLimit} plan limit`} tone="green" />
-        <StatTile label="Youth" value={counts.youth || 0} tone="blue" />
-        <StatTile label="Adult" value={counts.adult || 0} tone="violet" />
-        <StatTile label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
-        <StatTile label="Coach contacts" value={contacts.filter((contact) => contact.coachPhone || contact.coachEmail).length} tone="slate" />
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <CompactMetric label="Teams" value={teamCfg.length} detail={isUnlimitedLimit(teamLimit) ? "Unlimited" : `${teamLimit} limit`} tone="green" />
+        <CompactMetric label="Youth" value={counts.youth || 0} tone="blue" />
+        <CompactMetric label="Adult" value={counts.adult || 0} tone="violet" />
+        <CompactMetric label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
+        <CompactMetric label="Contacts" value={contacts.filter(hasContactData).length} />
       </div>
 
-      <details className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50/70">
-        <summary className="cursor-pointer list-none px-5 py-4 text-sm font-black text-slate-800 marker:hidden">
-          Import, export or download a team template
-        </summary>
-        <div className="border-t border-slate-200 p-4 sm:p-5">
+      {assignments.repairedTeams > 0 ? (
+        <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-900">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          {assignments.repairedTeams} historic team assignment{assignments.repairedTeams === 1 ? "" : "s"} will be linked to {primarySite?.name || "the primary site"} when saved.
+        </div>
+      ) : null}
+
+      <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-black text-slate-800 marker:hidden">Import, export or download a team template</summary>
+        <div className="border-t border-slate-200 p-4">
           <SettingsDataActions
             label="Teams"
-            rows={teamCfg}
+            rows={assignments.teams}
             columns={TEAM_COLUMNS}
             filename="ground-control-teams"
             templateRows={[{ name: "U14 Example", teamType: "youth", format: "11v11-youth", siteId: primarySite?.id || "main-ground", defaultPitch: "P1", altPitch: "P2", day: "Saturday", gameMins: 70, ageOrder: 7 }]}
@@ -309,204 +330,100 @@ export default function TeamSettingsPanel({
         </div>
       </details>
 
-      {limitMessage ? <Notice tone="warning" className="mt-5">{limitMessage}</Notice> : null}
-
-      {!communicationSchemaReady ? (
-        <Notice tone="warning" className="mt-5">
-          The secure coach-contact migration has not been detected. Apply the included Supabase migration before saving contacts.
-        </Notice>
-      ) : null}
-
+      {limitMessage ? <Notice tone="warning" className="mt-4">{limitMessage}</Notice> : null}
+      {!communicationSchemaReady ? <Notice tone="warning" className="mt-4">The secure coach-contact migration has not been detected. Apply the included Supabase migration before saving contacts.</Notice> : null}
       {!canAddTeam ? (
-        <Notice tone="warning" className="mt-5">
+        <Notice tone="warning" className="mt-4">
           {subscription?.planName || "The current plan"} allows {teamLimit} teams. {overTeamLimit ? `Remove ${excessTeams} team${excessTeams === 1 ? "" : "s"} in this session and then save, or upgrade the workspace.` : "Remove a team or review Plan & subscription before adding another."}
         </Notice>
       ) : null}
 
-      <Notice tone="info" className="mt-5">
-        Only adult coach or manager contact details should be entered here. Do not enter player or child contact information. Contact data is excluded from general team exports.
-      </Notice>
-
-      <div className="mt-5 grid min-w-0 gap-5 2xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="min-w-0 rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 2xl:sticky 2xl:top-44 2xl:max-h-[calc(100vh-12rem)] 2xl:self-start 2xl:overflow-hidden">
+      <div className="@container mt-4">
+      <div className="grid min-w-0 gap-4 @4xl:grid-cols-[230px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-[22px] border border-slate-200 bg-slate-50/80 p-3 @4xl:sticky @4xl:top-44 @4xl:max-h-[calc(100vh-12rem)] @4xl:self-start @4xl:overflow-hidden">
           <div className="relative">
-            <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              className={`${inputClass} pl-10`}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Find a team or coach"
-              aria-label="Find a team or coach"
-            />
+            <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input className={`${inputClass} pl-10`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find team or coach" aria-label="Find a team or coach" />
           </div>
-          <div className="mt-3 flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-            <span>{filteredTeams.length} shown</span>
-            <span>{teamCfg.length} total</span>
-          </div>
-          <div className="mt-2 grid max-h-[280px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3 2xl:block 2xl:max-h-[calc(100vh-18rem)] 2xl:space-y-1">
+          <div className="mt-2.5 flex items-center justify-between px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400"><span>{filteredTeams.length} shown</span><span>{teamCfg.length} total</span></div>
+          <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
             {filteredTeams.map(({ team, index, contact }) => {
               const active = index === selectedIndex;
-              const contactReady = Boolean(contact?.coachPhone || contact?.coachEmail);
+              const contactReady = hasContactData(contact);
               return (
-                <button
-                  key={contact?.teamKey || `team-${index}`}
-                  type="button"
-                  onClick={() => setSelectedIndex(index)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition ${
-                    active
-                      ? "border-slate-950 bg-slate-950 text-white shadow-sm"
-                      : "border-transparent bg-white text-slate-800 hover:border-slate-200"
-                  }`}
-                >
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${active ? "bg-white/10 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
-                    {contactReady ? <CheckCircle2 size={17} /> : <UsersRound size={17} />}
-                  </span>
+                <button key={contact?.teamKey || `team-${index}`} type="button" onClick={() => setSelectedIndex(index)} className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${active ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-transparent bg-white text-slate-800 hover:border-slate-200"}`}>
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-white/10 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>{contactReady ? <CheckCircle2 size={16} /> : <UsersRound size={16} />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-black">{team.name || "Unnamed team"}</span>
-                    <span className={`mt-0.5 block truncate text-[11px] font-bold ${active ? "text-slate-300" : "text-slate-400"}`}>
-                      {team.day || "Saturday"} · {team.format || "No format"} · {teamTypeLabel(team)}
-                    </span>
+                    <span className={`mt-0.5 block truncate text-[10px] font-bold ${active ? "text-slate-300" : "text-slate-400"}`}>{team.day || "Saturday"} · {team.format || "No format"} · {teamTypeLabel(team)}</span>
                   </span>
-                  <ChevronRight size={16} className={active ? "text-slate-300" : "text-slate-400"} />
+                  <ChevronRight size={15} className={active ? "text-slate-300" : "text-slate-400"} />
                 </button>
               );
             })}
-            {!filteredTeams.length ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">
-                No teams match that search.
-              </div>
-            ) : null}
+            {!filteredTeams.length ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">No teams match that search.</div> : null}
           </div>
         </aside>
 
         <div className="min-w-0">
           {selectedTeam && selectedContact ? (
-            <article className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+            <article className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Team {selectedIndex + 1} of {teamCfg.length}</div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Team {selectedIndex + 1} of {teamCfg.length}</div>
                   <div className="mt-1 text-lg font-black text-slate-950">{selectedTeam.name || "Unnamed team"}</div>
+                  <div className="mt-0.5 text-xs font-bold text-slate-400">{sites.find((site) => site.id === selectedHomeSiteId)?.name || primarySite?.name || "Main site"}</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeTeam(selectedIndex)}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 transition hover:bg-rose-50"
-                >
-                  <Trash2 size={16} /> Remove team
-                </button>
+                <button type="button" onClick={() => removeTeam(selectedIndex)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 transition hover:bg-rose-50"><Trash2 size={15} /> Remove</button>
               </div>
 
-              <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
-                <Field label="Team name" className="md:col-span-2">
-                  <input className={inputClass} value={selectedTeam.name || ""} onChange={(event) => updateTeam(selectedIndex, "name", event.target.value)} />
-                </Field>
-                <Field label="Type">
-                  <select className={selectClass} value={classifyFallback(selectedTeam)} onChange={(event) => updateTeam(selectedIndex, "teamType", event.target.value)}>
-                    {TEAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </Field>
-                <Field label="Format">
-                  <select className={selectClass} value={selectedTeam.format || ""} onChange={(event) => updateTeam(selectedIndex, "format", event.target.value)}>
-                    {FORMATS.map((format) => <option key={format}>{format}</option>)}
-                  </select>
-                </Field>
-                <Field label="Default day">
-                  <select className={selectClass} value={selectedTeam.day || "Saturday"} onChange={(event) => updateTeam(selectedIndex, "day", event.target.value)}>
-                    {DAYS.map((day) => <option key={day}>{day}</option>)}
-                  </select>
-                </Field>
-                <Field label="Minutes">
-                  <input type="number" min={20} max={120} step={5} className={inputClass} value={selectedTeam.gameMins ?? 70} onChange={(event) => updateTeam(selectedIndex, "gameMins", Number(event.target.value))} />
-                </Field>
-                <Field label="Home site">
-                  <select className={selectClass} value={selectedHomeSiteId} onChange={(event) => updateTeam(selectedIndex, "siteId", event.target.value)}>
-                    {sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}
-                  </select>
-                </Field>
-                <Field label="Default pitch">
-                  <select className={selectClass} value={selectedTeam.defaultPitch || ""} onChange={(event) => updateTeam(selectedIndex, "defaultPitch", event.target.value)}>
-                    <option value="">Unassigned</option>
-                    {selectedPitchOptions.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}
-                  </select>
-                </Field>
-                <Field label="Alternative pitch">
-                  <select className={selectClass} value={selectedTeam.altPitch || ""} onChange={(event) => updateTeam(selectedIndex, "altPitch", event.target.value)}>
-                    <option value="">None</option>
-                    {selectedPitchOptions.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}
-                  </select>
-                </Field>
-                <Field label="Scheduling order" hint="Lower numbers are considered first.">
-                  <input type="number" min={1} className={inputClass} value={selectedTeam.ageOrder ?? selectedIndex + 1} onChange={(event) => updateTeam(selectedIndex, "ageOrder", Number(event.target.value))} />
-                </Field>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-x-4 gap-y-4">
+                <Field label="Team name" className="col-span-full"><input className={inputClass} value={selectedTeam.name || ""} onChange={(event) => updateTeam(selectedIndex, "name", event.target.value)} /></Field>
+                <Field label="Type"><select className={selectClass} value={classifyFallback(selectedTeam)} onChange={(event) => updateTeam(selectedIndex, "teamType", event.target.value)}>{TEAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+                <Field label="Format"><select className={selectClass} value={selectedTeam.format || ""} onChange={(event) => updateTeam(selectedIndex, "format", event.target.value)}>{FORMATS.map((format) => <option key={format}>{format}</option>)}</select></Field>
+                <Field label="Default day"><select className={selectClass} value={selectedTeam.day || "Saturday"} onChange={(event) => updateTeam(selectedIndex, "day", event.target.value)}>{DAYS.map((day) => <option key={day}>{day}</option>)}</select></Field>
+                <Field label="Minutes"><input type="number" min={20} max={120} step={5} className={inputClass} value={selectedTeam.gameMins ?? 70} onChange={(event) => updateTeam(selectedIndex, "gameMins", Number(event.target.value))} /></Field>
+                <Field label="Home site"><select className={selectClass} value={selectedHomeSiteId || ""} onChange={(event) => updateTeam(selectedIndex, "siteId", event.target.value)}>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.isPrimary ? " ★" : ""}</option>)}</select></Field>
+                <Field label="Default pitch"><select className={selectClass} value={selectedTeam.defaultPitch || ""} onChange={(event) => updateTeam(selectedIndex, "defaultPitch", event.target.value)}><option value="">Unassigned</option>{selectedPitchOptions.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}</select></Field>
+                <Field label="Alternative pitch"><select className={selectClass} value={selectedTeam.altPitch || ""} onChange={(event) => updateTeam(selectedIndex, "altPitch", event.target.value)}><option value="">None</option>{selectedPitchOptions.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}</option>)}</select></Field>
+                <Field label="Scheduling order" hint="Lower numbers are considered first."><input type="number" min={1} className={inputClass} value={selectedTeam.ageOrder ?? selectedIndex + 1} onChange={(event) => updateTeam(selectedIndex, "ageOrder", Number(event.target.value))} /></Field>
               </div>
 
-              <div className="mt-6 rounded-[22px] border border-slate-200 bg-white p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700"><ShieldCheck size={15} /> Restricted contact record</div>
-                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Visible only to club administrators and authorised matchday operators. It is not included in the general team CSV.</p>
+              <details key={selectedContact.teamKey || selectedIndex} className="mt-5 rounded-2xl border border-slate-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 marker:hidden">
+                  <span className="min-w-0">
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700"><ShieldCheck size={15} /> Protected coach contact</span>
+                    <span className="mt-1 block truncate text-sm font-black text-slate-950">{selectedContactReady ? selectedContact.coachName || selectedContact.coachEmail || selectedContact.coachPhone || "Contact details added" : "No contact details added"}</span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${selectedContactReady ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selectedContactReady ? "Configured" : "Open to add"}</span>
+                </summary>
+
+                <div className="border-t border-slate-200 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <p className="max-w-3xl text-xs font-semibold leading-5 text-slate-500">Enter adult coach or manager details only. Do not enter player or child contact information. Contact data is excluded from general team exports.</p>
+                    {canManageContacts && selectedContactReady ? <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove contact data</button> : null}
                   </div>
-                  {canManageContacts && (selectedContact.coachName || selectedContact.coachPhone || selectedContact.coachEmail || selectedContact.assistantName) ? (
-                    <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove contact data</button>
-                  ) : null}
+
+                  {canManageContacts ? (
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-x-4 gap-y-4">
+                      <Field label="Coach / manager name"><input className={inputClass} value={selectedContact.coachName} onChange={(event) => updateContact(selectedIndex, "coachName", event.target.value)} placeholder="Primary adult contact" /></Field>
+                      <Field label="Mobile number"><input className={inputClass} value={selectedContact.coachPhone} onChange={(event) => updateContact(selectedIndex, "coachPhone", event.target.value)} placeholder="07xxx xxxxxx" inputMode="tel" /></Field>
+                      <Field label="Email address"><input type="email" className={inputClass} value={selectedContact.coachEmail} onChange={(event) => updateContact(selectedIndex, "coachEmail", event.target.value)} placeholder="coach@club.org.uk" /></Field>
+                      <Field label="Preferred channel"><select className={selectClass} value={selectedContact.preferredChannel} onChange={(event) => updateContact(selectedIndex, "preferredChannel", event.target.value)}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></Field>
+                      <Field label="Assistant coach name"><input className={inputClass} value={selectedContact.assistantName} onChange={(event) => updateContact(selectedIndex, "assistantName", event.target.value)} placeholder="Optional" /></Field>
+                      <Field label="Assistant mobile"><input className={inputClass} value={selectedContact.assistantPhone} onChange={(event) => updateContact(selectedIndex, "assistantPhone", event.target.value)} placeholder="Optional" inputMode="tel" /></Field>
+                      <Field label="Assistant email"><input type="email" className={inputClass} value={selectedContact.assistantEmail} onChange={(event) => updateContact(selectedIndex, "assistantEmail", event.target.value)} placeholder="Optional" /></Field>
+                      <label className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700"><input type="checkbox" checked={selectedContact.assistantEnabled} onChange={(event) => updateContact(selectedIndex, "assistantEnabled", event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-emerald-600" /> Include assistant</label>
+                      <label className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700"><input type="checkbox" checked={selectedContact.receiveMatchdayMessages} onChange={(event) => updateContact(selectedIndex, "receiveMatchdayMessages", event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-emerald-600" /> Receive messages</label>
+                      <label className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700"><input type="checkbox" checked={Boolean(selectedContact.privacyNoticeProvidedAt)} onChange={(event) => updateContact(selectedIndex, "privacyNoticeProvidedAt", event.target.checked ? new Date().toISOString() : null)} className="h-4 w-4 rounded border-slate-300 accent-emerald-600" /> Privacy notice provided</label>
+                    </div>
+                  ) : <Notice tone="info" className="mt-4">Coach contact details are hidden because your role cannot manage club contacts.</Notice>}
                 </div>
-
-                {canManageContacts ? (
-                  <div className="mt-5 grid gap-x-5 gap-y-5 md:grid-cols-2">
-                    <Field label="Coach / manager name">
-                      <input className={inputClass} value={selectedContact.coachName} onChange={(event) => updateContact(selectedIndex, "coachName", event.target.value)} placeholder="Primary adult contact" />
-                    </Field>
-                    <Field label="Mobile number">
-                      <input className={inputClass} value={selectedContact.coachPhone} onChange={(event) => updateContact(selectedIndex, "coachPhone", event.target.value)} placeholder="07xxx xxxxxx" inputMode="tel" />
-                    </Field>
-                    <Field label="Email address">
-                      <input type="email" className={inputClass} value={selectedContact.coachEmail} onChange={(event) => updateContact(selectedIndex, "coachEmail", event.target.value)} placeholder="coach@club.org.uk" />
-                    </Field>
-                    <Field label="Preferred channel">
-                      <select className={selectClass} value={selectedContact.preferredChannel} onChange={(event) => updateContact(selectedIndex, "preferredChannel", event.target.value)}>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="sms">SMS</option>
-                        <option value="email">Email</option>
-                      </select>
-                    </Field>
-                    <Field label="Assistant coach name">
-                      <input className={inputClass} value={selectedContact.assistantName} onChange={(event) => updateContact(selectedIndex, "assistantName", event.target.value)} placeholder="Optional" />
-                    </Field>
-                    <Field label="Assistant mobile">
-                      <input className={inputClass} value={selectedContact.assistantPhone} onChange={(event) => updateContact(selectedIndex, "assistantPhone", event.target.value)} placeholder="Optional" inputMode="tel" />
-                    </Field>
-                    <Field label="Assistant email">
-                      <input type="email" className={inputClass} value={selectedContact.assistantEmail} onChange={(event) => updateContact(selectedIndex, "assistantEmail", event.target.value)} placeholder="Optional" />
-                    </Field>
-                    <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
-                      <input type="checkbox" checked={selectedContact.assistantEnabled} onChange={(event) => updateContact(selectedIndex, "assistantEnabled", event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-emerald-600" />
-                      Include assistant in messages
-                    </label>
-                    <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
-                      <input type="checkbox" checked={selectedContact.receiveMatchdayMessages} onChange={(event) => updateContact(selectedIndex, "receiveMatchdayMessages", event.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-emerald-600" />
-                      Receive matchday messages
-                    </label>
-                    <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selectedContact.privacyNoticeProvidedAt)}
-                        onChange={(event) => updateContact(selectedIndex, "privacyNoticeProvidedAt", event.target.checked ? new Date().toISOString() : null)}
-                        className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
-                      />
-                      Privacy notice provided
-                    </label>
-                  </div>
-                ) : (
-                  <Notice tone="info" className="mt-4">Coach contact details are hidden because your role cannot manage club contacts.</Notice>
-                )}
-              </div>
+              </details>
             </article>
-          ) : (
-            <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-10 text-center text-sm font-semibold text-slate-500">
-              No teams configured. Add a team or import a CSV template.
-            </div>
-          )}
+          ) : <div className="rounded-[22px] border border-dashed border-slate-300 bg-slate-50/70 p-10 text-center text-sm font-semibold text-slate-500">No teams configured. Add a team or import a CSV template.</div>}
         </div>
+      </div>
       </div>
     </SettingsPanel>
   );
