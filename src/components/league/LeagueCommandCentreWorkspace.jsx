@@ -17,6 +17,7 @@ import { normaliseLeagueClubOperationsData } from "../../lib/league/leagueClubOp
 import { buildLeagueCommandCentre } from "../../lib/league/leagueCommandCentre.js";
 import { normaliseLeagueResultsData } from "../../lib/league/leagueResultsEngine.js";
 import { normaliseLeagueDisciplineData } from "../../lib/league/leagueDisciplineEngine.js";
+import { normaliseLeagueRegistrationData } from "../../lib/league/leagueRegistrationEngine.js";
 import { normaliseScheduleVersion, normaliseScheduleVersionPayload } from "../../lib/league/leagueSchedulingEngine.js";
 
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50";
@@ -61,7 +62,13 @@ function dateLabel(value) {
 }
 
 export default function LeagueCommandCentreWorkspace({ leagueId, workspace, operations, readiness, onNavigate, onRefreshOperations, onSummaryChange }) {
-  const [data, setData] = useState({ clubOperations: normaliseLeagueClubOperationsData({}), results: normaliseLeagueResultsData({}), discipline: normaliseLeagueDisciplineData({}), scheduleVersion: null });
+  const [data, setData] = useState({
+    clubOperations: normaliseLeagueClubOperationsData({}),
+    results: normaliseLeagueResultsData({}),
+    discipline: normaliseLeagueDisciplineData({}),
+    registrations: normaliseLeagueRegistrationData({}),
+    scheduleVersion: null,
+  });
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
 
@@ -79,10 +86,21 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
           throw disciplineError;
         })
         : Promise.resolve({});
-      const [clubPayload, resultPayload, disciplinePayload, versions] = await Promise.all([
+      const canLoadRegistrations = ["owner", "admin", "registrations"].includes(workspace.access?.role || "");
+      const registrationRequest = canLoadRegistrations && typeof DB.getLeagueRegistrationData === "function"
+        ? DB.getLeagueRegistrationData(leagueId).catch((registrationError) => {
+          const message = registrationError?.message || "";
+          const migrationNotReady = registrationError?.code === "PGRST202"
+            || /schema cache|could not find the function|get_league_registration_data/i.test(message);
+          if (migrationNotReady) return {};
+          throw registrationError;
+        })
+        : Promise.resolve({});
+      const [clubPayload, resultPayload, disciplinePayload, registrationPayload, versions] = await Promise.all([
         DB.getLeagueClubOperationsData(leagueId),
         DB.getLeagueResultsData(leagueId),
         disciplineRequest,
+        registrationRequest,
         DB.listLeagueScheduleVersions(leagueId),
       ]);
       const versionRows = (Array.isArray(versions) ? versions : []).map(normaliseScheduleVersion);
@@ -93,6 +111,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
         clubOperations: normaliseLeagueClubOperationsData(clubPayload),
         results: normaliseLeagueResultsData(resultPayload),
         discipline: normaliseLeagueDisciplineData(disciplinePayload),
+        registrations: normaliseLeagueRegistrationData(registrationPayload),
         scheduleVersion,
       });
       setStatus("ready");
@@ -110,6 +129,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
     clubOperations: data.clubOperations,
     results: data.results,
     discipline: data.discipline,
+    registrations: data.registrations,
     scheduleVersion: data.scheduleVersion,
     readiness,
     role: workspace.access?.role,
@@ -126,17 +146,18 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
   return <div className="space-y-5">
     <Panel className="overflow-hidden">
       <div className="grid gap-5 bg-slate-950 px-6 py-7 text-white lg:grid-cols-[1fr_auto] lg:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.6</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">{command.roleFocus?.detail || "One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness."}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.7</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">{command.roleFocus?.detail || "One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness."}</p></div>
         <button type="button" onClick={load} className={`${BUTTON} border border-white/15 bg-white/10 text-white hover:bg-white/15`}><RefreshCw size={14} /> Refresh command picture</button>
       </div>
       <div className={`border-t px-6 py-5 ${command.status === "action_required" ? "border-rose-200 bg-rose-50" : command.status === "needs_review" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-start gap-3">{command.status === "ready" ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" /> : <AlertTriangle className={`mt-0.5 shrink-0 ${command.status === "action_required" ? "text-rose-600" : "text-amber-600"}`} />}<div><div className="text-sm font-black text-slate-950">{copy.title}</div><div className="mt-1 text-xs font-semibold leading-5 text-slate-600">{copy.detail}</div></div></div></div>
     </Panel>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       <Metric label="Open actions" value={command.counts.openActions} detail="Across all command queues" tone={command.counts.critical ? "rose" : command.counts.attention ? "amber" : "green"} Icon={FileWarning} />
       <Metric label="Results control" value={command.counts.pendingResults + command.counts.missingResults} detail={`${command.counts.pendingResults} verification · ${command.counts.missingResults} missing`} tone={command.counts.pendingResults + command.counts.missingResults ? "amber" : "green"} Icon={ClipboardCheck} />
       <Metric label="Official coverage" value={`${command.counts.officialCoverage}%`} detail={`${command.counts.officialGaps} open roles in 35 days`} tone={command.counts.officialGaps ? "amber" : "green"} Icon={UserRoundCheck} />
       <Metric label="Discipline" value={command.counts.openDisciplineCases} detail={`${command.counts.overdueDisciplineResponses} overdue responses · ${command.counts.overdueDisciplineFines} overdue fines`} tone={command.counts.overdueDisciplineResponses + command.counts.overdueDisciplineFines ? "rose" : command.counts.openDisciplineCases ? "amber" : "green"} Icon={Gavel} />
+      <Metric label="Registrations" value={command.counts.pendingRegistrations + command.counts.registrationCorrections} detail={`${command.counts.pendingTransfers} transfers · ${command.counts.invalidTeamSheets} failed sheets`} tone={command.counts.registrationCorrections + command.counts.invalidTeamSheets ? "rose" : command.counts.pendingRegistrations + command.counts.pendingTransfers + command.counts.openEligibilityExceptions ? "amber" : "green"} Icon={UserRoundCheck} />
       <Metric label="Setup readiness" value={`${command.readinessPercentage}%`} detail={`${command.counts.setupGaps} mandatory gaps`} tone={command.counts.setupGaps ? "blue" : "green"} Icon={ShieldCheck} />
     </div>
 

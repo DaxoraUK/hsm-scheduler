@@ -34,6 +34,7 @@ export function buildLeagueCommandCentre({
   clubOperations = {},
   results = {},
   discipline = {},
+  registrations = {},
   scheduleVersion = null,
   readiness = { checks: [], percentage: 0 },
   role = "viewer",
@@ -52,6 +53,12 @@ export function buildLeagueCommandCentre({
   const overdueDisciplineFines = Number(disciplineSummary.overdueFines || 0);
   const disciplineHearings = Number(disciplineSummary.hearingsDue || 0);
   const disciplineAppeals = Number(disciplineSummary.openAppeals || 0);
+  const registrationSummary = registrations.summary || {};
+  const pendingRegistrations = Number(registrationSummary.pendingRegistrations || 0);
+  const registrationCorrections = Number(registrationSummary.correctionRequired || 0);
+  const pendingTransfers = Number(registrationSummary.pendingTransfers || 0);
+  const openEligibilityExceptions = Number(registrationSummary.openDispensations || 0);
+  const invalidTeamSheets = Number(registrationSummary.invalidTeamSheets || 0);
   const openPostponements = asArray(operations.postponements).filter((row) => !["closed", "rearranged", "rejected"].includes(row.status));
   const overduePostponements = openPostponements.filter((row) => row.deadlineOn && row.deadlineOn < todayKey);
   const replacementAssignments = asArray(operations.assignments).filter((row) => ["declined", "replacement_required"].includes(row.status));
@@ -106,6 +113,51 @@ export function buildLeagueCommandCentre({
       severity: "attention",
       tab: "discipline",
       child: "hearings",
+    }),
+    action({
+      id: "registration-corrections",
+      title: "Registrations requiring correction",
+      detail: "Club applications need clear feedback and resubmission before approval.",
+      count: registrationCorrections,
+      severity: "critical",
+      tab: "registrations",
+      child: "applications",
+    }),
+    action({
+      id: "registration-review",
+      title: "Registrations awaiting review",
+      detail: "Submitted player applications require a league decision.",
+      count: pendingRegistrations,
+      severity: "attention",
+      tab: "registrations",
+      child: "applications",
+    }),
+    action({
+      id: "registration-transfers",
+      title: "Transfers awaiting clearance",
+      detail: "Pending transfer decisions may block player eligibility.",
+      count: pendingTransfers,
+      severity: "attention",
+      tab: "registrations",
+      child: "transfers",
+    }),
+    action({
+      id: "registration-team-sheets",
+      title: "Team sheets failing eligibility",
+      detail: "Submitted matchday selections contain one or more ineligible players.",
+      count: invalidTeamSheets,
+      severity: "critical",
+      tab: "registrations",
+      child: "matchday",
+    }),
+    action({
+      id: "registration-exceptions",
+      title: "Eligibility exceptions awaiting decision",
+      detail: "Dispensation requests require a recorded league decision.",
+      count: openEligibilityExceptions,
+      severity: "attention",
+      tab: "registrations",
+      child: "eligibility",
     }),
     action({
       id: "result-verification",
@@ -194,12 +246,14 @@ export function buildLeagueCommandCentre({
     officials: ["official-replacements", "official-gaps", "overdue-postponements"],
     results: ["result-verification", "missing-results"],
     discipline: ["discipline-overdue-responses", "discipline-overdue-fines", "discipline-hearings"],
+    registrations: ["registration-corrections", "registration-team-sheets", "registration-review", "registration-transfers", "registration-exceptions"],
   };
   const roleLabels = {
     fixtures: { label: "Fixture secretary focus", detail: "Fixture exceptions, rearrangements, unplaced matches and club requests are prioritised for your role." },
     officials: { label: "Officials secretary focus", detail: "Replacement appointments, coverage gaps and postponement actions are prioritised for your role." },
     results: { label: "Results secretary focus", detail: "Verification and missing-result queues are prioritised for your role." },
     discipline: { label: "Discipline officer focus", detail: "Overdue responses, unpaid fines, hearings and appeals are prioritised for your role." },
+    registrations: { label: "Registration secretary focus", detail: "Application corrections, eligibility failures, transfers and dispensations are prioritised for your role." },
   };
   const focusedIds = rolePriorities[role] || [];
   const focusIndex = (id) => {
@@ -239,6 +293,11 @@ export function buildLeagueCommandCentre({
       overdueDisciplineFines,
       disciplineHearings,
       disciplineAppeals,
+      pendingRegistrations,
+      registrationCorrections,
+      pendingTransfers,
+      openEligibilityExceptions,
+      invalidTeamSheets,
     },
     publication,
     officialCoverage,

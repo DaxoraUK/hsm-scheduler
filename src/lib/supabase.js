@@ -1530,6 +1530,159 @@ export const DB = {
     });
   },
 
+  async getLeagueRegistrationData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_registration_data", { target_league_id: id });
+  },
+
+  async getLeagueClubRegistrationData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_registration_data", { target_league_id: id });
+  },
+
+  async submitLeaguePlayerRegistration(leagueId, data = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_player_registration", {
+      target_league_id: id,
+      registration_data: {
+        player_id: data.playerId || null,
+        first_name: String(data.firstName || "").trim(),
+        last_name: String(data.lastName || "").trim(),
+        date_of_birth: data.dateOfBirth || null,
+        external_ref: String(data.externalRef || "").trim() || null,
+        season_id: data.seasonId || null,
+        parent_club_id: data.parentClubId || null,
+        team_id: data.teamId || null,
+        registration_type: data.registrationType || "new",
+        submission_notes: String(data.submissionNotes || "").trim(),
+        effective_from: data.effectiveFrom || null,
+        effective_to: data.effectiveTo || null,
+      },
+    });
+  },
+
+  async reviewLeaguePlayerRegistration(leagueId, registrationId, status, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/review_league_player_registration", {
+      target_league_id: id,
+      target_registration_id: String(registrationId || "").trim(),
+      next_status: String(status || "").trim(),
+      review_notes: String(notes || "").trim(),
+    });
+  },
+
+  async resubmitLeaguePlayerRegistration(leagueId, registrationId, note = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/resubmit_league_player_registration", {
+      target_league_id: id,
+      target_registration_id: String(registrationId || "").trim(),
+      resubmission_note: String(note || "").trim(),
+    });
+  },
+
+  async addLeagueRegistrationDocument(leagueId, registrationId, document = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/add_league_registration_document", {
+      target_league_id: id,
+      target_registration_id: String(registrationId || "").trim(),
+      document_data: {
+        document_type: document.documentType || "evidence",
+        title: String(document.title || "Evidence").trim(),
+        document_url: String(document.documentUrl || "").trim(),
+        visibility: document.visibility || "league",
+        notes: String(document.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async submitLeagueTransferRequest(leagueId, transfer = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_transfer_request", {
+      target_league_id: id,
+      transfer_data: {
+        player_id: transfer.playerId || null,
+        season_id: transfer.seasonId || null,
+        to_club_id: transfer.toClubId || null,
+        to_team_id: transfer.toTeamId || null,
+        effective_on: transfer.effectiveOn || null,
+        reason: String(transfer.reason || "").trim(),
+      },
+    });
+  },
+
+  async reviewLeagueTransferRequest(leagueId, transferId, status, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/review_league_transfer_request", {
+      target_league_id: id,
+      target_transfer_id: String(transferId || "").trim(),
+      next_status: String(status || "").trim(),
+      review_notes: String(notes || "").trim(),
+    });
+  },
+
+  async upsertLeagueEligibilityRule(leagueId, rule = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_eligibility_rule", {
+      target_league_id: id,
+      rule_data: {
+        id: rule.id || null,
+        season_id: rule.seasonId || null,
+        division_id: rule.divisionId || null,
+        competition_type: rule.competitionType || "all",
+        competition_id: rule.competitionId || null,
+        rule_type: rule.ruleType || "other",
+        name: String(rule.name || "Eligibility rule").trim(),
+        severity: rule.severity || "block",
+        config: rule.config && typeof rule.config === "object" ? rule.config : {},
+        active: rule.active !== false,
+      },
+    });
+  },
+
+  async submitLeagueEligibilityDispensation(leagueId, dispensation = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_eligibility_dispensation", {
+      target_league_id: id,
+      dispensation_data: {
+        season_id: dispensation.seasonId || null,
+        player_id: dispensation.playerId || null,
+        team_id: dispensation.teamId || null,
+        rule_type: dispensation.ruleType || "other",
+        starts_on: dispensation.startsOn || null,
+        ends_on: dispensation.endsOn || null,
+        reason: String(dispensation.reason || "").trim(),
+      },
+    });
+  },
+
+  async reviewLeagueEligibilityDispensation(leagueId, dispensationId, status, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/review_league_eligibility_dispensation", {
+      target_league_id: id,
+      target_dispensation_id: String(dispensationId || "").trim(),
+      next_status: String(status || "").trim(),
+      review_notes: String(notes || "").trim(),
+    });
+  },
+
+  async saveLeagueTeamSheet(leagueId, teamSheet = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/save_league_team_sheet", {
+      target_league_id: id,
+      team_sheet_data: {
+        publication_fixture_id: teamSheet.publicationFixtureId || null,
+        team_id: teamSheet.teamId || null,
+        status: teamSheet.status || "submitted",
+        players: Array.isArray(teamSheet.players) ? teamSheet.players.map((player) => ({
+          player_id: player.playerId || null,
+          registration_id: player.registrationId || null,
+          squad_role: player.squadRole || "starter",
+          shirt_number: player.shirtNumber === "" || player.shirtNumber === null || player.shirtNumber === undefined ? null : Number(player.shirtNumber),
+        })) : [],
+      },
+    });
+  },
+
   async submitLeagueFixtureResult(leagueId, publicationFixtureId, result = {}) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/submit_league_fixture_result", {
