@@ -204,6 +204,18 @@ describe("League Operations v3.3 club portal, publication and communications", (
     await act(async () => root.unmount());
   });
 
+  test("keeps the club portal RPC in parse-safe PL/pgSQL statements", () => {
+    const portalFunction = migration.slice(
+      migration.indexOf("create or replace function public.get_league_club_portal_data"),
+      migration.indexOf("revoke all on function public.can_view_league_club_portal"),
+    );
+    expect(portalFunction).toContain("into league_json");
+    expect(portalFunction).toContain("into fixtures_json");
+    expect(portalFunction).toContain("into acknowledgements_json");
+    expect(portalFunction).toContain("return jsonb_build_object(");
+    expect(portalFunction).not.toContain(") into result\n  from public.leagues");
+  });
+
   test("enforces club isolation, active publication scope and private calendar tokens in the database", () => {
     for (const table of [
       "league_club_memberships",

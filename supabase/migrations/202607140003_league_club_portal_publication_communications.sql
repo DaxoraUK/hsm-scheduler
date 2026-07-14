@@ -1118,60 +1118,170 @@ set search_path = ''
 set row_security = off
 as $$
 declare
-  actor_id uuid := auth.uid();
-  club_id uuid := private.current_league_club_id(target_league_id, actor_id);
-  club_role text := private.current_league_role(target_league_id, actor_id);
-  result jsonb;
+  actor_user_id uuid := auth.uid();
+  resolved_club_id uuid := private.current_league_club_id(target_league_id, auth.uid());
+  resolved_club_role text := private.current_league_role(target_league_id, auth.uid());
+  league_json jsonb;
+  club_json jsonb;
+  teams_json jsonb := '[]'::jsonb;
+  venues_json jsonb := '[]'::jsonb;
+  fixtures_json jsonb := '[]'::jsonb;
+  acknowledgements_json jsonb := '[]'::jsonb;
+  change_requests_json jsonb := '[]'::jsonb;
+  communications_json jsonb := '[]'::jsonb;
+  calendar_feeds_json jsonb := '[]'::jsonb;
 begin
-  if club_id is null then raise exception 'Club portal access denied' using errcode = '42501'; end if;
-  select jsonb_build_object(
-    'league', to_jsonb(league),
-    'club', to_jsonb(club),
-    'access', jsonb_build_object('role', club_role, 'can_respond', club_role in ('club_secretary', 'team_contact'), 'can_request_changes', club_role in ('club_secretary', 'team_contact')),
-    'teams', coalesce((select jsonb_agg(to_jsonb(row_value) order by row_value.name) from public.league_teams row_value where row_value.league_id = target_league_id and row_value.parent_club_id = club_id), '[]'::jsonb),
-    'venues', coalesce((select jsonb_agg(to_jsonb(row_value) order by row_value.name) from public.league_venues row_value where row_value.league_id = target_league_id and row_value.parent_club_id = club_id), '[]'::jsonb),
-    'fixtures', coalesce((
-      select jsonb_agg(visible_fixture.fixture_json order by visible_fixture.fixture_json ->> 'scheduled_date', visible_fixture.fixture_json ->> 'kick_off')
-      from (
-        select distinct on (publication_fixture.target_type, publication_fixture.target_id)
-          publication_fixture.snapshot || jsonb_build_object(
-            'target_type', publication_fixture.target_type,
-            'target_id', publication_fixture.target_id,
-            'publication_id', publication_fixture.publication_id,
-            'publication_fixture_id', publication_fixture.id
-          ) as fixture_json
-        from public.league_publication_fixtures publication_fixture
-        join public.league_publications publication on publication.id = publication_fixture.publication_id and publication.status = 'published'
-        where publication_fixture.league_id = target_league_id and club_id = any(publication_fixture.parent_club_ids)
-        order by publication_fixture.target_type, publication_fixture.target_id, publication.published_at desc, publication.created_at desc
-      ) visible_fixture
-    ), '[]'::jsonb),
-    'acknowledgements', coalesce((
-      select jsonb_agg(to_jsonb(acknowledgement) order by acknowledgement.status, acknowledgement.created_at desc)
-      from public.league_fixture_acknowledgements acknowledgement
-      where acknowledgement.league_id = target_league_id
-        and acknowledgement.parent_club_id = club_id
-        and acknowledgement.publication_fixture_id in (
-          select visible_fixture.publication_fixture_id
-          from (
-            select distinct on (publication_fixture.target_type, publication_fixture.target_id)
-              publication_fixture.id as publication_fixture_id
-            from public.league_publication_fixtures publication_fixture
-            join public.league_publications publication
-              on publication.id = publication_fixture.publication_id and publication.status = 'published'
-            where publication_fixture.league_id = target_league_id and club_id = any(publication_fixture.parent_club_ids)
-            order by publication_fixture.target_type, publication_fixture.target_id, publication.published_at desc, publication.created_at desc
-          ) visible_fixture
+  if actor_user_id is null or resolved_club_id is null then
+    raise exception 'Club portal access denied' using errcode = '42501';
+  end if;
+
+  select to_jsonb(league_value)
+  into league_json
+  from public.leagues league_value
+  where league_value.id = target_league_id;
+
+  select to_jsonb(club_value)
+  into club_json
+  from public.league_parent_clubs club_value
+  where club_value.id = resolved_club_id
+    and club_value.league_id = target_league_id;
+
+  if league_json is null or club_json is null then
+    raise exception 'Club portal access denied' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(team_value) order by team_value.name), '[]'::jsonb)
+  into teams_json
+  from public.league_teams team_value
+  where team_value.league_id = target_league_id
+    and team_value.parent_club_id = resolved_club_id;
+
+  select coalesce(jsonb_agg(to_jsonb(venue_value) order by venue_value.name), '[]'::jsonb)
+  into venues_json
+  from public.league_venues venue_value
+  where venue_value.league_id = target_league_id
+    and venue_value.parent_club_id = resolved_club_id;
+
+  select coalesce(
+    jsonb_agg(
+      visible_fixture.fixture_json
+      order by visible_fixture.fixture_json ->> 'scheduled_date', visible_fixture.fixture_json ->> 'kick_off'
+    ),
+    '[]'::jsonb
+  )
+  into fixtures_json
+  from (
+    select distinct on (publication_fixture.target_type, publication_fixture.target_id)
+      publication_fixture.snapshot || jsonb_build_object(
+        'target_type', publication_fixture.target_type,
+        'target_id', publication_fixture.target_id,
+        'publication_id', publication_fixture.publication_id,
+        'publication_fixture_id', publication_fixture.id
+      ) as fixture_json
+    from public.league_publication_fixtures publication_fixture
+    join public.league_publications publication_value
+      on publication_value.id = publication_fixture.publication_id
+     and publication_value.status = 'published'
+    where publication_fixture.league_id = target_league_id
+      and resolved_club_id = any(publication_fixture.parent_club_ids)
+    order by
+      publication_fixture.target_type,
+      publication_fixture.target_id,
+      publication_value.published_at desc nulls last,
+      publication_value.created_at desc
+  ) visible_fixture;
+
+  with visible_publication_fixtures as (
+    select distinct on (publication_fixture.target_type, publication_fixture.target_id)
+      publication_fixture.id as publication_fixture_id
+    from public.league_publication_fixtures publication_fixture
+    join public.league_publications publication_value
+      on publication_value.id = publication_fixture.publication_id
+     and publication_value.status = 'published'
+    where publication_fixture.league_id = target_league_id
+      and resolved_club_id = any(publication_fixture.parent_club_ids)
+    order by
+      publication_fixture.target_type,
+      publication_fixture.target_id,
+      publication_value.published_at desc nulls last,
+      publication_value.created_at desc
+  )
+  select coalesce(
+    jsonb_agg(to_jsonb(acknowledgement_value) order by acknowledgement_value.status, acknowledgement_value.created_at desc),
+    '[]'::jsonb
+  )
+  into acknowledgements_json
+  from public.league_fixture_acknowledgements acknowledgement_value
+  join visible_publication_fixtures visible_fixture
+    on visible_fixture.publication_fixture_id = acknowledgement_value.publication_fixture_id
+  where acknowledgement_value.league_id = target_league_id
+    and acknowledgement_value.parent_club_id = resolved_club_id;
+
+  select coalesce(jsonb_agg(to_jsonb(request_value) order by request_value.created_at desc), '[]'::jsonb)
+  into change_requests_json
+  from public.league_fixture_change_requests request_value
+  where request_value.league_id = target_league_id
+    and request_value.parent_club_id = resolved_club_id;
+
+  select coalesce(jsonb_agg(to_jsonb(communication_value) order by communication_value.created_at desc), '[]'::jsonb)
+  into communications_json
+  from public.league_communications communication_value
+  where communication_value.league_id = target_league_id
+    and communication_value.status in ('queued', 'sent')
+    and (
+      communication_value.recipient_type = 'all_clubs'
+      or (
+        communication_value.recipient_type = 'club'
+        and communication_value.recipient_id = resolved_club_id
+      )
+      or (
+        communication_value.recipient_type = 'team'
+        and exists (
+          select 1
+          from public.league_teams recipient_team
+          where recipient_team.id = communication_value.recipient_id
+            and recipient_team.parent_club_id = resolved_club_id
         )
-    ), '[]'::jsonb),
-    'change_requests', coalesce((select jsonb_agg(to_jsonb(row_value) order by row_value.created_at desc) from public.league_fixture_change_requests row_value where row_value.league_id = target_league_id and row_value.parent_club_id = club_id), '[]'::jsonb),
-    'communications', coalesce((select jsonb_agg(to_jsonb(row_value) order by row_value.created_at desc) from public.league_communications row_value where row_value.league_id = target_league_id and row_value.status in ('queued', 'sent') and (row_value.recipient_type = 'all_clubs' or (row_value.recipient_type = 'club' and row_value.recipient_id = club_id) or (row_value.recipient_type = 'team' and exists (select 1 from public.league_teams team where team.id = row_value.recipient_id and team.parent_club_id = club_id))), '[]'::jsonb),
-    'calendar_feeds', coalesce((select jsonb_agg(jsonb_build_object('id', token.id, 'scope_type', token.scope_type, 'scope_id', token.scope_id, 'feed_label', token.label, 'expires_at', token.expires_at, 'revoked_at', token.revoked_at, 'created_at', token.created_at) order by token.created_at desc) from private.league_calendar_tokens token where token.league_id = target_league_id and token.created_by = actor_id and token.revoked_at is null), '[]'::jsonb)
-  ) into result
-  from public.leagues league
-  join public.league_parent_clubs club on club.id = club_id and club.league_id = league.id
-  where league.id = target_league_id;
-  return result;
+      )
+    );
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', calendar_token.id,
+        'scope_type', calendar_token.scope_type,
+        'scope_id', calendar_token.scope_id,
+        'feed_label', calendar_token.label,
+        'expires_at', calendar_token.expires_at,
+        'revoked_at', calendar_token.revoked_at,
+        'created_at', calendar_token.created_at
+      )
+      order by calendar_token.created_at desc
+    ),
+    '[]'::jsonb
+  )
+  into calendar_feeds_json
+  from private.league_calendar_tokens calendar_token
+  where calendar_token.league_id = target_league_id
+    and calendar_token.created_by = actor_user_id
+    and calendar_token.revoked_at is null;
+
+  return jsonb_build_object(
+    'league', league_json,
+    'club', club_json,
+    'access', jsonb_build_object(
+      'role', resolved_club_role,
+      'can_respond', resolved_club_role in ('club_secretary', 'team_contact'),
+      'can_request_changes', resolved_club_role in ('club_secretary', 'team_contact')
+    ),
+    'teams', teams_json,
+    'venues', venues_json,
+    'fixtures', fixtures_json,
+    'acknowledgements', acknowledgements_json,
+    'change_requests', change_requests_json,
+    'communications', communications_json,
+    'calendar_feeds', calendar_feeds_json
+  );
 end;
 $$;
 
