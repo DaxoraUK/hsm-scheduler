@@ -1238,6 +1238,37 @@ export const DB = {
     });
   },
 
+  async geocodeLeagueVenuePostcodes(leagueId, venues = []) {
+    const id = requireLeagueId(leagueId);
+    const session = await Auth.getValidSession();
+    if (!session?.access_token) throw new SupabaseRequestError("Sign in again to continue", { status: 401, code: "AUTH_REQUIRED", path: "/api/league/geocode-venues" });
+    const response = await fetch("/api/league/geocode-venues", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ leagueId: id, venues }),
+    });
+    const payload = await readResponse(response);
+    if (!response.ok) throw new SupabaseRequestError(responseError(payload, "Venue postcodes could not be geocoded"), { status: response.status, code: "VENUE_GEOCODING_FAILED", details: payload, path: "/api/league/geocode-venues" });
+    return payload || { coordinates: [], unmatched: [] };
+  },
+
+  async bulkUpdateLeagueVenueMapPositions(leagueId, coordinates = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/bulk_update_league_venue_map_positions", {
+      target_league_id: id,
+      coordinate_rows: (Array.isArray(coordinates) ? coordinates : []).map((row) => ({
+        venue_id: row.id || row.venueId,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        coordinate_source: row.source || row.coordinateSource || "postcode_centroid",
+        coordinate_accuracy: row.accuracy || row.coordinateAccuracy || "postcode",
+      })),
+    });
+  },
+
   async upsertLeaguePostponement(leagueId, data = {}) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/upsert_league_postponement", {
@@ -1266,6 +1297,26 @@ export const DB = {
       target_league_id: id,
       target_postponement_id: String(postponementId || "").trim(),
       next_status: String(status || "").trim(),
+    });
+  },
+
+  async saveLeaguePostponementSuggestions(leagueId, postponementId, suggestions = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/save_league_postponement_suggestions", {
+      target_league_id: id,
+      target_postponement_id: String(postponementId || "").trim(),
+      suggestion_rows: Array.isArray(suggestions) ? suggestions : [],
+    });
+  },
+
+  async applyLeaguePostponementRearrangement(leagueId, postponementId, suggestion = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/apply_league_postponement_rearrangement", {
+      target_league_id: id,
+      target_postponement_id: String(postponementId || "").trim(),
+      rearranged_date: String(suggestion.date || "").trim(),
+      rearranged_kick_off: String(suggestion.kickOff || "").trim() || null,
+      rearranged_venue_id: String(suggestion.venueId || "").trim() || null,
     });
   },
 

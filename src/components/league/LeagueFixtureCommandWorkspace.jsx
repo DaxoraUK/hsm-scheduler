@@ -10,9 +10,9 @@ import {
   List,
   Map as MapIcon,
   MapPin,
+  Sparkles,
   RefreshCw,
   ShieldAlert,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DB } from "../../lib/supabase.js";
@@ -24,6 +24,10 @@ import {
   getRequiredOfficialRoles,
   ROLE_LABELS,
 } from "../../lib/league/leagueOperationsEngine.js";
+import {
+  buildVenueGeocodeRequest,
+  coordinateSourceLabel,
+} from "../../lib/league/leagueVenueIntelligence.js";
 
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3.5 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50";
 const INPUT = "h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
@@ -111,7 +115,7 @@ function FixtureLine({ fixture, operations, compact = false, onSelect }) {
   );
 }
 
-function FixtureDrawer({ fixture, workspace, operations, onClose }) {
+function FixtureDrawer({ fixture, operations, onClose }) {
   if (!fixture) return null;
   const requirement = getFixtureOfficialRequirement(fixture, operations.requirements);
   const roles = getRequiredOfficialRoles(requirement);
@@ -153,22 +157,106 @@ function SeasonGridView({ fixtures, workspace, operations, onSelect }) {
   );
 }
 
-function VenueMapView({ fixtures, workspace, operations, canManage, onRefreshOperations, onSelect }) {
+function VenueMapView({ fixtures, workspace, operations, canManage, onRefreshOperations }) {
   const positions = new globalThis.Map(operations.venuePositions.map((row) => [row.id, row]));
-  const venues = workspace.venues.map((venue) => ({ ...venue, ...(positions.get(venue.id) || {}) }));
+  const venues = workspace.venues.map((venue) => ({ ...venue, ...positions.get(venue.id) }));
   const mapped = venues.filter((venue) => Number.isFinite(venue.latitude) && Number.isFinite(venue.longitude));
   const unmapped = venues.filter((venue) => !Number.isFinite(venue.latitude) || !Number.isFinite(venue.longitude));
+  const geocodable = buildVenueGeocodeRequest(unmapped);
   const [selectedVenueId, setSelectedVenueId] = useState(unmapped[0]?.id || venues[0]?.id || "");
   const selectedVenue = venues.find((row) => row.id === selectedVenueId);
   const [coords, setCoords] = useState({ latitude: selectedVenue?.latitude ?? "", longitude: selectedVenue?.longitude ?? "" });
-  useEffect(() => { setCoords({ latitude: selectedVenue?.latitude ?? "", longitude: selectedVenue?.longitude ?? "" }); }, [selectedVenue?.id, selectedVenue?.latitude, selectedVenue?.longitude]);
-  const bounds = mapped.length ? { minLat: Math.min(...mapped.map((row) => row.latitude)), maxLat: Math.max(...mapped.map((row) => row.latitude)), minLng: Math.min(...mapped.map((row) => row.longitude)), maxLng: Math.max(...mapped.map((row) => row.longitude)) } : null;
-  const point = (venue) => ({ x: bounds ? 5 + ((venue.longitude - bounds.minLng) / Math.max(0.01, bounds.maxLng - bounds.minLng)) * 90 : 50, y: bounds ? 95 - ((venue.latitude - bounds.minLat) / Math.max(0.01, bounds.maxLat - bounds.minLat)) * 90 : 50 });
+  const [geocoding, setGeocoding] = useState(false);
+
+  useEffect(() => {
+    setCoords({ latitude: selectedVenue?.latitude ?? "", longitude: selectedVenue?.longitude ?? "" });
+  }, [selectedVenue?.id, selectedVenue?.latitude, selectedVenue?.longitude]);
+
+  const bounds = mapped.length ? {
+    minLat: Math.min(...mapped.map((row) => row.latitude)),
+    maxLat: Math.max(...mapped.map((row) => row.latitude)),
+    minLng: Math.min(...mapped.map((row) => row.longitude)),
+    maxLng: Math.max(...mapped.map((row) => row.longitude)),
+  } : null;
+  const point = (venue) => ({
+    x: bounds ? 5 + ((venue.longitude - bounds.minLng) / Math.max(0.01, bounds.maxLng - bounds.minLng)) * 90 : 50,
+    y: bounds ? 95 - ((venue.latitude - bounds.minLat) / Math.max(0.01, bounds.maxLat - bounds.minLat)) * 90 : 50,
+  });
   const selectedDate = fixtures.find((row) => row.date)?.date || "";
+
+  const geocodeAll = async () => {
+    if (!geocodable.length) return;
+    setGeocoding(true);
+    try {
+      const result = await DB.geocodeLeagueVenuePostcodes(workspace.league.id, geocodable);
+      if (result.coordinates?.length) {
+        await DB.bulkUpdateLeagueVenueMapPositions(workspace.league.id, result.coordinates);
+        await onRefreshOperations?.();
+      }
+      if (result.unmatched?.length) {
+        toast.warning(`${result.unmatched.length} postcode${result.unmatched.length === 1 ? "" : "s"} could not be matched`);
+      }
+      toast.success(`${result.coordinates?.length || 0} venue location${result.coordinates?.length === 1 ? "" : "s"} mapped`);
+    } catch (error) {
+      toast.error("Venue postcodes could not be mapped", { description: error?.message });
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1.7fr_0.8fr]">
-      <Panel className="overflow-hidden"><div className="border-b border-slate-200 p-4"><div className="text-lg font-black text-slate-950">Venue map</div><div className="text-xs font-semibold text-slate-500">Geographic venue pressure and official coverage. Add coordinates once; every fixture view then uses them.</div></div>{mapped.length ? <div className="relative h-[620px] overflow-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-emerald-50"><svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full"><defs><pattern id="mapGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth=".25" /></pattern></defs><rect width="100" height="100" fill="url(#mapGrid)" />{mapped.map((venue) => { const p = point(venue); const venueFixtures = fixtures.filter((row) => row.venueId === venue.id); const missing = venueFixtures.some((row) => !fixtureAssignmentSummary(row, operations).complete); return <g key={venue.id} transform={`translate(${p.x} ${p.y})`} className="cursor-pointer" onClick={() => setSelectedVenueId(venue.id)}><circle r={selectedVenueId === venue.id ? 3.2 : 2.4} fill={missing ? "#f59e0b" : "#059669"} stroke="white" strokeWidth=".8" /><text y="-4" textAnchor="middle" fontSize="2.4" fontWeight="800" fill="#0f172a">{venue.name.slice(0, 24)}</text><text y="5" textAnchor="middle" fontSize="2" fontWeight="700" fill="#475569">{venueFixtures.length} fixtures</text></g>; })}</svg></div> : <div className="flex min-h-[420px] items-center justify-center p-8 text-center"><div><MapPin className="mx-auto text-slate-300" size={42} /><div className="mt-4 text-lg font-black text-slate-800">No venue coordinates yet</div><div className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-slate-500">Ground postcodes are already stored. Add latitude and longitude below to activate the geographic map without introducing a paid mapping dependency.</div></div></div>}</Panel>
-      <div className="space-y-5"><Panel className="p-5"><div className="text-sm font-black text-slate-950">Map a venue</div><div className="mt-4 space-y-3"><select className={`${INPUT} w-full`} value={selectedVenueId} onChange={(event) => setSelectedVenueId(event.target.value)}>{venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name} · {venue.postcode || "No postcode"}</option>)}</select><div className="grid grid-cols-2 gap-3"><input type="number" step="0.000001" className={`${INPUT} w-full`} value={coords.latitude} onChange={(event) => setCoords((current) => ({ ...current, latitude: event.target.value }))} placeholder="Latitude" /><input type="number" step="0.000001" className={`${INPUT} w-full`} value={coords.longitude} onChange={(event) => setCoords((current) => ({ ...current, longitude: event.target.value }))} placeholder="Longitude" /></div><button type="button" disabled={!canManage || !selectedVenueId || coords.latitude === "" || coords.longitude === ""} onClick={async () => { try { await DB.updateLeagueVenueMapPosition(workspace.league.id, selectedVenueId, Number(coords.latitude), Number(coords.longitude)); await onRefreshOperations?.(); toast.success("Venue map position saved"); } catch (error) { toast.error("Venue position could not be saved", { description: error?.message }); } }} className={`${BUTTON} w-full bg-slate-950 text-white`}><MapPin size={15} /> Save map position</button></div></Panel><Panel className="p-5"><div className="flex items-center justify-between"><div className="text-sm font-black text-slate-950">Unmapped venues</div><Pill tone={unmapped.length ? "amber" : "green"}>{unmapped.length}</Pill></div><div className="mt-3 max-h-[330px] space-y-2 overflow-y-auto">{unmapped.map((venue) => <button type="button" key={venue.id} onClick={() => setSelectedVenueId(venue.id)} className="w-full rounded-xl bg-slate-50 px-3 py-2 text-left"><div className="text-xs font-black text-slate-800">{venue.name}</div><div className="mt-0.5 text-[10px] font-semibold text-slate-500">{venue.postcode || "Postcode missing"}</div></button>)}</div></Panel>{selectedDate ? <div className="text-[10px] font-semibold text-slate-400">Fixture count reflects the currently filtered programme, starting {dateLabel(selectedDate)}.</div> : null}</div>
+      <Panel className="overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-lg font-black text-slate-950">Venue map</div>
+            <div className="text-xs font-semibold text-slate-500">Postcode centroids activate the map quickly; operators can refine any pin to the exact pitch entrance or centre.</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill tone={unmapped.length ? "amber" : "green"}>{mapped.length}/{venues.length} mapped</Pill>
+            <button type="button" disabled={!canManage || !geocodable.length || geocoding} onClick={geocodeAll} className={`${BUTTON} bg-emerald-600 text-white`}>
+              <Sparkles size={15} className={geocoding ? "animate-pulse" : ""} />
+              {geocoding ? "Mapping postcodes…" : `Map ${geocodable.length || "all"} postcodes`}
+            </button>
+          </div>
+        </div>
+        {mapped.length ? (
+          <div className="relative h-[620px] overflow-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-emerald-50">
+            <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
+              <defs><pattern id="mapGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth=".25" /></pattern></defs>
+              <rect width="100" height="100" fill="url(#mapGrid)" />
+              {mapped.map((venue) => {
+                const p = point(venue);
+                const venueFixtures = fixtures.filter((row) => row.venueId === venue.id);
+                const missing = venueFixtures.some((row) => !fixtureAssignmentSummary(row, operations).complete);
+                return (
+                  <g key={venue.id} transform={`translate(${p.x} ${p.y})`} className="cursor-pointer" onClick={() => setSelectedVenueId(venue.id)}>
+                    <circle r={selectedVenueId === venue.id ? 3.2 : 2.4} fill={missing ? "#f59e0b" : "#059669"} stroke="white" strokeWidth=".8" />
+                    <text y="-4" textAnchor="middle" fontSize="2.4" fontWeight="800" fill="#0f172a">{venue.name.slice(0, 24)}</text>
+                    <text y="5" textAnchor="middle" fontSize="2" fontWeight="700" fill="#475569">{venueFixtures.length} fixtures</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        ) : (
+          <div className="flex min-h-[420px] items-center justify-center p-8 text-center">
+            <div><MapPin className="mx-auto text-slate-300" size={42} /><div className="mt-4 text-lg font-black text-slate-800">No venue coordinates yet</div><div className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-slate-500">Use Map postcodes to populate every valid UK venue in one controlled batch.</div></div>
+          </div>
+        )}
+      </Panel>
+      <div className="space-y-5">
+        <Panel className="p-5">
+          <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-black text-slate-950">Venue position</div><div className="mt-1 text-xs font-semibold text-slate-500">Refine a postcode pin when the exact pitch location matters.</div></div>{selectedVenue?.coordinateSource ? <Pill tone={selectedVenue.coordinateSource === "manual" ? "green" : "blue"}>{coordinateSourceLabel(selectedVenue.coordinateSource)}</Pill> : null}</div>
+          <div className="mt-4 space-y-3">
+            <select className={`${INPUT} w-full`} value={selectedVenueId} onChange={(event) => setSelectedVenueId(event.target.value)}>{venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name} · {venue.postcode || "No postcode"}</option>)}</select>
+            <div className="grid grid-cols-2 gap-3"><input type="number" step="0.000001" className={`${INPUT} w-full`} value={coords.latitude} onChange={(event) => setCoords((current) => ({ ...current, latitude: event.target.value }))} placeholder="Latitude" /><input type="number" step="0.000001" className={`${INPUT} w-full`} value={coords.longitude} onChange={(event) => setCoords((current) => ({ ...current, longitude: event.target.value }))} placeholder="Longitude" /></div>
+            <button type="button" disabled={!canManage || !selectedVenueId || coords.latitude === "" || coords.longitude === ""} onClick={async () => { try { await DB.updateLeagueVenueMapPosition(workspace.league.id, selectedVenueId, Number(coords.latitude), Number(coords.longitude)); await onRefreshOperations?.(); toast.success("Exact venue position saved"); } catch (error) { toast.error("Venue position could not be saved", { description: error?.message }); } }} className={`${BUTTON} w-full bg-slate-950 text-white`}><MapPin size={15} /> Save exact position</button>
+          </div>
+        </Panel>
+        <Panel className="p-5"><div className="flex items-center justify-between"><div className="text-sm font-black text-slate-950">Unmapped venues</div><Pill tone={unmapped.length ? "amber" : "green"}>{unmapped.length}</Pill></div><div className="mt-3 max-h-[330px] space-y-2 overflow-y-auto">{unmapped.map((venue) => <button type="button" key={venue.id} onClick={() => setSelectedVenueId(venue.id)} className="w-full rounded-xl bg-slate-50 px-3 py-2 text-left"><div className="text-xs font-black text-slate-800">{venue.name}</div><div className="mt-0.5 text-[10px] font-semibold text-slate-500">{venue.postcode || "Postcode missing"}</div></button>)}{!unmapped.length ? <div className="rounded-xl bg-emerald-50 p-3 text-xs font-black text-emerald-700">Every venue is mapped.</div> : null}</div></Panel>
+        {selectedDate ? <div className="text-[10px] font-semibold text-slate-400">Fixture count reflects the currently filtered programme, starting {dateLabel(selectedDate)}.</div> : null}
+      </div>
     </div>
   );
 }
@@ -245,11 +333,11 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
 
       {view === "calendar" ? <CalendarView fixtures={filtered} month={month} setMonth={setMonth} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "grid" ? <SeasonGridView fixtures={filtered} workspace={workspace} operations={operations} onSelect={setSelectedFixture} /> : null}
-      {view === "map" ? <VenueMapView fixtures={filtered} workspace={workspace} operations={operations} canManage={canManage} onRefreshOperations={onRefreshOperations} onSelect={setSelectedFixture} /> : null}
+      {view === "map" ? <VenueMapView fixtures={filtered} workspace={workspace} operations={operations} canManage={canManage} onRefreshOperations={onRefreshOperations} /> : null}
       {view === "list" ? <ListView fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "exceptions" ? <ExceptionsView fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {!filtered.length ? <Panel className="p-10 text-center"><AlertTriangle className="mx-auto text-slate-300" size={34} /><div className="mt-3 text-lg font-black text-slate-700">No fixtures match these filters</div></Panel> : null}
-      <FixtureDrawer fixture={selectedFixture} workspace={workspace} operations={operations} onClose={() => setSelectedFixture(null)} />
+      <FixtureDrawer fixture={selectedFixture} operations={operations} onClose={() => setSelectedFixture(null)} />
     </div>
   );
 }

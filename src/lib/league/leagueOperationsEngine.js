@@ -58,11 +58,19 @@ function normaliseRow(row = {}) {
     minimumGrade: row.minimum_grade || row.minimumGrade || "",
     responseToken: row.response_token || row.responseToken || "",
     responseExpiresAt: row.response_expires_at || row.responseExpiresAt || null,
+    coordinateSource: row.coordinate_source || row.coordinateSource || "",
+    coordinateAccuracy: row.coordinate_accuracy || row.coordinateAccuracy || "",
+    coordinateUpdatedAt: row.coordinate_updated_at || row.coordinateUpdatedAt || null,
     requestedByClubId: row.requested_by_club_id || row.requestedByClubId || "",
     originalDate: row.original_date || row.originalDate || "",
     originalKickOff: row.original_kick_off || row.originalKickOff || "",
     originalVenueId: row.original_venue_id || row.originalVenueId || "",
     proposedDates: asArray(row.proposed_dates ?? row.proposedDates),
+    selectedDate: row.selected_date || row.selectedDate || "",
+    selectedKickOff: row.selected_kick_off || row.selectedKickOff || "",
+    selectedVenueId: row.selected_venue_id || row.selectedVenueId || "",
+    resolutionVersionId: row.resolution_version_id || row.resolutionVersionId || "",
+    resolvedAt: row.resolved_at || row.resolvedAt || null,
     deadlineOn: row.deadline_on || row.deadlineOn || "",
     notes: row.notes || "",
     createdAt: row.created_at || row.createdAt || null,
@@ -142,6 +150,10 @@ export function buildLeagueOperationalFixtures(workspace = {}, scheduleVersion =
     competitionId: entry.divisionId,
     competitionName: entityName(workspace.divisions, entry.divisionId, "League"),
     divisionId: entry.divisionId,
+    seasonId: entry.seasonId || scheduleVersion?.version?.seasonId || "",
+    versionId: entry.versionId || scheduleVersion?.version?.id || "",
+    roundNumber: Number(entry.roundNumber || 0),
+    meetingNumber: Number(entry.meetingNumber || 1),
     cupRoundId: "",
     date: entry.scheduledDate || "",
     kickOff: String(entry.kickOff || "").slice(0, 5),
@@ -165,6 +177,10 @@ export function buildLeagueOperationalFixtures(workspace = {}, scheduleVersion =
     competitionId: tie.cupId,
     competitionName: entityName(workspace.cups, tie.cupId, "Cup"),
     divisionId: "",
+    seasonId: tie.seasonId || "",
+    versionId: "",
+    roundNumber: Number(tie.roundNumber || 0),
+    meetingNumber: 1,
     cupRoundId: tie.cupRoundId,
     date: tie.scheduledDate || "",
     kickOff: String(tie.kickOff || "").slice(0, 5),
@@ -340,6 +356,121 @@ export function suggestLeagueOfficialAssignments({ fixtures = [], officials = []
   });
 
   return { suggestions, unresolved };
+}
+
+function dateInRange(date, startsOn, endsOn) {
+  if (!date) return false;
+  return (!startsOn || date >= startsOn) && (!endsOn || date <= endsOn);
+}
+
+function fixtureGroundKey(workspace, venueId) {
+  const venue = asArray(workspace.venues).find((row) => row.id === venueId);
+  return venue?.groundShareKey || (venue?.id ? `venue:${venue.id}` : "missing-venue");
+}
+
+function blackoutBlocksDate(workspace, fixture, candidateDate, venueId) {
+  const teams = asArray(workspace.teams);
+  const home = teams.find((row) => row.id === fixture.homeTeamId);
+  const away = teams.find((row) => row.id === fixture.awayTeamId);
+  const clubIds = new Set([home?.parentClubId, away?.parentClubId].filter(Boolean));
+  const teamIds = new Set([fixture.homeTeamId, fixture.awayTeamId].filter(Boolean));
+  return asArray(workspace.blackouts).some((row) => {
+    if (row.seasonId && fixture.seasonId && row.seasonId !== fixture.seasonId) return false;
+    if (!dateInRange(candidateDate, row.startsOn, row.endsOn || row.startsOn)) return false;
+    if (row.scopeType === "league") return true;
+    if (row.scopeType === "division") return row.scopeId === fixture.divisionId;
+    if (row.scopeType === "club") return clubIds.has(row.scopeId);
+    if (row.scopeType === "team") return teamIds.has(row.scopeId);
+    if (row.scopeType === "venue") return row.scopeId === venueId;
+    return false;
+  });
+}
+
+function candidateHomeAwayPenalty(fixtures, fixture, candidateDate) {
+  const affectedTeams = [fixture.homeTeamId, fixture.awayTeamId];
+  return affectedTeams.reduce((total, teamId) => {
+    const sequence = asArray(fixtures)
+      .filter((row) => row.targetId !== fixture.targetId && row.date && [row.homeTeamId, row.awayTeamId].includes(teamId))
+      .concat([{ ...fixture, date: candidateDate }])
+      .sort((left, right) => left.date.localeCompare(right.date));
+    let run = 0;
+    let previous = "";
+    let penalty = 0;
+    sequence.forEach((row) => {
+      const side = row.homeTeamId === teamId ? "home" : "away";
+      run = side === previous ? run + 1 : 1;
+      previous = side;
+      if (run > 2) penalty += (run - 2) * 8;
+    });
+    return total + penalty;
+  }, 0);
+}
+
+/**
+ * Produces operator-reviewable rearrangement candidates. The server repeats the
+ * hard conflict checks before a selected date can be applied.
+ */
+export function suggestLeagueRearrangementDates({ postponement = {}, fixture = null, fixtures = [], workspace = {}, limit = 6 } = {}) {
+  if (!fixture?.targetId || !fixture.homeTeamId || !fixture.awayTeamId) return [];
+  const season = asArray(workspace.seasons).find((row) => row.id === fixture.seasonId)
+    || asArray(workspace.seasons).find((row) => row.isCurrent)
+    || asArray(workspace.seasons)[0];
+  const division = asArray(workspace.divisions).find((row) => row.id === fixture.divisionId);
+  const startsOn = division?.startsOn || season?.startsOn || "";
+  const endsOn = division?.endsOn || season?.endsOn || "";
+  const originalDate = postponement.originalDate || fixture.date || "";
+  const deadline = postponement.deadlineOn || endsOn;
+  const venueId = fixture.venueId || postponement.originalVenueId || "";
+  const venue = asArray(workspace.venues).find((row) => row.id === venueId);
+  const venueLimit = Math.max(1, Number(venue?.simultaneousFixtureLimit || 1));
+  const groundKey = fixtureGroundKey(workspace, venueId);
+  const groundCapacity = asArray(workspace.venues)
+    .filter((row) => fixtureGroundKey(workspace, row.id) === groundKey)
+    .reduce((total, row) => total + Math.max(1, Number(row.simultaneousFixtureLimit || 1)), 0) || 1;
+
+  const byDate = new Map();
+  asArray(workspace.playingDates)
+    .filter((row) => !fixture.seasonId || row.seasonId === fixture.seasonId)
+    .filter((row) => !row.divisionId || !fixture.divisionId || row.divisionId === fixture.divisionId)
+    .filter((row) => row.status === "available")
+    .forEach((row) => {
+      const existing = byDate.get(row.playingDate);
+      if (!existing || (!existing.divisionId && row.divisionId)) byDate.set(row.playingDate, row);
+    });
+
+  return [...byDate.values()]
+    .filter((row) => row.playingDate && row.playingDate !== originalDate)
+    .filter((row) => !originalDate || row.playingDate > originalDate)
+    .filter((row) => dateInRange(row.playingDate, startsOn, deadline || endsOn))
+    .map((row) => {
+      const date = row.playingDate;
+      const kickOff = String(row.defaultKickOff || division?.defaultKickOff || season?.defaultKickOff || fixture.kickOff || "").slice(0, 5);
+      const otherFixtures = asArray(fixtures).filter((item) => item.targetId !== fixture.targetId && item.date === date && !["cancelled", "postponed"].includes(item.status));
+      const blockers = [];
+      if (!kickOff) blockers.push("No kick-off is configured for this date");
+      if (otherFixtures.some((item) => [item.homeTeamId, item.awayTeamId].includes(fixture.homeTeamId))) blockers.push(`${fixture.homeTeamName} already plays`);
+      if (otherFixtures.some((item) => [item.homeTeamId, item.awayTeamId].includes(fixture.awayTeamId))) blockers.push(`${fixture.awayTeamName} already plays`);
+      if (blackoutBlocksDate(workspace, fixture, date, venueId)) blockers.push("A league, team, club or venue blackout applies");
+      const sameVenue = otherFixtures.filter((item) => item.kickOff === kickOff && item.venueId === venueId).length;
+      if (sameVenue >= venueLimit) blockers.push(`${venue?.name || "Venue"} is at capacity`);
+      const sameGround = otherFixtures.filter((item) => item.kickOff === kickOff && fixtureGroundKey(workspace, item.venueId) === groundKey).length;
+      if (sameGround >= groundCapacity) blockers.push("The shared ground is at capacity");
+      const daysAfter = originalDate ? Math.max(0, Math.round((new Date(`${date}T12:00:00`) - new Date(`${originalDate}T12:00:00`)) / 86400000)) : 0;
+      const congestion = otherFixtures.length;
+      const sequencePenalty = candidateHomeAwayPenalty(fixtures, fixture, date);
+      return {
+        date,
+        kickOff,
+        venueId,
+        blockers,
+        score: daysAfter + (congestion * 2) + sequencePenalty,
+        congestion,
+        sequencePenalty,
+      };
+    })
+    .filter((row) => row.blockers.length === 0)
+    .sort((left, right) => left.score - right.score || left.date.localeCompare(right.date))
+    .slice(0, Math.max(1, Math.min(Number(limit) || 6, 12)));
 }
 
 export function getLeagueOfficialCoverage(fixtures = [], requirements = [], assignments = []) {
