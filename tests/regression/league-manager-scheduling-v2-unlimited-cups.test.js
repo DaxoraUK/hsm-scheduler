@@ -200,7 +200,7 @@ describe("League Manager scheduling v2 and unlimited cups", () => {
   });
 
   test("exposes the complete settings-driven league and unlimited cup operator workflow", () => {
-    expect(leaguePage).toContain('"cups", "Cup Manager"');
+    expect(leaguePage).toContain('"cups", "Cups"');
     expect(leaguePage).toContain("League default kick-off");
     expect(leaguePage).toContain("Meetings per pairing");
     expect(scheduleUi).toContain("Generate full league programme");

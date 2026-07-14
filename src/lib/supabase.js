@@ -1119,6 +1119,156 @@ export const DB = {
     });
   },
 
+  async getLeagueOperationsData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_operations_data", { target_league_id: id });
+  },
+
+  async upsertLeagueOfficial(leagueId, officialData = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_official", {
+      target_league_id: id,
+      official_data: {
+        id: officialData.id || null,
+        name: String(officialData.name || "").trim(),
+        email: String(officialData.email || "").trim() || null,
+        phone: String(officialData.phone || "").trim() || null,
+        grade: String(officialData.grade || "").trim() || null,
+        home_postcode: String(officialData.homePostcode || "").trim() || null,
+        travel_radius_miles: Number(officialData.travelRadiusMiles || 35),
+        max_appointments_per_day: Number(officialData.maxAppointmentsPerDay || 1),
+        max_appointments_per_week: Number(officialData.maxAppointmentsPerWeek || 2),
+        can_referee: Boolean(officialData.canReferee),
+        can_assistant: Boolean(officialData.canAssistant),
+        can_fourth: Boolean(officialData.canFourth),
+        can_observe: Boolean(officialData.canObserve),
+        status: String(officialData.status || "active"),
+        notes: String(officialData.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async deactivateLeagueOfficial(leagueId, officialId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/deactivate_league_official", {
+      target_league_id: id,
+      target_official_id: String(officialId || "").trim(),
+    });
+  },
+
+  async upsertLeagueOfficialAvailability(leagueId, officialId, availability = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_official_availability", {
+      target_league_id: id,
+      target_official_id: String(officialId || "").trim(),
+      availability_data: {
+        id: availability.id || null,
+        available_on: availability.availableOn || null,
+        starts_at: availability.startsAt || null,
+        ends_at: availability.endsAt || null,
+        availability_status: availability.availabilityStatus || "available",
+        notes: availability.notes || null,
+      },
+    });
+  },
+
+  async upsertLeagueOfficialConflict(leagueId, officialId, conflict = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_official_conflict", {
+      target_league_id: id,
+      target_official_id: String(officialId || "").trim(),
+      conflict_data: {
+        id: conflict.id || null,
+        conflict_type: conflict.conflictType || "club",
+        parent_club_id: conflict.parentClubId || null,
+        team_id: conflict.teamId || null,
+        reason: conflict.reason || null,
+      },
+    });
+  },
+
+  async upsertLeagueOfficialRequirement(leagueId, requirement = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_official_requirement", {
+      target_league_id: id,
+      requirement_data: {
+        id: requirement.id || null,
+        scope_type: requirement.scopeType,
+        scope_id: requirement.scopeId,
+        referee_count: Number(requirement.refereeCount || 0),
+        assistant_count: Number(requirement.assistantCount || 0),
+        fourth_official_count: Number(requirement.fourthOfficialCount || 0),
+        observer_count: Number(requirement.observerCount || 0),
+        minimum_grade: requirement.minimumGrade || null,
+      },
+    });
+  },
+
+  async bulkUpsertLeagueOfficialAssignments(leagueId, appointments = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/bulk_upsert_league_official_assignments", {
+      target_league_id: id,
+      appointment_rows: (Array.isArray(appointments) ? appointments : []).map((row) => ({
+        official_id: row.officialId,
+        target_type: row.targetType,
+        target_id: row.targetId,
+        role: row.role,
+        status: row.status || "proposed",
+        notes: row.notes || null,
+      })),
+    });
+  },
+
+  async updateLeagueOfficialAssignmentStatus(leagueId, assignmentId, status) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_official_assignment_status", {
+      target_league_id: id,
+      target_assignment_id: String(assignmentId || "").trim(),
+      next_status: String(status || "").trim(),
+    });
+  },
+
+  async updateLeagueVenueMapPosition(leagueId, venueId, latitude, longitude) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_venue_map_position", {
+      target_league_id: id,
+      target_venue_id: String(venueId || "").trim(),
+      target_latitude: Number(latitude),
+      target_longitude: Number(longitude),
+    });
+  },
+
+  async upsertLeaguePostponement(leagueId, data = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_postponement", {
+      target_league_id: id,
+      postponement_data: {
+        id: data.id || null,
+        target_type: data.targetType,
+        target_id: data.targetId,
+        requested_by_club_id: data.requestedByClubId || null,
+        reason_category: data.reasonCategory || "other",
+        reason: data.reason || "",
+        status: data.status || "requested",
+        original_date: data.originalDate || null,
+        original_kick_off: data.originalKickOff || null,
+        original_venue_id: data.originalVenueId || null,
+        proposed_dates: Array.isArray(data.proposedDates) ? data.proposedDates : [],
+        deadline_on: data.deadlineOn || null,
+        notes: data.notes || null,
+      },
+    });
+  },
+
+  async updateLeaguePostponementStatus(leagueId, postponementId, status) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_postponement_status", {
+      target_league_id: id,
+      target_postponement_id: String(postponementId || "").trim(),
+      next_status: String(status || "").trim(),
+    });
+  },
+
   async getPlatformOperatorContext() {
     return supaFetch("POST", "rpc/get_platform_operator_context", {});
   },
