@@ -10,6 +10,8 @@ let notificationContext = {
   workspaceName: "Daxora",
 };
 
+let remoteAdapter = null;
+
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
@@ -30,14 +32,17 @@ function normaliseNotification(input = {}) {
     description: String(input.description || ""),
     severity,
     category: String(input.category || (severity === "error" ? "system" : "activity")),
-    createdAt,
-    readAt: input.readAt || null,
-    resolvedAt: input.resolvedAt || null,
+    createdAt: input.created_at || createdAt,
+    readAt: input.read_at || input.readAt || null,
+    resolvedAt: input.resolved_at || input.resolvedAt || null,
+    dismissedAt: input.dismissed_at || input.dismissedAt || null,
     href: input.href || "",
-    actionLabel: input.actionLabel || "",
-    workspaceType: input.workspaceType || notificationContext.workspaceType,
-    workspaceId: input.workspaceId || notificationContext.workspaceId,
-    workspaceName: input.workspaceName || notificationContext.workspaceName,
+    actionLabel: input.action_label || input.actionLabel || "",
+    workspaceType: input.workspace_type || input.workspaceType || notificationContext.workspaceType,
+    workspaceId: input.workspace_id || input.workspaceId || notificationContext.workspaceId,
+    workspaceName: input.workspace_name || input.workspaceName || notificationContext.workspaceName,
+    leagueId: input.league_id || input.leagueId || "",
+    clubId: input.club_id || input.clubId || "",
     metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
   };
 }
@@ -47,6 +52,31 @@ export function setDaxoraNotificationContext(next = {}) {
     ...notificationContext,
     ...Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined)),
   };
+}
+
+export function configureDaxoraNotificationRemoteAdapter(adapter = null) {
+  remoteAdapter = adapter && typeof adapter === "object" ? adapter : null;
+  return () => { if (remoteAdapter === adapter) remoteAdapter = null; };
+}
+
+function callRemote(method, ...args) {
+  try {
+    const result = remoteAdapter?.[method]?.(...args);
+    if (result && typeof result.catch === "function") result.catch(() => {});
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export function mergeDaxoraNotifications(items = []) {
+  const byId = new Map(readDaxoraNotifications().map((item) => [item.id, item]));
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const normalised = normaliseNotification(item);
+    const existing = byId.get(normalised.id);
+    byId.set(normalised.id, existing ? { ...existing, ...normalised } : normalised);
+  });
+  return writeNotifications([...byId.values()].sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))));
 }
 
 export function readDaxoraNotifications() {
@@ -91,25 +121,35 @@ export function publishDaxoraNotification(input = {}) {
     : [item, ...existing];
   if (dedupeKey) item.metadata = { ...item.metadata, dedupeKey };
   writeNotifications(next);
+  const remote = callRemote("publish", item);
+  if (remote && typeof remote.then === "function") remote.then((saved) => { if (saved) mergeDaxoraNotifications([saved]); }).catch(() => {});
   return item;
 }
 
 export function markDaxoraNotificationRead(id, read = true) {
   const readAt = read ? new Date().toISOString() : null;
-  return writeNotifications(readDaxoraNotifications().map((item) => item.id === id ? { ...item, readAt } : item));
+  const next = writeNotifications(readDaxoraNotifications().map((item) => item.id === id ? { ...item, readAt } : item));
+  callRemote("mark", id, read ? "read" : "unread");
+  return next;
 }
 
 export function markAllDaxoraNotificationsRead() {
   const readAt = new Date().toISOString();
-  return writeNotifications(readDaxoraNotifications().map((item) => item.readAt ? item : { ...item, readAt }));
+  const next = writeNotifications(readDaxoraNotifications().map((item) => item.readAt ? item : { ...item, readAt }));
+  callRemote("markAll", "read");
+  return next;
 }
 
 export function dismissDaxoraNotification(id) {
-  return writeNotifications(readDaxoraNotifications().filter((item) => item.id !== id));
+  const next = writeNotifications(readDaxoraNotifications().filter((item) => item.id !== id));
+  callRemote("mark", id, "dismiss");
+  return next;
 }
 
 export function clearReadDaxoraNotifications() {
-  return writeNotifications(readDaxoraNotifications().filter((item) => !item.readAt));
+  const next = writeNotifications(readDaxoraNotifications().filter((item) => !item.readAt));
+  callRemote("markAll", "dismiss_read");
+  return next;
 }
 
 export function clearAllDaxoraNotifications() {

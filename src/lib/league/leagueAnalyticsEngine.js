@@ -56,6 +56,15 @@ function fixtureWithinFilters(fixture, filters = {}) {
   return true;
 }
 
+const REPORT_TYPE_LABELS = Object.freeze({
+  executive: "Executive",
+  competitions: "Competitions",
+  clubs: "Club scorecards",
+  officials: "Officials",
+  governance: "Governance",
+  funding_evidence: "Funding evidence",
+});
+
 function sortByName(rows = [], key = "name") {
   return [...asArray(rows)].sort((left, right) => String(left?.[key] || "").localeCompare(String(right?.[key] || "")));
 }
@@ -69,9 +78,13 @@ export function normaliseLeagueReportConfiguration(payload = {}) {
     cadence: row.cadence || "manual",
     deliveryFormat: row.delivery_format || row.deliveryFormat || "html",
     recipients: asArray(row.recipients),
+    distributionListId: row.distribution_list_id || row.distributionListId || "",
     filters: row.filters && typeof row.filters === "object" ? row.filters : {},
     nextRunOn: isoDate(row.next_run_on || row.nextRunOn),
     lastRunAt: row.last_run_at || row.lastRunAt || null,
+    freshnessHours: Math.max(1, Math.min(168, asNumber(row.freshness_hours ?? row.freshnessHours, 24))),
+    sendEmail: asBoolean(row.send_email ?? row.sendEmail ?? true),
+    archiveRuns: asBoolean(row.archive_runs ?? row.archiveRuns ?? true),
     active: asBoolean(row.active ?? true),
     createdAt: row.created_at || row.createdAt || null,
     updatedAt: row.updated_at || row.updatedAt || null,
@@ -86,6 +99,41 @@ export function normaliseLeagueReportConfiguration(payload = {}) {
     snapshot: row.snapshot && typeof row.snapshot === "object" ? row.snapshot : {},
     createdAt: row.created_at || row.createdAt || null,
   });
+  const normaliseDistributionList = (row = {}) => ({
+    id: row.id || "",
+    leagueId: row.league_id || row.leagueId || "",
+    name: row.name || "Distribution list",
+    recipients: asArray(row.recipients),
+    active: asBoolean(row.active ?? true),
+    createdAt: row.created_at || row.createdAt || null,
+    updatedAt: row.updated_at || row.updatedAt || null,
+  });
+  const normaliseRun = (row = {}) => ({
+    id: row.id || "",
+    leagueId: row.league_id || row.leagueId || "",
+    definitionId: row.definition_id || row.definitionId || "",
+    definitionName: row.definition_name || row.definitionName || "Report delivery",
+    snapshotId: row.snapshot_id || row.snapshotId || "",
+    reportType: row.report_type || row.reportType || "executive",
+    deliveryFormat: row.delivery_format || row.deliveryFormat || "html",
+    status: row.status || "queued",
+    recipients: asArray(row.recipients),
+    recipientCount: asNumber(row.recipient_count ?? row.recipientCount),
+    requestedSource: row.requested_source || row.requestedSource || "manual",
+    attemptCount: asNumber(row.attempt_count ?? row.attemptCount),
+    queuedAt: row.queued_at || row.queuedAt || null,
+    startedAt: row.started_at || row.startedAt || null,
+    completedAt: row.completed_at || row.completedAt || null,
+    nextAttemptAt: row.next_attempt_at || row.nextAttemptAt || null,
+    provider: row.provider || "",
+    providerReference: row.provider_reference || row.providerReference || "",
+    errorCode: row.error_code || row.errorCode || "",
+    errorMessage: row.error_message || row.errorMessage || "",
+    artifactName: row.artifact_name || row.artifactName || "",
+    snapshotCreatedAt: row.snapshot_created_at || row.snapshotCreatedAt || null,
+    snapshot: row.snapshot && typeof row.snapshot === "object" ? row.snapshot : {},
+    createdAt: row.created_at || row.createdAt || row.queued_at || row.queuedAt || null,
+  });
   return {
     access: {
       canManage: asBoolean(payload.access?.can_manage ?? payload.access?.canManage),
@@ -93,6 +141,16 @@ export function normaliseLeagueReportConfiguration(payload = {}) {
     },
     definitions: asArray(payload.definitions).map(normaliseDefinition),
     snapshots: asArray(payload.snapshots).map(normaliseSnapshot),
+    distributionLists: asArray(payload.distribution_lists || payload.distributionLists).map(normaliseDistributionList),
+    runs: asArray(payload.runs).map(normaliseRun),
+    delivery: {
+      queued: asNumber(payload.delivery?.queued),
+      processing: asNumber(payload.delivery?.processing),
+      delivered: asNumber(payload.delivery?.delivered),
+      failed: asNumber(payload.delivery?.failed),
+      dueDefinitions: asNumber(payload.delivery?.due_definitions ?? payload.delivery?.dueDefinitions),
+      automationReady: asBoolean(payload.delivery?.automation_ready ?? payload.delivery?.automationReady),
+    },
   };
 }
 
@@ -390,9 +448,16 @@ export function buildLeagueFundingEvidence({ workspace = {}, executive = {}, com
 export function leagueAnalyticsSnapshotPayload(model = {}, reportType = "executive") {
   const base = {
     generatedAt: model.generatedAt || new Date().toISOString(),
-    seasonId: model.season?.id || "",
-    seasonName: model.season?.name || "",
+    league: {
+      id: model.league?.id || "",
+      name: model.league?.name || "League",
+    },
+    season: {
+      id: model.season?.id || "",
+      name: model.season?.name || "Current season",
+    },
     filters: model.filters || {},
+    dataCoverage: model.dataCoverage || {},
     executive: model.executive || {},
   };
   if (reportType === "clubs") return { ...base, clubs: asArray(model.clubRows) };
@@ -400,7 +465,41 @@ export function leagueAnalyticsSnapshotPayload(model = {}, reportType = "executi
   if (reportType === "officials") return { ...base, officials: model.officialMetrics || {}, officialRows: model.officialRows || [] };
   if (reportType === "governance") return { ...base, discipline: model.disciplineSummary || {}, registrations: model.registrationSummary || {} };
   if (reportType === "funding_evidence") return { ...base, evidence: model.fundingEvidence || [] };
-  return base;
+  return {
+    ...base,
+    competitions: model.competitionRows || [],
+    clubs: model.clubRows || [],
+    officials: model.officialMetrics || {},
+    discipline: model.disciplineSummary || {},
+    registrations: model.registrationSummary || {},
+    evidence: model.fundingEvidence || [],
+  };
+}
+
+export function leagueAnalyticsModelFromSnapshot(snapshot = {}) {
+  return {
+    generatedAt: snapshot.generatedAt || new Date().toISOString(),
+    league: snapshot.league && typeof snapshot.league === "object" ? snapshot.league : { id: "", name: "League" },
+    season: snapshot.season && typeof snapshot.season === "object"
+      ? snapshot.season
+      : { id: snapshot.seasonId || "", name: snapshot.seasonName || "Current season" },
+    filters: snapshot.filters && typeof snapshot.filters === "object" ? snapshot.filters : {},
+    dataCoverage: snapshot.dataCoverage && typeof snapshot.dataCoverage === "object" ? snapshot.dataCoverage : {},
+    executive: snapshot.executive && typeof snapshot.executive === "object" ? snapshot.executive : {},
+    competitionRows: asArray(snapshot.competitions || snapshot.competitionRows),
+    clubRows: asArray(snapshot.clubs || snapshot.clubRows),
+    officialMetrics: snapshot.officials && typeof snapshot.officials === "object" ? snapshot.officials : {},
+    officialRows: asArray(snapshot.officialRows),
+    disciplineSummary: snapshot.discipline && typeof snapshot.discipline === "object" ? snapshot.discipline : {},
+    registrationSummary: snapshot.registrations && typeof snapshot.registrations === "object" ? snapshot.registrations : {},
+    fundingEvidence: asArray(snapshot.evidence || snapshot.fundingEvidence),
+  };
+}
+
+export function leagueAnalyticsSnapshotAgeHours(snapshot = {}, reference = Date.now()) {
+  const timestamp = new Date(snapshot.generatedAt || snapshot.createdAt || 0).getTime();
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (Number(reference) - timestamp) / 3600000);
 }
 
 function csvCell(value) {
@@ -471,6 +570,69 @@ export function leagueAnalyticsToCsv(model = {}, reportType = "executive") {
     ["Pending registrations", executive.pendingRegistrations || 0],
     ["Invalid team sheets", executive.invalidTeamSheets || 0],
   ]);
+}
+
+
+function parseCsvRows(content = "") {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < String(content).length; index += 1) {
+    const character = content[index];
+    if (quoted) {
+      if (character === '"' && content[index + 1] === '"') { cell += '"'; index += 1; }
+      else if (character === '"') quoted = false;
+      else cell += character;
+    } else if (character === '"') quoted = true;
+    else if (character === ',') { row.push(cell); cell = ""; }
+    else if (character === '\n') { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; }
+    else cell += character;
+  }
+  if (cell || row.length) { row.push(cell.replace(/\r$/, "")); rows.push(row); }
+  return rows;
+}
+
+function spreadsheetXmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function spreadsheetCell(value, header = false) {
+  const numeric = value !== "" && Number.isFinite(Number(value));
+  const type = numeric ? "Number" : "String";
+  return `<Cell${header ? ' ss:StyleID="Header"' : ""}><Data ss:Type="${type}">${spreadsheetXmlEscape(value)}</Data></Cell>`;
+}
+
+function worksheetXml(name, rows = []) {
+  const safeName = String(name || "Report").replace(/[\\/:?*]/g, " ").replaceAll("[", " ").replaceAll("]", " ").slice(0, 31) || "Report";
+  const body = asArray(rows).map((row, rowIndex) => `<Row>${asArray(row).map((value) => spreadsheetCell(value, rowIndex === 0)).join("")}</Row>`).join("");
+  return `<Worksheet ss:Name="${spreadsheetXmlEscape(safeName)}"><Table>${body}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>`;
+}
+
+export function leagueAnalyticsToExcelXml(model = {}, reportType = "executive") {
+  const requested = reportType === "executive"
+    ? [
+        ["Executive", "executive"],
+        ["Competitions", "competitions"],
+        ["Club scorecards", "clubs"],
+        ["Officials", "officials"],
+        ["Governance", "governance"],
+        ["Funding evidence", "funding_evidence"],
+      ]
+    : [[REPORT_TYPE_LABELS[reportType] || "Report", reportType]];
+  const worksheets = requested.map(([label, type]) => worksheetXml(label, parseCsvRows(leagueAnalyticsToCsv(model, type)))).join("");
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40"><DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Author>Daxora Ground Control</Author><Title>${spreadsheetXmlEscape(model.league?.name || "League")} analytics</Title><Created>${new Date(model.generatedAt || Date.now()).toISOString()}</Created></DocumentProperties><Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Bottom"/><Borders/><Font ss:FontName="Aptos" ss:Size="10"/><Interior/><NumberFormat/><Protection/></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center"/><Font ss:FontName="Aptos Display" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#07121F" ss:Pattern="Solid"/></Style></Styles>${worksheets}</Workbook>`;
+}
+
+export function leagueAnalyticsArtifact(model = {}, reportType = "executive", deliveryFormat = "html") {
+  const format = ["html", "csv", "xls"].includes(deliveryFormat) ? deliveryFormat : "html";
+  if (format === "csv") return { extension: "csv", contentType: "text/csv; charset=utf-8", content: leagueAnalyticsToCsv(model, reportType) };
+  if (format === "xls") return { extension: "xls", contentType: "application/vnd.ms-excel", content: leagueAnalyticsToExcelXml(model, reportType) };
+  return { extension: "html", contentType: "text/html; charset=utf-8", content: leagueAnalyticsToHtml(model, reportType) };
 }
 
 function escapeHtml(value) {

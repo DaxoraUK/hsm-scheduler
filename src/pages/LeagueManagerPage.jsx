@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -22,18 +22,19 @@ import {
 } from "lucide-react";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { DB } from "../lib/supabase.js";
-import LeagueScheduleWorkspace from "../components/league/LeagueScheduleWorkspace.jsx";
-import LeagueCupWorkspace from "../components/league/LeagueCupWorkspace.jsx";
-import LeagueFixtureCommandWorkspace from "../components/league/LeagueFixtureCommandWorkspace.jsx";
-import LeagueOfficialsWorkspace from "../components/league/LeagueOfficialsWorkspace.jsx";
-import LeagueClubOperationsWorkspace from "../components/league/LeagueClubOperationsWorkspace.jsx";
-import LeagueClubPortalPage from "../components/league/LeagueClubPortalPage.jsx";
-import LeagueResultsWorkspace from "../components/league/LeagueResultsWorkspace.jsx";
-import LeagueCommandCentreWorkspace from "../components/league/LeagueCommandCentreWorkspace.jsx";
 import LeagueCommandSearch from "../components/league/LeagueCommandSearch.jsx";
-import LeagueDisciplineWorkspace from "../components/league/LeagueDisciplineWorkspace.jsx";
-import LeagueRegistrationsWorkspace from "../components/league/LeagueRegistrationsWorkspace.jsx";
-import LeagueAnalyticsWorkspace from "../components/league/LeagueAnalyticsWorkspace.jsx";
+
+const LeagueScheduleWorkspace = lazy(() => import("../components/league/LeagueScheduleWorkspace.jsx"));
+const LeagueCupWorkspace = lazy(() => import("../components/league/LeagueCupWorkspace.jsx"));
+const LeagueFixtureCommandWorkspace = lazy(() => import("../components/league/LeagueFixtureCommandWorkspace.jsx"));
+const LeagueOfficialsWorkspace = lazy(() => import("../components/league/LeagueOfficialsWorkspace.jsx"));
+const LeagueClubOperationsWorkspace = lazy(() => import("../components/league/LeagueClubOperationsWorkspace.jsx"));
+const LeagueClubPortalPage = lazy(() => import("../components/league/LeagueClubPortalPage.jsx"));
+const LeagueResultsWorkspace = lazy(() => import("../components/league/LeagueResultsWorkspace.jsx"));
+const LeagueCommandCentreWorkspace = lazy(() => import("../components/league/LeagueCommandCentreWorkspace.jsx"));
+const LeagueDisciplineWorkspace = lazy(() => import("../components/league/LeagueDisciplineWorkspace.jsx"));
+const LeagueRegistrationsWorkspace = lazy(() => import("../components/league/LeagueRegistrationsWorkspace.jsx"));
+const LeagueAnalyticsWorkspace = lazy(() => import("../components/league/LeagueAnalyticsWorkspace.jsx"));
 import { usePersistedWorkspaceState } from "../hooks/usePersistedWorkspaceState.js";
 import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.js";
 import { useDaxoraConfirm } from "../contexts/DaxoraInteractionContext.jsx";
@@ -809,7 +810,11 @@ export default function LeagueManagerPage({
   }
 
   if (isClubPortal) {
-    return <LeagueClubPortalPage leagueId={activeLeagueId} portal={workspace} onRefresh={loadWorkspace} />;
+    return (
+      <Suspense fallback={<LoadingCard label="club portal" />}>
+        <LeagueClubPortalPage leagueId={activeLeagueId} portal={workspace} onRefresh={loadWorkspace} />
+      </Suspense>
+    );
   }
 
   const canManage = workspace.access.canManage;
@@ -956,6 +961,7 @@ export default function LeagueManagerPage({
         {activeGroupTabs.length > 1 ? <div className="mt-2 flex gap-2 overflow-x-auto border-t border-slate-100 pt-2 [scrollbar-width:thin]">{activeGroupTabs.map(([key, label]) => { const count = tabQueueCount(key, commandSummary?.counts); return <button key={key} type="button" onClick={() => navigateLeague(key)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${tab === key ? "bg-emerald-50 text-emerald-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}><span>{label}</span>{count > 0 ? <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] ${tab === key ? "bg-emerald-200 text-emerald-900" : "bg-slate-200 text-slate-700"}`}>{count > 99 ? "99+" : count}</span> : null}</button>; })}</div> : null}
       </nav>
 
+      <Suspense fallback={<LoadingCard label={TAB_LOOKUP.get(tab)?.[1] || "League Manager"} />}>
       {tab === "overview" ? (
         <LeagueCommandCentreWorkspace
           leagueId={activeLeagueId}
@@ -1106,6 +1112,7 @@ export default function LeagueManagerPage({
           </Panel>
         </div>
       ) : null}
+      </Suspense>
     </div>
   );
 }

@@ -1897,6 +1897,84 @@ export const DB = {
     });
   },
 
+  async getDaxoraNotificationCentre(limit = 120) {
+    return supaFetch("POST", "rpc/get_daxora_notification_centre", {
+      result_limit: Math.max(1, Math.min(Number(limit) || 120, 200)),
+    });
+  },
+
+  async updateDaxoraNotificationPreferences(preferences = {}) {
+    return supaFetch("POST", "rpc/update_daxora_notification_preferences", {
+      preferences_data: {
+        in_app_enabled: preferences.inAppEnabled !== false,
+        browser_push_enabled: Boolean(preferences.browserPushEnabled),
+        email_alerts_enabled: preferences.emailAlertsEnabled !== false,
+        daily_digest_enabled: Boolean(preferences.dailyDigestEnabled),
+        weekly_digest_enabled: preferences.weeklyDigestEnabled !== false,
+        quiet_start: preferences.quietStart || null,
+        quiet_end: preferences.quietEnd || null,
+        timezone: preferences.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London",
+        categories: preferences.categories && typeof preferences.categories === "object" ? preferences.categories : {},
+      },
+    });
+  },
+
+  async createDaxoraNotification(notification = {}) {
+    return supaFetch("POST", "rpc/create_daxora_notification", {
+      notification_data: {
+        id: notification.id || null,
+        league_id: notification.leagueId || (notification.workspaceType === "league" ? notification.workspaceId : null),
+        club_id: notification.clubId || (notification.workspaceType === "club" ? notification.workspaceId : null),
+        title: notification.title || "Daxora update",
+        description: notification.description || "",
+        severity: notification.severity || "info",
+        category: notification.category || "activity",
+        href: notification.href || "",
+        action_label: notification.actionLabel || "",
+        workspace_type: notification.workspaceType || "platform",
+        workspace_id: notification.workspaceId || "",
+        workspace_name: notification.workspaceName || "Daxora",
+        metadata: notification.metadata && typeof notification.metadata === "object" ? notification.metadata : {},
+        created_at: notification.createdAt || new Date().toISOString(),
+      },
+    });
+  },
+
+  async markDaxoraNotification(notificationId, action = "read") {
+    return supaFetch("POST", "rpc/mark_daxora_notification", {
+      target_notification_id: String(notificationId || "").trim(),
+      notification_action: String(action || "read").trim(),
+    });
+  },
+
+  async markAllDaxoraNotifications(action = "read") {
+    return supaFetch("POST", "rpc/mark_all_daxora_notifications", {
+      notification_action: String(action || "read").trim(),
+    });
+  },
+
+  async registerDaxoraPushSubscription(subscription = {}) {
+    const serialised = typeof subscription.toJSON === "function" ? subscription.toJSON() : subscription;
+    return supaFetch("POST", "rpc/register_daxora_push_subscription", {
+      subscription_data: {
+        endpoint: serialised.endpoint || "",
+        p256dh: serialised.keys?.p256dh || serialised.p256dh || "",
+        auth: serialised.keys?.auth || serialised.auth || "",
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      },
+    });
+  },
+
+  async removeDaxoraPushSubscription(endpoint) {
+    return supaFetch("POST", "rpc/remove_daxora_push_subscription", {
+      target_endpoint: String(endpoint || "").trim(),
+    });
+  },
+
+  async getMyDaxoraPushSubscriptions() {
+    return supaFetch("POST", "rpc/get_my_daxora_push_subscriptions", {});
+  },
+
   async getLeagueReportConfiguration(leagueId) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/get_league_report_configuration", { target_league_id: id });
@@ -1913,8 +1991,12 @@ export const DB = {
         cadence: definition.cadence || "manual",
         delivery_format: definition.deliveryFormat || "html",
         recipients: Array.isArray(definition.recipients) ? definition.recipients : [],
+        distribution_list_id: definition.distributionListId || null,
         filters: definition.filters && typeof definition.filters === "object" ? definition.filters : {},
         next_run_on: definition.nextRunOn || null,
+        freshness_hours: Math.max(1, Math.min(Number(definition.freshnessHours) || 24, 168)),
+        send_email: definition.sendEmail !== false,
+        archive_runs: definition.archiveRuns !== false,
         active: definition.active !== false,
       },
     });
@@ -1939,6 +2021,45 @@ export const DB = {
         generated_from: data.generatedFrom || "manual",
         snapshot: data.snapshot && typeof data.snapshot === "object" ? data.snapshot : {},
       },
+    });
+  },
+
+  async upsertLeagueReportDistributionList(leagueId, list = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_report_distribution_list", {
+      target_league_id: id,
+      list_data: {
+        id: list.id || null,
+        name: String(list.name || "").trim(),
+        recipients: Array.isArray(list.recipients) ? list.recipients : [],
+        active: list.active !== false,
+      },
+    });
+  },
+
+  async deleteLeagueReportDistributionList(leagueId, listId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/delete_league_report_distribution_list", {
+      target_league_id: id,
+      target_list_id: String(listId || "").trim(),
+    });
+  },
+
+  async queueLeagueReportDelivery(leagueId, definitionId, snapshotId, source = "manual") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/queue_league_report_delivery", {
+      target_league_id: id,
+      target_definition_id: String(definitionId || "").trim(),
+      target_snapshot_id: String(snapshotId || "").trim(),
+      request_source: String(source || "manual").trim(),
+    });
+  },
+
+  async retryLeagueReportDelivery(leagueId, runId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/retry_league_report_delivery", {
+      target_league_id: id,
+      target_run_id: String(runId || "").trim(),
     });
   },
 

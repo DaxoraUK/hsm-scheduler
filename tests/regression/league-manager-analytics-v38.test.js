@@ -189,7 +189,7 @@ describe("League Operations v3.8 analytics and reports", () => {
     expect(analyticsWorkspace).toContain("Analytics and reports");
     expect(analyticsWorkspace).toContain("Club operational scorecards");
     expect(analyticsWorkspace).toContain("Funding evidence dataset");
-    expect(analyticsWorkspace).toContain("Automatic email delivery requires a later delivery-worker integration");
+    expect(analyticsWorkspace).toContain("The daily automation queues due packs");
     expect(analyticsWorkspace).toContain("usePersistedWorkspaceState");
 
     [
