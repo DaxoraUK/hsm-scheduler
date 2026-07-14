@@ -57,6 +57,7 @@ import {
 } from "../lib/operations/matchdayLock.js";
 import { getParkingStats } from "../lib/dashboardStats.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
+import { getTimelineCandidateSummary } from "../lib/engines/timelineDragEngine.js";
 
 const WORKSPACES = [
   {
@@ -300,10 +301,16 @@ export default function MatchdayPage({
   );
   const [isLocked, setIsLocked] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  const [timelineDirty, setTimelineDirty] = useState(false);
+  const [timelineSaving, setTimelineSaving] = useState(false);
 
   useEffect(() => {
     setIsLocked(readMatchdayLock(lockIdentity));
   }, [lockIdentity]);
+
+  useEffect(() => {
+    setTimelineDirty(false);
+  }, [day, matchdayDate]);
 
   const clubWithTiming = useMemo(
     () => ({
@@ -579,6 +586,69 @@ export default function MatchdayPage({
     window.setTimeout(() => setHighlightedSection(null), 2200);
   }, []);
 
+  const applyTimelineMove = useCallback(
+    (candidate) => {
+      if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
+
+      Object.entries(candidate.patch).forEach(([field, value]) =>
+        onOverride(candidate.fixtureIndex, field, value),
+      );
+      setTimelineDirty(true);
+      setPendingConfirmation(null);
+
+      const undo = () => {
+        Object.entries(candidate.previousPatch || {}).forEach(([field, value]) =>
+          onOverride(candidate.fixtureIndex, field, value),
+        );
+        setTimelineDirty(true);
+        toast.info("Timeline move undone", {
+          description: "The fixture has returned to its previous pitch and kick-off time.",
+        });
+      };
+
+      toast.success("Fixture moved on the timeline", {
+        description: getTimelineCandidateSummary(candidate),
+        action: { label: "Undo", onClick: undo },
+      });
+    },
+    [isLocked, onOverride],
+  );
+
+  const requestTimelineMove = useCallback(
+    (candidate) => {
+      if (!candidate) return;
+      if (candidate.noChange) {
+        toast.info(candidate.title || "Fixture already here", {
+          description: candidate.message,
+        });
+        return;
+      }
+      if (candidate.blocked) {
+        toast.error(candidate.title || "Timeline move blocked", {
+          description: candidate.message || "Choose a suitable pitch or a different kick-off time.",
+        });
+        return;
+      }
+      if (candidate.advisory) {
+        setPendingConfirmation({ type: "timeline-warning", candidate });
+        return;
+      }
+      applyTimelineMove(candidate);
+    },
+    [applyTimelineMove],
+  );
+
+  const saveTimelineChanges = useCallback(async () => {
+    if (typeof props.saveWeek !== "function" || timelineSaving) return;
+    setTimelineSaving(true);
+    try {
+      const saved = await props.saveWeek();
+      if (saved !== false) setTimelineDirty(false);
+    } finally {
+      setTimelineSaving(false);
+    }
+  }, [props.saveWeek, timelineSaving]);
+
   const weatherIntelligence = useMemo(
     () =>
       calculateWeatherIntelligence({
@@ -823,7 +893,13 @@ export default function MatchdayPage({
             subtitle={`Pitch usage and kick-off flow for ${day.toLowerCase()} fixtures.`}
             games={final}
             pitchCfg={props.pitchCfg}
+            closedPitches={props.closedPitches}
             club={clubWithTiming}
+            readOnly={isLocked}
+            dirty={timelineDirty}
+            saving={timelineSaving}
+            onSave={props.saveWeek ? saveTimelineChanges : undefined}
+            onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
           />
         ),
@@ -1454,6 +1530,31 @@ export default function MatchdayPage({
             ))}
           </ul>
         </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "timeline-warning"}
+        eyebrow="Operational warning"
+        title="Apply this timeline move?"
+        description={pendingConfirmation?.candidate?.message || "The move is possible, but it creates an operational warning that must be reviewed before publication."}
+        confirmLabel="Apply move"
+        cancelLabel="Choose another slot"
+        tone="warning"
+        initialFocus="cancel"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={() => applyTimelineMove(pendingConfirmation?.candidate)}
+      >
+        {pendingConfirmation?.candidate ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Proposed move</div>
+            <div className="mt-2 text-sm font-black text-amber-950">
+              {getTimelineCandidateSummary(pendingConfirmation.candidate)}
+            </div>
+            <div className="mt-2 text-xs font-bold leading-5 text-amber-800">
+              The fixture can be moved, but Ground Control will keep the warning visible until the operating plan is resolved.
+            </div>
+          </div>
+        ) : null}
       </ConfirmDialog>
 
       <ConfirmDialog
