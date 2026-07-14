@@ -1367,6 +1367,169 @@ export const DB = {
     return supaFetch("POST", "rpc/get_league_club_results_data", { target_league_id: id });
   },
 
+  async getLeagueDisciplineData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_discipline_data", { target_league_id: id });
+  },
+
+  async getLeagueClubDisciplineData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_discipline_data", { target_league_id: id });
+  },
+
+  async upsertLeagueDisciplineCase(leagueId, data = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_discipline_case", {
+      target_league_id: id,
+      case_data: {
+        id: data.id || null,
+        season_id: data.seasonId || null,
+        case_reference: data.caseReference || null,
+        case_type: data.caseType || "misconduct",
+        status: data.status || "draft",
+        priority: data.priority || "normal",
+        title: String(data.title || "").trim(),
+        summary: String(data.summary || "").trim(),
+        incident_on: data.incidentOn || null,
+        response_due_on: data.responseDueOn || null,
+        hearing_on: data.hearingOn || null,
+        hearing_location: String(data.hearingLocation || "").trim() || null,
+        hearing_panel: Array.isArray(data.hearingPanel) ? data.hearingPanel : [],
+        decision_on: data.decisionOn || null,
+        publication_fixture_id: data.publicationFixtureId || null,
+        target_type: data.targetType || null,
+        target_id: data.targetId || null,
+        reporting_club_id: data.reportingClubId || null,
+        respondent_club_id: data.respondentClubId || null,
+        respondent_team_id: data.respondentTeamId || null,
+        assigned_to: data.assignedTo || null,
+        confidential: Boolean(data.confidential),
+        club_response_required: Boolean(data.clubResponseRequired),
+      },
+    });
+  },
+
+  async updateLeagueDisciplineCaseStatus(leagueId, caseId, status, note = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_discipline_case_status", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      next_status: String(status || "").trim(),
+      status_note: String(note || "").trim(),
+    });
+  },
+
+  async addLeagueCaseEvent(leagueId, caseId, event = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/add_league_case_event", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      event_data: {
+        event_type: event.eventType || "note",
+        visibility: event.visibility || "league",
+        title: String(event.title || "Case note").trim(),
+        detail: String(event.detail || "").trim(),
+        event_data: event.eventData && typeof event.eventData === "object" ? event.eventData : {},
+      },
+    });
+  },
+
+  async upsertLeagueCaseCharge(leagueId, caseId, charge = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_case_charge", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      charge_data: {
+        id: charge.id || null,
+        charge_code: String(charge.chargeCode || "").trim() || null,
+        title: String(charge.title || "").trim(),
+        description: String(charge.description || "").trim(),
+        rule_reference: String(charge.ruleReference || "").trim() || null,
+        status: charge.status || "alleged",
+        decision_reason: String(charge.decisionReason || "").trim() || null,
+      },
+    });
+  },
+
+  async upsertLeagueCaseSanction(leagueId, caseId, sanction = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_case_sanction", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      sanction_data: {
+        id: sanction.id || null,
+        sanction_type: sanction.sanctionType || "warning",
+        subject_type: sanction.subjectType || "club",
+        subject_id: sanction.subjectId || null,
+        subject_label: String(sanction.subjectLabel || "").trim(),
+        status: sanction.status || "proposed",
+        amount_pence: Math.max(0, Number(sanction.amountPence || 0)),
+        points_delta: Number(sanction.pointsDelta || 0),
+        match_count: Math.max(0, Number(sanction.matchCount || 0)),
+        matches_served: Math.max(0, Number(sanction.matchesServed || 0)),
+        starts_on: sanction.startsOn || null,
+        ends_on: sanction.endsOn || null,
+        payment_due_on: sanction.paymentDueOn || null,
+        paid_at: sanction.paidAt || null,
+        notes: String(sanction.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async addLeagueCaseDocument(leagueId, caseId, document = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/add_league_case_document", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      document_data: {
+        document_type: document.documentType || "evidence",
+        title: String(document.title || "Evidence").trim(),
+        file_name: String(document.fileName || "").trim() || null,
+        document_url: String(document.documentUrl || "").trim(),
+        visibility: document.visibility || "league",
+        notes: String(document.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async submitLeagueCaseResponse(leagueId, caseId, response = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_case_response", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      response_data: {
+        response_type: response.responseType || "response",
+        detail: String(response.detail || "").trim(),
+        event_data: response.eventData && typeof response.eventData === "object" ? response.eventData : {},
+      },
+    });
+  },
+
+  async submitLeagueCaseAppeal(leagueId, caseId, appeal = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_case_appeal", {
+      target_league_id: id,
+      target_case_id: String(caseId || "").trim(),
+      appeal_data: {
+        grounds: String(appeal.grounds || "").trim(),
+        appeal_due_on: appeal.appealDueOn || null,
+      },
+    });
+  },
+
+  async reviewLeagueCaseAppeal(leagueId, appealId, review = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/review_league_case_appeal", {
+      target_league_id: id,
+      target_appeal_id: String(appealId || "").trim(),
+      appeal_data: {
+        status: review.status || "under_review",
+        decision: String(review.decision || "").trim() || null,
+        decision_reason: String(review.decisionReason || "").trim() || null,
+      },
+    });
+  },
+
   async submitLeagueFixtureResult(leagueId, publicationFixtureId, result = {}) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/submit_league_fixture_result", {

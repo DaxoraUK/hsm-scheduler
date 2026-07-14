@@ -33,6 +33,7 @@ export function buildLeagueCommandCentre({
   operations = {},
   clubOperations = {},
   results = {},
+  discipline = {},
   scheduleVersion = null,
   readiness = { checks: [], percentage: 0 },
   role = "viewer",
@@ -45,6 +46,12 @@ export function buildLeagueCommandCentre({
   const pendingAcknowledgements = asArray(clubOperations.acknowledgements).filter((row) => row.status === "awaiting");
   const pendingResults = asArray(results.submissions).filter((row) => row.status === "submitted");
   const missingResults = buildMissingResultQueue(results.publishedFixtures, results.results, { today: todayKey });
+  const disciplineSummary = discipline.summary || {};
+  const openDisciplineCases = Number(disciplineSummary.openCases || 0);
+  const overdueDisciplineResponses = Number(disciplineSummary.overdueResponses || 0);
+  const overdueDisciplineFines = Number(disciplineSummary.overdueFines || 0);
+  const disciplineHearings = Number(disciplineSummary.hearingsDue || 0);
+  const disciplineAppeals = Number(disciplineSummary.openAppeals || 0);
   const openPostponements = asArray(operations.postponements).filter((row) => !["closed", "rearranged", "rejected"].includes(row.status));
   const overduePostponements = openPostponements.filter((row) => row.deadlineOn && row.deadlineOn < todayKey);
   const replacementAssignments = asArray(operations.assignments).filter((row) => ["declined", "replacement_required"].includes(row.status));
@@ -72,6 +79,33 @@ export function buildLeagueCommandCentre({
       severity: "critical",
       tab: "officials",
       child: "postponements",
+    }),
+    action({
+      id: "discipline-overdue-responses",
+      title: "Overdue discipline responses",
+      detail: "Club response deadlines have passed and need league intervention.",
+      count: overdueDisciplineResponses,
+      severity: "critical",
+      tab: "discipline",
+      child: "cases",
+    }),
+    action({
+      id: "discipline-overdue-fines",
+      title: "Overdue discipline fines",
+      detail: "Active financial sanctions have passed their payment deadline.",
+      count: overdueDisciplineFines,
+      severity: "critical",
+      tab: "discipline",
+      child: "sanctions",
+    }),
+    action({
+      id: "discipline-hearings",
+      title: "Discipline hearings scheduled",
+      detail: "Open cases have hearings or appeal activity requiring committee preparation.",
+      count: disciplineHearings + disciplineAppeals,
+      severity: "attention",
+      tab: "discipline",
+      child: "hearings",
     }),
     action({
       id: "result-verification",
@@ -159,11 +193,13 @@ export function buildLeagueCommandCentre({
     fixtures: ["overdue-postponements", "club-change-requests", "unplaced-fixtures", "publication-gap", "fixture-acknowledgements"],
     officials: ["official-replacements", "official-gaps", "overdue-postponements"],
     results: ["result-verification", "missing-results"],
+    discipline: ["discipline-overdue-responses", "discipline-overdue-fines", "discipline-hearings"],
   };
   const roleLabels = {
     fixtures: { label: "Fixture secretary focus", detail: "Fixture exceptions, rearrangements, unplaced matches and club requests are prioritised for your role." },
     officials: { label: "Officials secretary focus", detail: "Replacement appointments, coverage gaps and postponement actions are prioritised for your role." },
     results: { label: "Results secretary focus", detail: "Verification and missing-result queues are prioritised for your role." },
+    discipline: { label: "Discipline officer focus", detail: "Overdue responses, unpaid fines, hearings and appeals are prioritised for your role." },
   };
   const focusedIds = rolePriorities[role] || [];
   const focusIndex = (id) => {
@@ -198,6 +234,11 @@ export function buildLeagueCommandCentre({
       pendingAcknowledgements: pendingAcknowledgements.length,
       unplacedFixtures: unplacedFixtures.length,
       setupGaps: incompleteSetup.length,
+      openDisciplineCases,
+      overdueDisciplineResponses,
+      overdueDisciplineFines,
+      disciplineHearings,
+      disciplineAppeals,
     },
     publication,
     officialCoverage,
