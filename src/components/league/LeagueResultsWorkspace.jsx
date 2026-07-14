@@ -34,7 +34,7 @@ const TABS = [
   ["verified", "Verified results", ShieldCheck],
   ["tables", "League tables", Table2],
   ["adjustments", "Adjustments", MinusCircle],
-  ["fulltime", "Full-Time", FileSearch],
+  ["fulltime", "Full-Time results", FileSearch],
 ];
 
 function Panel({ children, className = "" }) {
@@ -130,8 +130,8 @@ function ResultEditor({ fixture, workspace, busy, onCancel, onSave, title = "Rec
   </div>;
 }
 
-export default function LeagueResultsWorkspace({ leagueId, workspace }) {
-  const [tab, setTab] = useState("command");
+export default function LeagueResultsWorkspace({ leagueId, workspace, initialTab = "command", focusToken = 0 }) {
+  const [tab, setTab] = useState(initialTab);
   const [data, setData] = useState(() => normaliseLeagueResultsData({}));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -151,6 +151,7 @@ export default function LeagueResultsWorkspace({ leagueId, workspace }) {
   }, [leagueId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (TABS.some(([key]) => key === initialTab)) setTab(initialTab); }, [initialTab, focusToken]);
 
   const season = getCurrentLeagueSeason(workspace);
   const missing = useMemo(() => buildMissingResultQueue(data.publishedFixtures, data.results), [data.publishedFixtures, data.results]);

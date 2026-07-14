@@ -185,6 +185,6 @@ describe("League Manager pilot foundation", () => {
     expect(page).toContain("Parent club registry");
     expect(page).toContain("Ground-share group");
     expect(page).toContain("Schedule builder");
-    expect(page).toContain("Available now:");
+    expect(page).toContain("Command centre");
   });
 });

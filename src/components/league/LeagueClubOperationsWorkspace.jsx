@@ -37,7 +37,7 @@ const VIEWS = [
   ["requests", "Change requests", FileDiff],
   ["communications", "Communications", Mail],
   ["calendars", "Calendar feeds", CalendarPlus],
-  ["fulltime", "Full-Time", FileSpreadsheet],
+  ["fulltime", "Full-Time fixtures", FileSpreadsheet],
 ];
 
 function Panel({ children, className = "" }) {
@@ -92,8 +92,8 @@ function requestTone(status) {
   return "amber";
 }
 
-export default function LeagueClubOperationsWorkspace({ leagueId, workspace, canManage, canOperate, operations = {} }) {
-  const [view, setView] = useState("publication");
+export default function LeagueClubOperationsWorkspace({ leagueId, workspace, canManage, canOperate, operations = {}, initialView = "publication", focusToken = 0 }) {
+  const [view, setView] = useState(initialView);
   const [data, setData] = useState(() => normaliseLeagueClubOperationsData({}));
   const [versions, setVersions] = useState([]);
   const [selectedVersionId, setSelectedVersionId] = useState("");
@@ -137,6 +137,8 @@ export default function LeagueClubOperationsWorkspace({ leagueId, workspace, can
   }, [leagueId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { if (VIEWS.some(([key]) => key === initialView)) setView(initialView); }, [initialView, focusToken]);
 
   useEffect(() => {
     let cancelled = false;

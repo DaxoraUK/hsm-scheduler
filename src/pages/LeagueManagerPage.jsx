@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ClipboardCopy,
   FileSpreadsheet,
-  Flag,
   LockKeyhole,
   MapPin,
   Megaphone,
@@ -28,6 +27,7 @@ import LeagueOfficialsWorkspace from "../components/league/LeagueOfficialsWorksp
 import LeagueClubOperationsWorkspace from "../components/league/LeagueClubOperationsWorkspace.jsx";
 import LeagueClubPortalPage from "../components/league/LeagueClubPortalPage.jsx";
 import LeagueResultsWorkspace from "../components/league/LeagueResultsWorkspace.jsx";
+import LeagueCommandCentreWorkspace from "../components/league/LeagueCommandCentreWorkspace.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -65,7 +65,7 @@ const FIXTURE_VIEWS = Object.freeze([
 ]);
 
 const TABS = Object.freeze([
-  ["overview", "Command overview", ShieldCheck],
+  ["overview", "Command centre", ShieldCheck],
   ["command", "Fixture Command", CalendarDays],
   ["schedule", "Schedule builder", RefreshCw],
   ["cups", "Cups", Trophy],
@@ -77,6 +77,17 @@ const TABS = Object.freeze([
   ["fixtures", "Fixture registry", FileSpreadsheet],
   ["access", "Access & audit", LockKeyhole],
 ]);
+
+const NAV_GROUPS = Object.freeze([
+  ["command-centre", "Command", ShieldCheck, ["overview"]],
+  ["fixtures", "Fixtures", CalendarDays, ["command", "schedule", "fixtures", "availability", "officials"]],
+  ["competitions", "Competitions", Trophy, ["results", "cups"]],
+  ["clubs", "Clubs", Megaphone, ["clubs"]],
+  ["administration", "Administration", Building2, ["structure", "access"]],
+]);
+
+const TAB_LOOKUP = new Map(TABS.map((item) => [item[0], item]));
+const TAB_GROUP = new Map(NAV_GROUPS.flatMap(([groupKey, , , tabKeys]) => tabKeys.map((tabKey) => [tabKey, groupKey])));
 
 function currentSeasonDefaults() {
   const today = new Date();
@@ -116,18 +127,6 @@ function Badge({ children, tone = "slate" }) {
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${tones[tone] || tones.slate}`}>{children}</span>;
 }
 
-function Metric({ label, value, detail, Icon }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
-        {Icon ? <Icon size={17} className="text-slate-400" /> : null}
-      </div>
-      <div className="mt-2 text-2xl font-black text-slate-950">{value}</div>
-      {detail ? <div className="mt-1 text-xs font-semibold text-slate-500">{detail}</div> : null}
-    </div>
-  );
-}
 
 function LoadingCard({ label = "League Manager" }) {
   return (
@@ -520,6 +519,8 @@ export default function LeagueManagerPage({
   const [workspaceStatus, setWorkspaceStatus] = useState("idle");
   const [workspaceError, setWorkspaceError] = useState("");
   const [tab, setTab] = useState("overview");
+  const [childView, setChildView] = useState("");
+  const [navigationToken, setNavigationToken] = useState(0);
   const [structureSection, setStructureSection] = useState("season");
   const [venueSection, setVenueSection] = useState("venue");
   const [fixtureView, setFixtureView] = useState("all");
@@ -578,6 +579,18 @@ export default function LeagueManagerPage({
   }, [activeLeagueId]);
 
   const readiness = useMemo(() => getLeagueReadiness(workspace || {}), [workspace]);
+
+  const navigateLeague = useCallback((nextTab, nextChild = "") => {
+    if (!TAB_LOOKUP.has(nextTab)) return;
+    setTab(nextTab);
+    setChildView(nextChild);
+    setNavigationToken((current) => current + 1);
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const activeGroup = TAB_GROUP.get(tab) || "command-centre";
+  const activeGroupDefinition = NAV_GROUPS.find(([groupKey]) => groupKey === activeGroup) || NAV_GROUPS[0];
+  const activeGroupTabs = activeGroupDefinition[3].map((tabKey) => TAB_LOOKUP.get(tabKey)).filter(Boolean);
 
   const saveEntity = async (type, draft) => {
     if (!workspace || !activeLeagueId) return null;
@@ -769,7 +782,7 @@ export default function LeagueManagerPage({
           <div>
             <div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Manager</Badge><Badge tone="navy">{league.productStatus || "pilot"}</Badge><Badge tone={workspace.access.readOnly ? "amber" : "blue"}>{workspace.access.role.replaceAll("_", " ")}</Badge></div>
             <h1 className="mt-4 text-3xl font-black tracking-tight">{league.name || activeLeague?.name || "League workspace"}</h1>
-            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">Season structure, parent clubs, teams, venues, ground sharing, availability and fixture records in one secure league workspace.</p>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">Fixtures, competitions, clubs, results, officials and governance in one secure league operations workspace.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-stretch">
             {leagues.length > 1 ? <select className="h-11 min-w-[240px] rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-black text-white outline-none" value={activeLeagueId} onChange={(event) => onSelectLeague?.(event.target.value)}>{leagues.map((row) => <option key={row.leagueId} value={row.leagueId} className="text-slate-950">{row.name}</option>)}</select> : null}
@@ -786,49 +799,23 @@ export default function LeagueManagerPage({
 
       <nav aria-label="League Manager workspaces" className="rounded-[24px] border border-slate-200 bg-white p-2.5 shadow-sm">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-          {TABS.map(([key, label, Icon]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              aria-current={tab === key ? "page" : undefined}
-              className={`flex min-h-12 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-black transition ${tab === key ? "bg-slate-950 text-white shadow-sm" : "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"}`}
-            >
-              <Icon size={16} className={`shrink-0 ${tab === key ? "text-emerald-300" : "text-slate-400"}`} />
-              <span className="min-w-0 leading-4">{label}</span>
-            </button>
-          ))}
+          {NAV_GROUPS.map(([groupKey, label, Icon, tabKeys]) => {
+            const selected = activeGroup === groupKey;
+            return <button key={groupKey} type="button" onClick={() => navigateLeague(tabKeys[0])} aria-current={selected ? "page" : undefined} className={`flex min-h-12 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-black transition ${selected ? "bg-slate-950 text-white shadow-sm" : "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"}`}><Icon size={16} className={`shrink-0 ${selected ? "text-emerald-300" : "text-slate-400"}`} /><span className="min-w-0 leading-4">{label}</span></button>;
+          })}
         </div>
+        {activeGroupTabs.length > 1 ? <div className="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2">{activeGroupTabs.map(([key, label]) => <button key={key} type="button" onClick={() => navigateLeague(key)} className={`rounded-xl px-3 py-2 text-xs font-black transition ${tab === key ? "bg-emerald-50 text-emerald-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}>{label}</button>)}</div> : null}
       </nav>
 
       {tab === "overview" ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-            <Metric label="Divisions" value={readiness.totals.divisions} Icon={Trophy} />
-            <Metric label="Parent clubs" value={readiness.totals.clubs} Icon={Building2} />
-            <Metric label="Teams" value={readiness.totals.teams} Icon={Users} />
-            <Metric label="Venues" value={readiness.totals.venues} Icon={MapPin} />
-            <Metric label="Blackouts" value={readiness.totals.blackouts} Icon={Flag} />
-            <Metric label="Fixtures" value={readiness.totals.fixtures} Icon={CalendarDays} />
-            <Metric label="Postponed" value={readiness.totals.postponed} Icon={AlertTriangle} />
-            <Metric label="Unplaced" value={readiness.totals.unplaced} Icon={FileSpreadsheet} />
-          </div>
-          <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <Panel className="p-6">
-              <div className="flex items-center justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Pilot readiness</div><h2 className="mt-1 text-2xl font-black text-slate-950">Configuration checklist</h2></div><div className="text-3xl font-black text-slate-950">{readiness.percentage}%</div></div>
-              <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${readiness.percentage}%` }} /></div>
-              <div className="mt-5 space-y-3">{readiness.checks.map((check) => <div key={check.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 p-4"><span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${check.complete ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{check.complete ? <CheckCircle2 size={16} /> : <AlertTriangle size={15} />}</span><div><div className="text-sm font-black text-slate-900">{check.label}{check.optionalForSetup ? <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-400">Next stage</span> : null}</div><div className="mt-1 text-xs font-semibold text-slate-500">{check.detail}</div></div></div>)}</div>
-            </Panel>
-            <Panel className="overflow-hidden">
-              <div className="bg-emerald-50 p-6"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white"><Trophy size={22} /></div><h2 className="mt-4 text-xl font-black text-slate-950">Pilot outcome</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-600">This foundation is ready for real league discovery once the league structure and sample fixtures are loaded.</p></div>
-              <div className="space-y-4 p-6 text-sm font-semibold leading-6 text-slate-600">
-                <div><strong className="text-slate-950">Available now:</strong> secure setup, home-and-away generation, date allocation, blackout and ground-share controls, schedule versions, validation and export.</div>
-                <div><strong className="text-slate-950">Pilot workflow:</strong> load one real division, generate the draft, resolve explained exceptions, lock agreed fixtures and publish the validated programme.</div>
-                <div><strong className="text-slate-950">Design-partner stage:</strong> ready to approach a league for real rules, dates, ground shares and export requirements.</div>
-              </div>
-            </Panel>
-          </div>
-        </div>
+        <LeagueCommandCentreWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+          operations={operations}
+          readiness={readiness}
+          onNavigate={navigateLeague}
+          onRefreshOperations={refreshOperations}
+        />
       ) : null}
 
       {tab === "command" ? (
@@ -838,6 +825,8 @@ export default function LeagueManagerPage({
           operations={operations}
           canManage={canManage}
           onRefreshOperations={refreshOperations}
+          initialView={childView || "calendar"}
+          focusToken={navigationToken}
         />
       ) : null}
 
@@ -897,6 +886,8 @@ export default function LeagueManagerPage({
           operations={operations}
           canEdit={operations.access.canManageOfficials || canManage}
           onRefreshOperations={refreshOperations}
+          initialTab={childView || "pool"}
+          focusToken={navigationToken}
         />
       ) : null}
 
@@ -907,6 +898,8 @@ export default function LeagueManagerPage({
           canManage={canManage}
           canOperate={canOperate}
           operations={operations}
+          initialView={childView || "publication"}
+          focusToken={navigationToken}
         />
       ) : null}
 
@@ -914,6 +907,8 @@ export default function LeagueManagerPage({
         <LeagueResultsWorkspace
           leagueId={activeLeagueId}
           workspace={workspace}
+          initialTab={childView || "command"}
+          focusToken={navigationToken}
         />
       ) : null}
 

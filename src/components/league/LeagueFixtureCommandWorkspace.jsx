@@ -168,8 +168,8 @@ function ExceptionsView({ fixtures, operations, onSelect }) {
   return <div className="grid gap-5 xl:grid-cols-2">{categories.map((category) => <Panel key={category.id} className="overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-base font-black text-slate-950">{category.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">{category.detail}</div></div><Pill tone={category.tone}>{category.rows.length}</Pill></div><div className="max-h-[420px] space-y-2 overflow-y-auto p-3">{category.rows.length ? category.rows.map((fixture) => <FixtureLine key={`${fixture.targetType}-${fixture.targetId}`} fixture={fixture} operations={operations} onSelect={onSelect} />) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-400">No exceptions in this category.</div>}</div></Panel>)}</div>;
 }
 
-export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, operations, canManage = false, onRefreshOperations }) {
-  const [view, setView] = useState("calendar");
+export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, operations, canManage = false, onRefreshOperations, initialView = "calendar", focusToken = 0 }) {
+  const [view, setView] = useState(initialView);
   const [versions, setVersions] = useState([]);
   const [versionPayload, setVersionPayload] = useState(null);
   const [versionId, setVersionId] = useState("");
@@ -198,6 +198,7 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
   }, [leagueId, versionId]);
 
   useEffect(() => { loadSchedule(); }, [leagueId]);
+  useEffect(() => { if (VIEWS.some(([key]) => key === initialView)) setView(initialView); }, [initialView, focusToken]);
   useEffect(() => { if (versionId && versions.some((row) => row.id === versionId)) { DB.getLeagueScheduleVersion(leagueId, versionId).then((payload) => setVersionPayload(normaliseScheduleVersionPayload(payload))).catch((error) => toast.error("Schedule version could not be loaded", { description: error?.message })); } }, [versionId]);
 
   const fixtures = useMemo(() => buildLeagueOperationalFixtures(workspace, versionPayload), [workspace, versionPayload]);
