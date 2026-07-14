@@ -83,7 +83,7 @@ import {
 
 import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
-import { toast } from "sonner";
+import { toast } from "./lib/notifications/daxoraNotifications.js";
 import {
   clearTenantStorageContext,
   migrateLegacyTenantStorage,
@@ -1609,7 +1609,7 @@ function App() {
   const runSatLive = async () => {
     if (!requirePlanCompliance()) return false;
     if (!satDate) {
-      alert("Select a Saturday date.");
+      toast.warning("Select a Saturday date", { description: "Choose the Saturday match date before building the schedule." });
       return;
     }
 
@@ -1670,7 +1670,7 @@ function App() {
   const runSunLive = async () => {
     if (!requirePlanCompliance()) return false;
     if (!sunDate) {
-      alert("Select a Sunday date.");
+      toast.warning("Select a Sunday date", { description: "Choose the Sunday match date before building the schedule." });
       return;
     }
 
@@ -1732,12 +1732,12 @@ function App() {
   const runMidweekLive = async () => {
     if (!requirePlanCompliance()) return false;
     if (!midweekDate) {
-      alert("Select a midweek fixture date.");
+      toast.warning("Select a midweek fixture date", { description: "Choose the midweek fixture date before building the schedule." });
       return;
     }
 
     if (midweekEndMins <= midweekStartMins) {
-      alert("The midweek end time must be later than the start time.");
+      toast.warning("Check the midweek time window", { description: "The end time must be later than the start time." });
       return;
     }
 

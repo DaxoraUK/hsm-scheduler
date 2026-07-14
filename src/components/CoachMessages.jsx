@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { cleanName } from "../lib/scheduler.js";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 export default function CoachMessages({ games, dateLabel, club }) {
   const [copied, setCopied] = useState(null);
@@ -12,7 +13,7 @@ export default function CoachMessages({ games, dateLabel, club }) {
       setCopied(id);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      alert("Copy failed");
+      toast.error("Message could not be copied", { description: "Your browser blocked clipboard access. Select the message text and copy it manually." });
     }
   };
 

@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Siren,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 import { DB } from "../lib/supabase.js";
 import { getClientStagingDiagnostics } from "../lib/platform/stagingReadiness.js";

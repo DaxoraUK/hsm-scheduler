@@ -26,7 +26,7 @@ import {
 import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.js";
 import StatusChip from "@/ui/StatusChip.jsx";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
-import { toast } from "sonner";
+import { toast } from "../../../lib/notifications/daxoraNotifications.js";
 
 const PARKING_ADVISORY_TYPES = new Set([
   "parking_capacity",

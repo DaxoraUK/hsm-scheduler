@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { createNavigationController, resolveSearchNavigation } from "../lib/navigation/index.js";
 
 export default function HeaderSearch({ setMainPage, setDayTab, setNavigationTarget, canOpenSettings = true }) {

@@ -1,8 +1,11 @@
 import { useCallback, useEffect } from "react";
+import { useDaxoraConfirm } from "../contexts/DaxoraInteractionContext.jsx";
 
 const DEFAULT_MESSAGE = "You have unsaved League Manager changes. Leave this area and discard them?";
 
 export function useUnsavedChangesGuard(enabled, message = DEFAULT_MESSAGE) {
+  const daxoraConfirm = useDaxoraConfirm();
+
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return undefined;
     const warnBeforeLeaving = (event) => {
@@ -13,8 +16,15 @@ export function useUnsavedChangesGuard(enabled, message = DEFAULT_MESSAGE) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
   }, [enabled]);
 
-  return useCallback(() => {
+  return useCallback(async () => {
     if (!enabled || typeof window === "undefined") return true;
-    return window.confirm(message);
-  }, [enabled, message]);
+    return daxoraConfirm({
+      title: "Discard unsaved changes?",
+      description: message,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "danger",
+      warning: "This action cannot be undone.",
+    });
+  }, [confirm, enabled, message]);
 }

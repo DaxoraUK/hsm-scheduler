@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { createSupportReference } from "../lib/errors/recovery.js";
 import { Auth, DB } from "../lib/supabase.js";
 import { buildClientEvent, getClientReleaseMetadata, isClientTelemetryEnabled } from "../lib/monitoring/clientTelemetry.js";

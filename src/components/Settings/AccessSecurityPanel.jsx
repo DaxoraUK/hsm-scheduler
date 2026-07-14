@@ -17,7 +17,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import {
   canAssignRole,
@@ -27,6 +27,7 @@ import {
   MANAGEABLE_MEMBER_ROLES,
 } from "../../lib/security/permissions.js";
 import { useWorkspaceSecurity } from "../../hooks/useWorkspaceSecurity.js";
+import { useDaxoraPrompt } from "../../contexts/DaxoraInteractionContext.jsx";
 import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 
 const ROLE_TONES = {
@@ -107,6 +108,7 @@ export default function AccessSecurityPanel({
   authSession,
   refreshClubAccess,
 }) {
+  const daxoraPrompt = useDaxoraPrompt();
   const access = useMemo(() => createWorkspaceAccess(activeMembership), [activeMembership]);
   const {
     members,
@@ -184,7 +186,15 @@ export default function AccessSecurityPanel({
       await navigator.clipboard.writeText(inviteLink);
       toast.success("Invitation link copied");
     } catch {
-      window.prompt("Copy this invitation link", inviteLink);
+      await daxoraPrompt({
+        title: "Copy secure invitation link",
+        description: "Clipboard access is blocked. Select the full link below and copy it manually.",
+        label: "Invitation link",
+        defaultValue: inviteLink,
+        readOnly: true,
+        multiline: false,
+        confirmLabel: "Done",
+      });
     }
   };
 

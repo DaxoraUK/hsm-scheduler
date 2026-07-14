@@ -10,7 +10,7 @@ import {
   Trash2,
   Trophy,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import {
   buildCupOpeningRound,
@@ -27,6 +27,7 @@ import {
   validateLeagueSchedule,
 } from "../../lib/league/leagueSchedulingEngine.js";
 import { getCurrentLeagueSeason } from "../../lib/league/leagueManagerModel.js";
+import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 
 const INPUT = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500";
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50";
@@ -110,6 +111,7 @@ function CupList({ cups, selectedCupId, onSelect, onCreate }) {
 }
 
 export default function LeagueCupWorkspace({ leagueId, workspace, canOperate, onWorkspaceRefresh }) {
+  const daxoraConfirm = useDaxoraConfirm();
   const season = getCurrentLeagueSeason(workspace);
   const cups = useMemo(() => workspace.cups.filter((cup) => !season || cup.seasonId === season.id), [season, workspace.cups]);
   const [selectedCupId, setSelectedCupId] = useState(cups[0]?.id || "new");
@@ -311,7 +313,7 @@ export default function LeagueCupWorkspace({ leagueId, workspace, canOperate, on
   };
 
   const deleteCup = async () => {
-    if (!selectedCup || !window.confirm(`Delete ${selectedCup.name}? Drawn rounds without played results will also be deleted.`)) return;
+    if (!selectedCup || !(await daxoraConfirm({ title: `Delete ${selectedCup.name}?`, description: "The cup and all unplayed drawn rounds will be removed.", confirmLabel: "Delete cup", tone: "danger", warning: "Played results are protected by database constraints and may prevent deletion." }))) return;
     setBusy(true);
     try {
       await DB.deleteLeagueCup(leagueId, selectedCup.id);

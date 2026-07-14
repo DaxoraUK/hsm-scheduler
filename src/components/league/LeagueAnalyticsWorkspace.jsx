@@ -20,9 +20,10 @@ import {
   Users,
   UserRoundCheck,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
+import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 import { normaliseLeagueClubOperationsData } from "../../lib/league/leagueClubOperations.js";
 import { normaliseLeagueResultsData } from "../../lib/league/leagueResultsEngine.js";
 import { normaliseLeagueDisciplineData } from "../../lib/league/leagueDisciplineEngine.js";
@@ -197,6 +198,7 @@ function ReportsView({ model, configuration, canManage, onSaveDefinition, onDele
 }
 
 export default function LeagueAnalyticsWorkspace({ leagueId, workspace, operations, initialTab = "executive", focusToken = 0 }) {
+  const daxoraConfirm = useDaxoraConfirm();
   const currentSeason = getCurrentLeagueSeason(workspace);
   const [tab, setTab] = usePersistedWorkspaceState(`daxora:league:${leagueId}:analytics-tab`, initialTab);
   const [seasonId, setSeasonId] = usePersistedWorkspaceState(`daxora:league:${leagueId}:analytics-season`, currentSeason?.id || "");
@@ -259,7 +261,7 @@ export default function LeagueAnalyticsWorkspace({ leagueId, workspace, operatio
   };
 
   const deleteDefinition = async (definition) => {
-    if (!window.confirm(`Delete ${definition.name}?`)) return;
+    if (!(await daxoraConfirm({ title: "Delete report schedule?", description: `${definition.name} will be removed from the reporting queue.`, confirmLabel: "Delete schedule", tone: "danger" }))) return;
     setBusy(true);
     try { await DB.deleteLeagueReportDefinition(leagueId, definition.id); await load(); toast.success("Report schedule deleted"); }
     catch (deleteError) { toast.error("Report schedule could not be deleted", { description: deleteError?.message }); }

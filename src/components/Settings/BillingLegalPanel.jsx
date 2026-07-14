@@ -15,7 +15,7 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 
 import { DB } from "../../lib/supabase.js";
 import {

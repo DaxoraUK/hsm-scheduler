@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import { normaliseLeagueClubOperationsData } from "../../lib/league/leagueClubOperations.js";
 import { buildLeagueCommandCentre } from "../../lib/league/leagueCommandCentre.js";

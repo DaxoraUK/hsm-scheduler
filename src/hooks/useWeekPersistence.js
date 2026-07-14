@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { isSupaConfigured, DB } from "../lib/supabase.js";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
   decorateFixturesForDay,
   normaliseFixtureDayKey,

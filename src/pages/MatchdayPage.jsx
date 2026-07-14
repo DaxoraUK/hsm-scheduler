@@ -56,7 +56,7 @@ import {
   writeMatchdayLock,
 } from "../lib/operations/matchdayLock.js";
 import { getParkingStats } from "../lib/dashboardStats.js";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 const WORKSPACES = [
   {

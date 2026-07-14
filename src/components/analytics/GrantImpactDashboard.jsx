@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import {
   AlertTriangle,
   BarChart3,

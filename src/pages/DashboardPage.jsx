@@ -22,7 +22,7 @@ import useLiveWeather from "../hooks/useLiveWeather.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { readMatchdayLock } from "../lib/operations/matchdayLock.js";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
   ENTITLEMENTS,
   hasEntitlement,

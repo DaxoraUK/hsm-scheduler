@@ -13,7 +13,7 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import StatusChip from "../../ui/StatusChip.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import {

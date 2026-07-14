@@ -12,7 +12,7 @@ import {
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import LeagueVenueMap from "./LeagueVenueMap.jsx";
 import { DB } from "../../lib/supabase.js";
 import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";

@@ -16,7 +16,7 @@ import {
   Workflow,
 } from "lucide-react";
 import PageContainer from "@/ui/PageContainer.jsx";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
   buildEliteBoardCsv,
   buildEliteBoardHtml,

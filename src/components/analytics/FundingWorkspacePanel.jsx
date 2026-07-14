@@ -24,7 +24,7 @@ import {
   Upload,
   UsersRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import Card from "../../ui/Card.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import FundingApplicationTracker from "./FundingApplicationTracker.jsx";

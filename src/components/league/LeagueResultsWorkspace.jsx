@@ -14,8 +14,9 @@ import {
   Table2,
   Upload,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
+import { useDaxoraConfirm, useDaxoraPrompt } from "../../contexts/DaxoraInteractionContext.jsx";
 import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
 import {
   buildLeagueStandings,
@@ -132,6 +133,8 @@ function ResultEditor({ fixture, workspace, busy, onCancel, onSave, title = "Rec
 }
 
 export default function LeagueResultsWorkspace({ leagueId, workspace, initialTab = "command", focusToken = 0 }) {
+  const daxoraConfirm = useDaxoraConfirm();
+  const daxoraPrompt = useDaxoraPrompt();
   const [tab, setTab] = useState(initialTab);
   const [data, setData] = useState(() => normaliseLeagueResultsData({}));
   const [loading, setLoading] = useState(true);
@@ -180,8 +183,8 @@ export default function LeagueResultsWorkspace({ leagueId, workspace, initialTab
   };
 
   const reviewSubmission = async (submission, decision) => {
-    const notes = decision === "reject" ? (window.prompt("Reason for rejecting this result:", "") || "") : "";
-    if (decision === "reject" && notes.trim().length < 3) return;
+    const notes = decision === "reject" ? await daxoraPrompt({ title: "Reject submitted result", description: "Explain what the club must correct before resubmitting.", label: "Rejection reason", confirmLabel: "Reject result", required: true, minLength: 3, multiline: true }) : "";
+    if (decision === "reject" && (notes === null || notes.trim().length < 3)) return;
     setBusy(true);
     try { await DB.reviewLeagueResultSubmission(leagueId, submission.id, decision, notes); await load(); toast.success(decision === "verify" ? "Result verified" : "Result rejected"); }
     catch (reviewError) { toast.error("Result review failed", { description: reviewError?.message }); }
@@ -200,7 +203,7 @@ export default function LeagueResultsWorkspace({ leagueId, workspace, initialTab
   };
 
   const revokeAdjustment = async (row) => {
-    if (!window.confirm("Revoke this table adjustment? The audit record will remain.")) return;
+    if (!(await daxoraConfirm({ title: "Revoke table adjustment?", description: "The points or goals adjustment will stop affecting the table. Its audit record will remain.", confirmLabel: "Revoke adjustment", tone: "danger" }))) return;
     setBusy(true);
     try { await DB.revokeLeagueTableAdjustment(leagueId, row.id); await load(); toast.success("Adjustment revoked"); }
     catch (revokeError) { toast.error("Adjustment could not be revoked", { description: revokeError?.message }); }

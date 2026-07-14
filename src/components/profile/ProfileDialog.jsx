@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, LoaderCircle, UserRound, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 
 import { Auth, DB } from "../../lib/supabase.js";
 import {

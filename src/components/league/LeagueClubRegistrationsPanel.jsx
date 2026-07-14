@@ -11,8 +11,9 @@ import {
   Shirt,
   UserPlus,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
+import { useDaxoraPrompt } from "../../contexts/DaxoraInteractionContext.jsx";
 import {
   assessLeaguePlayerEligibility,
   normaliseLeagueRegistrationData,
@@ -67,6 +68,7 @@ function emptyRegistration(data = {}) {
 }
 
 export default function LeagueClubRegistrationsPanel({ leagueId }) {
+  const daxoraPrompt = useDaxoraPrompt();
   const [data, setData] = useState(() => normaliseLeagueRegistrationData({}));
   const [rawContext, setRawContext] = useState({ club: null, teams: [], seasons: [] });
   const [status, setStatus] = useState("loading");
@@ -149,8 +151,16 @@ export default function LeagueClubRegistrationsPanel({ leagueId }) {
   };
 
   const resubmit = async (registration) => {
-    const note = window.prompt("Tell the league what has been corrected:", "") || "";
-    if (!note.trim()) return;
+    const note = await daxoraPrompt({
+      title: "Resubmit corrected registration",
+      description: "Tell the league what was changed so the registration secretary can review it quickly.",
+      label: "Correction summary",
+      confirmLabel: "Resubmit application",
+      required: true,
+      minLength: 3,
+      multiline: true,
+    });
+    if (note === null || !note.trim()) return;
     setBusy(true);
     try {
       await DB.resubmitLeaguePlayerRegistration(leagueId, registration.id, note);

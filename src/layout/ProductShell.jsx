@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
+import DaxoraNotificationBell from "../components/system/DaxoraNotificationBell.jsx";
+import DaxoraToaster from "../components/system/DaxoraToaster.jsx";
 import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
 import { canOpenPage, ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { setDaxoraNotificationContext } from "../lib/notifications/daxoraNotifications.js";
 
 import {
   Building2,
@@ -84,6 +86,7 @@ export default function ProductShell({
   platformOnly = false,
   leagueOnly = false,
   leagueMemberships = [],
+  activeLeagueId = "",
   activeLeague = null,
   dbStatus = "connected",
   syncError = "",
@@ -168,6 +171,14 @@ export default function ProductShell({
       : "Needs Attention";
 
   const syncBanner = getSyncBanner({ online, dbStatus, syncError, sessionStatus });
+
+  useEffect(() => {
+    setDaxoraNotificationContext({
+      workspaceType: leagueMode || leagueOnly ? "league" : platformOnly ? "platform" : "club",
+      workspaceId: leagueMode || leagueOnly ? activeLeagueId : activeClubId,
+      workspaceName: leagueMode || leagueOnly ? (activeLeague?.name || "League Manager") : platformOnly ? "Daxora Platform" : (club?.name || "Ground Control"),
+    });
+  }, [activeClubId, activeLeague?.name, activeLeagueId, club?.name, leagueMode, leagueOnly, platformOnly]);
 
   const workspaceCard = leagueMode || leagueOnly ? (
     <div className="rounded-2xl border border-slate-800 bg-white/[0.04] p-4">
@@ -277,7 +288,9 @@ export default function ProductShell({
                 <div className="truncate text-[11px] font-bold text-slate-500">{leagueMode || leagueOnly ? activeLeague?.name : platformOnly ? "Daxora platform" : club?.name}</div>
               </div>
             </div>
-            <HeaderProfile
+            <div className="flex shrink-0 items-center gap-2">
+              <DaxoraNotificationBell />
+              <HeaderProfile
               session={authSession}
               clubName={leagueMode || leagueOnly ? (activeLeague?.name || "League Manager") : platformOnly ? "Daxora Platform" : club?.name}
               memberships={leagueMode || leagueOnly ? [] : memberships}
@@ -290,7 +303,8 @@ export default function ProductShell({
               onOpenSettings={(settingsTab = "overview") => nav.goToSettings({ settingsTab, scroll: false })}
               onProfileUpdated={onProfileUpdated}
               onSignOut={onSignOut}
-            />
+              />
+            </div>
           </header>
 
           {syncBanner?.kind === "offline" ? (
@@ -357,7 +371,7 @@ export default function ProductShell({
         </div>
       </div>
 
-      <Toaster position="top-right" richColors closeButton />
+      <DaxoraToaster />
     </div>
   );
 }

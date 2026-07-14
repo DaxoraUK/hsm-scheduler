@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, Eraser, RefreshCw, Save, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import { alignTeamContacts } from "../../lib/communications/contactModel.js";
 import {

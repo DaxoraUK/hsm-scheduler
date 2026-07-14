@@ -13,7 +13,7 @@ import {
   Siren,
   UsersRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 import PlatformPilotEvidencePanel from "./PlatformPilotEvidencePanel.jsx";
 import { DB } from "../lib/supabase.js";

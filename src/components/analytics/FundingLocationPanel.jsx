@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Building2, CheckCircle2, ExternalLink, Loader2, MapPin, RefreshCw, Save, Search, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { buildLocalFundingDiscovery, buildFundingLocationProfile } from "../../lib/grants/localFundingDiscovery.js";

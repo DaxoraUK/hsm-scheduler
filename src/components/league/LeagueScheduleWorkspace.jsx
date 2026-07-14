@@ -15,10 +15,11 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.js";
+import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 import { getCurrentLeagueSeason, getEntityName } from "../../lib/league/leagueManagerModel.js";
 import {
   compareLeagueScheduleVersions,
@@ -338,6 +339,7 @@ function ScheduleEntryRow({
 }
 
 export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperate, onWorkspaceRefresh, onDirtyChange }) {
+  const daxoraConfirm = useDaxoraConfirm();
   const season = getCurrentLeagueSeason(workspace);
   const [versions, setVersions] = useState([]);
   const [selectedVersionId, setSelectedVersionId] = useState("");
@@ -519,9 +521,9 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     });
   }, []);
 
-  const discardAllChanges = () => {
+  const discardAllChanges = async () => {
     if (!dirtyCount) return;
-    if (!window.confirm(`Discard ${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"}?`)) return;
+    if (!(await daxoraConfirm({ title: "Discard unsaved fixture changes?", description: `${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"} will be lost.`, confirmLabel: "Discard changes", cancelLabel: "Keep editing", tone: "danger" }))) return;
     setEntryEdits({});
     setServerValidation(payload?.version.validationSummary || null);
     toast.success("Unsaved fixture changes discarded");
@@ -570,9 +572,9 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
     return () => window.removeEventListener("keydown", saveShortcut);
   }, [canOperate, dirtyCount, payload?.version.status, saveAllChanges]);
 
-  const chooseVersion = (nextVersionId) => {
+  const chooseVersion = async (nextVersionId) => {
     if (nextVersionId === selectedVersionId) return;
-    if (dirtyCount && !window.confirm(`Discard ${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"} and open another version?`)) return;
+    if (dirtyCount && !(await daxoraConfirm({ title: "Open another schedule version?", description: `${dirtyCount} unsaved fixture change${dirtyCount === 1 ? "" : "s"} will be discarded.`, confirmLabel: "Discard and open", cancelLabel: "Stay here", tone: "danger" }))) return;
     setEntryEdits({});
     setSelectedVersionId(nextVersionId);
   };
@@ -676,7 +678,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const publishSchedule = async () => {
-    if (!payload || !requireSavedDraft() || !window.confirm("Publish this version as the official league schedule? The previously published generated schedule will be archived.")) return;
+    if (!payload || !requireSavedDraft() || !(await daxoraConfirm({ title: "Publish official league schedule?", description: "This version will become the live programme for clubs. The previously published generated schedule will be archived.", confirmLabel: "Publish schedule", tone: "success", details: [{ label: "Version", value: payload.version.name || payload.version.id }, { label: "Fixtures", value: payload.entries.length }] }))) return;
     setBusy(true);
     try {
       const result = await DB.publishLeagueScheduleVersion(leagueId, payload.version.id);
@@ -707,7 +709,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   };
 
   const deleteVersion = async () => {
-    if (!payload || payload.version.status !== "draft" || !window.confirm("Delete this draft schedule version?")) return;
+    if (!payload || payload.version.status !== "draft" || !(await daxoraConfirm({ title: "Delete draft schedule?", description: "This draft version and its unsaved planning history will be removed.", confirmLabel: "Delete draft", tone: "danger" }))) return;
     setBusy(true);
     try {
       await DB.deleteLeagueScheduleVersion(leagueId, payload.version.id);

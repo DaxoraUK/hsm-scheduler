@@ -14,8 +14,9 @@ import {
   Table2,
   UserRoundCheck,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
+import { useDaxoraPrompt } from "../../contexts/DaxoraInteractionContext.jsx";
 import { normaliseLeagueResultsData } from "../../lib/league/leagueResultsEngine.js";
 import LeagueClubDisciplinePanel from "./LeagueClubDisciplinePanel.jsx";
 import LeagueClubRegistrationsPanel from "./LeagueClubRegistrationsPanel.jsx";
@@ -75,6 +76,7 @@ function requestTone(status) {
 }
 
 export default function LeagueClubPortalPage({ leagueId, portal, onRefresh }) {
+  const daxoraPrompt = useDaxoraPrompt();
   const [tab, setTab] = useState("fixtures");
   const [busy, setBusy] = useState(false);
   const [selectedFixture, setSelectedFixture] = useState(null);
@@ -108,8 +110,16 @@ export default function LeagueClubPortalPage({ leagueId, portal, onRefresh }) {
 
   const acknowledge = async (acknowledgement, status) => {
     if (!acknowledgement) return;
-    const notes = ["disputed", "unable_to_fulfil"].includes(status) ? (window.prompt("Add a note for the league:", "") || "") : "";
-    if (["disputed", "unable_to_fulfil"].includes(status) && !notes.trim()) return;
+    const notes = ["disputed", "unable_to_fulfil"].includes(status) ? await daxoraPrompt({
+      title: status === "disputed" ? "Dispute fixture details" : "Report fixture issue",
+      description: "Explain the issue clearly so the league can investigate and respond.",
+      label: "Message to the league",
+      confirmLabel: "Send response",
+      required: true,
+      minLength: 3,
+      multiline: true,
+    }) : "";
+    if (["disputed", "unable_to_fulfil"].includes(status) && (notes === null || !notes.trim())) return;
     setBusy(true);
     try {
       await DB.acknowledgeLeagueFixture(leagueId, acknowledgement.id, status, notes);

@@ -17,7 +17,7 @@ import {
   UserRoundCog,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import {
   DEFAULT_COMMUNICATION_TEMPLATES,
   ELITE_APPROVAL_TYPES,

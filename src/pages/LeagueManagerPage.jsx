@@ -20,7 +20,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { DB } from "../lib/supabase.js";
 import LeagueScheduleWorkspace from "../components/league/LeagueScheduleWorkspace.jsx";
 import LeagueCupWorkspace from "../components/league/LeagueCupWorkspace.jsx";
@@ -36,6 +36,7 @@ import LeagueRegistrationsWorkspace from "../components/league/LeagueRegistratio
 import LeagueAnalyticsWorkspace from "../components/league/LeagueAnalyticsWorkspace.jsx";
 import { usePersistedWorkspaceState } from "../hooks/usePersistedWorkspaceState.js";
 import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.js";
+import { useDaxoraConfirm } from "../contexts/DaxoraInteractionContext.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -424,16 +425,16 @@ function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, bus
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange]);
 
-  const selectRecord = (record) => {
-    if (!confirmLeave()) return;
+  const selectRecord = async (record) => {
+    if (!(await confirmLeave())) return;
     const next = { ...record };
     setSelectedId(record.id);
     setDraft(next);
     setBaseline(next);
   };
 
-  const startNew = () => {
-    if (!confirmLeave()) return;
+  const startNew = async () => {
+    if (!(await confirmLeave())) return;
     const next = createDraft(type, workspace);
     setSelectedId("");
     setDraft(next);
@@ -576,6 +577,7 @@ export default function LeagueManagerPage({
   onSelectLeague,
   platformContext = null,
 }) {
+  const daxoraConfirm = useDaxoraConfirm();
   const [workspace, setWorkspace] = useState(null);
   const [operations, setOperations] = useState(() => normaliseLeagueOperationsData({}));
   const initialNavigation = useRef(readLeagueNavigation());
@@ -655,19 +657,25 @@ export default function LeagueManagerPage({
     });
   }, []);
 
-  const confirmAreaLeave = useCallback((area = tab) => {
+  const confirmAreaLeave = useCallback(async (area = tab) => {
     if (!dirtyAreas[area]) return true;
-    return window.confirm("This League Manager area has unsaved changes. Discard them and continue?");
-  }, [dirtyAreas, tab]);
+    return daxoraConfirm({
+      title: "Discard unsaved League Manager changes?",
+      description: "The changes in this workspace have not been saved and will be lost if you continue.",
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "danger",
+    });
+  }, [confirm, dirtyAreas, tab]);
 
   const handleStructureDirty = useCallback((dirty) => setAreaDirty("structure", dirty), [setAreaDirty]);
   const handleAvailabilityDirty = useCallback((dirty) => setAreaDirty("availability", dirty), [setAreaDirty]);
   const handleFixturesDirty = useCallback((dirty) => setAreaDirty("fixtures", dirty), [setAreaDirty]);
   const handleScheduleDirty = useCallback((dirty) => setAreaDirty("schedule", dirty), [setAreaDirty]);
 
-  const navigateLeague = useCallback((nextTab, nextChild = "", options = {}) => {
+  const navigateLeague = useCallback(async (nextTab, nextChild = "", options = {}) => {
     if (!TAB_LOOKUP.has(nextTab)) return;
-    if ((nextTab !== tab || nextChild !== childView) && !confirmAreaLeave(tab)) return;
+    if ((nextTab !== tab || nextChild !== childView) && !(await confirmAreaLeave(tab))) return;
     setTab(nextTab);
     setChildView(nextChild);
     setNavigationToken((current) => current + 1);
@@ -676,8 +684,8 @@ export default function LeagueManagerPage({
   }, [childView, confirmAreaLeave, tab]);
 
   useEffect(() => {
-    const handleHistoryNavigation = () => {
-      if (!confirmAreaLeave(tab)) {
+    const handleHistoryNavigation = async () => {
+      if (!(await confirmAreaLeave(tab))) {
         writeLeagueNavigation(tab, childView, { replace: true });
         return;
       }
@@ -723,8 +731,8 @@ export default function LeagueManagerPage({
   const activeGroupDefinition = visibleNavGroups.find(([groupKey]) => groupKey === activeGroup) || visibleNavGroups[0];
   const activeGroupTabs = activeGroupDefinition[3].map((tabKey) => TAB_LOOKUP.get(tabKey)).filter(Boolean);
 
-  const changeRegistrySection = (area, setter, nextValue) => {
-    if (!confirmAreaLeave(area)) return;
+  const changeRegistrySection = async (area, setter, nextValue) => {
+    if (!(await confirmAreaLeave(area))) return;
     setter(nextValue);
     setChildView(nextValue);
     writeLeagueNavigation(area, nextValue, { replace: true });
@@ -772,7 +780,7 @@ export default function LeagueManagerPage({
   };
 
   const deleteEntity = async (type, id) => {
-    if (!window.confirm("Delete this league record? Linked records may prevent deletion.")) return false;
+    if (!(await daxoraConfirm({ title: "Delete league record?", description: "This record will be removed. Linked fixtures, registrations or competition records may prevent deletion.", confirmLabel: "Delete record", tone: "danger" }))) return false;
     setBusy(true);
     try {
       await DB.deleteLeagueEntity(activeLeagueId, type, id);
@@ -1087,7 +1095,7 @@ export default function LeagueManagerPage({
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <Panel className="p-6">
             <div className="flex items-center gap-3"><ShieldCheck className="text-emerald-600" size={22} /><div><h2 className="text-xl font-black text-slate-950">League access</h2><p className="mt-1 text-sm font-semibold text-slate-500">Roles are separate from Ground Control club permissions.</p></div></div>
-            <div className="mt-5 space-y-3">{workspace.members.map((member) => <div key={member.userId} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">{member.displayName || member.email || "League member"}</div><div className="mt-1 truncate text-xs font-semibold text-slate-500">{member.email || "Email unavailable"}</div></div><div className="flex items-center gap-2">{canManage && member.role !== "owner" ? <select className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black" value={member.role} disabled={busy} onChange={async (event) => { setBusy(true); try { await DB.updateLeagueMemberRole(activeLeagueId, member.userId, event.target.value); await loadWorkspace(); toast.success("League role updated"); } catch (error) { toast.error("Role could not be updated", { description: error?.message }); } finally { setBusy(false); } }}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="results">Results secretary</option><option value="discipline">Discipline officer</option><option value="registrations">Registration secretary</option><option value="viewer">Viewer</option></select> : <Badge tone={member.role === "owner" ? "navy" : "slate"}>{member.role}</Badge>}{canManage && member.role !== "owner" ? <button type="button" aria-label="Remove member" onClick={async () => { if (!window.confirm("Remove this user from League Manager?")) return; setBusy(true); try { await DB.removeLeagueMember(activeLeagueId, member.userId); await loadWorkspace(); toast.success("League member removed"); } catch (error) { toast.error("Member could not be removed", { description: error?.message }); } finally { setBusy(false); } }} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700"><Trash2 size={14} /></button> : null}</div></div>)}</div>
+            <div className="mt-5 space-y-3">{workspace.members.map((member) => <div key={member.userId} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">{member.displayName || member.email || "League member"}</div><div className="mt-1 truncate text-xs font-semibold text-slate-500">{member.email || "Email unavailable"}</div></div><div className="flex items-center gap-2">{canManage && member.role !== "owner" ? <select className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black" value={member.role} disabled={busy} onChange={async (event) => { setBusy(true); try { await DB.updateLeagueMemberRole(activeLeagueId, member.userId, event.target.value); await loadWorkspace(); toast.success("League role updated"); } catch (error) { toast.error("Role could not be updated", { description: error?.message }); } finally { setBusy(false); } }}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="results">Results secretary</option><option value="discipline">Discipline officer</option><option value="registrations">Registration secretary</option><option value="viewer">Viewer</option></select> : <Badge tone={member.role === "owner" ? "navy" : "slate"}>{member.role}</Badge>}{canManage && member.role !== "owner" ? <button type="button" aria-label="Remove member" onClick={async () => { if (!(await daxoraConfirm({ title: "Remove League Manager access?", description: "This user will immediately lose access to this league workspace.", confirmLabel: "Remove access", tone: "danger" }))) return; setBusy(true); try { await DB.removeLeagueMember(activeLeagueId, member.userId); await loadWorkspace(); toast.success("League member removed"); } catch (error) { toast.error("Member could not be removed", { description: error?.message }); } finally { setBusy(false); } }} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700"><Trash2 size={14} /></button> : null}</div></div>)}</div>
             {canManage ? <div className="mt-6 border-t border-slate-200 pt-6"><h3 className="text-sm font-black text-slate-950">Invite a league user</h3><div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px_auto]"><input type="email" className={INPUT} value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="secretary@league.org" /><select className={INPUT} value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="results">Results secretary</option><option value="discipline">Discipline officer</option><option value="registrations">Registration secretary</option><option value="viewer">Viewer</option></select><button type="button" onClick={createInvite} disabled={busy || !inviteForm.email.includes("@")} className={`${BUTTON} bg-emerald-600 text-white`}><Plus size={16} /> Invite</button></div>{lastInviteLink ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-black text-emerald-900">Secure invitation link</div><div className="mt-2 flex gap-2"><input readOnly className={`${INPUT} min-w-0 bg-white`} value={lastInviteLink} /><button type="button" onClick={async () => { await navigator.clipboard.writeText(lastInviteLink); toast.success("Invitation link copied"); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white"><ClipboardCopy size={16} /></button></div></div> : null}</div> : null}
             {workspace.invitations.length ? <div className="mt-6 border-t border-slate-200 pt-6"><h3 className="text-sm font-black text-slate-950">Invitation history</h3><div className="mt-3 space-y-2">{workspace.invitations.slice(0, 10).map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3"><div className="min-w-0"><div className="truncate text-xs font-black text-slate-900">{invitation.email}</div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">{invitation.role} · {invitation.status}</div></div>{canManage && invitation.status === "pending" ? <button type="button" onClick={async () => { setBusy(true); try { await DB.revokeLeagueInvitation(activeLeagueId, invitation.id); await loadWorkspace(); toast.success("Invitation revoked"); } catch (error) { toast.error("Invitation could not be revoked", { description: error?.message }); } finally { setBusy(false); } }} className="text-xs font-black text-rose-700">Revoke</button> : null}</div>)}</div></div> : null}
           </Panel>

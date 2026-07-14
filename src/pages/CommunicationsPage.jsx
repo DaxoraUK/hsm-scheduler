@@ -18,7 +18,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 import PageContainer from "../ui/PageContainer.jsx";
 import PageHeader from "../ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
