@@ -35,6 +35,7 @@ export function buildLeagueCommandCentre({
   results = {},
   scheduleVersion = null,
   readiness = { checks: [], percentage: 0 },
+  role = "viewer",
   today = new Date(),
   officialHorizonDays = 35,
 } = {}) {
@@ -154,7 +155,26 @@ export function buildLeagueCommandCentre({
   ].filter((row) => row.count > 0);
 
   const severityOrder = { critical: 0, attention: 1, info: 2 };
-  actions.sort((left, right) => severityOrder[left.severity] - severityOrder[right.severity] || right.count - left.count);
+  const rolePriorities = {
+    fixtures: ["overdue-postponements", "club-change-requests", "unplaced-fixtures", "publication-gap", "fixture-acknowledgements"],
+    officials: ["official-replacements", "official-gaps", "overdue-postponements"],
+    results: ["result-verification", "missing-results"],
+  };
+  const roleLabels = {
+    fixtures: { label: "Fixture secretary focus", detail: "Fixture exceptions, rearrangements, unplaced matches and club requests are prioritised for your role." },
+    officials: { label: "Officials secretary focus", detail: "Replacement appointments, coverage gaps and postponement actions are prioritised for your role." },
+    results: { label: "Results secretary focus", detail: "Verification and missing-result queues are prioritised for your role." },
+  };
+  const focusedIds = rolePriorities[role] || [];
+  const focusIndex = (id) => {
+    const index = focusedIds.indexOf(id);
+    return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+  };
+  actions.sort((left, right) => (
+    severityOrder[left.severity] - severityOrder[right.severity]
+    || focusIndex(left.id) - focusIndex(right.id)
+    || right.count - left.count
+  ));
 
   const criticalCount = actions.filter((row) => row.severity === "critical").reduce((sum, row) => sum + row.count, 0);
   const attentionCount = actions.filter((row) => row.severity === "attention").reduce((sum, row) => sum + row.count, 0);
@@ -173,6 +193,7 @@ export function buildLeagueCommandCentre({
       openPostponements: openPostponements.length,
       overduePostponements: overduePostponements.length,
       officialGaps: officialCoverage.missing.length,
+      replacementAssignments: replacementAssignments.length,
       officialCoverage: officialCoverage.percentage,
       pendingAcknowledgements: pendingAcknowledgements.length,
       unplacedFixtures: unplacedFixtures.length,
@@ -180,6 +201,7 @@ export function buildLeagueCommandCentre({
     },
     publication,
     officialCoverage,
+    roleFocus: roleLabels[role] || null,
     nextFixtures: operationalFixtures.slice(0, 8),
     readinessPercentage: Number(readiness.percentage || 0),
     generatedFor: todayKey,

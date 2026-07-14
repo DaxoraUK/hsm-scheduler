@@ -873,6 +873,14 @@ export const DB = {
     });
   },
 
+  async resequenceLeagueDivisions(leagueId, seasonId = null) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/resequence_league_divisions", {
+      target_league_id: id,
+      target_season_id: seasonId ? String(seasonId).trim() : null,
+    });
+  },
+
   async importLeagueFixtures(leagueId, rows = []) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/import_league_fixtures", {

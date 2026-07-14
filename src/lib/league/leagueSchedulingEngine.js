@@ -1,3 +1,5 @@
+import { compareLeagueDivisions } from "./leagueOrdering.js";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function asArray(value) {
@@ -416,7 +418,7 @@ function selectedDivisions(workspace, season, divisionIds = []) {
   return asArray(workspace?.divisions)
     .filter((division) => division.seasonId === season.id)
     .filter((division) => !selected.size || selected.has(division.id))
-    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || left.name.localeCompare(right.name, "en-GB"));
+    .sort(compareLeagueDivisions);
 }
 
 export function getLeagueSchedulePreflight(workspace = {}, options = {}) {
@@ -518,7 +520,7 @@ export function generateLeagueSchedule(workspace = {}, options = {}) {
   queue.sort((left, right) => (
     left.fixture.roundNumber - right.fixture.roundNumber
     || left.dates.length - right.dates.length
-    || Number(left.division.sortOrder || 0) - Number(right.division.sortOrder || 0)
+    || compareLeagueDivisions(left.division, right.division)
     || left.identity.localeCompare(right.identity)
   ));
 

@@ -58,7 +58,7 @@ function dateLabel(value) {
   catch { return value; }
 }
 
-export default function LeagueCommandCentreWorkspace({ leagueId, workspace, operations, readiness, onNavigate, onRefreshOperations }) {
+export default function LeagueCommandCentreWorkspace({ leagueId, workspace, operations, readiness, onNavigate, onRefreshOperations, onSummaryChange }) {
   const [data, setData] = useState({ clubOperations: normaliseLeagueClubOperationsData({}), results: normaliseLeagueResultsData({}), scheduleVersion: null });
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -97,7 +97,12 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
     results: data.results,
     scheduleVersion: data.scheduleVersion,
     readiness,
+    role: workspace.access?.role,
   }), [workspace, operations, data, readiness]);
+
+  useEffect(() => {
+    onSummaryChange?.(command);
+  }, [command, onSummaryChange]);
 
   if (status === "loading") return <Panel className="flex min-h-[360px] items-center justify-center"><div className="text-center"><RefreshCw className="mx-auto animate-spin text-emerald-600" size={28} /><div className="mt-3 text-sm font-black text-slate-800">Building the league command picture…</div></div></Panel>;
   if (status === "error") return <Panel className="p-7"><div className="flex items-start gap-4"><AlertTriangle className="mt-1 shrink-0 text-rose-600" /><div><h2 className="text-xl font-black text-slate-950">Command centre could not load</h2><p className="mt-2 text-sm font-semibold text-slate-600">{error}</p><button type="button" onClick={() => load().catch((loadError) => toast.error(loadError?.message))} className={`${BUTTON} mt-5 bg-slate-950 text-white`}><RefreshCw size={14} /> Retry</button></div></div></Panel>;
@@ -106,7 +111,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
   return <div className="space-y-5">
     <Panel className="overflow-hidden">
       <div className="grid gap-5 bg-slate-950 px-6 py-7 text-white lg:grid-cols-[1fr_auto] lg:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.5</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness.</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.5.1</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">{command.roleFocus?.detail || "One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness."}</p></div>
         <button type="button" onClick={load} className={`${BUTTON} border border-white/15 bg-white/10 text-white hover:bg-white/15`}><RefreshCw size={14} /> Refresh command picture</button>
       </div>
       <div className={`border-t px-6 py-5 ${command.status === "action_required" ? "border-rose-200 bg-rose-50" : command.status === "needs_review" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-start gap-3">{command.status === "ready" ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" /> : <AlertTriangle className={`mt-0.5 shrink-0 ${command.status === "action_required" ? "text-rose-600" : "text-amber-600"}`} />}<div><div className="text-sm font-black text-slate-950">{copy.title}</div><div className="mt-1 text-xs font-semibold leading-5 text-slate-600">{copy.detail}</div></div></div></div>

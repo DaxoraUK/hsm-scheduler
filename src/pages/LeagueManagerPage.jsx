@@ -74,7 +74,7 @@ const TABS = Object.freeze([
   ["results", "Results & tables", Table2],
   ["structure", "League structure", Building2],
   ["availability", "Venues & availability", MapPin],
-  ["fixtures", "Fixture registry", FileSpreadsheet],
+  ["fixtures", "Fixture records", FileSpreadsheet],
   ["access", "Access & audit", LockKeyhole],
 ]);
 
@@ -88,6 +88,35 @@ const NAV_GROUPS = Object.freeze([
 
 const TAB_LOOKUP = new Map(TABS.map((item) => [item[0], item]));
 const TAB_GROUP = new Map(NAV_GROUPS.flatMap(([groupKey, , , tabKeys]) => tabKeys.map((tabKey) => [tabKey, groupKey])));
+
+function readLeagueNavigation() {
+  if (typeof window === "undefined") return { tab: "overview", child: "" };
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("lm_area") || "overview";
+  return {
+    tab: TAB_LOOKUP.has(tab) ? tab : "overview",
+    child: params.get("lm_view") || "",
+  };
+}
+
+function writeLeagueNavigation(tab, child = "", { replace = false } = {}) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("lm_area", tab);
+  if (child) url.searchParams.set("lm_view", child);
+  else url.searchParams.delete("lm_view");
+  window.history?.[replace ? "replaceState" : "pushState"]?.({}, "", url);
+}
+
+function tabQueueCount(tab, counts = {}) {
+  if (tab === "overview") return Number(counts.openActions || 0);
+  if (tab === "results") return Number(counts.pendingResults || 0) + Number(counts.missingResults || 0);
+  if (tab === "clubs") return Number(counts.openChangeRequests || 0) + Number(counts.pendingAcknowledgements || 0);
+  if (tab === "officials") return Number(counts.officialGaps || 0) + Number(counts.replacementAssignments || 0) + Number(counts.overduePostponements || 0);
+  if (tab === "schedule") return Number(counts.unplacedFixtures || 0);
+  if (tab === "structure") return Number(counts.setupGaps || 0);
+  return 0;
+}
 
 function currentSeasonDefaults() {
   const today = new Date();
@@ -516,10 +545,12 @@ export default function LeagueManagerPage({
 }) {
   const [workspace, setWorkspace] = useState(null);
   const [operations, setOperations] = useState(() => normaliseLeagueOperationsData({}));
+  const initialNavigation = useRef(readLeagueNavigation());
   const [workspaceStatus, setWorkspaceStatus] = useState("idle");
   const [workspaceError, setWorkspaceError] = useState("");
-  const [tab, setTab] = useState("overview");
-  const [childView, setChildView] = useState("");
+  const [tab, setTab] = useState(initialNavigation.current.tab);
+  const [childView, setChildView] = useState(initialNavigation.current.child);
+  const [commandSummary, setCommandSummary] = useState(null);
   const [navigationToken, setNavigationToken] = useState(0);
   const [structureSection, setStructureSection] = useState("season");
   const [venueSection, setVenueSection] = useState("venue");
@@ -580,12 +611,24 @@ export default function LeagueManagerPage({
 
   const readiness = useMemo(() => getLeagueReadiness(workspace || {}), [workspace]);
 
-  const navigateLeague = useCallback((nextTab, nextChild = "") => {
+  const navigateLeague = useCallback((nextTab, nextChild = "", options = {}) => {
     if (!TAB_LOOKUP.has(nextTab)) return;
     setTab(nextTab);
     setChildView(nextChild);
     setNavigationToken((current) => current + 1);
+    writeLeagueNavigation(nextTab, nextChild, options);
     window.scrollTo?.({ top: 0, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const handleHistoryNavigation = () => {
+      const next = readLeagueNavigation();
+      setTab(next.tab);
+      setChildView(next.child);
+      setNavigationToken((current) => current + 1);
+    };
+    window.addEventListener?.("popstate", handleHistoryNavigation);
+    return () => window.removeEventListener?.("popstate", handleHistoryNavigation);
   }, []);
 
   const activeGroup = TAB_GROUP.get(tab) || "command-centre";
@@ -703,6 +746,7 @@ export default function LeagueManagerPage({
     setBusy(true);
     try {
       const result = await DB.importLeagueStructure(activeLeagueId, currentSeason.id, parsed.records);
+      await DB.resequenceLeagueDivisions(activeLeagueId, currentSeason.id);
       await loadWorkspace();
       toast.success(`${Number(result?.rows || parsed.records.length)} team rows imported`, {
         description: `${Number(result?.clubs_created || 0)} clubs, ${Number(result?.venues_created || 0)} venues and ${Number(result?.teams_created || 0)} new teams created.`,
@@ -804,7 +848,7 @@ export default function LeagueManagerPage({
             return <button key={groupKey} type="button" onClick={() => navigateLeague(tabKeys[0])} aria-current={selected ? "page" : undefined} className={`flex min-h-12 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-black transition ${selected ? "bg-slate-950 text-white shadow-sm" : "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"}`}><Icon size={16} className={`shrink-0 ${selected ? "text-emerald-300" : "text-slate-400"}`} /><span className="min-w-0 leading-4">{label}</span></button>;
           })}
         </div>
-        {activeGroupTabs.length > 1 ? <div className="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2">{activeGroupTabs.map(([key, label]) => <button key={key} type="button" onClick={() => navigateLeague(key)} className={`rounded-xl px-3 py-2 text-xs font-black transition ${tab === key ? "bg-emerald-50 text-emerald-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}>{label}</button>)}</div> : null}
+        {activeGroupTabs.length > 1 ? <div className="mt-2 flex gap-2 overflow-x-auto border-t border-slate-100 pt-2 [scrollbar-width:thin]">{activeGroupTabs.map(([key, label]) => { const count = tabQueueCount(key, commandSummary?.counts); return <button key={key} type="button" onClick={() => navigateLeague(key)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${tab === key ? "bg-emerald-50 text-emerald-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}><span>{label}</span>{count > 0 ? <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] ${tab === key ? "bg-emerald-200 text-emerald-900" : "bg-slate-200 text-slate-700"}`}>{count > 99 ? "99+" : count}</span> : null}</button>; })}</div> : null}
       </nav>
 
       {tab === "overview" ? (
@@ -815,6 +859,7 @@ export default function LeagueManagerPage({
           readiness={readiness}
           onNavigate={navigateLeague}
           onRefreshOperations={refreshOperations}
+          onSummaryChange={setCommandSummary}
         />
       ) : null}
 

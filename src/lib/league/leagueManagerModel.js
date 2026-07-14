@@ -1,3 +1,5 @@
+import { orderLeagueDivisions, orderLeagueTeams } from "./leagueOrdering.js";
+
 const ARRAY_KEYS = Object.freeze([
   "seasons",
   "divisions",
@@ -125,6 +127,9 @@ export function normaliseLeagueWorkspace(payload = {}) {
     const payloadKey = payloadKeyMap[key] || key;
     result[key] = asArray(payload[payloadKey] ?? payload[key]).map(normaliseRow);
   });
+
+  result.divisions = orderLeagueDivisions(result.divisions);
+  result.teams = orderLeagueTeams(result.teams, result.divisions);
 
   return result;
 }
