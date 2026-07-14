@@ -1320,6 +1320,159 @@ export const DB = {
     });
   },
 
+  async getLeagueClubOperationsData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_operations_data", { target_league_id: id });
+  },
+
+  async getLeagueClubPortalData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_portal_data", { target_league_id: id });
+  },
+
+  async createLeagueClubInvitation(leagueId, { parentClubId, email, role = "club_secretary", expiresInDays = 14 } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/create_league_club_invitation", {
+      target_league_id: id,
+      target_parent_club_id: String(parentClubId || "").trim(),
+      invitation_email: String(email || "").trim(),
+      invitation_role: String(role || "club_secretary").trim(),
+      expires_in_days: Math.max(1, Math.min(Number(expiresInDays) || 14, 30)),
+    });
+  },
+
+  async acceptLeagueClubInvitation(token) {
+    return supaFetch("POST", "rpc/accept_league_club_invitation", {
+      invitation_token: String(token || "").trim(),
+    });
+  },
+
+  async revokeLeagueClubInvitation(leagueId, invitationId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/revoke_league_club_invitation", {
+      target_league_id: id,
+      target_invitation_id: String(invitationId || "").trim(),
+    });
+  },
+
+  async removeLeagueClubMember(leagueId, parentClubId, userId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/remove_league_club_member", {
+      target_league_id: id,
+      target_parent_club_id: String(parentClubId || "").trim(),
+      target_user_id: String(userId || "").trim(),
+    });
+  },
+
+  async publishLeagueFixtureRelease(leagueId, { scheduleVersionId, scopeType = "league", scopeId = null, title = "", notes = "" } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/publish_league_fixture_release", {
+      target_league_id: id,
+      target_schedule_version_id: String(scheduleVersionId || "").trim(),
+      target_scope_type: String(scopeType || "league").trim(),
+      target_scope_id: scopeId ? String(scopeId).trim() : null,
+      publication_title: String(title || "").trim() || null,
+      publication_notes: String(notes || "").trim() || null,
+    });
+  },
+
+  async withdrawLeaguePublication(leagueId, publicationId, reason = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/withdraw_league_publication", {
+      target_league_id: id,
+      target_publication_id: String(publicationId || "").trim(),
+      withdrawal_reason: String(reason || "").trim() || null,
+    });
+  },
+
+  async restoreLeaguePublication(leagueId, publicationId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/restore_league_publication", {
+      target_league_id: id,
+      target_publication_id: String(publicationId || "").trim(),
+    });
+  },
+
+  async acknowledgeLeagueFixture(leagueId, acknowledgementId, status, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/acknowledge_league_fixture", {
+      target_league_id: id,
+      target_acknowledgement_id: String(acknowledgementId || "").trim(),
+      acknowledgement_status: String(status || "received").trim(),
+      acknowledgement_notes: String(notes || "").trim() || null,
+    });
+  },
+
+  async createLeagueFixtureChangeRequest(leagueId, request = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/create_league_fixture_change_request", {
+      target_league_id: id,
+      request_data: {
+        publication_id: request.publicationId || null,
+        target_type: request.targetType || "schedule_entry",
+        target_id: request.targetId || null,
+        request_type: request.requestType || "date_change",
+        requested_date: request.requestedDate || null,
+        requested_kick_off: request.requestedKickOff || null,
+        requested_venue_id: request.requestedVenueId || null,
+        reason: request.reason || "",
+        evidence: request.evidence && typeof request.evidence === "object" ? request.evidence : {},
+      },
+    });
+  },
+
+  async resolveLeagueFixtureChangeRequest(leagueId, requestId, decision, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/resolve_league_fixture_change_request", {
+      target_league_id: id,
+      target_request_id: String(requestId || "").trim(),
+      decision: String(decision || "under_review").trim(),
+      response_notes: String(notes || "").trim() || null,
+    });
+  },
+
+  async saveLeagueCommunication(leagueId, communication = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/save_league_communication", {
+      target_league_id: id,
+      communication_data: {
+        id: communication.id || null,
+        recipient_type: communication.recipientType || "club",
+        recipient_id: communication.recipientId || null,
+        recipient_label: communication.recipientLabel || "League recipient",
+        recipient_email: communication.recipientEmail || null,
+        template_key: communication.templateKey || "custom",
+        subject: communication.subject || "",
+        body: communication.body || "",
+        channel: communication.channel || "manual",
+        status: communication.status || "draft",
+        requires_acknowledgement: Boolean(communication.requiresAcknowledgement),
+        source_type: communication.sourceType || null,
+        source_id: communication.sourceId || null,
+        delivery_detail: communication.deliveryDetail && typeof communication.deliveryDetail === "object" ? communication.deliveryDetail : {},
+      },
+    });
+  },
+
+  async createLeagueCalendarFeed(leagueId, { scopeType = "league", scopeId = null, label = "", expiresInDays = null } = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/create_league_calendar_feed", {
+      target_league_id: id,
+      target_scope_type: String(scopeType || "league").trim(),
+      target_scope_id: scopeId ? String(scopeId).trim() : null,
+      feed_label: String(label || "").trim() || null,
+      expires_in_days: expiresInDays ? Number(expiresInDays) : null,
+    });
+  },
+
+  async revokeLeagueCalendarFeed(leagueId, feedId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/revoke_league_calendar_feed", {
+      target_league_id: id,
+      target_feed_id: String(feedId || "").trim(),
+    });
+  },
+
   async getPlatformOperatorContext() {
     return supaFetch("POST", "rpc/get_platform_operator_context", {});
   },

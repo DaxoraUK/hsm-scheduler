@@ -6,22 +6,23 @@ import { isRecoverableAccessVerificationError } from "../lib/errors/recovery.js"
 
 const ACTIVE_LEAGUE_KEY = "league-selected";
 const INVITE_QUERY_KEY = "league_invite";
+const CLUB_INVITE_QUERY_KEY = "league_club_invite";
 
-function readInviteToken() {
+function readInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return "";
   try {
-    return new URL(window.location.href).searchParams.get(INVITE_QUERY_KEY)?.trim() || "";
+    return new URL(window.location.href).searchParams.get(key)?.trim() || "";
   } catch {
     return "";
   }
 }
 
-function clearInviteToken() {
+function clearInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has(INVITE_QUERY_KEY)) return;
-    url.searchParams.delete(INVITE_QUERY_KEY);
+    if (!url.searchParams.has(key)) return;
+    url.searchParams.delete(key);
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   } catch {
     // A malformed browser URL must not block normal workspace access.
@@ -58,10 +59,15 @@ export function useLeagueAccess(authSession) {
     setError("");
 
     try {
-      const inviteToken = readInviteToken();
+      const inviteToken = readInviteToken(INVITE_QUERY_KEY);
       if (inviteToken) {
         await DB.acceptLeagueInvitation(inviteToken);
-        clearInviteToken();
+        clearInviteToken(INVITE_QUERY_KEY);
+      }
+      const clubInviteToken = readInviteToken(CLUB_INVITE_QUERY_KEY);
+      if (clubInviteToken) {
+        await DB.acceptLeagueClubInvitation(clubInviteToken);
+        clearInviteToken(CLUB_INVITE_QUERY_KEY);
       }
 
       const nextLeagues = (await DB.listAccessibleLeagues())

@@ -9,6 +9,7 @@ import {
   Flag,
   LockKeyhole,
   MapPin,
+  Megaphone,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -23,6 +24,8 @@ import LeagueScheduleWorkspace from "../components/league/LeagueScheduleWorkspac
 import LeagueCupWorkspace from "../components/league/LeagueCupWorkspace.jsx";
 import LeagueFixtureCommandWorkspace from "../components/league/LeagueFixtureCommandWorkspace.jsx";
 import LeagueOfficialsWorkspace from "../components/league/LeagueOfficialsWorkspace.jsx";
+import LeagueClubOperationsWorkspace from "../components/league/LeagueClubOperationsWorkspace.jsx";
+import LeagueClubPortalPage from "../components/league/LeagueClubPortalPage.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -34,6 +37,7 @@ import {
   serialiseLeagueEntity,
 } from "../lib/league/leagueManagerModel.js";
 import { normaliseLeagueOperationsData } from "../lib/league/leagueOperationsEngine.js";
+import { normaliseLeagueClubPortalData } from "../lib/league/leagueClubOperations.js";
 
 const INPUT = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-500";
 const LABEL = "mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500";
@@ -64,6 +68,7 @@ const TABS = Object.freeze([
   ["schedule", "Schedule builder", RefreshCw],
   ["cups", "Cups", Trophy],
   ["officials", "Match officials", Users],
+  ["clubs", "Club operations", Megaphone],
   ["structure", "League structure", Building2],
   ["availability", "Venues & availability", MapPin],
   ["fixtures", "Fixture registry", FileSpreadsheet],
@@ -515,6 +520,7 @@ export default function LeagueManagerPage({
   const [lastInviteLink, setLastInviteLink] = useState("");
   const fileInputRef = useRef(null);
   const structureFileInputRef = useRef(null);
+  const isClubPortal = ["club_secretary", "team_contact", "club_viewer"].includes(activeLeague?.role || "");
 
   const loadWorkspace = useCallback(async () => {
     if (!activeLeagueId) {
@@ -527,6 +533,14 @@ export default function LeagueManagerPage({
     setWorkspaceStatus("loading");
     setWorkspaceError("");
     try {
+      if (isClubPortal) {
+        const portalPayload = await DB.getLeagueClubPortalData(activeLeagueId);
+        const nextPortal = normaliseLeagueClubPortalData(portalPayload);
+        setWorkspace(nextPortal);
+        setOperations(normaliseLeagueOperationsData({}));
+        setWorkspaceStatus("ready");
+        return nextPortal;
+      }
       const [payload, operationsPayload] = await Promise.all([
         DB.getLeagueWorkspace(activeLeagueId),
         DB.getLeagueOperationsData(activeLeagueId),
@@ -542,7 +556,7 @@ export default function LeagueManagerPage({
       setWorkspaceError(error?.message || "The league workspace could not be loaded.");
       return null;
     }
-  }, [activeLeagueId]);
+  }, [activeLeagueId, isClubPortal]);
 
   useEffect(() => {
     loadWorkspace();
@@ -625,6 +639,10 @@ export default function LeagueManagerPage({
   if (workspaceStatus === "loading" || !workspace) {
     if (workspaceStatus === "error") return <ErrorCard error={workspaceError} onRetry={loadWorkspace} />;
     return <LoadingCard />;
+  }
+
+  if (isClubPortal) {
+    return <LeagueClubPortalPage leagueId={activeLeagueId} portal={workspace} onRefresh={loadWorkspace} />;
   }
 
   const canManage = workspace.access.canManage;
@@ -871,6 +889,16 @@ export default function LeagueManagerPage({
           operations={operations}
           canEdit={operations.access.canManageOfficials || canManage}
           onRefreshOperations={refreshOperations}
+        />
+      ) : null}
+
+      {tab === "clubs" ? (
+        <LeagueClubOperationsWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+          canManage={canManage}
+          canOperate={canOperate}
+          operations={operations}
         />
       ) : null}
 
