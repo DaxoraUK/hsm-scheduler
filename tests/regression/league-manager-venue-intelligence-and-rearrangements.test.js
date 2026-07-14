@@ -12,6 +12,7 @@ import {
 } from "../../src/lib/league/leagueVenueIntelligence.js";
 
 const fixtureCommand = readFileSync("src/components/league/LeagueFixtureCommandWorkspace.jsx", "utf8");
+const venueMap = readFileSync("src/components/league/LeagueVenueMap.jsx", "utf8");
 const officialsWorkspace = readFileSync("src/components/league/LeagueOfficialsWorkspace.jsx", "utf8");
 const supabase = readFileSync("src/lib/supabase.js", "utf8");
 const api = readFileSync("api/league/geocode-venues.js", "utf8");
@@ -102,9 +103,10 @@ describe("League Operations venue intelligence and rearrangement automation", ()
     expect(api).toContain("https://api.postcodes.io/postcodes");
     expect(api).toContain("can_manage_league");
     expect(api).toContain("slice(0, 100)");
-    expect(fixtureCommand).toContain("Map postcodes");
-    expect(fixtureCommand).toContain("Save exact position");
-    expect(fixtureCommand).toContain("Postcode centroid");
+    expect(fixtureCommand).toContain("LeagueVenueMap");
+    expect(venueMap).toContain("Map ${geocodable.length} pitches");
+    expect(venueMap).toContain("Refine exact site position");
+    expect(venueMap).toContain("coordinateSourceLabel");
     expect(supabase).toContain("geocodeLeagueVenuePostcodes");
     expect(supabase).toContain("bulkUpdateLeagueVenueMapPositions");
   });
