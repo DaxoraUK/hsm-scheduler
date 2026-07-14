@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import LeagueVenueMap from "./LeagueVenueMap.jsx";
 import { DB } from "../../lib/supabase.js";
+import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
 import { normaliseScheduleVersion, normaliseScheduleVersionPayload } from "../../lib/league/leagueSchedulingEngine.js";
 import {
   buildLeagueOperationalFixtures,
@@ -169,14 +170,14 @@ function ExceptionsView({ fixtures, operations, onSelect }) {
 }
 
 export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, operations, canManage = false, onRefreshOperations, initialView = "calendar", focusToken = 0 }) {
-  const [view, setView] = useState(initialView);
+  const [view, setView] = usePersistedWorkspaceState(`daxora:league:${leagueId}:fixture-command-view`, initialView);
   const [versions, setVersions] = useState([]);
   const [versionPayload, setVersionPayload] = useState(null);
   const [versionId, setVersionId] = useState("");
   const [status, setStatus] = useState("loading");
   const [month, setMonth] = useState(startOfMonth());
   const [selectedFixture, setSelectedFixture] = useState(null);
-  const [filters, setFilters] = useState({ competition: "all", division: "all", venue: "all", query: "" });
+  const [filters, setFilters] = usePersistedWorkspaceState(`daxora:league:${leagueId}:fixture-command-filters`, { competition: "all", division: "all", venue: "all", query: "" });
 
   const loadSchedule = useCallback(async () => {
     setStatus("loading");

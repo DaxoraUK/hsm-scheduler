@@ -28,6 +28,9 @@ import LeagueClubOperationsWorkspace from "../components/league/LeagueClubOperat
 import LeagueClubPortalPage from "../components/league/LeagueClubPortalPage.jsx";
 import LeagueResultsWorkspace from "../components/league/LeagueResultsWorkspace.jsx";
 import LeagueCommandCentreWorkspace from "../components/league/LeagueCommandCentreWorkspace.jsx";
+import LeagueCommandSearch from "../components/league/LeagueCommandSearch.jsx";
+import { usePersistedWorkspaceState } from "../hooks/usePersistedWorkspaceState.js";
+import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.js";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -240,7 +243,7 @@ function createDraft(type, workspace) {
   const venue = workspace.venues?.[0];
   const defaults = currentSeasonDefaults();
   if (type === "season") return { ...defaults, status: workspace.seasons?.length ? "draft" : "active", isCurrent: !workspace.seasons?.length };
-  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "", startsOn: season?.startsOn || "", endsOn: season?.endsOn || "", meetingsPerPairing: 2, defaultKickOff: "", playingWeekday: "", maxConsecutiveHomeAway: season?.maxConsecutiveHomeAway || 2, winPoints: 3, drawPoints: 1, lossPoints: 0, walkoverScore: 3 };
+  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "", startsOn: season?.startsOn || "", endsOn: season?.endsOn || "", meetingsPerPairing: 2, defaultKickOff: "", playingWeekday: "", maxConsecutiveHomeAway: season?.maxConsecutiveHomeAway || 2, extraHomeRotationOffset: 0, winPoints: 3, drawPoints: 1, lossPoints: 0, walkoverScore: 3 };
   if (type === "parent_club") return { name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "team") return { seasonId: season?.id || "", divisionId: division?.id || "", parentClubId: club?.id || "", homeVenueId: venue?.id || "", name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "venue") return { parentClubId: club?.id || "", name: "", address: "", postcode: "", surface: "Grass", capacity: "", groundShareKey: "", simultaneousFixtureLimit: 1, status: "active" };
@@ -280,6 +283,7 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
         <Field label="Division starts"><input type="date" className={INPUT} value={draft.startsOn || ""} onChange={update("startsOn")} disabled={disabled} /></Field>
         <Field label="Division ends"><input type="date" className={INPUT} value={draft.endsOn || ""} onChange={update("endsOn")} disabled={disabled} /></Field>
         <Field label="Meetings per pairing"><select className={INPUT} value={draft.meetingsPerPairing ?? 2} onChange={update("meetingsPerPairing")} disabled={disabled}><option value={1}>1 meeting</option><option value={2}>2 meetings — home and away</option><option value={3}>3 meetings</option><option value={4}>4 meetings</option></select></Field>
+        <Field label="Odd-meeting home cycle"><select className={INPUT} value={draft.extraHomeRotationOffset ?? 0} onChange={update("extraHomeRotationOffset")} disabled={disabled}><option value={0}>Automatic season rotation</option><option value={1}>Invert automatic rotation</option></select><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">For one or three meetings, the extra home fixture swaps automatically between consecutive seasons. Use invert only to correct an inherited cycle.</span></Field>
         <Field label="Kick-off override"><input type="time" className={INPUT} value={draft.defaultKickOff || ""} onChange={update("defaultKickOff")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">Leave blank to inherit the league setting.</span></Field>
         <Field label="Playing-day override"><select className={INPUT} value={draft.playingWeekday ?? ""} onChange={update("playingWeekday")} disabled={disabled}><option value="">Use league day</option><option value={6}>Saturday</option><option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></Field>
         <Field label="Home/away run target"><input type="number" min="1" max="6" className={INPUT} value={draft.maxConsecutiveHomeAway ?? 2} onChange={update("maxConsecutiveHomeAway")} disabled={disabled} /></Field>
@@ -389,24 +393,41 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
   return null;
 }
 
-function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, busy, onSave, onDelete }) {
+function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, busy, onSave, onDelete, onDirtyChange }) {
   const items = Array.isArray(itemsOverride) ? itemsOverride : entityItems(type, workspace);
+  const initialDraft = useMemo(() => createDraft(type, workspace), [type, workspace]);
   const [selectedId, setSelectedId] = useState("");
-  const [draft, setDraft] = useState(() => createDraft(type, workspace));
+  const [draft, setDraft] = useState(initialDraft);
+  const [baseline, setBaseline] = useState(initialDraft);
+  const dirty = canEdit && JSON.stringify(draft) !== JSON.stringify(baseline);
+  const confirmLeave = useUnsavedChangesGuard(dirty, "This league record has unsaved changes. Discard them and continue?");
 
   useEffect(() => {
+    const next = createDraft(type, workspace);
     setSelectedId("");
-    setDraft(createDraft(type, workspace));
-  }, [type, workspace.league?.id]);
+    setDraft(next);
+    setBaseline(next);
+  }, [type, workspace.league?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   const selectRecord = (record) => {
+    if (!confirmLeave()) return;
+    const next = { ...record };
     setSelectedId(record.id);
-    setDraft({ ...record });
+    setDraft(next);
+    setBaseline(next);
   };
 
   const startNew = () => {
+    if (!confirmLeave()) return;
+    const next = createDraft(type, workspace);
     setSelectedId("");
-    setDraft(createDraft(type, workspace));
+    setDraft(next);
+    setBaseline(next);
   };
 
   const titleMap = {
@@ -426,7 +447,7 @@ function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, bus
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-sm font-black text-slate-950">{titleMap[type]}</div>
-            <div className="mt-0.5 text-xs font-semibold text-slate-500">{items.length} record{items.length === 1 ? "" : "s"}</div>
+            <div className="mt-0.5 flex items-center gap-2 text-xs font-semibold text-slate-500"><span>{items.length} record{items.length === 1 ? "" : "s"}</span>{dirty ? <Badge tone="blue">Unsaved</Badge> : null}</div>
           </div>
           {canEdit ? <button type="button" onClick={startNew} className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-black text-white"><Plus size={14} /> Add</button> : null}
         </div>
@@ -462,8 +483,10 @@ function RegistryWorkspace({ type, workspace, itemsOverride = null, canEdit, bus
               <button type="button" onClick={async () => {
                 const id = await onSave(type, draft);
                 if (id) {
+                  const saved = { ...draft, id: String(id) };
                   setSelectedId(String(id));
-                  setDraft((current) => ({ ...current, id: String(id) }));
+                  setDraft(saved);
+                  setBaseline(saved);
                 }
               }} disabled={busy} className={`${BUTTON} bg-emerald-600 text-white hover:bg-emerald-700`}>
                 {busy ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
@@ -552,9 +575,10 @@ export default function LeagueManagerPage({
   const [childView, setChildView] = useState(initialNavigation.current.child);
   const [commandSummary, setCommandSummary] = useState(null);
   const [navigationToken, setNavigationToken] = useState(0);
-  const [structureSection, setStructureSection] = useState("season");
-  const [venueSection, setVenueSection] = useState("venue");
-  const [fixtureView, setFixtureView] = useState("all");
+  const [structureSection, setStructureSection] = usePersistedWorkspaceState(`daxora:league:${activeLeagueId || "none"}:structure-section`, "season");
+  const [venueSection, setVenueSection] = usePersistedWorkspaceState(`daxora:league:${activeLeagueId || "none"}:venue-section`, "venue");
+  const [fixtureView, setFixtureView] = usePersistedWorkspaceState(`daxora:league:${activeLeagueId || "none"}:fixture-view`, "all");
+  const [dirtyAreas, setDirtyAreas] = useState({});
   const [busy, setBusy] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: "", role: "viewer" });
   const [lastInviteLink, setLastInviteLink] = useState("");
@@ -611,17 +635,42 @@ export default function LeagueManagerPage({
 
   const readiness = useMemo(() => getLeagueReadiness(workspace || {}), [workspace]);
 
+  const setAreaDirty = useCallback((area, dirty) => {
+    setDirtyAreas((current) => {
+      if (Boolean(current[area]) === Boolean(dirty)) return current;
+      const next = { ...current };
+      if (dirty) next[area] = true;
+      else delete next[area];
+      return next;
+    });
+  }, []);
+
+  const confirmAreaLeave = useCallback((area = tab) => {
+    if (!dirtyAreas[area]) return true;
+    return window.confirm("This League Manager area has unsaved changes. Discard them and continue?");
+  }, [dirtyAreas, tab]);
+
+  const handleStructureDirty = useCallback((dirty) => setAreaDirty("structure", dirty), [setAreaDirty]);
+  const handleAvailabilityDirty = useCallback((dirty) => setAreaDirty("availability", dirty), [setAreaDirty]);
+  const handleFixturesDirty = useCallback((dirty) => setAreaDirty("fixtures", dirty), [setAreaDirty]);
+  const handleScheduleDirty = useCallback((dirty) => setAreaDirty("schedule", dirty), [setAreaDirty]);
+
   const navigateLeague = useCallback((nextTab, nextChild = "", options = {}) => {
     if (!TAB_LOOKUP.has(nextTab)) return;
+    if ((nextTab !== tab || nextChild !== childView) && !confirmAreaLeave(tab)) return;
     setTab(nextTab);
     setChildView(nextChild);
     setNavigationToken((current) => current + 1);
     writeLeagueNavigation(nextTab, nextChild, options);
     window.scrollTo?.({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [childView, confirmAreaLeave, tab]);
 
   useEffect(() => {
     const handleHistoryNavigation = () => {
+      if (!confirmAreaLeave(tab)) {
+        writeLeagueNavigation(tab, childView, { replace: true });
+        return;
+      }
       const next = readLeagueNavigation();
       setTab(next.tab);
       setChildView(next.child);
@@ -629,11 +678,24 @@ export default function LeagueManagerPage({
     };
     window.addEventListener?.("popstate", handleHistoryNavigation);
     return () => window.removeEventListener?.("popstate", handleHistoryNavigation);
-  }, []);
+  }, [childView, confirmAreaLeave, tab]);
+
+  useEffect(() => {
+    if (tab === "structure" && STRUCTURE_SECTIONS.some(([key]) => key === childView)) setStructureSection(childView);
+    if (tab === "availability" && VENUE_SECTIONS.some(([key]) => key === childView)) setVenueSection(childView);
+    if (tab === "fixtures" && FIXTURE_VIEWS.some(([key]) => key === childView)) setFixtureView(childView);
+  }, [childView, setFixtureView, setStructureSection, setVenueSection, tab]);
 
   const activeGroup = TAB_GROUP.get(tab) || "command-centre";
   const activeGroupDefinition = NAV_GROUPS.find(([groupKey]) => groupKey === activeGroup) || NAV_GROUPS[0];
   const activeGroupTabs = activeGroupDefinition[3].map((tabKey) => TAB_LOOKUP.get(tabKey)).filter(Boolean);
+
+  const changeRegistrySection = (area, setter, nextValue) => {
+    if (!confirmAreaLeave(area)) return;
+    setter(nextValue);
+    setChildView(nextValue);
+    writeLeagueNavigation(area, nextValue, { replace: true });
+  };
 
   const saveEntity = async (type, draft) => {
     if (!workspace || !activeLeagueId) return null;
@@ -841,6 +903,8 @@ export default function LeagueManagerPage({
         </div>
       </Panel>
 
+      <LeagueCommandSearch workspace={workspace} operations={operations} onNavigate={navigateLeague} />
+
       <nav aria-label="League Manager workspaces" className="rounded-[24px] border border-slate-200 bg-white p-2.5 shadow-sm">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           {NAV_GROUPS.map(([groupKey, label, Icon, tabKeys]) => {
@@ -883,12 +947,12 @@ export default function LeagueManagerPage({
               <div className="flex flex-wrap gap-2"><button type="button" onClick={downloadStructureTemplate} className={`${BUTTON} border border-slate-200 bg-white text-slate-800 hover:bg-slate-50`}><FileSpreadsheet size={16} /> Download template</button><button type="button" disabled={!canManage || busy || !readiness.season} onClick={() => structureFileInputRef.current?.click()} className={`${BUTTON} bg-emerald-600 text-white`}><Upload size={16} /> Import setup CSV</button><input ref={structureFileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => importStructureCsv(event.target.files?.[0])} /></div>
             </div>
           </Panel>
-          <SectionTabs items={STRUCTURE_SECTIONS} value={structureSection} onChange={setStructureSection} />
-          <RegistryWorkspace type={structureSection} workspace={workspace} canEdit={canManage} busy={busy} onSave={saveEntity} onDelete={deleteEntity} />
+          <SectionTabs items={STRUCTURE_SECTIONS} value={structureSection} onChange={(value) => changeRegistrySection("structure", setStructureSection, value)} />
+          <RegistryWorkspace type={structureSection} workspace={workspace} canEdit={canManage} busy={busy} onSave={saveEntity} onDelete={deleteEntity} onDirtyChange={handleStructureDirty} />
         </div>
       ) : null}
 
-      {tab === "availability" ? <div className="space-y-5"><SectionTabs items={VENUE_SECTIONS} value={venueSection} onChange={setVenueSection} /><RegistryWorkspace type={venueSection} workspace={workspace} canEdit={venueSection === "blackout" ? canOperate : canManage} busy={busy} onSave={saveEntity} onDelete={deleteEntity} /></div> : null}
+      {tab === "availability" ? <div className="space-y-5"><SectionTabs items={VENUE_SECTIONS} value={venueSection} onChange={(value) => changeRegistrySection("availability", setVenueSection, value)} /><RegistryWorkspace type={venueSection} workspace={workspace} canEdit={venueSection === "blackout" ? canOperate : canManage} busy={busy} onSave={saveEntity} onDelete={deleteEntity} onDirtyChange={handleAvailabilityDirty} /></div> : null}
 
       {tab === "fixtures" ? (
         <div className="space-y-5">
@@ -898,8 +962,8 @@ export default function LeagueManagerPage({
               <div className="flex flex-wrap gap-2"><button type="button" onClick={downloadCsvTemplate} className={`${BUTTON} border border-slate-200 bg-white text-slate-800 hover:bg-slate-50`}><FileSpreadsheet size={16} /> Download template</button><button type="button" disabled={!canOperate || busy} onClick={() => fileInputRef.current?.click()} className={`${BUTTON} bg-slate-950 text-white`}><Upload size={16} /> Import CSV</button><input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => importCsv(event.target.files?.[0])} /></div>
             </div>
           </Panel>
-          <SectionTabs items={FIXTURE_VIEWS} value={fixtureView} onChange={setFixtureView} />
-          <RegistryWorkspace type="fixture" workspace={workspace} itemsOverride={visibleFixtures} canEdit={canOperate} busy={busy} onSave={saveEntity} onDelete={deleteEntity} />
+          <SectionTabs items={FIXTURE_VIEWS} value={fixtureView} onChange={(value) => changeRegistrySection("fixtures", setFixtureView, value)} />
+          <RegistryWorkspace type="fixture" workspace={workspace} itemsOverride={visibleFixtures} canEdit={canOperate} busy={busy} onSave={saveEntity} onDelete={deleteEntity} onDirtyChange={handleFixturesDirty} />
         </div>
       ) : null}
 
@@ -910,6 +974,7 @@ export default function LeagueManagerPage({
           workspace={workspace}
           canOperate={canOperate}
           onWorkspaceRefresh={loadWorkspace}
+          onDirtyChange={handleScheduleDirty}
         />
       ) : null}
 

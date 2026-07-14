@@ -71,6 +71,12 @@ function getDivisionTeams(workspace, divisionId, seasonId) {
     .sort((left, right) => left.name.localeCompare(right.name, "en-GB"));
 }
 
+function seasonRotationSeed(season, division) {
+  const startYear = Number(String(season?.startsOn || season?.name || "").match(/\d{4}/)?.[0] || 0);
+  const offset = Number(division?.extraHomeRotationOffset ?? 0) === 1 ? 1 : 0;
+  return Math.abs(startYear + offset) % 2;
+}
+
 function divisionRule(workspace, division, season) {
   const defaultKickOff = toTime(division?.defaultKickOff, toTime(season?.defaultKickOff, ""));
   return {
@@ -80,6 +86,8 @@ function divisionRule(workspace, division, season) {
     defaultKickOff,
     weekday: Number.isInteger(Number(division?.playingWeekday)) ? Number(division.playingWeekday) : Number(season?.primaryWeekday ?? 6),
     maxConsecutive: asPositiveInteger(division?.maxConsecutiveHomeAway ?? season?.maxConsecutiveHomeAway ?? 2, 2, 6),
+    rotationSeed: seasonRotationSeed(season, division),
+    extraHomeRotationOffset: Number(division?.extraHomeRotationOffset ?? 0) === 1 ? 1 : 0,
   };
 }
 
@@ -123,7 +131,101 @@ function flipFixture(fixture) {
   return { ...fixture, homeTeamId: fixture.awayTeamId, awayTeamId: fixture.homeTeamId };
 }
 
-function optimiseFixtureOrientation(fixtures, teams, { maxRun = 2, meetings = 2 } = {}) {
+
+function balanceSingleCycleOrientation(fixtures, teams) {
+  const result = fixtures.map((fixture) => ({ ...fixture }));
+  const activeTeams = asArray(teams).filter((team) => team?.id);
+  if (result.length === 0 || activeTeams.length < 2) return result;
+
+  const currentHomeCounts = new Map(activeTeams.map((team) => [team.id, 0]));
+  result.forEach((fixture) => currentHomeCounts.set(fixture.homeTeamId, (currentHomeCounts.get(fixture.homeTeamId) || 0) + 1));
+
+  const gamesPerTeam = activeTeams.length - 1;
+  const lowTarget = Math.floor(gamesPerTeam / 2);
+  const highTargetCount = gamesPerTeam % 2 === 0 ? 0 : activeTeams.length / 2;
+  const highTargetTeams = new Set(
+    [...activeTeams]
+      .sort((left, right) => {
+        const countDifference = (currentHomeCounts.get(right.id) || 0) - (currentHomeCounts.get(left.id) || 0);
+        if (countDifference !== 0) return countDifference;
+        return String(left.id).localeCompare(String(right.id), "en-GB");
+      })
+      .slice(0, highTargetCount)
+      .map((team) => team.id),
+  );
+  const targets = new Map(activeTeams.map((team) => [team.id, lowTarget + (highTargetTeams.has(team.id) ? 1 : 0)]));
+
+  const source = 0;
+  const fixtureOffset = 1;
+  const teamOffset = fixtureOffset + result.length;
+  const sink = teamOffset + activeTeams.length;
+  const graph = Array.from({ length: sink + 1 }, () => []);
+  const addEdge = (from, to, capacity, cost) => {
+    const forward = { to, reverse: graph[to].length, capacity, cost, originalCapacity: capacity };
+    const backward = { to: from, reverse: graph[from].length, capacity: 0, cost: -cost, originalCapacity: 0 };
+    graph[from].push(forward);
+    graph[to].push(backward);
+    return forward;
+  };
+
+  const teamNodeById = new Map(activeTeams.map((team, index) => [team.id, teamOffset + index]));
+  const choiceEdges = [];
+  result.forEach((fixture, index) => {
+    const fixtureNode = fixtureOffset + index;
+    addEdge(source, fixtureNode, 1, 0);
+    choiceEdges[index] = [
+      { teamId: fixture.homeTeamId, edge: addEdge(fixtureNode, teamNodeById.get(fixture.homeTeamId), 1, 0) },
+      { teamId: fixture.awayTeamId, edge: addEdge(fixtureNode, teamNodeById.get(fixture.awayTeamId), 1, 1) },
+    ];
+  });
+  activeTeams.forEach((team) => addEdge(teamNodeById.get(team.id), sink, targets.get(team.id), 0));
+
+  let flow = 0;
+  while (flow < result.length) {
+    const distance = Array(graph.length).fill(Number.POSITIVE_INFINITY);
+    const previousNode = Array(graph.length).fill(-1);
+    const previousEdge = Array(graph.length).fill(-1);
+    const inQueue = Array(graph.length).fill(false);
+    const queue = [source];
+    distance[source] = 0;
+    inQueue[source] = true;
+
+    while (queue.length > 0) {
+      const node = queue.shift();
+      inQueue[node] = false;
+      graph[node].forEach((edge, edgeIndex) => {
+        if (edge.capacity <= 0 || distance[node] + edge.cost >= distance[edge.to]) return;
+        distance[edge.to] = distance[node] + edge.cost;
+        previousNode[edge.to] = node;
+        previousEdge[edge.to] = edgeIndex;
+        if (!inQueue[edge.to]) {
+          queue.push(edge.to);
+          inQueue[edge.to] = true;
+        }
+      });
+    }
+
+    if (previousNode[sink] < 0) return result;
+    let node = sink;
+    while (node !== source) {
+      const from = previousNode[node];
+      const edge = graph[from][previousEdge[node]];
+      edge.capacity -= 1;
+      graph[node][edge.reverse].capacity += 1;
+      node = from;
+    }
+    flow += 1;
+  }
+
+  choiceEdges.forEach((choices, index) => {
+    const selected = choices.find((choice) => choice.edge.originalCapacity === 1 && choice.edge.capacity === 0);
+    if (!selected || selected.teamId === result[index].homeTeamId) return;
+    result[index] = flipFixture(result[index]);
+  });
+  return result;
+}
+
+function optimiseFixtureOrientation(fixtures, teams, { maxRun = 2, meetings = 2, allowSingles = false } = {}) {
   const result = fixtures.map((fixture) => ({ ...fixture }));
   const teamIds = teams.map((team) => team.id);
   const groups = [];
@@ -136,7 +238,8 @@ function optimiseFixtureOrientation(fixtures, teams, { maxRun = 2, meetings = 2 
   groupedByPair.forEach((indices) => {
     const ordered = indices.sort((a, b) => result[a].meetingNumber - result[b].meetingNumber);
     for (let index = 0; index < ordered.length; index += 2) {
-      groups.push(ordered.slice(index, index + 2));
+      const pair = ordered.slice(index, index + 2);
+      if (pair.length === 2 || (allowSingles && pair.length === 1)) groups.push(pair);
     }
   });
 
@@ -161,7 +264,7 @@ function optimiseFixtureOrientation(fixtures, teams, { maxRun = 2, meetings = 2 
  * Builds a deterministic round-robin matrix supporting one to four meetings per pairing.
  * Meeting numbers are stable and are part of the fixture identity.
  */
-export function buildDivisionFixtureMatrix(teams = [], { meetings = 2, maxConsecutive = 2 } = {}) {
+export function buildDivisionFixtureMatrix(teams = [], { meetings = 2, maxConsecutive = 2, rotationSeed = 0 } = {}) {
   const activeTeams = asArray(teams).filter((team) => team?.id);
   if (activeTeams.length < 2) return [];
 
@@ -189,13 +292,23 @@ export function buildDivisionFixtureMatrix(teams = [], { meetings = 2, maxConsec
     current = rotateRoundRobin(current);
   }
 
+  const balancedFirstCycle = balanceSingleCycleOrientation(
+    optimiseFixtureOrientation(firstCycle, activeTeams, {
+      maxRun: asPositiveInteger(maxConsecutive, 2, 6),
+      meetings: 1,
+      allowSingles: true,
+    }),
+    activeTeams,
+  );
+
   const fixtures = [];
+  const oddMeetingUsesReverseCycle = Math.abs(Number(rotationSeed) || 0) % 2 === 1;
   for (let meetingNumber = 1; meetingNumber <= meetingCount; meetingNumber += 1) {
     const cycleIndex = meetingNumber - 1;
-    firstCycle.forEach((baseFixture) => {
-      const oddExtraFlip = meetingNumber > 2 && ((baseFixture.roundNumber + baseFixture.pairIndex + meetingNumber) % 2 === 0);
-      const reverse = meetingNumber % 2 === 0;
-      const shouldFlip = reverse !== oddExtraFlip;
+    balancedFirstCycle.forEach((baseFixture) => {
+      let shouldFlip = meetingNumber % 2 === 0;
+      if (meetingNumber === 3) shouldFlip = oddMeetingUsesReverseCycle;
+      if (meetingNumber === 4) shouldFlip = !oddMeetingUsesReverseCycle;
       fixtures.push({
         roundNumber: baseFixture.roundNumber + (cycleIndex * roundsPerCycle),
         homeTeamId: shouldFlip ? baseFixture.awayTeamId : baseFixture.homeTeamId,
@@ -208,6 +321,7 @@ export function buildDivisionFixtureMatrix(teams = [], { meetings = 2, maxConsec
   return optimiseFixtureOrientation(fixtures, activeTeams, {
     maxRun: asPositiveInteger(maxConsecutive, 2, 6),
     meetings: meetingCount,
+    allowSingles: meetingCount === 1,
   });
 }
 
@@ -427,10 +541,28 @@ export function getLeagueSchedulePreflight(workspace = {}, options = {}) {
   const divisions = selectedDivisions(workspace, season, options.divisionIds).map((division) => {
     const rule = divisionRule(workspace, division, season);
     const teams = getDivisionTeams(workspace, division.id, season.id);
-    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
+    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive, rotationSeed: rule.rotationSeed });
     const requiredRounds = matrix.reduce((maximum, fixture) => Math.max(maximum, fixture.roundNumber), 0);
     const availableDates = playingDatesForDivision(workspace, season.id, division.id).length;
-    return { id: division.id, name: division.name, teams: teams.length, fixtures: matrix.length, requiredRounds, availableDates, shortfall: Math.max(requiredRounds - availableDates, 0), ...rule };
+    const scopedDates = asArray(workspace?.playingDates)
+      .filter((row) => row.seasonId === season.id)
+      .filter((row) => !row.divisionId || row.divisionId === division.id);
+    const reservedDates = new Set(scopedDates.filter((row) => row.status === "reserved").map((row) => row.playingDate)).size;
+    const closedDates = new Set(scopedDates.filter((row) => row.status === "closed").map((row) => row.playingDate)).size;
+    return {
+      id: division.id,
+      name: division.name,
+      teams: teams.length,
+      fixtures: matrix.length,
+      fixturesPerTeam: teams.length > 1 ? (teams.length - 1) * rule.meetings : 0,
+      requiredRounds,
+      availableDates,
+      reservedDates,
+      closedDates,
+      shortfall: Math.max(requiredRounds - availableDates, 0),
+      oddMeetingRotation: rule.meetings % 2 === 1 ? (rule.rotationSeed ? "inverted" : "standard") : "balanced",
+      ...rule,
+    };
   });
   const errors = [];
   if (!season.startsOn || !season.endsOn) errors.push("Set the season start and end dates.");
@@ -483,7 +615,7 @@ export function generateLeagueSchedule(workspace = {}, options = {}) {
       errors.push(`${division.name} needs at least two active teams.`);
       return;
     }
-    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
+    const matrix = buildDivisionFixtureMatrix(teams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive, rotationSeed: rule.rotationSeed });
     const dates = playingDatesForDivision(workspace, season.id, division.id);
     const totalRounds = matrix.reduce((max, fixture) => Math.max(max, fixture.roundNumber), 0);
 
@@ -732,15 +864,43 @@ export function validateLeagueSchedule(workspace = {}, entriesInput = [], config
   selectedDivisions(workspace, season || { id: "" }, config.divisionIds).forEach((division) => {
     const rule = divisionRule(workspace, division, season);
     const divisionTeams = getDivisionTeams(workspace, division.id, season?.id || "");
-    const expected = buildDivisionFixtureMatrix(divisionTeams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive });
-    const actualKeys = new Set(entries.filter((entry) => entry.divisionId === division.id).map(fixtureIdentity));
+    const expected = buildDivisionFixtureMatrix(divisionTeams, { meetings: rule.meetings, maxConsecutive: rule.maxConsecutive, rotationSeed: rule.rotationSeed });
+    const expectedByIdentity = new Map(expected.map((fixture) => {
+      const withDivision = { ...fixture, divisionId: division.id };
+      return [fixtureIdentity(withDivision), withDivision];
+    }));
+    const actualRows = entries.filter((entry) => entry.divisionId === division.id);
+    const actualKeys = new Set(actualRows.map(fixtureIdentity));
     const missing = expected.filter((fixture) => !actualKeys.has(fixtureIdentity({ ...fixture, divisionId: division.id })));
+    const unexpected = actualRows.filter((entry) => !expectedByIdentity.has(fixtureIdentity(entry)));
     if (missing.length) issues.push(issue({ code: "missing-required-fixtures", message: `${division.name} is missing ${missing.length} required fixture${missing.length === 1 ? "" : "s"}.`, divisionId: division.id }));
+    if (unexpected.length) issues.push(issue({ code: "unexpected-fixture", message: `${division.name} contains ${unexpected.length} fixture${unexpected.length === 1 ? "" : "s"} outside its ${rule.meetings}-meeting competition format.`, divisionId: division.id, entryIds: unexpected.map(stableEntryKey) }));
+
+    actualRows.forEach((entry) => {
+      const expectedEntry = expectedByIdentity.get(fixtureIdentity(entry));
+      if (expectedEntry && expectedEntry.homeTeamId !== entry.homeTeamId) {
+        issues.push(issue({
+          code: "home-allocation-mismatch",
+          message: `${nameOf(teams, entry.homeTeamId, "Home team")} v ${nameOf(teams, entry.awayTeamId, "Away team")} does not follow ${division.name}'s season home-allocation cycle for meeting ${entry.meetingNumber || 1}.`,
+          entryIds: [stableEntryKey(entry)],
+          divisionId: division.id,
+        }));
+      }
+    });
+
+    const expectedPerTeam = Math.max(0, (divisionTeams.length - 1) * rule.meetings);
     divisionTeams.forEach((team) => {
-      const rows = entries.filter((entry) => entry.divisionId === division.id && [entry.homeTeamId, entry.awayTeamId].includes(team.id));
+      const rows = actualRows.filter((entry) => [entry.homeTeamId, entry.awayTeamId].includes(team.id));
       const homeCount = rows.filter((entry) => entry.homeTeamId === team.id).length;
       const awayCount = rows.filter((entry) => entry.awayTeamId === team.id).length;
-      const allowed = rows.length % 2;
+      const allowed = expectedPerTeam % 2;
+      if (rows.length !== expectedPerTeam) issues.push(issue({
+        code: "team-fixture-total-mismatch",
+        message: `${team.name} has ${rows.length} league fixtures; ${division.name} requires ${expectedPerTeam}.`,
+        teamId: team.id,
+        divisionId: division.id,
+        entryIds: rows.map(stableEntryKey),
+      }));
       if (Math.abs(homeCount - awayCount) > allowed) issues.push(issue({ code: "home-away-imbalance", severity: "warning", message: `${team.name} has ${homeCount} home and ${awayCount} away league fixtures.`, teamId: team.id, divisionId: division.id }));
     });
   });

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { DB } from "../../lib/supabase.js";
+import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
+import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.js";
 import { getCurrentLeagueSeason, getEntityName } from "../../lib/league/leagueManagerModel.js";
 import {
   compareLeagueScheduleVersions,
@@ -149,6 +151,18 @@ const ISSUE_GROUP_COPY = {
   "missing-required-fixtures": {
     title: "Missing fixtures",
     description: "The generated programme is missing required pairings.",
+  },
+  "unexpected-fixture": {
+    title: "Fixtures outside the format",
+    description: "The programme contains pairings or meeting numbers beyond the division rule.",
+  },
+  "team-fixture-total-mismatch": {
+    title: "Incorrect team totals",
+    description: "At least one team does not have the required number of league fixtures.",
+  },
+  "home-allocation-mismatch": {
+    title: "Home allocation cycle",
+    description: "An odd-meeting home fixture does not follow the season rotation.",
   },
 };
 
@@ -323,7 +337,7 @@ function ScheduleEntryRow({
   );
 }
 
-export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperate, onWorkspaceRefresh }) {
+export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperate, onWorkspaceRefresh, onDirtyChange }) {
   const season = getCurrentLeagueSeason(workspace);
   const [versions, setVersions] = useState([]);
   const [selectedVersionId, setSelectedVersionId] = useState("");
@@ -332,7 +346,7 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({ name: "Full league programme" });
-  const [filters, setFilters] = useState({ divisionId: "all", teamId: "all", venueId: "all", status: "all", query: "" });
+  const [filters, setFilters] = usePersistedWorkspaceState(`daxora:league:${leagueId}:schedule-filters`, { divisionId: "all", teamId: "all", venueId: "all", status: "all", query: "" });
   const [visibleLimit, setVisibleLimit] = useState(75);
   const [compareVersionId, setCompareVersionId] = useState("");
   const [comparePayload, setComparePayload] = useState(null);
@@ -409,15 +423,12 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
       .catch((error) => toast.error("Comparison version could not be loaded", { description: error?.message }));
   }, [compareVersionId, leagueId]);
 
+  useUnsavedChangesGuard(dirtyCount > 0, "This schedule has unsaved fixture changes. Discard them and leave?");
+
   useEffect(() => {
-    if (!dirtyCount) return undefined;
-    const warnBeforeLeaving = (event) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeLeaving);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [dirtyCount]);
+    onDirtyChange?.(dirtyCount > 0);
+    return () => onDirtyChange?.(false);
+  }, [dirtyCount, onDirtyChange]);
 
   const effectiveEntries = useMemo(() => {
     if (!payload) return [];
@@ -741,6 +752,31 @@ export default function LeagueScheduleWorkspace({ leagueId, workspace, canOperat
             {!preflight.ready ? <div className="mt-3 text-xs font-black text-amber-900">{[...(preflight.errors || []), ...(preflight.dateShortfalls || []).map((division) => `${division.name}: ${division.availableDates}/${division.requiredRounds} valid dates`)].slice(0, 5).join(" · ")}</div> : null}
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold leading-5 text-slate-700">Change the league default kick-off, primary day or division rules in <strong>League structure</strong>. The Schedule Builder no longer carries separate defaults that can drift from those settings.</div>
+        </div>
+      </Panel>
+
+      <Panel className="overflow-hidden">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="text-sm font-black text-slate-950">Competition-format assurance</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">Expected team totals, rounds and protected calendar dates are calculated before generation.</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500"><tr><th className="px-4 py-3">Division</th><th className="px-4 py-3">Teams</th><th className="px-4 py-3">Format</th><th className="px-4 py-3">Per team</th><th className="px-4 py-3">Fixtures</th><th className="px-4 py-3">Rounds</th><th className="px-4 py-3">Available</th><th className="px-4 py-3">Protected</th><th className="px-4 py-3">Assurance</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {preflight.divisions.map((division) => <tr key={division.id} className="bg-white">
+                <td className="px-4 py-3 font-black text-slate-950">{division.name}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.teams}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.meetings}× pairing{division.meetings % 2 === 1 ? ` · ${division.oddMeetingRotation} extra-home cycle` : ""}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.fixturesPerTeam}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.fixtures}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.requiredRounds}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.availableDates}</td>
+                <td className="px-4 py-3 font-bold text-slate-700">{division.reservedDates + division.closedDates}</td>
+                <td className="px-4 py-3"><Pill tone={division.shortfall ? "rose" : "green"}>{division.shortfall ? `${division.shortfall} date shortfall` : "Ready"}</Pill></td>
+              </tr>)}
+            </tbody>
+          </table>
         </div>
       </Panel>
 

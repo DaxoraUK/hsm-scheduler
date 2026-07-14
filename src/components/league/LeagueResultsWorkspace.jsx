@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { DB } from "../../lib/supabase.js";
+import { usePersistedWorkspaceState } from "../../hooks/usePersistedWorkspaceState.js";
 import {
   buildLeagueStandings,
   buildMissingResultQueue,
@@ -137,8 +138,8 @@ export default function LeagueResultsWorkspace({ leagueId, workspace, initialTab
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resultFixture, setResultFixture] = useState(null);
-  const [divisionFilter, setDivisionFilter] = useState("all");
-  const [tableDivisionId, setTableDivisionId] = useState("");
+  const [divisionFilter, setDivisionFilter] = usePersistedWorkspaceState(`daxora:league:${leagueId}:results-division-filter`, "all");
+  const [tableDivisionId, setTableDivisionId] = usePersistedWorkspaceState(`daxora:league:${leagueId}:table-division`, "");
   const [adjustment, setAdjustment] = useState({ divisionId: "", teamId: "", pointsDelta: "", goalsForDelta: "", goalsAgainstDelta: "", effectiveOn: new Date().toISOString().slice(0, 10), reason: "" });
   const [fullTimeCsv, setFullTimeCsv] = useState("");
   const [reconciliation, setReconciliation] = useState(null);
