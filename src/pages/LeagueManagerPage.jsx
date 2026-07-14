@@ -59,15 +59,15 @@ const FIXTURE_VIEWS = Object.freeze([
 ]);
 
 const TABS = Object.freeze([
-  ["overview", "Command overview"],
-  ["command", "Fixture Command"],
-  ["schedule", "Schedule builder"],
-  ["cups", "Cups"],
-  ["officials", "Match officials"],
-  ["structure", "League structure"],
-  ["availability", "Venues & availability"],
-  ["fixtures", "Fixture registry"],
-  ["access", "Access & audit"],
+  ["overview", "Command overview", ShieldCheck],
+  ["command", "Fixture Command", CalendarDays],
+  ["schedule", "Schedule builder", RefreshCw],
+  ["cups", "Cups", Trophy],
+  ["officials", "Match officials", Users],
+  ["structure", "League structure", Building2],
+  ["availability", "Venues & availability", MapPin],
+  ["fixtures", "Fixture registry", FileSpreadsheet],
+  ["access", "Access & audit", LockKeyhole],
 ]);
 
 function currentSeasonDefaults() {
@@ -758,11 +758,22 @@ export default function LeagueManagerPage({
         </div>
       </Panel>
 
-      <div className="overflow-x-auto pb-1">
-        <div className="inline-flex min-w-full gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:min-w-0">
-          {TABS.map(([key, label]) => <button key={key} type="button" onClick={() => setTab(key)} className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-black transition ${tab === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>{label}</button>)}
+      <nav aria-label="League Manager workspaces" className="rounded-[24px] border border-slate-200 bg-white p-2.5 shadow-sm">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+          {TABS.map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-current={tab === key ? "page" : undefined}
+              className={`flex min-h-12 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-black transition ${tab === key ? "bg-slate-950 text-white shadow-sm" : "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"}`}
+            >
+              <Icon size={16} className={`shrink-0 ${tab === key ? "text-emerald-300" : "text-slate-400"}`} />
+              <span className="min-w-0 leading-4">{label}</span>
+            </button>
+          ))}
         </div>
-      </div>
+      </nav>
 
       {tab === "overview" ? (
         <div className="space-y-6">

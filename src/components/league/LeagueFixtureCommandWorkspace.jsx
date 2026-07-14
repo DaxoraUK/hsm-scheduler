@@ -8,7 +8,7 @@ import {
   Filter,
   Grid3X3,
   List,
-  Map,
+  Map as MapIcon,
   MapPin,
   RefreshCw,
   ShieldAlert,
@@ -30,7 +30,7 @@ const INPUT = "h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm fon
 const VIEWS = [
   ["calendar", "Calendar", CalendarDays],
   ["grid", "Season grid", Grid3X3],
-  ["map", "Venue map", Map],
+  ["map", "Venue map", MapIcon],
   ["list", "Fixture list", List],
   ["exceptions", "Exceptions", ShieldAlert],
 ];
@@ -130,7 +130,7 @@ function FixtureDrawer({ fixture, workspace, operations, onClose }) {
 
 function CalendarView({ fixtures, month, setMonth, operations, onSelect }) {
   const cells = monthCells(month);
-  const grouped = useMemo(() => fixtures.reduce((map, fixture) => { if (!fixture.date) return map; const rows = map.get(fixture.date) || []; rows.push(fixture); map.set(fixture.date, rows); return map; }, new Map()), [fixtures]);
+  const grouped = useMemo(() => fixtures.reduce((map, fixture) => { if (!fixture.date) return map; const rows = map.get(fixture.date) || []; rows.push(fixture); map.set(fixture.date, rows); return map; }, new globalThis.Map()), [fixtures]);
   return (
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-lg font-black text-slate-950">{month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</div><div className="text-xs font-semibold text-slate-500">League and cup fixtures share one operational calendar.</div></div><div className="flex gap-2"><button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><ChevronLeft size={17} /></button><button type="button" onClick={() => setMonth(startOfMonth())} className={`${BUTTON} border border-slate-200 bg-white text-slate-700`}>Today</button><button type="button" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><ChevronRight size={17} /></button></div></div>
@@ -154,7 +154,7 @@ function SeasonGridView({ fixtures, workspace, operations, onSelect }) {
 }
 
 function VenueMapView({ fixtures, workspace, operations, canManage, onRefreshOperations, onSelect }) {
-  const positions = new Map(operations.venuePositions.map((row) => [row.id, row]));
+  const positions = new globalThis.Map(operations.venuePositions.map((row) => [row.id, row]));
   const venues = workspace.venues.map((venue) => ({ ...venue, ...(positions.get(venue.id) || {}) }));
   const mapped = venues.filter((venue) => Number.isFinite(venue.latitude) && Number.isFinite(venue.longitude));
   const unmapped = venues.filter((venue) => !Number.isFinite(venue.latitude) || !Number.isFinite(venue.longitude));
@@ -174,7 +174,7 @@ function VenueMapView({ fixtures, workspace, operations, canManage, onRefreshOpe
 }
 
 function ListView({ fixtures, operations, onSelect }) {
-  const grouped = fixtures.reduce((map, fixture) => { const key = fixture.date || "unplaced"; const rows = map.get(key) || []; rows.push(fixture); map.set(key, rows); return map; }, new Map());
+  const grouped = fixtures.reduce((map, fixture) => { const key = fixture.date || "unplaced"; const rows = map.get(key) || []; rows.push(fixture); map.set(key, rows); return map; }, new globalThis.Map());
   return <div className="space-y-4">{[...grouped.entries()].map(([date, rows]) => <Panel key={date} className="overflow-hidden"><div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3"><div className="text-sm font-black text-slate-900">{date === "unplaced" ? "Unplaced fixtures" : dateLabel(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><Pill tone={date === "unplaced" ? "rose" : "slate"}>{rows.length}</Pill></div><div className="divide-y divide-slate-100">{rows.map((fixture) => { const coverage = fixtureAssignmentSummary(fixture, operations); return <button type="button" key={`${fixture.targetType}-${fixture.targetId}`} onClick={() => onSelect(fixture)} className="grid w-full gap-2 px-4 py-3 text-left hover:bg-slate-50 sm:grid-cols-[90px_minmax(260px,1.5fr)_minmax(180px,1fr)_150px_120px] sm:items-center"><div className="text-xs font-black text-slate-700">{fixture.kickOff || "TBC"}</div><div><div className="text-sm font-black text-slate-950">{fixture.homeTeamName} <span className="text-slate-400">v</span> {fixture.awayTeamName}</div><div className="mt-0.5 text-[10px] font-bold text-slate-500">{fixture.competitionName}</div></div><div className="truncate text-xs font-bold text-slate-600">{fixture.venueName}</div><Pill tone={fixture.competitionType === "cup" ? "amber" : "blue"}>{fixture.competitionType}</Pill><Pill tone={coverage.complete ? "green" : "amber"}>{coverage.assigned}/{coverage.required} officials</Pill></button>; })}</div></Panel>)}</div>;
 }
 
