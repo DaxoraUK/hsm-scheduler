@@ -1897,6 +1897,51 @@ export const DB = {
     });
   },
 
+  async getLeagueReportConfiguration(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_report_configuration", { target_league_id: id });
+  },
+
+  async upsertLeagueReportDefinition(leagueId, definition = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_report_definition", {
+      target_league_id: id,
+      definition_data: {
+        id: definition.id || null,
+        name: String(definition.name || "").trim(),
+        report_type: definition.reportType || "executive",
+        cadence: definition.cadence || "manual",
+        delivery_format: definition.deliveryFormat || "html",
+        recipients: Array.isArray(definition.recipients) ? definition.recipients : [],
+        filters: definition.filters && typeof definition.filters === "object" ? definition.filters : {},
+        next_run_on: definition.nextRunOn || null,
+        active: definition.active !== false,
+      },
+    });
+  },
+
+  async deleteLeagueReportDefinition(leagueId, definitionId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/delete_league_report_definition", {
+      target_league_id: id,
+      target_definition_id: String(definitionId || "").trim(),
+    });
+  },
+
+  async captureLeagueReportSnapshot(leagueId, data = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/capture_league_report_snapshot", {
+      target_league_id: id,
+      snapshot_data: {
+        season_id: data.seasonId || null,
+        definition_id: data.definitionId || null,
+        report_type: data.reportType || "executive",
+        generated_from: data.generatedFrom || "manual",
+        snapshot: data.snapshot && typeof data.snapshot === "object" ? data.snapshot : {},
+      },
+    });
+  },
+
   async getPlatformOperatorContext() {
     return supaFetch("POST", "rpc/get_platform_operator_context", {});
   },

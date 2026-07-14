@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  BarChart3,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -32,6 +33,7 @@ import LeagueCommandCentreWorkspace from "../components/league/LeagueCommandCent
 import LeagueCommandSearch from "../components/league/LeagueCommandSearch.jsx";
 import LeagueDisciplineWorkspace from "../components/league/LeagueDisciplineWorkspace.jsx";
 import LeagueRegistrationsWorkspace from "../components/league/LeagueRegistrationsWorkspace.jsx";
+import LeagueAnalyticsWorkspace from "../components/league/LeagueAnalyticsWorkspace.jsx";
 import { usePersistedWorkspaceState } from "../hooks/usePersistedWorkspaceState.js";
 import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.js";
 import {
@@ -72,6 +74,7 @@ const FIXTURE_VIEWS = Object.freeze([
 
 const TABS = Object.freeze([
   ["overview", "Command centre", ShieldCheck],
+  ["analytics", "Analytics & reports", BarChart3],
   ["command", "Fixture Command", CalendarDays],
   ["schedule", "Schedule builder", RefreshCw],
   ["cups", "Cups", Trophy],
@@ -87,7 +90,7 @@ const TABS = Object.freeze([
 ]);
 
 const NAV_GROUPS = Object.freeze([
-  ["command-centre", "Command", ShieldCheck, ["overview"]],
+  ["command-centre", "Command", ShieldCheck, ["overview", "analytics"]],
   ["fixtures", "Fixtures", CalendarDays, ["command", "schedule", "fixtures", "availability", "officials"]],
   ["competitions", "Competitions", Trophy, ["results", "cups", "registrations", "discipline"]],
   ["clubs", "Clubs", Megaphone, ["clubs"]],
@@ -954,6 +957,16 @@ export default function LeagueManagerPage({
           onNavigate={navigateLeague}
           onRefreshOperations={refreshOperations}
           onSummaryChange={setCommandSummary}
+        />
+      ) : null}
+
+      {tab === "analytics" ? (
+        <LeagueAnalyticsWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+          operations={operations}
+          initialTab={childView || "executive"}
+          focusToken={navigationToken}
         />
       ) : null}
 
