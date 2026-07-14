@@ -49,6 +49,10 @@ function normaliseRow(row = {}) {
     playingWeekday: row.playing_weekday === null || row.playing_weekday === undefined ? (row.playingWeekday ?? "") : Number(row.playing_weekday),
     meetingsPerPairing: Number(row.meetings_per_pairing ?? row.meetingsPerPairing ?? 2),
     maxConsecutiveHomeAway: Number(row.max_consecutive_home_away ?? row.maxConsecutiveHomeAway ?? 2),
+    winPoints: Number(row.win_points ?? row.winPoints ?? 3),
+    drawPoints: Number(row.draw_points ?? row.drawPoints ?? 1),
+    lossPoints: Number(row.loss_points ?? row.lossPoints ?? 0),
+    walkoverScore: Number(row.walkover_score ?? row.walkoverScore ?? 3),
     finalDate: row.final_date || row.finalDate || "",
     finalVenueId: row.final_venue_id || row.finalVenueId || "",
     drawMode: row.draw_mode || row.drawMode || "random",
@@ -483,6 +487,10 @@ export function serialiseLeagueEntity(type, draft = {}) {
         default_kick_off: draft.defaultKickOff || draft.default_kick_off || null,
         playing_weekday: draft.playingWeekday === "" || draft.playing_weekday === "" ? null : Number(draft.playingWeekday ?? draft.playing_weekday ?? 6),
         max_consecutive_home_away: Math.max(1, Math.min(Number(draft.maxConsecutiveHomeAway ?? draft.max_consecutive_home_away ?? 2) || 2, 6)),
+        win_points: Math.max(0, Math.min(Number(draft.winPoints ?? draft.win_points ?? 3) || 0, 10)),
+        draw_points: Math.max(0, Math.min(Number(draft.drawPoints ?? draft.draw_points ?? 1) || 0, 10)),
+        loss_points: Math.max(-10, Math.min(Number(draft.lossPoints ?? draft.loss_points ?? 0) || 0, 10)),
+        walkover_score: Math.max(1, Math.min(Number(draft.walkoverScore ?? draft.walkover_score ?? 3) || 3, 20)),
       };
     case "parent_club":
       return {

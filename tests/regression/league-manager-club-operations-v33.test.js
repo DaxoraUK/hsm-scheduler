@@ -24,6 +24,7 @@ const mockDb = {
     club_invitations: [],
     calendar_feeds: [],
   })),
+  getLeagueClubResultsData: vi.fn(async () => ({ access: { can_submit: true }, results: [], submissions: [] })),
   listLeagueScheduleVersions: vi.fn(async () => ([
     { id: "version-1", version_number: 1, name: "Published programme", status: "published" },
   ])),

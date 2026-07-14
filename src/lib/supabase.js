@@ -1322,12 +1322,112 @@ export const DB = {
 
   async getLeagueClubOperationsData(leagueId) {
     const id = requireLeagueId(leagueId);
-    return supaFetch("POST", "rpc/get_league_club_operations_data", { target_league_id: id });
+    const request = () => supaFetch("POST", "rpc/get_league_club_operations_data", { target_league_id: id });
+    try {
+      return await request();
+    } catch (error) {
+      const schemaCacheMiss = error?.code === "PGRST202"
+        || /schema cache|could not find the function/i.test(String(error?.message || ""));
+      if (!schemaCacheMiss) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      try {
+        return await request();
+      } catch (retryError) {
+        if (retryError?.code === "PGRST202" || /schema cache|could not find the function/i.test(String(retryError?.message || ""))) {
+          throw new SupabaseRequestError(
+            "Club Operations is waiting for the latest database migration. Run npx supabase db push, wait a few seconds, then refresh the workspace.",
+            { status: retryError?.status || 404, code: "LEAGUE_CLUB_OPERATIONS_RPC_MISSING", details: retryError?.details, path: "rpc/get_league_club_operations_data" },
+          );
+        }
+        throw retryError;
+      }
+    }
   },
 
   async getLeagueClubPortalData(leagueId) {
     const id = requireLeagueId(leagueId);
     return supaFetch("POST", "rpc/get_league_club_portal_data", { target_league_id: id });
+  },
+
+  async getLeagueResultsData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_results_data", { target_league_id: id });
+  },
+
+  async getLeagueClubResultsData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_results_data", { target_league_id: id });
+  },
+
+  async submitLeagueFixtureResult(leagueId, publicationFixtureId, result = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/submit_league_fixture_result", {
+      target_league_id: id,
+      target_publication_fixture_id: String(publicationFixtureId || "").trim(),
+      result_data: {
+        outcome_type: result.outcomeType || "played",
+        home_score: result.homeScore === "" || result.homeScore === null || result.homeScore === undefined ? null : Number(result.homeScore),
+        away_score: result.awayScore === "" || result.awayScore === null || result.awayScore === undefined ? null : Number(result.awayScore),
+        home_penalties: result.homePenalties === "" || result.homePenalties === null || result.homePenalties === undefined ? null : Number(result.homePenalties),
+        away_penalties: result.awayPenalties === "" || result.awayPenalties === null || result.awayPenalties === undefined ? null : Number(result.awayPenalties),
+        winner_team_id: result.winnerTeamId || null,
+        notes: String(result.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async reviewLeagueResultSubmission(leagueId, submissionId, decision, notes = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/review_league_result_submission", {
+      target_league_id: id,
+      target_submission_id: String(submissionId || "").trim(),
+      review_decision: String(decision || "verify").trim(),
+      review_notes: String(notes || "").trim() || null,
+    });
+  },
+
+  async recordLeagueFixtureResult(leagueId, publicationFixtureId, result = {}, source = "league_entry") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/record_league_fixture_result", {
+      target_league_id: id,
+      target_publication_fixture_id: String(publicationFixtureId || "").trim(),
+      result_data: {
+        outcome_type: result.outcomeType || "played",
+        home_score: result.homeScore === "" || result.homeScore === null || result.homeScore === undefined ? null : Number(result.homeScore),
+        away_score: result.awayScore === "" || result.awayScore === null || result.awayScore === undefined ? null : Number(result.awayScore),
+        home_penalties: result.homePenalties === "" || result.homePenalties === null || result.homePenalties === undefined ? null : Number(result.homePenalties),
+        away_penalties: result.awayPenalties === "" || result.awayPenalties === null || result.awayPenalties === undefined ? null : Number(result.awayPenalties),
+        winner_team_id: result.winnerTeamId || null,
+        notes: String(result.notes || "").trim() || null,
+      },
+      result_source: String(source || "league_entry").trim(),
+    });
+  },
+
+  async upsertLeagueTableAdjustment(leagueId, adjustment = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_table_adjustment", {
+      target_league_id: id,
+      adjustment_data: {
+        id: adjustment.id || null,
+        season_id: adjustment.seasonId || null,
+        division_id: adjustment.divisionId || null,
+        team_id: adjustment.teamId || null,
+        points_delta: Number(adjustment.pointsDelta || 0),
+        goals_for_delta: Number(adjustment.goalsForDelta || 0),
+        goals_against_delta: Number(adjustment.goalsAgainstDelta || 0),
+        reason: String(adjustment.reason || "").trim(),
+        effective_on: adjustment.effectiveOn || null,
+      },
+    });
+  },
+
+  async revokeLeagueTableAdjustment(leagueId, adjustmentId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/revoke_league_table_adjustment", {
+      target_league_id: id,
+      target_adjustment_id: String(adjustmentId || "").trim(),
+    });
   },
 
   async createLeagueClubInvitation(leagueId, { parentClubId, email, role = "club_secretary", expiresInDays = 14 } = {}) {

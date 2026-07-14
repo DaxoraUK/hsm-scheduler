@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Table2,
   Trash2,
   Trophy,
   Upload,
@@ -26,6 +27,7 @@ import LeagueFixtureCommandWorkspace from "../components/league/LeagueFixtureCom
 import LeagueOfficialsWorkspace from "../components/league/LeagueOfficialsWorkspace.jsx";
 import LeagueClubOperationsWorkspace from "../components/league/LeagueClubOperationsWorkspace.jsx";
 import LeagueClubPortalPage from "../components/league/LeagueClubPortalPage.jsx";
+import LeagueResultsWorkspace from "../components/league/LeagueResultsWorkspace.jsx";
 import {
   getBlackoutScopeOptions,
   getCurrentLeagueSeason,
@@ -69,6 +71,7 @@ const TABS = Object.freeze([
   ["cups", "Cups", Trophy],
   ["officials", "Match officials", Users],
   ["clubs", "Club operations", Megaphone],
+  ["results", "Results & tables", Table2],
   ["structure", "League structure", Building2],
   ["availability", "Venues & availability", MapPin],
   ["fixtures", "Fixture registry", FileSpreadsheet],
@@ -209,7 +212,7 @@ function createDraft(type, workspace) {
   const venue = workspace.venues?.[0];
   const defaults = currentSeasonDefaults();
   if (type === "season") return { ...defaults, status: workspace.seasons?.length ? "draft" : "active", isCurrent: !workspace.seasons?.length };
-  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "", startsOn: season?.startsOn || "", endsOn: season?.endsOn || "", meetingsPerPairing: 2, defaultKickOff: "", playingWeekday: "", maxConsecutiveHomeAway: season?.maxConsecutiveHomeAway || 2 };
+  if (type === "division") return { seasonId: season?.id || "", name: "", code: "", sortOrder: workspace.divisions?.length || 0, teamLimit: "", startsOn: season?.startsOn || "", endsOn: season?.endsOn || "", meetingsPerPairing: 2, defaultKickOff: "", playingWeekday: "", maxConsecutiveHomeAway: season?.maxConsecutiveHomeAway || 2, winPoints: 3, drawPoints: 1, lossPoints: 0, walkoverScore: 3 };
   if (type === "parent_club") return { name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "team") return { seasonId: season?.id || "", divisionId: division?.id || "", parentClubId: club?.id || "", homeVenueId: venue?.id || "", name: "", shortName: "", externalRef: "", status: "active" };
   if (type === "venue") return { parentClubId: club?.id || "", name: "", address: "", postcode: "", surface: "Grass", capacity: "", groundShareKey: "", simultaneousFixtureLimit: 1, status: "active" };
@@ -254,6 +257,11 @@ function EntityEditorFields({ type, draft, setDraft, workspace, disabled }) {
         <Field label="Home/away run target"><input type="number" min="1" max="6" className={INPUT} value={draft.maxConsecutiveHomeAway ?? 2} onChange={update("maxConsecutiveHomeAway")} disabled={disabled} /></Field>
         <Field label="Sort order"><input type="number" min="0" className={INPUT} value={draft.sortOrder ?? 0} onChange={update("sortOrder")} disabled={disabled} /></Field>
         <Field label="Team limit"><input type="number" min="1" className={INPUT} value={draft.teamLimit ?? ""} onChange={update("teamLimit")} disabled={disabled} placeholder="Optional" /></Field>
+        <div className="sm:col-span-2 mt-2 border-t border-slate-200 pt-4"><div className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Result and table rules</div></div>
+        <Field label="Points for win"><input type="number" min="0" max="10" className={INPUT} value={draft.winPoints ?? 3} onChange={update("winPoints")} disabled={disabled} /></Field>
+        <Field label="Points for draw"><input type="number" min="0" max="10" className={INPUT} value={draft.drawPoints ?? 1} onChange={update("drawPoints")} disabled={disabled} /></Field>
+        <Field label="Points for loss"><input type="number" min="-10" max="10" className={INPUT} value={draft.lossPoints ?? 0} onChange={update("lossPoints")} disabled={disabled} /></Field>
+        <Field label="Walkover score"><input type="number" min="1" max="20" className={INPUT} value={draft.walkoverScore ?? 3} onChange={update("walkoverScore")} disabled={disabled} /><span className="mt-2 block text-[11px] font-semibold leading-5 text-slate-500">A home walkover becomes this score to nil; away walkovers are reversed.</span></Field>
       </div>
     );
   }
@@ -902,12 +910,19 @@ export default function LeagueManagerPage({
         />
       ) : null}
 
+      {tab === "results" ? (
+        <LeagueResultsWorkspace
+          leagueId={activeLeagueId}
+          workspace={workspace}
+        />
+      ) : null}
+
       {tab === "access" ? (
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <Panel className="p-6">
             <div className="flex items-center gap-3"><ShieldCheck className="text-emerald-600" size={22} /><div><h2 className="text-xl font-black text-slate-950">League access</h2><p className="mt-1 text-sm font-semibold text-slate-500">Roles are separate from Ground Control club permissions.</p></div></div>
-            <div className="mt-5 space-y-3">{workspace.members.map((member) => <div key={member.userId} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">{member.displayName || member.email || "League member"}</div><div className="mt-1 truncate text-xs font-semibold text-slate-500">{member.email || "Email unavailable"}</div></div><div className="flex items-center gap-2">{canManage && member.role !== "owner" ? <select className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black" value={member.role} disabled={busy} onChange={async (event) => { setBusy(true); try { await DB.updateLeagueMemberRole(activeLeagueId, member.userId, event.target.value); await loadWorkspace(); toast.success("League role updated"); } catch (error) { toast.error("Role could not be updated", { description: error?.message }); } finally { setBusy(false); } }}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="viewer">Viewer</option></select> : <Badge tone={member.role === "owner" ? "navy" : "slate"}>{member.role}</Badge>}{canManage && member.role !== "owner" ? <button type="button" aria-label="Remove member" onClick={async () => { if (!window.confirm("Remove this user from League Manager?")) return; setBusy(true); try { await DB.removeLeagueMember(activeLeagueId, member.userId); await loadWorkspace(); toast.success("League member removed"); } catch (error) { toast.error("Member could not be removed", { description: error?.message }); } finally { setBusy(false); } }} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700"><Trash2 size={14} /></button> : null}</div></div>)}</div>
-            {canManage ? <div className="mt-6 border-t border-slate-200 pt-6"><h3 className="text-sm font-black text-slate-950">Invite a league user</h3><div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px_auto]"><input type="email" className={INPUT} value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="secretary@league.org" /><select className={INPUT} value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="viewer">Viewer</option></select><button type="button" onClick={createInvite} disabled={busy || !inviteForm.email.includes("@")} className={`${BUTTON} bg-emerald-600 text-white`}><Plus size={16} /> Invite</button></div>{lastInviteLink ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-black text-emerald-900">Secure invitation link</div><div className="mt-2 flex gap-2"><input readOnly className={`${INPUT} min-w-0 bg-white`} value={lastInviteLink} /><button type="button" onClick={async () => { await navigator.clipboard.writeText(lastInviteLink); toast.success("Invitation link copied"); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white"><ClipboardCopy size={16} /></button></div></div> : null}</div> : null}
+            <div className="mt-5 space-y-3">{workspace.members.map((member) => <div key={member.userId} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">{member.displayName || member.email || "League member"}</div><div className="mt-1 truncate text-xs font-semibold text-slate-500">{member.email || "Email unavailable"}</div></div><div className="flex items-center gap-2">{canManage && member.role !== "owner" ? <select className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black" value={member.role} disabled={busy} onChange={async (event) => { setBusy(true); try { await DB.updateLeagueMemberRole(activeLeagueId, member.userId, event.target.value); await loadWorkspace(); toast.success("League role updated"); } catch (error) { toast.error("Role could not be updated", { description: error?.message }); } finally { setBusy(false); } }}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="results">Results secretary</option><option value="viewer">Viewer</option></select> : <Badge tone={member.role === "owner" ? "navy" : "slate"}>{member.role}</Badge>}{canManage && member.role !== "owner" ? <button type="button" aria-label="Remove member" onClick={async () => { if (!window.confirm("Remove this user from League Manager?")) return; setBusy(true); try { await DB.removeLeagueMember(activeLeagueId, member.userId); await loadWorkspace(); toast.success("League member removed"); } catch (error) { toast.error("Member could not be removed", { description: error?.message }); } finally { setBusy(false); } }} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700"><Trash2 size={14} /></button> : null}</div></div>)}</div>
+            {canManage ? <div className="mt-6 border-t border-slate-200 pt-6"><h3 className="text-sm font-black text-slate-950">Invite a league user</h3><div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px_auto]"><input type="email" className={INPUT} value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="secretary@league.org" /><select className={INPUT} value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Administrator</option><option value="fixtures">Fixture secretary</option><option value="officials">Referee appointments secretary</option><option value="results">Results secretary</option><option value="viewer">Viewer</option></select><button type="button" onClick={createInvite} disabled={busy || !inviteForm.email.includes("@")} className={`${BUTTON} bg-emerald-600 text-white`}><Plus size={16} /> Invite</button></div>{lastInviteLink ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-black text-emerald-900">Secure invitation link</div><div className="mt-2 flex gap-2"><input readOnly className={`${INPUT} min-w-0 bg-white`} value={lastInviteLink} /><button type="button" onClick={async () => { await navigator.clipboard.writeText(lastInviteLink); toast.success("Invitation link copied"); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white"><ClipboardCopy size={16} /></button></div></div> : null}</div> : null}
             {workspace.invitations.length ? <div className="mt-6 border-t border-slate-200 pt-6"><h3 className="text-sm font-black text-slate-950">Invitation history</h3><div className="mt-3 space-y-2">{workspace.invitations.slice(0, 10).map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3"><div className="min-w-0"><div className="truncate text-xs font-black text-slate-900">{invitation.email}</div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">{invitation.role} · {invitation.status}</div></div>{canManage && invitation.status === "pending" ? <button type="button" onClick={async () => { setBusy(true); try { await DB.revokeLeagueInvitation(activeLeagueId, invitation.id); await loadWorkspace(); toast.success("Invitation revoked"); } catch (error) { toast.error("Invitation could not be revoked", { description: error?.message }); } finally { setBusy(false); } }} className="text-xs font-black text-rose-700">Revoke</button> : null}</div>)}</div></div> : null}
           </Panel>
 
