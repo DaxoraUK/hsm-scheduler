@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -26,8 +26,6 @@ import {
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
-import PlatformBillingLegalPanel from "../components/PlatformBillingLegalPanel.jsx";
-import PlatformPilotLaunchPanel from "../components/PlatformPilotLaunchPanel.jsx";
 import { DB } from "../lib/supabase.js";
 import {
   CASE_PRIORITIES,
@@ -46,11 +44,16 @@ import {
   getAssignablePlans,
 } from "../lib/subscriptions/entitlements.js";
 
+const PlatformBillingLegalPanel = lazy(() => import("../components/PlatformBillingLegalPanel.jsx"));
+const PlatformPilotLaunchPanel = lazy(() => import("../components/PlatformPilotLaunchPanel.jsx"));
+const PlatformSystemHealthPanel = lazy(() => import("../components/system/PlatformSystemHealthPanel.jsx"));
+
 const PANEL_TABS = Object.freeze([
   ["clubs", "Clubs", Building2],
   ["cases", "Support cases", LifeBuoy],
   ["billing", "Billing & legal", ReceiptText],
   ["launch", "Pilot & launch", Rocket],
+  ["health", "System health", ShieldCheck],
   ["activity", "Platform activity", Activity],
 ]);
 
@@ -663,11 +666,21 @@ export default function PlatformAdminPage({
       ) : null}
 
       {tab === "billing" ? (
-        <PlatformBillingLegalPanel isPlatformAdmin={platformContext.isPlatformAdmin} />
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformBillingLegalPanel isPlatformAdmin={platformContext.isPlatformAdmin} />
+        </Suspense>
       ) : null}
 
       {tab === "launch" ? (
-        <PlatformPilotLaunchPanel clubs={clubs} isPlatformAdmin={platformContext.isPlatformAdmin} />
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformPilotLaunchPanel clubs={clubs} isPlatformAdmin={platformContext.isPlatformAdmin} />
+        </Suspense>
+      ) : null}
+
+      {tab === "health" ? (
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformSystemHealthPanel platformContext={platformContext} />
+        </Suspense>
       ) : null}
 
       {tab === "activity" ? (

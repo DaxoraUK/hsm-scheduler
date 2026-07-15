@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
@@ -98,6 +98,7 @@ export default function ProductShell({
   onSignOut,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mainContentRef = useRef(null);
   const { online } = useConnectivity();
   const nav = createNavigationController({ setMainPage, setDayTab, setSettingsTab, setNavigationTarget });
 
@@ -139,6 +140,13 @@ export default function ProductShell({
     });
     setMobileOpen(false);
   };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      mainContentRef.current?.focus?.({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mainPage]);
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -233,6 +241,7 @@ export default function ProductShell({
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
+      <a href="#main-content" className="fixed left-4 top-3 z-[200] -translate-y-24 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white shadow-xl transition focus:translate-y-0 focus:outline-none focus:ring-4 focus:ring-emerald-200">Skip to main content</a>
       {mobileOpen ? (
         <div className="fixed inset-0 z-[80] lg:hidden">
           <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
@@ -359,7 +368,7 @@ export default function ProductShell({
             ) : null
           ) : null}
 
-          <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+          <main id="main-content" ref={mainContentRef} tabIndex={-1} className="flex-1 overflow-auto p-4 outline-none sm:p-6 lg:p-8">
             <div
               className={clubWorkspaceAvailable && !leagueMode && workspaceAccess?.isReadOnly && mainPage !== "settings" ? "pointer-events-none" : ""}
               inert={clubWorkspaceAvailable && !leagueMode && workspaceAccess?.isReadOnly && mainPage !== "settings" ? true : undefined}

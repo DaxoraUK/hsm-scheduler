@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ClipboardCopy, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { Auth, DB } from "../../lib/supabase.js";
 import { clearTenantStorageContext } from "../../lib/storage/tenantStorage.js";
 import { createSupportReference } from "../../lib/errors/recovery.js";
@@ -8,11 +8,11 @@ import { buildClientEvent, getClientReleaseMetadata, isClientTelemetryEnabled } 
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, reference: "" };
+    this.state = { error: null, reference: "", copied: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { error, reference: createSupportReference() };
+    return { error, reference: createSupportReference(), copied: false };
   }
 
   componentDidCatch(error, info) {
@@ -40,6 +40,18 @@ export default class AppErrorBoundary extends React.Component {
       });
     }
   }
+
+  copyReference = async () => {
+    const metadata = getClientReleaseMetadata();
+    const summary = [
+      `Daxora support reference: ${this.state.reference}`,
+      `Release: ${metadata.release}`,
+      `Environment: ${metadata.environment}`,
+      `Route: ${window.location.pathname}`,
+    ].join("\n");
+    await navigator.clipboard?.writeText?.(summary);
+    this.setState({ copied: true });
+  };
 
   reload = () => {
     window.location.reload();
@@ -91,6 +103,9 @@ export default class AppErrorBoundary extends React.Component {
                   <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
                     Keep this reference if the problem repeats. Do not include passwords, access keys or private fixture data in a support message.
                   </div>
+                  <button type="button" onClick={this.copyReference} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100">
+                    <ClipboardCopy size={14} /> {this.state.copied ? "Reference copied" : "Copy support details"}
+                  </button>
                 </div>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">

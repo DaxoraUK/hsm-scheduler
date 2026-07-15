@@ -16,7 +16,8 @@
     "smoke:staging": "node scripts/staging-smoke.mjs",
     "preflight:staging": "node scripts/staging-preflight.mjs",
     "acceptance:launch": "node scripts/launch-acceptance.mjs",
-    "release:package": "powershell -ExecutionPolicy Bypass -File scripts/create-release-package.ps1"
+    "release:package": "powershell -ExecutionPolicy Bypass -File scripts/create-release-package.ps1",
+    "pilot:hardening": "node scripts/pilot-hardening-evidence.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

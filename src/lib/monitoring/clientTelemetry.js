@@ -4,6 +4,7 @@ const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 export const CLIENT_EVENT_LEVELS = Object.freeze(["warning", "error"]);
 export const CLIENT_EVENT_CATEGORIES = Object.freeze([
   "application_crash",
+  "runtime_error",
   "unhandled_rejection",
   "sync_failure",
   "session_failure",

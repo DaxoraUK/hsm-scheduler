@@ -29,7 +29,35 @@ export function useGlobalErrorNotifications() {
       });
     };
 
+    const handleRuntimeError = (event) => {
+      const reference = createSupportReference();
+      const error = event?.error;
+      const message = error?.message || event?.message || "Unexpected browser runtime error";
+      console.error("Ground Control browser runtime error", { error, reference });
+      if (isClientTelemetryEnabled() && Auth.getSession()?.access_token) {
+        DB.recordClientEvent(buildClientEvent({
+          level: "error",
+          category: "runtime_error",
+          message,
+          reference,
+          route: window.location.pathname,
+          ...getClientReleaseMetadata(),
+          context: { errorName: error?.name || "Error", source: event?.filename || "browser" },
+        })).catch((telemetryError) => {
+          console.warn("Ground Control telemetry could not be recorded", telemetryError);
+        });
+      }
+      toast.error("A browser action failed", {
+        description: `Retry the action. If it happens again, give Daxora support reference ${reference}.`,
+        duration: 9000,
+      });
+    };
+
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
-    return () => window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    window.addEventListener("error", handleRuntimeError);
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      window.removeEventListener("error", handleRuntimeError);
+    };
   }, []);
 }
