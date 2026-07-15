@@ -28,6 +28,8 @@ import {
 import { buildOperationsCentreSnapshot } from "../lib/engines/operationsCentreEngine.js";
 import { decorateFixtureDay, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { getCurrentMatchWeekend } from "../lib/date/weekendCalendar.js";
+import useLiveWeather from "../hooks/useLiveWeather.js";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 const DEFAULT_SITE_CHECKS = [
   { id: "access", label: "Ground access and gates open", icon: DoorOpen, critical: true },
@@ -336,6 +338,48 @@ export default function OperationsCentrePage({
   const isCurrentWeekend =
     satDate === currentWeekend.saturday && sunDate === currentWeekend.sunday;
 
+  const weatherSelection = useMemo(() => {
+    const candidates = [];
+    const add = (label, date, rows, enabled) => {
+      if (!enabled || !date) return;
+      candidates.push({
+        label,
+        date,
+        fixtures: (rows || []).filter((fixture) => fixture?.status !== "postponed"),
+      });
+    };
+
+    if (scope === MATCHDAY_SCOPES.SATURDAY) add("Saturday", satDate, satFinal, satHasRun);
+    else if (scope === MATCHDAY_SCOPES.SUNDAY) add("Sunday", sunDate, sunFinal, sunHasRun);
+    else if (scope === MATCHDAY_SCOPES.MIDWEEK) add("Midweek", midweekDate, midweekFinal, midweekHasRun);
+    else {
+      if (scope === MATCHDAY_SCOPES.MATCHWEEK) add("Midweek", midweekDate, midweekFinal, midweekHasRun);
+      add("Saturday", satDate, satFinal, satHasRun);
+      add("Sunday", sunDate, sunFinal, sunHasRun);
+    }
+
+    candidates.sort((left, right) => String(left.date).localeCompare(String(right.date)));
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+    return candidates.find((candidate) => candidate.date >= today)
+      || candidates.at(-1)
+      || { label: "Matchday", date: satDate || sunDate || midweekDate, fixtures };
+  }, [fixtures, midweekDate, midweekFinal, midweekHasRun, satDate, satFinal, satHasRun, scope, sunDate, sunFinal, sunHasRun]);
+
+  const liveWeather = useLiveWeather({
+    club,
+    date: weatherSelection.date,
+    fixtures: weatherSelection.fixtures,
+  });
+
+  const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
+    club,
+    fixtures: weatherSelection.fixtures,
+    dateLabel: `${weatherSelection.label}${weatherSelection.date ? ` · ${weatherSelection.date}` : ""}`,
+    forecastSource: liveWeather.data,
+    connectionStatus: liveWeather.status,
+    connectionError: liveWeather.error,
+  }), [club, liveWeather.data, liveWeather.error, liveWeather.status, weatherSelection]);
+
   const snapshot = useMemo(
     () =>
       buildOperationsCentreSnapshot({
@@ -351,8 +395,9 @@ export default function OperationsCentrePage({
         incidents,
         scope,
         dateLabel,
+        weatherSnapshot: weatherIntelligence,
       }),
-    [fixtures, club, pitchCfg, closedPitches, refs, scheduleBuilt, unresolvedCount, conflictCount, checks, incidents, scope, dateLabel]
+    [fixtures, club, pitchCfg, closedPitches, refs, scheduleBuilt, unresolvedCount, conflictCount, checks, incidents, scope, dateLabel, weatherIntelligence]
   );
 
   const toggleCheck = (id) => {

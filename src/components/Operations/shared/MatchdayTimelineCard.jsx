@@ -353,7 +353,7 @@ export default function MatchdayTimelineCard({
                       <button
                         type="button"
                         onClick={() => toggleGroup(group.id)}
-                        className="sticky left-0 z-30 flex w-full items-center gap-2 border-y border-slate-200 bg-slate-100/95 px-4 py-2 text-left text-[10px] font-black uppercase tracking-[0.17em] text-slate-600 backdrop-blur"
+                        className="sticky left-0 z-30 flex w-full items-center gap-2 border-y border-slate-200 bg-slate-100/95 px-3 py-1.5 text-left text-[9px] font-black uppercase tracking-[0.16em] text-slate-600 backdrop-blur"
                       >
                         {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                         {group.label}
@@ -615,7 +615,7 @@ function PlannerRow({
         }}
         data-planner-pitch-id={row.pitch.id}
         className={`relative overflow-hidden ${closed && activeOverlays.has("closures") ? "bg-[repeating-linear-gradient(135deg,#fff1f2_0,#fff1f2_12px,#ffe4e6_12px,#ffe4e6_24px)]" : "bg-slate-50"}`}
-        style={{ height: `${Math.max(isCompact ? 60 : 76, row.laneCount * 56 + 16)}px` }}
+        style={{ height: `${row.laneCount <= 1 ? (isCompact ? 52 : 58) : row.laneCount * 50 + 8}px` }}
         onClick={(event) => {
           if (!movingSelected || event.target.closest("[data-fixture-card]") || event.target.closest("button")) return;
           const rect = event.currentTarget.getBoundingClientRect();
@@ -648,10 +648,10 @@ function PlannerRow({
               className={`absolute z-10 flex overflow-hidden rounded-2xl border text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${colour} ${isSelected ? "ring-4 ring-sky-300 ring-offset-2" : ""}`}
               style={{
                 left: `${fixture.leftPct}%`,
-                width: `${Math.max(fixture.widthPct, 9)}%`,
-                top: `${8 + fixture.lane * 56}px`,
-                height: "44px",
-                minWidth: "118px",
+                width: `${fixture.displayWidthPct || fixture.widthPct}%`,
+                top: `${7 + fixture.lane * 50}px`,
+                height: "42px",
+                minWidth: "0",
               }}
             >
               {canEdit ? (

@@ -2265,6 +2265,140 @@ export const DB = {
     });
   },
 
+  async getLeagueFinanceData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_finance_data", { target_league_id: id });
+  },
+
+  async getLeagueClubFinanceData(leagueId) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/get_league_club_finance_data", { target_league_id: id });
+  },
+
+  async upsertLeagueFinanceChargeType(leagueId, data = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_finance_charge_type", {
+      target_league_id: id,
+      charge_data: {
+        id: data.id || null,
+        name: String(data.name || "").trim(),
+        code: String(data.code || "").trim().toUpperCase(),
+        category: data.category || "other",
+        default_amount_pence: Math.max(0, Number(data.defaultAmountPence || 0)),
+        tax_rate: Math.max(0, Number(data.taxRate || 0)),
+        active: data.active !== false,
+        notes: String(data.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async upsertLeagueFinanceInvoice(leagueId, invoice = {}, lines = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_finance_invoice", {
+      target_league_id: id,
+      invoice_data: {
+        id: invoice.id || null,
+        season_id: invoice.seasonId || null,
+        parent_club_id: invoice.parentClubId || null,
+        invoice_number: String(invoice.invoiceNumber || "").trim() || null,
+        issue_on: invoice.issueOn || null,
+        due_on: invoice.dueOn || null,
+        period_label: String(invoice.periodLabel || "").trim() || null,
+        purchase_order_reference: String(invoice.purchaseOrderReference || "").trim() || null,
+        notes: String(invoice.notes || "").trim() || null,
+      },
+      line_rows: (Array.isArray(lines) ? lines : []).map((line) => ({
+        charge_type_id: line.chargeTypeId || null,
+        description: String(line.description || "").trim(),
+        quantity: Math.max(0.001, Number(line.quantity || 1)),
+        unit_amount_pence: Number(line.unitAmountPence || 0),
+        tax_rate: Math.max(0, Number(line.taxRate || 0)),
+        source_type: line.sourceType || null,
+        source_id: line.sourceId || null,
+        source_label: String(line.sourceLabel || "").trim() || null,
+      })),
+    });
+  },
+
+  async updateLeagueFinanceInvoiceStatus(leagueId, invoiceId, status, note = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_finance_invoice_status", {
+      target_league_id: id,
+      target_invoice_id: String(invoiceId || "").trim(),
+      next_status: String(status || "").trim(),
+      status_note: String(note || "").trim(),
+    });
+  },
+
+  async recordLeagueFinancePayment(leagueId, invoiceId, payment = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/record_league_finance_payment", {
+      target_league_id: id,
+      target_invoice_id: String(invoiceId || "").trim(),
+      payment_data: {
+        amount_pence: Math.max(1, Number(payment.amountPence || 0)),
+        paid_on: payment.paidOn || null,
+        payment_method: payment.paymentMethod || "bank_transfer",
+        reference: String(payment.reference || "").trim() || null,
+        notes: String(payment.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async addLeagueFinanceCredit(leagueId, invoiceId, credit = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/add_league_finance_credit", {
+      target_league_id: id,
+      target_invoice_id: String(invoiceId || "").trim(),
+      credit_data: {
+        amount_pence: Math.max(1, Number(credit.amountPence || 0)),
+        credit_on: credit.creditOn || null,
+        reason: String(credit.reason || "").trim(),
+        reference: String(credit.reference || "").trim() || null,
+      },
+    });
+  },
+
+  async invoiceLeagueDisciplineFine(leagueId, sanctionId, invoiceId = null) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/invoice_league_discipline_fine", {
+      target_league_id: id,
+      target_sanction_id: String(sanctionId || "").trim(),
+      target_invoice_id: invoiceId || null,
+    });
+  },
+
+  async upsertLeagueFinanceExpense(leagueId, expense = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_finance_expense", {
+      target_league_id: id,
+      expense_data: {
+        id: expense.id || null,
+        season_id: expense.seasonId || null,
+        official_id: expense.officialId || null,
+        official_name: String(expense.officialName || "").trim(),
+        publication_fixture_id: expense.publicationFixtureId || null,
+        fixture_label: String(expense.fixtureLabel || "").trim() || null,
+        expense_type: expense.expenseType || "match_fee",
+        amount_pence: Math.max(1, Number(expense.amountPence || 0)),
+        expense_on: expense.expenseOn || null,
+        status: expense.status || "submitted",
+        payment_reference: String(expense.paymentReference || "").trim() || null,
+        notes: String(expense.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async updateLeagueFinanceExpenseStatus(leagueId, expenseId, status, paymentReference = "") {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/update_league_finance_expense_status", {
+      target_league_id: id,
+      target_expense_id: String(expenseId || "").trim(),
+      next_status: String(status || "").trim(),
+      payment_reference_value: String(paymentReference || "").trim(),
+    });
+  },
+
   async getClubOnboarding(clubId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/get_club_onboarding", {

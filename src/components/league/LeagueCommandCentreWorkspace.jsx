@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
+  BadgePoundSterling,
   CheckCircle2,
   ClipboardCheck,
   FileWarning,
@@ -18,6 +19,7 @@ import { buildLeagueCommandCentre } from "../../lib/league/leagueCommandCentre.j
 import { normaliseLeagueResultsData } from "../../lib/league/leagueResultsEngine.js";
 import { normaliseLeagueDisciplineData } from "../../lib/league/leagueDisciplineEngine.js";
 import { normaliseLeagueRegistrationData } from "../../lib/league/leagueRegistrationEngine.js";
+import { normaliseLeagueFinanceData } from "../../lib/league/leagueFinanceEngine.js";
 import { normaliseScheduleVersion, normaliseScheduleVersionPayload } from "../../lib/league/leagueSchedulingEngine.js";
 
 const BUTTON = "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50";
@@ -67,6 +69,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
     results: normaliseLeagueResultsData({}),
     discipline: normaliseLeagueDisciplineData({}),
     registrations: normaliseLeagueRegistrationData({}),
+    finance: normaliseLeagueFinanceData({}),
     scheduleVersion: null,
   });
   const [status, setStatus] = useState("loading");
@@ -96,11 +99,22 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
           throw registrationError;
         })
         : Promise.resolve({});
-      const [clubPayload, resultPayload, disciplinePayload, registrationPayload, versions] = await Promise.all([
+      const canLoadFinance = ["owner", "admin", "finance"].includes(workspace.access?.role || "");
+      const financeRequest = canLoadFinance && typeof DB.getLeagueFinanceData === "function"
+        ? DB.getLeagueFinanceData(leagueId).catch((financeError) => {
+          const message = financeError?.message || "";
+          const migrationNotReady = financeError?.code === "PGRST202"
+            || /schema cache|could not find the function|get_league_finance_data/i.test(message);
+          if (migrationNotReady) return {};
+          throw financeError;
+        })
+        : Promise.resolve({});
+      const [clubPayload, resultPayload, disciplinePayload, registrationPayload, financePayload, versions] = await Promise.all([
         DB.getLeagueClubOperationsData(leagueId),
         DB.getLeagueResultsData(leagueId),
         disciplineRequest,
         registrationRequest,
+        financeRequest,
         DB.listLeagueScheduleVersions(leagueId),
       ]);
       const versionRows = (Array.isArray(versions) ? versions : []).map(normaliseScheduleVersion);
@@ -112,6 +126,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
         results: normaliseLeagueResultsData(resultPayload),
         discipline: normaliseLeagueDisciplineData(disciplinePayload),
         registrations: normaliseLeagueRegistrationData(registrationPayload),
+        finance: normaliseLeagueFinanceData(financePayload),
         scheduleVersion,
       });
       setStatus("ready");
@@ -130,6 +145,7 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
     results: data.results,
     discipline: data.discipline,
     registrations: data.registrations,
+    finance: data.finance,
     scheduleVersion: data.scheduleVersion,
     readiness,
     role: workspace.access?.role,
@@ -146,18 +162,19 @@ export default function LeagueCommandCentreWorkspace({ leagueId, workspace, oper
   return <div className="space-y-5">
     <Panel className="overflow-hidden">
       <div className="grid gap-5 bg-slate-950 px-6 py-7 text-white lg:grid-cols-[1fr_auto] lg:items-center">
-        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.7</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">{command.roleFocus?.detail || "One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness."}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><Badge tone="green">League Operations v3.9</Badge><Badge tone={copy.tone}>{copy.label}</Badge></div><h2 className="mt-4 text-3xl font-black tracking-tight">Operational command centre</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-300">{command.roleFocus?.detail || "One prioritised view of fixture exceptions, club requests, results, appointments, publications and setup readiness."}</p></div>
         <button type="button" onClick={load} className={`${BUTTON} border border-white/15 bg-white/10 text-white hover:bg-white/15`}><RefreshCw size={14} /> Refresh command picture</button>
       </div>
       <div className={`border-t px-6 py-5 ${command.status === "action_required" ? "border-rose-200 bg-rose-50" : command.status === "needs_review" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-start gap-3">{command.status === "ready" ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" /> : <AlertTriangle className={`mt-0.5 shrink-0 ${command.status === "action_required" ? "text-rose-600" : "text-amber-600"}`} />}<div><div className="text-sm font-black text-slate-950">{copy.title}</div><div className="mt-1 text-xs font-semibold leading-5 text-slate-600">{copy.detail}</div></div></div></div>
     </Panel>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
       <Metric label="Open actions" value={command.counts.openActions} detail="Across all command queues" tone={command.counts.critical ? "rose" : command.counts.attention ? "amber" : "green"} Icon={FileWarning} />
       <Metric label="Results control" value={command.counts.pendingResults + command.counts.missingResults} detail={`${command.counts.pendingResults} verification · ${command.counts.missingResults} missing`} tone={command.counts.pendingResults + command.counts.missingResults ? "amber" : "green"} Icon={ClipboardCheck} />
       <Metric label="Official coverage" value={`${command.counts.officialCoverage}%`} detail={`${command.counts.officialGaps} open roles in 35 days`} tone={command.counts.officialGaps ? "amber" : "green"} Icon={UserRoundCheck} />
       <Metric label="Discipline" value={command.counts.openDisciplineCases} detail={`${command.counts.overdueDisciplineResponses} overdue responses · ${command.counts.overdueDisciplineFines} overdue fines`} tone={command.counts.overdueDisciplineResponses + command.counts.overdueDisciplineFines ? "rose" : command.counts.openDisciplineCases ? "amber" : "green"} Icon={Gavel} />
       <Metric label="Registrations" value={command.counts.pendingRegistrations + command.counts.registrationCorrections} detail={`${command.counts.pendingTransfers} transfers · ${command.counts.invalidTeamSheets} failed sheets`} tone={command.counts.registrationCorrections + command.counts.invalidTeamSheets ? "rose" : command.counts.pendingRegistrations + command.counts.pendingTransfers + command.counts.openEligibilityExceptions ? "amber" : "green"} Icon={UserRoundCheck} />
+      <Metric label="Finance" value={command.counts.overdueInvoices} detail={`${command.counts.unbilledFines} unbilled fines · ${command.counts.unpaidExpenses} unpaid expenses`} tone={command.counts.overdueInvoices ? "rose" : command.counts.unbilledFines + command.counts.unpaidExpenses ? "amber" : "green"} Icon={BadgePoundSterling} />
       <Metric label="Setup readiness" value={`${command.readinessPercentage}%`} detail={`${command.counts.setupGaps} mandatory gaps`} tone={command.counts.setupGaps ? "blue" : "green"} Icon={ShieldCheck} />
     </div>
 

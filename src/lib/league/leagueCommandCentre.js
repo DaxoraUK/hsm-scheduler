@@ -35,6 +35,7 @@ export function buildLeagueCommandCentre({
   results = {},
   discipline = {},
   registrations = {},
+  finance = {},
   scheduleVersion = null,
   readiness = { checks: [], percentage: 0 },
   role = "viewer",
@@ -59,6 +60,11 @@ export function buildLeagueCommandCentre({
   const pendingTransfers = Number(registrationSummary.pendingTransfers || 0);
   const openEligibilityExceptions = Number(registrationSummary.openDispensations || 0);
   const invalidTeamSheets = Number(registrationSummary.invalidTeamSheets || 0);
+  const financeSummary = finance.summary || {};
+  const overdueInvoices = Number(financeSummary.overdueInvoices || 0);
+  const outstandingPence = Number(financeSummary.outstandingPence || 0);
+  const unbilledFines = Number(financeSummary.unbilledFines || 0);
+  const unpaidExpenses = Number(financeSummary.unpaidExpenses || 0);
   const openPostponements = asArray(operations.postponements).filter((row) => !["closed", "rearranged", "rejected"].includes(row.status));
   const overduePostponements = openPostponements.filter((row) => row.deadlineOn && row.deadlineOn < todayKey);
   const replacementAssignments = asArray(operations.assignments).filter((row) => ["declined", "replacement_required"].includes(row.status));
@@ -78,6 +84,33 @@ export function buildLeagueCommandCentre({
   );
 
   const actions = [
+    action({
+      id: "finance-overdue-invoices",
+      title: "Overdue club balances",
+      detail: "Issued club invoices have passed their due date and require collection action.",
+      count: overdueInvoices,
+      severity: "critical",
+      tab: "finance",
+      child: "invoices",
+    }),
+    action({
+      id: "finance-unbilled-fines",
+      title: "Discipline fines awaiting invoice",
+      detail: "Active financial sanctions have not yet been converted into club invoices.",
+      count: unbilledFines,
+      severity: "attention",
+      tab: "finance",
+      child: "command",
+    }),
+    action({
+      id: "finance-unpaid-expenses",
+      title: "Approved expenses awaiting payment",
+      detail: "League or official expenses are approved but do not yet have a payment record.",
+      count: unpaidExpenses,
+      severity: "attention",
+      tab: "finance",
+      child: "expenses",
+    }),
     action({
       id: "overdue-postponements",
       title: "Overdue rearrangements",
@@ -247,6 +280,7 @@ export function buildLeagueCommandCentre({
     results: ["result-verification", "missing-results"],
     discipline: ["discipline-overdue-responses", "discipline-overdue-fines", "discipline-hearings"],
     registrations: ["registration-corrections", "registration-team-sheets", "registration-review", "registration-transfers", "registration-exceptions"],
+    finance: ["finance-overdue-invoices", "finance-unbilled-fines", "finance-unpaid-expenses"],
   };
   const roleLabels = {
     fixtures: { label: "Fixture secretary focus", detail: "Fixture exceptions, rearrangements, unplaced matches and club requests are prioritised for your role." },
@@ -254,6 +288,7 @@ export function buildLeagueCommandCentre({
     results: { label: "Results secretary focus", detail: "Verification and missing-result queues are prioritised for your role." },
     discipline: { label: "Discipline officer focus", detail: "Overdue responses, unpaid fines, hearings and appeals are prioritised for your role." },
     registrations: { label: "Registration secretary focus", detail: "Application corrections, eligibility failures, transfers and dispensations are prioritised for your role." },
+    finance: { label: "Finance officer focus", detail: "Overdue balances, unbilled fines and approved expenses are prioritised for your role." },
   };
   const focusedIds = rolePriorities[role] || [];
   const focusIndex = (id) => {
@@ -298,6 +333,10 @@ export function buildLeagueCommandCentre({
       pendingTransfers,
       openEligibilityExceptions,
       invalidTeamSheets,
+      overdueInvoices,
+      outstandingPence,
+      unbilledFines,
+      unpaidExpenses,
     },
     publication,
     officialCoverage,

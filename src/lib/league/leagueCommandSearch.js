@@ -19,7 +19,15 @@ export function buildLeagueCommandSearchIndex(workspace = {}, operations = {}) {
   const clubs = new Map(asArray(workspace.clubs).map((row) => [row.id, row.name]));
   const teams = new Map(asArray(workspace.teams).map((row) => [row.id, row.name]));
   const venues = new Map(asArray(workspace.venues).map((row) => [row.id, row.name]));
-  const items = [];
+  const items = [{
+    id: "workspace:finance",
+    type: "Workspace",
+    label: "Finance and commercial administration",
+    detail: "Invoices, payments, charges, discipline fines, expenses and club statements",
+    tab: "finance",
+    child: "command",
+    searchText: searchable("finance commercial invoice payment charge fine expense statement debt overdue"),
+  }];
 
   asArray(workspace.divisions).forEach((row) => items.push({
     id: `division:${row.id}`,
