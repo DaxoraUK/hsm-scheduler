@@ -143,6 +143,7 @@ const OperationsTimelinePage = lazy(
   () => import("./pages/OperationsTimelinePage.jsx"),
 );
 const AnnualPlannerPage = lazy(() => import("./pages/AnnualPlannerPage.jsx"));
+const CoachHubPage = lazy(() => import("./pages/CoachHubPage.jsx"));
 const CommunicationsPage = lazy(() => import("./pages/CommunicationsPage.jsx"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
@@ -573,7 +574,10 @@ function App() {
     start: startOnboarding,
     saveProgress: saveOnboardingProgress,
     complete: completeOnboarding,
-  } = useClubOnboarding(activeClubId, clubAccessStatus === "ready");
+  } = useClubOnboarding(
+    activeClubId,
+    clubAccessStatus === "ready" && !roleWorkspaceAccess.isCoach,
+  );
 
   useLayoutEffect(() => {
     setWorkspaceHydrated(false);
@@ -1019,6 +1023,7 @@ function App() {
         // protected coach contacts are not partially updated.
         await DB.saveTeamCfg(activeClubId, nextTeamCfg);
         await DB.saveTeamContacts(activeClubId, nextTeamContacts);
+        await DB.syncCoachHubContacts(activeClubId);
       }
       if (data.refs || tab === "refs") await DB.saveRefs(activeClubId, nextRefs);
       if (data.pitchCfg || tab === "pitches") await DB.savePitches(activeClubId, nextPitchCfg);
@@ -1153,6 +1158,27 @@ function App() {
         clubId: activeClubId,
       });
       migrateLegacyTenantStorage();
+
+      if (roleWorkspaceAccess.isCoach) {
+        const coachClub = {
+          ...DEFAULT_CLUB,
+          id: activeClubId,
+          name: activeMembership?.club?.name || DEFAULT_CLUB.name,
+        };
+        setClub(coachClub);
+        setTeamCfg([]);
+        setTeamContacts([]);
+        setPitchCfg([]);
+        setPitchClosures([]);
+        setRefs([]);
+        setHistory([]);
+        setCommunicationPrivacy(DEFAULT_COMMUNICATION_PRIVACY);
+        setCommunicationSchemaReady(true);
+        setDbStatus("connected");
+        reportSyncSuccess();
+        setWorkspaceHydrated(true);
+        return;
+      }
 
       const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
       if (cloudAuthoritative) {
@@ -1455,6 +1481,7 @@ function App() {
     clearWeekendScheduleForDateChange,
     reportSyncFailure,
     reportSyncSuccess,
+    roleWorkspaceAccess.isCoach,
     workspaceAccess.canOperate,
   ]);
 
@@ -1521,6 +1548,7 @@ function App() {
     pitchClosures,
     reportSyncFailure,
     reportSyncSuccess,
+    roleWorkspaceAccess.isCoach,
     workspaceAccess.canOperate,
     workspaceHydrated,
   ]);
@@ -2114,6 +2142,22 @@ function App() {
 
   if (!workspaceHydrated)
     return <BrandSplash message="Loading secure club workspace" />;
+
+  if (roleWorkspaceAccess.isCoach) {
+    return (
+      <Suspense fallback={<BrandSplash message="Opening Coach Hub" />}>
+        <CoachHubPage
+          clubId={activeClubId}
+          activeMembership={activeMembership}
+          memberships={memberships}
+          authSession={authSession}
+          subscription={subscription}
+          onClubChange={handleClubChange}
+          onSignOut={handleSignOut}
+        />
+      </Suspense>
+    );
+  }
 
   const requiredPageEntitlement = getRequiredEntitlementForPage(mainPage);
   const independentWorkspacePage = mainPage === "league" || mainPage === "platform";

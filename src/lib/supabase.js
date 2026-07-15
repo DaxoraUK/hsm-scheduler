@@ -584,6 +584,114 @@ export const DB = {
     });
   },
 
+
+  async syncCoachHubContacts(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/sync_coach_hub_contacts", {
+      target_club_id: id,
+    });
+  },
+
+  async listCoachHubAdminWorkspace(clubId) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_coach_hub_admin_workspace", {
+      target_club_id: id,
+    });
+    return result && typeof result === "object"
+      ? result
+      : { people: [], assignments: [], invitations: [], requests: [] };
+  },
+
+  async listCoachHubRequestQueue(clubId) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_coach_hub_request_queue", {
+      target_club_id: id,
+    });
+    return result && typeof result === "object"
+      ? result
+      : { requests: [] };
+  },
+
+  async createCoachHubInvitation(clubId, personId, expiryHours = 168) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_coach_hub_invitation", {
+      target_club_id: id,
+      target_person_id: personId,
+      expiry_hours: Math.max(24, Math.min(Number(expiryHours) || 168, 720)),
+    });
+  },
+
+  async acceptCoachHubInvitation(token) {
+    return supaFetch("POST", "rpc/accept_coach_hub_invitation", {
+      invitation_token: String(token || "").trim(),
+    });
+  },
+
+  async getCoachHubWorkspace(clubId, { startDate = null, endDate = null } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/get_coach_hub_workspace", {
+      target_club_id: id,
+      range_start: startDate || null,
+      range_end: endDate || null,
+    });
+    return result && typeof result === "object"
+      ? result
+      : { club: {}, person: {}, assignments: [], bookings: [], requests: [], messages: [], team_contacts: [] };
+  },
+
+  async submitCoachHubRequest(clubId, request) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/submit_coach_hub_request", {
+      target_club_id: id,
+      request_data: request && typeof request === "object" ? request : {},
+    });
+  },
+
+  async reviewCoachHubRequest(clubId, requestId, decision, data = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/review_coach_hub_request", {
+      target_club_id: id,
+      target_request_id: requestId,
+      decision: String(decision || "").trim(),
+      decision_data: data && typeof data === "object" ? data : {},
+    });
+  },
+
+  async respondToCoachHubAlternative(clubId, requestId, response, message = "") {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/respond_to_coach_hub_alternative", {
+      target_club_id: id,
+      target_request_id: requestId,
+      response_value: String(response || "").trim(),
+      coach_message: String(message || "").trim() || null,
+    });
+  },
+
+  async markCoachHubMessage(clubId, messageId, acknowledge = false) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/mark_coach_hub_message", {
+      target_club_id: id,
+      target_message_id: messageId,
+      acknowledge: Boolean(acknowledge),
+    });
+  },
+
+  async updateMyCoachHubProfile(clubId, profile) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/update_my_coach_hub_profile", {
+      target_club_id: id,
+      profile_data: profile && typeof profile === "object" ? profile : {},
+    });
+  },
+
+  async createCoachHubCalendarFeed(clubId, label = "My team calendar") {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_coach_hub_calendar_feed", {
+      target_club_id: id,
+      label_value: String(label || "My team calendar").trim(),
+    });
+  },
+
   async loadPitches(clubId) {
     return DB.load("pitches", clubId);
   },

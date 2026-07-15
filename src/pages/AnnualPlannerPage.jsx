@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import DaxoraConfirmDialog from "../components/system/DaxoraConfirmDialog.jsx";
+import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDialog.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import {
   ANNUAL_BOOKING_STATUSES,
@@ -46,6 +47,7 @@ import {
   normaliseDateKey,
   normaliseTime,
 } from "../lib/planning/annualPlannerEngine.js";
+import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -157,6 +159,8 @@ export default function AnnualPlannerPage({
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
   const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [] });
+  const [coachRequests, setCoachRequests] = useState([]);
+  const [coachReview, setCoachReview] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -181,8 +185,12 @@ export default function AnnualPlannerPage({
     setError("");
     try {
       let result;
+      let coachPayload = { requests: [] };
       if (isSupaConfigured() && clubId) {
-        result = await DB.listAnnualPlannerWorkspace(clubId, dateRangeForYear(year));
+        [result, coachPayload] = await Promise.all([
+          DB.listAnnualPlannerWorkspace(clubId, dateRangeForYear(year)),
+          canOperate ? DB.listCoachHubRequestQueue(clubId) : Promise.resolve({ requests: [] }),
+        ]);
       } else {
         result = readLocalWorkspace(clubId);
       }
@@ -191,12 +199,17 @@ export default function AnnualPlannerPage({
         bookings: Array.isArray(result?.bookings) ? result.bookings.map(normaliseAnnualBooking) : [],
         blackouts: Array.isArray(result?.blackouts) ? result.blackouts.map(normaliseAnnualBlackout) : [],
       });
+      setCoachRequests(
+        (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
+          .map(normaliseCoachRequest)
+          .filter((request) => ["submitted", "needs_information", "alternative_offered"].includes(request.status)),
+      );
       setStatus("ready");
     } catch (loadError) {
       setError(loadError?.message || "The annual planner could not be loaded.");
       setStatus("error");
     }
-  }, [clubId, year]);
+  }, [canOperate, clubId, year]);
 
   useEffect(() => {
     loadWorkspace();
@@ -224,6 +237,23 @@ export default function AnnualPlannerPage({
       .sort((a, b) => `${a.startDate}${a.startTime}`.localeCompare(`${b.startDate}${b.startTime}`));
   }, [query, snapshot.bookings, typeFilter]);
   const requestQueue = useMemo(() => snapshot.bookings.filter((booking) => booking.status === "requested"), [snapshot.bookings]);
+  const totalRequests = requestQueue.length + coachRequests.length;
+
+  async function decideCoachRequest(decision, data = {}) {
+    if (!coachReview) return;
+    setSaving(true);
+    try {
+      await DB.reviewCoachHubRequest(clubId, coachReview.id, decision, data);
+      setCoachReview(null);
+      await loadWorkspace({ quiet: true });
+      announceUpdate();
+      toast.success(decision === "approve" ? "Coach request approved" : decision === "alternative" ? "Alternative sent to coach" : "Coach request updated");
+    } catch (decisionError) {
+      toast.error("Coach request could not be updated", { description: decisionError?.message });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function announceUpdate() {
     window.dispatchEvent(new CustomEvent("daxora-annual-planner-updated", { detail: { clubId } }));
@@ -380,7 +410,7 @@ export default function AnnualPlannerPage({
             <Metric icon={CalendarDays} label="Active bookings" value={snapshot.metrics.active} detail={`${snapshot.metrics.confirmed} confirmed`} />
             <Metric icon={Clock3} label="Facility hours" value={snapshot.metrics.hours} detail="Across the selected year" />
             <Metric icon={Sparkles} label="Friendlies" value={snapshot.metrics.friendlies} detail="Internal and external" />
-            <Metric icon={ListChecks} label="Requests" value={snapshot.metrics.requested} detail={snapshot.metrics.requested ? "Awaiting approval" : "Queue clear"} tone={snapshot.metrics.requested ? "warning" : "ready"} />
+            <Metric icon={ListChecks} label="Requests" value={totalRequests} detail={totalRequests ? "Awaiting approval" : "Queue clear"} tone={totalRequests ? "warning" : "ready"} />
             {canViewCosts ? <Metric icon={PoundSterling} label="Planned cost" value={money(snapshot.metrics.costPence)} detail="Confirmed and provisional" /> : null}
           </div>
         </div>
@@ -421,7 +451,16 @@ export default function AnnualPlannerPage({
       ) : null}
 
       {tab === "requests" ? (
-        <RequestsWorkspace bookings={requestQueue} canOperate={canManage} saving={saving} onSelect={setSelectedBooking} onApprove={(booking) => updateBookingStatus(booking, "confirmed")} onReject={(booking) => updateBookingStatus(booking, "rejected")} />
+        <RequestsWorkspace
+          bookings={requestQueue}
+          coachRequests={coachRequests}
+          canOperate={canManage}
+          saving={saving}
+          onSelect={setSelectedBooking}
+          onSelectCoachRequest={setCoachReview}
+          onApprove={(booking) => updateBookingStatus(booking, "confirmed")}
+          onReject={(booking) => updateBookingStatus(booking, "rejected")}
+        />
       ) : null}
 
       {tab === "availability" ? (
@@ -469,6 +508,8 @@ export default function AnnualPlannerPage({
 
       <BlackoutEditor draft={blackoutEditor} setDraft={setBlackoutEditor} pitchCfg={pitchCfg} saving={saving} onSave={saveBlackout} />
 
+      {coachReview ? <CoachRequestReviewDialog request={coachReview} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
+
       <DaxoraConfirmDialog
         request={confirmRequest}
         onCancel={() => setConfirmRequest(null)}
@@ -514,8 +555,40 @@ function BookingsWorkspace({ bookings, query, setQuery, typeFilter, setTypeFilte
   </section>;
 }
 
-function RequestsWorkspace({ bookings, canOperate, saving, onSelect, onApprove, onReject }) {
-  return <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Approval queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Facility requests awaiting a decision</h2><p className="mt-2 text-sm font-semibold text-slate-500">Approve only after pitch, matchday and blackout conflicts have been resolved.</p></div><div className="mt-6 space-y-3">{bookings.length ? bookings.map((booking) => <div key={booking.id} className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:flex-row lg:items-center lg:justify-between"><button type="button" onClick={() => onSelect(booking)} className="min-w-0 text-left"><div className="text-sm font-black text-amber-950">{booking.title}</div><div className="mt-1 text-xs font-bold text-amber-900/70">{formatDate(booking.startAt)} · {booking.startTime}–{booking.endTime} · {booking.pitchName || "Pitch TBC"}</div><div className="mt-1 text-xs font-semibold text-amber-900/70">{booking.teamName || "Club-wide request"}</div></button>{canOperate ? <div className="flex gap-2"><button disabled={saving} type="button" onClick={() => onReject(booking)} className="h-10 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-900">Reject</button><button disabled={saving} type="button" onClick={() => onApprove(booking)} className="h-10 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white">Approve</button></div> : null}</div>) : <Empty icon={CheckCircle2} title="Request queue clear" description="No teams are waiting for pitch-booking approval." />}</div></section>;
+function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, onSelect, onSelectCoachRequest, onApprove, onReject }) {
+  const total = bookings.length + coachRequests.length;
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Approval queue</div>
+        <h2 className="mt-1 text-xl font-black text-slate-950">Facility requests awaiting a decision</h2>
+        <p className="mt-2 text-sm font-semibold text-slate-500">Coach Hub requests and administrator-created provisional bookings share one queue.</p>
+      </div>
+      <div className="mt-6 space-y-3">
+        {coachRequests.map((request) => (
+          <button key={`coach-${request.id}`} type="button" onClick={() => onSelectCoachRequest?.(request)} className="flex w-full flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-emerald-950">{request.title}</span><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Coach Hub</span></div>
+              <div className="mt-1 text-xs font-bold text-emerald-900/70">{request.preferredDate} · {request.preferredStartTime}–{request.preferredEndTime} · {request.preferredPitchName || "Pitch requested"}</div>
+              <div className="mt-1 text-xs font-semibold text-emerald-900/70">{request.teamName} · {requestStatusLabel(request.status)}</div>
+            </div>
+            {canOperate ? <span className="rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white">Review request</span> : null}
+          </button>
+        ))}
+        {bookings.map((booking) => (
+          <div key={booking.id} className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <button type="button" onClick={() => onSelect(booking)} className="min-w-0 text-left">
+              <div className="text-sm font-black text-amber-950">{booking.title}</div>
+              <div className="mt-1 text-xs font-bold text-amber-900/70">{formatDate(booking.startAt)} · {booking.startTime}–{booking.endTime} · {booking.pitchName || "Pitch TBC"}</div>
+              <div className="mt-1 text-xs font-semibold text-amber-900/70">{booking.teamName || "Club-wide request"}</div>
+            </button>
+            {canOperate ? <div className="flex gap-2"><button disabled={saving} type="button" onClick={() => onReject(booking)} className="h-10 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-900">Reject</button><button disabled={saving} type="button" onClick={() => onApprove(booking)} className="h-10 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white">Approve</button></div> : null}
+          </div>
+        ))}
+        {!total ? <Empty icon={CheckCircle2} title="Request queue clear" description="No teams are waiting for pitch-booking approval." /> : null}
+      </div>
+    </section>
+  );
 }
 
 function AvailabilityWorkspace({ blackouts, pitchCfg, canOperate, canManage, onCreate, settings }) {

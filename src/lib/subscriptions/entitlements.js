@@ -46,6 +46,7 @@ export const ENTITLEMENTS = Object.freeze({
   FUNDING_PORTFOLIO: "funding_portfolio",
   ENHANCED_AUDIT: "enhanced_audit",
   ANNUAL_PLANNER: "annual_planner",
+  COACH_HUB: "coach_hub",
 });
 
 export const LIMIT_KEYS = Object.freeze({
@@ -90,6 +91,7 @@ const proFeatures = [
   ENTITLEMENTS.ANALYTICS_ADVANCED,
   ENTITLEMENTS.MULTI_VENUE,
   ENTITLEMENTS.ANNUAL_PLANNER,
+  ENTITLEMENTS.COACH_HUB,
 ];
 
 const eliteFeatures = [
@@ -295,6 +297,9 @@ export function normaliseSubscriptionPayload(payload = {}) {
     payload.entitlement_overrides ?? payload.entitlementOverrides
   );
   const features = new Set([...plan.features, ...overrideRows]);
+  // Coach Hub is part of the Annual Planner module. Preserve access for Core
+  // clubs that already carry the annual_planner add-on override.
+  if (features.has(ENTITLEMENTS.ANNUAL_PLANNER)) features.add(ENTITLEMENTS.COACH_HUB);
 
   const limitOverrides = normaliseObject(payload.limit_overrides ?? payload.limitOverrides);
   // The launch catalogue is authoritative. A stale database plan row must not
@@ -351,11 +356,29 @@ export function hasEntitlement(subscription, key) {
   if (!key) return true;
   if (!subscription) return false;
 
-  if (subscription.features instanceof Set && subscription.features.has(key)) return true;
-  if (Array.isArray(subscription.features) && subscription.features.includes(key)) return true;
+  const directFeatures = subscription.features;
+  const hasDirect = directFeatures instanceof Set
+    ? directFeatures.has(key)
+    : Array.isArray(directFeatures) && directFeatures.includes(key);
+  if (hasDirect) return true;
+
+  const overrides = normaliseObject(subscription.entitlementOverrides ?? subscription.entitlement_overrides);
+  if (overrides[key] === true || String(overrides[key]).toLowerCase() === "true") return true;
 
   const planCode = subscription.planCode || subscription.plan_code || subscription.plan?.code;
-  return getPlanDefinition(planCode).features.includes(key);
+  const planFeatures = getPlanDefinition(planCode).features;
+  if (planFeatures.includes(key)) return true;
+
+  if (key === ENTITLEMENTS.COACH_HUB) {
+    const annualPlannerEnabled = directFeatures instanceof Set
+      ? directFeatures.has(ENTITLEMENTS.ANNUAL_PLANNER)
+      : Array.isArray(directFeatures) && directFeatures.includes(ENTITLEMENTS.ANNUAL_PLANNER);
+    const annualPlannerOverride = overrides[ENTITLEMENTS.ANNUAL_PLANNER] === true
+      || String(overrides[ENTITLEMENTS.ANNUAL_PLANNER]).toLowerCase() === "true";
+    return annualPlannerEnabled || annualPlannerOverride || planFeatures.includes(ENTITLEMENTS.ANNUAL_PLANNER);
+  }
+
+  return false;
 }
 
 export function canUseMatchdayWorkspace(subscription) {

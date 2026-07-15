@@ -2,7 +2,7 @@
 
 **Audit date:** 15 July 2026
 **Repository baseline inspected:** `staging` at `2873ea3`
-**Current product build:** Ground Control v3.10 Annual Pitch Booking, Training and Friendlies Planner
+**Current product build:** Ground Control v3.10.1 Coach Hub, Team Contacts and Requests
 
 ## Executive verdict
 
@@ -51,12 +51,13 @@ The right commercial strategy is to stop adding unrelated modules, prove the int
 - v3.9.1 bulk billing, automated reminders, document delivery and payment reconciliation.
 - v3.9.2 platform health, support diagnostics, accessibility safeguards and repeatable pilot evidence.
 - v3.10 annual pitch booking, recurring training, friendlies, blackouts and Matchday facility protection.
+- v3.10.1 unified team contacts, dedicated Coach Hub, secure invitations, booking requests, alternatives, messages, acknowledgements and private team calendars.
 
 ## Technical evidence from this audit
 
 - Clean dependency installation completed.
 - TypeScript and Vite production build completed.
-- Full regression suite passes after v3.10: **101 files and 509 tests**.
+- Full regression suite passes after v3.10.1: **102 files and 516 tests**.
 - Lint completes with no errors; existing warning debt remains.
 - PostgreSQL parser accepts the new v3.9.1 migration.
 - The repository contains approximately **106,000** JavaScript, TypeScript and SQL lines across product, server, migrations and tests.
@@ -155,30 +156,35 @@ Those results will justify pricing more convincingly than a long feature list.
 
 ## Full roadmap
 
-### Current — v3.10 Annual Pitch Booking, Training and Friendlies Planner
+### Current — v3.10.1 Coach Hub, Team Contacts and Requests
 
 Delivered in this build:
 
-- full calendar-year facility planning;
-- weekly and fortnightly training series;
-- internal and external friendlies;
-- camps, tournaments, maintenance and external hire;
-- requests, approvals and facility blackouts;
-- cost, contact and booking-reference records;
-- conflict protection against annual bookings and current matchdays;
-- Core add-on packaging with inclusion in Pro and Elite.
+- one adult team-contact record reused across Communications and Coach Hub;
+- individual and bulk coach invitations;
+- dedicated mobile-first coach workspace;
+- team-scoped calendar, fixtures, messages and profile;
+- training, friendly, camp, tournament, change and cancellation requests;
+- operator approval, rejection, information and alternative-offer workflows;
+- private team calendar feeds;
+- acknowledgement tracking and audit history;
+- Core Annual Planner add-on packaging with inclusion in Pro and Elite;
+- database-enforced entitlement, role and team isolation.
 
-### v3.10.1 — Annual Planner Pilot Refinement
+### v3.10.2 — Coach Hub and Annual Planner Pilot Refinement
 
 Only evidence-led refinements from real club use:
 
-- touch and tablet calendar testing;
-- drag-to-reschedule where it reduces administration;
-- school-holiday and exception patterns;
-- team self-service requests;
-- team calendar feeds and coach invitations;
-- facility supplier documents and cost reconciliation;
-- external venue-calendar integration discovery.
+- touch and tablet request/calendar testing;
+- saved Communications audiences for affected coaches;
+- automatic request and fixture-change recipient selection;
+- school-holiday and recurring-series exception patterns;
+- team-manager contact verification and replacement workflow;
+- richer direct request comments and attachments;
+- external facility-calendar integration discovery;
+- booking-cost reconciliation into Finance;
+- utilisation, unused-slot and response-time analytics;
+- managed safeguarding or qualification evidence only after retention and access governance is approved.
 
 ### v4.0 — Controlled Paid Launch
 
@@ -232,4 +238,4 @@ Link remains held back until League Manager connectivity creates meaningful valu
 
 ## Recommended immediate decision
 
-Deploy v3.10 to staging and prove a real pre-season, winter-training and friendly-booking cycle with Horwich St Mary’s. Do not begin another broad module until that workflow, Matchday integration and the v3.9.2 launch-confidence evidence are accepted. The next increase in value comes from controlled onboarding, reliable operation and proof that clubs save time across an entire calendar year.
+Deploy v3.10.1 to staging and prove a real pre-season, winter-training and friendly-request cycle with Horwich St Mary’s coaches. Do not begin another broad module until that workflow, Matchday integration and the v3.9.2 launch-confidence evidence are accepted. The next increase in value comes from controlled onboarding, reliable operation and proof that clubs save time across an entire calendar year.

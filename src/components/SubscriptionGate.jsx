@@ -24,7 +24,7 @@ export default function SubscriptionGate({
 }) {
   const currentPlan = getPlanDefinition(subscription?.planCode);
   const requiredPlan = getUpgradePlanForEntitlement(entitlement);
-  const isAnnualPlannerAddOn = entitlement === ENTITLEMENTS.ANNUAL_PLANNER && currentPlan.code === "core";
+  const isAnnualPlannerAddOn = [ENTITLEMENTS.ANNUAL_PLANNER, ENTITLEMENTS.COACH_HUB].includes(entitlement) && currentPlan.code === "core";
 
   return (
     <div className="mx-auto flex min-h-[560px] w-full max-w-5xl items-center justify-center py-10">
@@ -46,9 +46,9 @@ export default function SubscriptionGate({
 
           <div className="p-7 sm:p-10">
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{isAnnualPlannerAddOn ? "Core add-on" : "Available from"}</div>
-            <div className="mt-3 text-3xl font-black text-slate-950">{isAnnualPlannerAddOn ? "Annual Planner" : requiredPlan.name}</div>
+            <div className="mt-3 text-3xl font-black text-slate-950">{isAnnualPlannerAddOn ? "Annual Planner + Coach Hub" : requiredPlan.name}</div>
             <div className="mt-2 text-sm font-black text-emerald-700">{isAnnualPlannerAddOn ? "Available by agreement · included in Pro and Elite" : formatPrice(requiredPlan)}</div>
-            <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{isAnnualPlannerAddOn ? "Add full-year pitch booking, recurring training, friendlies, blackout dates and facility conflict protection without moving Core into the wrong package." : requiredPlan.strapline}</p>
+            <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{isAnnualPlannerAddOn ? "Add full-year pitch booking, recurring training, friendlies, Coach Hub, team requests, calendar feeds and facility conflict protection without moving Core into the wrong package." : requiredPlan.strapline}</p>
 
             {onOpenSubscription ? (
               <button
@@ -56,7 +56,7 @@ export default function SubscriptionGate({
                 onClick={onOpenSubscription}
                 className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900"
               >
-                {isAnnualPlannerAddOn ? "Review Annual Planner add-on" : requiredPlan.code === "elite" ? "Review Elite with Daxora" : "Review plans"} <ArrowRight size={17} className="text-emerald-300" />
+                {isAnnualPlannerAddOn ? "Review Annual Planner add-on + Coach Hub" : requiredPlan.code === "elite" ? "Review Elite with Daxora" : "Review plans"} <ArrowRight size={17} className="text-emerald-300" />
               </button>
             ) : (
               <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center text-sm font-black text-slate-700">Ask the club owner to review the subscription.</div>

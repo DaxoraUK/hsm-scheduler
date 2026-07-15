@@ -5,22 +5,23 @@ import { isRecoverableAccessVerificationError } from "../lib/errors/recovery.js"
 
 const ACTIVE_CLUB_KEY = "selected";
 const INVITE_QUERY_KEY = "club_invite";
+const COACH_INVITE_QUERY_KEY = "coach_invite";
 
-function readInviteToken() {
+function readInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return "";
   try {
-    return new URL(window.location.href).searchParams.get(INVITE_QUERY_KEY)?.trim() || "";
+    return new URL(window.location.href).searchParams.get(key)?.trim() || "";
   } catch {
     return "";
   }
 }
 
-function clearInviteToken() {
+function clearInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has(INVITE_QUERY_KEY)) return;
-    url.searchParams.delete(INVITE_QUERY_KEY);
+    if (!url.searchParams.has(key)) return;
+    url.searchParams.delete(key);
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   } catch {
     // A malformed browser URL must not prevent normal workspace access.
@@ -66,6 +67,7 @@ export function useClubAccess(authSession) {
     try {
       let nextMemberships = await DB.listMemberships();
       const inviteToken = readInviteToken();
+      const coachInviteToken = readInviteToken(COACH_INVITE_QUERY_KEY);
 
       if (inviteToken) {
         try {
@@ -75,6 +77,17 @@ export function useClubAccess(authSession) {
         } catch (inviteError) {
           if (!nextMemberships.length) throw inviteError;
           setError(inviteError?.message || "The club invitation could not be accepted.");
+        }
+      }
+
+      if (coachInviteToken) {
+        try {
+          await DB.acceptCoachHubInvitation(coachInviteToken);
+          clearInviteToken(COACH_INVITE_QUERY_KEY);
+          nextMemberships = await DB.listMemberships();
+        } catch (inviteError) {
+          if (!nextMemberships.length) throw inviteError;
+          setError(inviteError?.message || "The Coach Hub invitation could not be accepted.");
         }
       }
 

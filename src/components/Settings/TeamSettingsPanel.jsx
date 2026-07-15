@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Trash2,
   UsersRound,
+  UserRoundPlus,
 } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
@@ -126,6 +127,7 @@ export default function TeamSettingsPanel({
   subscription,
   workspaceAccess,
   communicationSchemaReady = false,
+  setSettingsTab,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -332,6 +334,14 @@ export default function TeamSettingsPanel({
 
       {limitMessage ? <Notice tone="warning" className="mt-4">{limitMessage}</Notice> : null}
       {!communicationSchemaReady ? <Notice tone="warning" className="mt-4">The secure coach-contact migration has not been detected. Apply the included Supabase migration before saving contacts.</Notice> : null}
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><UserRoundPlus size={18} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-black text-emerald-950">Team contacts now power Coach Hub and Communications</div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-emerald-800">Save the adult coach once, then invite them to their dedicated team calendar and request area without re-entering contact information.</div>
+        </div>
+        <button type="button" onClick={() => setSettingsTab?.("coachhub")} className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-xs font-black text-white">Open Coach Hub</button>
+      </div>
       {!canAddTeam ? (
         <Notice tone="warning" className="mt-4">
           {subscription?.planName || "The current plan"} allows {teamLimit} teams. {overTeamLimit ? `Remove ${excessTeams} team${excessTeams === 1 ? "" : "s"} in this session and then save, or upgrade the workspace.` : "Remove a team or review Plan & subscription before adding another."}
@@ -400,7 +410,7 @@ export default function TeamSettingsPanel({
 
                 <div className="border-t border-slate-200 p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <p className="max-w-3xl text-xs font-semibold leading-5 text-slate-500">Enter adult coach or manager details only. Do not enter player or child contact information. Contact data is excluded from general team exports.</p>
+                    <p className="max-w-3xl text-xs font-semibold leading-5 text-slate-500">Enter adult coach or manager details only. This same protected record powers Communications and Coach Hub invitations, so the club does not set the person up twice. Do not enter player or child contact information.</p>
                     {canManageContacts && selectedContactReady ? <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove contact data</button> : null}
                   </div>
 

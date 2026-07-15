@@ -9,6 +9,7 @@ import SettingsOverviewPanel from "../components/Settings/SettingsOverviewPanel.
 import WorkspaceSettingsPanel from "../components/Settings/WorkspaceSettingsPanel.jsx";
 import ClubSettingsPanel from "../components/Settings/ClubSettingsPanel.jsx";
 import TeamSettingsPanel from "../components/Settings/TeamSettingsPanel.jsx";
+import CoachHubSettingsPanel from "../components/Settings/CoachHubSettingsPanel.jsx";
 import VenueSettingsPanel from "../components/Settings/VenueSettingsPanel.jsx";
 import TimingSettingsPanel from "../components/Settings/TimingSettingsPanel.jsx";
 import PitchSettingsPanel from "../components/Settings/PitchSettingsPanel.jsx";
@@ -77,6 +78,10 @@ const TAB_TITLES = {
     "Teams",
     "Manage team formats, home days, match durations and pitch preferences.",
   ],
+  coachhub: [
+    "Coach Hub",
+    "Invite existing team contacts, manage coach access and decide training or friendly requests.",
+  ],
   pitches: [
     "Pitches",
     "Maintain the single pitch registry used by scheduling and intelligence.",
@@ -115,6 +120,7 @@ const TAB_ENTITLEMENTS = {
   history: ENTITLEMENTS.MATCHDAY_SCHEDULING,
   refs: ENTITLEMENTS.OFFICIALS_MANAGEMENT,
   governance: ENTITLEMENTS.GOVERNANCE_CONTROLS,
+  coachhub: ENTITLEMENTS.COACH_HUB,
 };
 
 export default function SettingsPage(props) {
@@ -191,6 +197,7 @@ export default function SettingsPage(props) {
     if (activeTab === "venues") return <VenueSettingsPanel {...props} />;
     if (activeTab === "timing") return <TimingSettingsPanel {...props} />;
     if (activeTab === "teams") return <TeamSettingsPanel {...props} />;
+    if (activeTab === "coachhub") return <CoachHubSettingsPanel {...props} />;
     if (activeTab === "pitches") return <PitchSettingsPanel {...props} />;
     if (activeTab === "refs") return <RefereeSettingsPanel {...props} />;
     if (activeTab === "integrations")

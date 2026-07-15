@@ -51,9 +51,9 @@ const FEATURE_LABELS = [
 ];
 
 const PLAN_HIGHLIGHTS = Object.freeze({
-  core: ["15 active teams", "Single-site matchday control", "Annual Planner available as a paid bolt-on"],
-  pro: ["40 active teams and 4 sites", "Annual Planner included", "Funding evidence and configured email delivery"],
-  elite: ["60 active teams and 8 sites", "Annual Planner and organisation-wide command included", "Executive board packs and contracted scale"],
+  core: ["15 active teams", "Single-site matchday control", "Annual Planner available as a paid bolt-on · Coach Hub included"],
+  pro: ["40 active teams and 4 sites", "Annual Planner + unlimited Coach Hub accounts included", "Funding evidence and configured email delivery"],
+  elite: ["60 active teams and 8 sites", "Annual Planner, Coach Hub and organisation-wide command included", "Executive board packs and contracted scale"],
 });
 
 const LIMIT_LABELS = [

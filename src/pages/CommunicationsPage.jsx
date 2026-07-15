@@ -573,6 +573,11 @@ export default function CommunicationsPage(props) {
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-950"><ShieldCheck size={19} className="mt-0.5 shrink-0" /><span>Coach contact access is restricted and communication events are retained for {privacy.retentionDays} days under the club's recorded privacy setup.</span></div>
       )}
 
+      <div className="mb-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
+        <UsersRound size={19} className="mt-0.5 shrink-0 text-sky-700" />
+        <span><strong>Shared team contacts.</strong> The same adult contact record powers Communications, Coach Hub invitations, booking requests, calendar updates and acknowledgements. Update it once in Settings → Teams.</span>
+      </div>
+
       <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${deliveryCapabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
         <div className="flex items-start gap-3">
           {capabilitiesLoading ? <Loader2 size={19} className="mt-0.5 shrink-0 animate-spin text-slate-500" /> : <RadioTower size={19} className={`mt-0.5 shrink-0 ${deliveryCapabilities.webSendingEnabled ? "text-emerald-700" : "text-slate-500"}`} />}

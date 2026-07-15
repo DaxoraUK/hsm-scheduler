@@ -39,6 +39,7 @@ export const SETTINGS_GROUPS = Object.freeze([
     icon: UsersRound,
     tabs: [
       ["teams", "Teams"],
+      ["coachhub", "Coach Hub"],
       ["pitches", "Pitches"],
       ["refs", "Officials"],
     ],
@@ -118,6 +119,7 @@ function isTabVisible({
   if (key === "access" && !workspaceAccess?.canViewAudit) return false;
   if (key === "governance" && !hasEntitlement(subscription, ENTITLEMENTS.GOVERNANCE_CONTROLS)) return false;
   if (key === "privacy" && !workspaceAccess?.canManageSettings) return false;
+  if (key === "coachhub" && (!workspaceAccess?.canManageSettings || !hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB))) return false;
   if (
     ["timing", "history"].includes(key) &&
     !hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING)
