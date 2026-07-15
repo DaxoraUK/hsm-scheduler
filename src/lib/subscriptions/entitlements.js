@@ -45,6 +45,7 @@ export const ENTITLEMENTS = Object.freeze({
   COMMUNICATION_GOVERNANCE: "communication_governance",
   FUNDING_PORTFOLIO: "funding_portfolio",
   ENHANCED_AUDIT: "enhanced_audit",
+  ANNUAL_PLANNER: "annual_planner",
 });
 
 export const LIMIT_KEYS = Object.freeze({
@@ -88,6 +89,7 @@ const proFeatures = [
   ENTITLEMENTS.REPORTS_ADVANCED,
   ENTITLEMENTS.ANALYTICS_ADVANCED,
   ENTITLEMENTS.MULTI_VENUE,
+  ENTITLEMENTS.ANNUAL_PLANNER,
 ];
 
 const eliteFeatures = [
@@ -232,6 +234,7 @@ export const ROUTE_ENTITLEMENTS = Object.freeze({
   communications: ENTITLEMENTS.COMMUNICATIONS,
   analytics: ENTITLEMENTS.ANALYTICS_CORE,
   reports: ENTITLEMENTS.REPORTS_OPERATIONS,
+  planner: ENTITLEMENTS.ANNUAL_PLANNER,
   executive: ENTITLEMENTS.ORGANISATION_COMMAND,
 });
 

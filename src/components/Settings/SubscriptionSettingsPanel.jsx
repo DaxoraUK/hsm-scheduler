@@ -47,12 +47,13 @@ const FEATURE_LABELS = [
   [ENTITLEMENTS.COMMUNICATION_GOVERNANCE, "Controlled communication templates"],
   [ENTITLEMENTS.FUNDING_PORTFOLIO, "Organisation funding portfolio"],
   [ENTITLEMENTS.ENHANCED_AUDIT, "Enhanced governance audit trail"],
+  [ENTITLEMENTS.ANNUAL_PLANNER, "Annual pitch booking, training and friendlies"],
 ];
 
 const PLAN_HIGHLIGHTS = Object.freeze({
-  core: ["15 active teams", "Single-site matchday control", "Operational reports and export"],
-  pro: ["40 active teams and 4 sites", "Complete advanced operations", "Funding evidence and configured email delivery"],
-  elite: ["60 active teams and 8 sites", "Organisation Command and site governance", "Executive board packs and contracted scale"],
+  core: ["15 active teams", "Single-site matchday control", "Annual Planner available as a paid bolt-on"],
+  pro: ["40 active teams and 4 sites", "Annual Planner included", "Funding evidence and configured email delivery"],
+  elite: ["60 active teams and 8 sites", "Annual Planner and organisation-wide command included", "Executive board packs and contracted scale"],
 });
 
 const LIMIT_LABELS = [

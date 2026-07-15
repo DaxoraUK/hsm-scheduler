@@ -6,6 +6,7 @@ import {
   isPitchSuitableForFixture,
 } from "../intelligence/pitch/pitchService.js";
 import { formatTimelineTime } from "./timelineEngine.js";
+import { detectAnnualPlannerConflicts, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
 
 export const TIMELINE_SNAP_MINUTES = 15;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
@@ -113,6 +114,9 @@ export function buildTimelineMoveCandidate({
   koMins,
   start,
   end,
+  matchDate = "",
+  resourceBookings = [],
+  resourceBlackouts = [],
 } = {}) {
   const fixture = fixtures[fixtureIndex];
   const pitch = (pitchCfg || []).find((item) => item.id === pitchId);
@@ -186,6 +190,65 @@ export function buildTimelineMoveCandidate({
       },
     };
   }
+  const resourceCandidate = normaliseAnnualBooking({
+    title: `${fixture.homeTeam || fixture.team || "Fixture"} vs ${fixture.awayTeam || "TBC"}`,
+    bookingType: "match",
+    status: "confirmed",
+    teamKey: fixture.cfg?.id || fixture.teamId || fixture.homeTeam || fixture.team || "",
+    teamName: fixture.homeTeam || fixture.team || "",
+    opponentName: fixture.awayTeam || "",
+    pitchId: patch.pitchId,
+    pitchName: patch.pitchLabel,
+    startDate: matchDate || fixture.date || fixture.fixtureDate || "",
+    startTime: patch.koTime,
+    endTime: patch.endTime,
+    sourceType: "matchday_candidate",
+  });
+  const resourceConflicts = matchDate
+    ? detectAnnualPlannerConflicts(resourceCandidate, {
+        bookings: resourceBookings,
+        blackouts: resourceBlackouts,
+      })
+    : [];
+
+  if (resourceConflicts.length) {
+    const safeAlternatives = rankTimelinePitches({ pitchCfg, fixture, closedPitches, currentPitchId: fixture.pitchId })
+      .filter((item) => item.state.allowed)
+      .filter((item) => !detectAnnualPlannerConflicts({ ...resourceCandidate, pitchId: item.pitch.id, pitchName: item.pitch.label || item.pitch.id }, {
+        bookings: resourceBookings,
+        blackouts: resourceBlackouts,
+      }).length)
+      .slice(0, 3);
+    return {
+      ok: false,
+      blocked: true,
+      advisory: false,
+      severity: "blocked",
+      type: "annual_planner_conflict",
+      title: resourceConflicts[0].title || "Facility already booked",
+      message: resourceConflicts[0].message || "The annual planner already protects this pitch and time.",
+      conflicts: resourceConflicts,
+      fixture,
+      fixtureIndex,
+      pitch,
+      pitchId,
+      koMins: safeKo,
+      koTime: patch.koTime,
+      endMins: patch.endMins,
+      patch,
+      pitchState,
+      alternatives: safeAlternatives,
+      previousPatch: {
+        pitchId: fixture.pitchId,
+        pitchLabel: fixture.pitchLabel || fixture.pitchId,
+        koMins: fixture.koMins,
+        koTime: fixture.koTime || formatTimelineTime(fixture.koMins),
+        endMins: fixture.endMins,
+        endTime: fixture.endTime || formatTimelineTime(fixture.endMins),
+      },
+    };
+  }
+
   const impact = getOperationsImpact({
     fixtures,
     fixtureIndex,

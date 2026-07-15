@@ -36,6 +36,10 @@ export function resolveSearchNavigation(query = "") {
     return { target: NAV_TARGETS.EXECUTIVE, options: {} };
   }
 
+  if (q.includes("annual planner") || q.includes("training planner") || q.includes("pitch booking") || q.includes("friendlies") || q.includes("friendly")) {
+    return { target: NAV_TARGETS.PLANNER, options: {} };
+  }
+
   if (q.includes("timeline") || q.includes("control room")) {
     return { target: timelineTarget, options: { scroll: false } };
   }
@@ -190,6 +194,7 @@ export function createNavigationController({
     goToOfficials: (options) => goTo(NAV_TARGETS.OFFICIALS, options),
     goToWeather: (options) => goTo(NAV_TARGETS.WEATHER, options),
     goToRecommendations: (options) => goTo(NAV_TARGETS.RECOMMENDATIONS, options),
+    goToAnnualPlanner: () => goTo(NAV_TARGETS.PLANNER),
     goToCommunications: (options) => goTo(NAV_TARGETS.COMMUNICATIONS, options),
     goToAnalytics: () => goTo(NAV_TARGETS.ANALYTICS),
     goToReports: () => goTo(NAV_TARGETS.REPORTS),

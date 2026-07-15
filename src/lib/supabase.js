@@ -523,6 +523,67 @@ export const DB = {
     });
   },
 
+  async listAnnualPlannerWorkspace(clubId, { startDate = null, endDate = null } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_annual_planner_workspace", {
+      target_club_id: id,
+      range_start: startDate || null,
+      range_end: endDate || null,
+    });
+    return result && typeof result === "object"
+      ? result
+      : { settings: {}, bookings: [], blackouts: [] };
+  },
+
+  async saveAnnualPlannerBooking(clubId, booking) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_booking", {
+      target_club_id: id,
+      booking_data: booking && typeof booking === "object" ? booking : {},
+    });
+  },
+
+  async saveAnnualPlannerBookingSeries(clubId, bookings = []) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/save_annual_planner_booking_series", {
+      target_club_id: id,
+      booking_rows: Array.isArray(bookings) ? bookings : [],
+    }));
+  },
+
+  async deleteAnnualPlannerBooking(clubId, bookingId, { deleteSeries = false } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_annual_planner_booking", {
+      target_club_id: id,
+      target_booking_id: bookingId,
+      delete_series: Boolean(deleteSeries),
+    });
+  },
+
+  async saveAnnualPlannerBlackout(clubId, blackout) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_blackout", {
+      target_club_id: id,
+      blackout_data: blackout && typeof blackout === "object" ? blackout : {},
+    });
+  },
+
+  async deleteAnnualPlannerBlackout(clubId, blackoutId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_annual_planner_blackout", {
+      target_club_id: id,
+      target_blackout_id: blackoutId,
+    });
+  },
+
+  async saveAnnualPlannerSettings(clubId, settings) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_settings", {
+      target_club_id: id,
+      settings_data: settings && typeof settings === "object" ? settings : {},
+    });
+  },
+
   async loadPitches(clubId) {
     return DB.load("pitches", clubId);
   },

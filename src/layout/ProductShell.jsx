@@ -14,6 +14,7 @@ import { setDaxoraNotificationContext } from "../lib/notifications/daxoraNotific
 import {
   Building2,
   CalendarDays,
+  CalendarRange,
   ChartNoAxesCombined,
   Clock3,
   CloudAlert,
@@ -34,7 +35,7 @@ import {
 function NavigationItems({ items, mainPage, onNavigate, className = "" }) {
   return (
     <nav className={`space-y-1 ${className}`} aria-label="Primary navigation">
-      {items.map(([key, label, Icon, target]) => {
+      {items.map(([key, label, Icon, target, meta = {}]) => {
         const active = mainPage === key;
         return (
           <button
@@ -50,7 +51,12 @@ function NavigationItems({ items, mainPage, onNavigate, className = "" }) {
           >
             {active ? <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-emerald-400" /> : null}
             <Icon size={19} strokeWidth={2.5} className={active ? "text-emerald-400" : "text-slate-500"} />
-            <span>{label}</span>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {meta.badge ? (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${active ? "bg-emerald-400/15 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>
+                {meta.badge}
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -104,16 +110,20 @@ export default function ProductShell({
 
   const leagueMode = mainPage === "league";
   const clubWorkspaceAvailable = !platformOnly && !leagueOnly;
+  const annualPlannerAddOnAvailable = subscription?.planCode === "core"
+    && !hasEntitlement(subscription, ENTITLEMENTS.ANNUAL_PLANNER);
   const workspaceNavItems = clubWorkspaceAvailable ? [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
     ["executive", "Organisation Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
+    ["planner", "Annual Planner", CalendarRange, NAV_TARGETS.PLANNER, annualPlannerAddOnAvailable ? { badge: "Add-on" } : {}],
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
   ].filter(([key]) => {
     if (key === "settings") return workspaceAccess?.canManageSettings;
+    if (key === "planner" && annualPlannerAddOnAvailable) return true;
     return canOpenPage(subscription, key);
   }) : [];
 

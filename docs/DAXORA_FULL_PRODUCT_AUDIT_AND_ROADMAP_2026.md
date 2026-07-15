@@ -2,7 +2,7 @@
 
 **Audit date:** 15 July 2026
 **Repository baseline inspected:** `staging` at `2873ea3`
-**Build added during this audit:** League Operations v3.9.1
+**Current product build:** Ground Control v3.10 Annual Pitch Booking, Training and Friendlies Planner
 
 ## Executive verdict
 
@@ -49,12 +49,14 @@ The right commercial strategy is to stop adding unrelated modules, prove the int
 - Executive analytics, compliance scorecards, scheduled report delivery and archive.
 - Finance ledger, club statements, fines and expenses.
 - v3.9.1 bulk billing, automated reminders, document delivery and payment reconciliation.
+- v3.9.2 platform health, support diagnostics, accessibility safeguards and repeatable pilot evidence.
+- v3.10 annual pitch booking, recurring training, friendlies, blackouts and Matchday facility protection.
 
 ## Technical evidence from this audit
 
 - Clean dependency installation completed.
 - TypeScript and Vite production build completed.
-- Full regression suite passes after v3.9.1: **99 files and 498 tests**.
+- Full regression suite passes after v3.10: **101 files and 509 tests**.
 - Lint completes with no errors; existing warning debt remains.
 - PostgreSQL parser accepts the new v3.9.1 migration.
 - The repository contains approximately **106,000** JavaScript, TypeScript and SQL lines across product, server, migrations and tests.
@@ -153,37 +155,37 @@ Those results will justify pricing more convincingly than a long feature list.
 
 ## Full roadmap
 
-### Current — v3.9.1 Finance Automation and Reconciliation
+### Current — v3.10 Annual Pitch Booking, Training and Friendlies Planner
 
 Delivered in this build:
 
-- club billing profiles;
-- reusable billing templates;
-- bulk seasonal invoicing;
-- branded invoice and statement documents;
-- invoice and reminder delivery evidence;
-- automatic overdue reminders;
-- payment CSV matching and controlled batch posting.
+- full calendar-year facility planning;
+- weekly and fortnightly training series;
+- internal and external friendlies;
+- camps, tournaments, maintenance and external hire;
+- requests, approvals and facility blackouts;
+- cost, contact and booking-reference records;
+- conflict protection against annual bookings and current matchdays;
+- Core add-on packaging with inclusion in Pro and Elite.
 
-### v3.9.2 — Pilot Hardening and Launch Confidence
+### v3.10.1 — Annual Planner Pilot Refinement
 
-This should be the next release and should avoid major new modules.
+Only evidence-led refinements from real club use:
 
-- Playwright end-to-end acceptance suite.
-- Real-device Ground Control planner acceptance.
-- Accessibility correction pass.
-- performance and route-splitting pass;
-- support diagnostics and provider-health page;
-- backup/export/restore acceptance;
-- full empty/loading/error-state review;
-- production onboarding and import rehearsal;
-- pilot evidence dashboard and launch-gate closure.
+- touch and tablet calendar testing;
+- drag-to-reschedule where it reduces administration;
+- school-holiday and exception patterns;
+- team self-service requests;
+- team calendar feeds and coach invitations;
+- facility supplier documents and cost reconciliation;
+- external venue-calendar integration discovery.
 
 ### v4.0 — Controlled Paid Launch
 
 - hosted subscription checkout and renewals;
 - production organisation provisioning;
-- guided onboarding and customer success checklist;
+- Core add-on activation and billing;
+- guided onboarding and customer-success checklist;
 - in-product help, support and service status;
 - legal acceptance and data-processing records;
 - production monitoring and incident handling;
@@ -195,20 +197,20 @@ Link remains held back until League Manager connectivity creates meaningful valu
 
 - Full-Time controlled two-way sync;
 - payment links and payment reconciliation connectors;
-- native PDF/credit notes and period close;
-- accounting exports/integrations;
+- native PDF and credit-note generation with finance period close;
+- accounting exports and integrations;
 - communications provider expansion;
-- API/webhook foundation;
-- calendar and membership integrations.
+- API and webhook foundation;
+- facility and membership integrations.
 
 ### v4.2 — Mobile and Field Operations
 
-- touch-first matchday board;
-- offline-safe operational checklist;
+- touch-first matchday and annual-planning boards;
+- offline-safe operational checklists;
 - rapid incident, result and attendance capture;
 - push-action workflows;
 - venue and pitch inspection records;
-- evidence capture with governed storage.
+- governed evidence capture.
 
 ### v4.3 — Intelligence and Benchmarking
 
@@ -222,7 +224,7 @@ Link remains held back until League Manager connectivity creates meaningful valu
 ### v5.0 — League Network and Federation
 
 - multi-league administration;
-- county/federation views;
+- county and federation views;
 - shared officials and venue governance;
 - inter-league competition support;
 - governing-body data exchange;
@@ -230,4 +232,4 @@ Link remains held back until League Manager connectivity creates meaningful valu
 
 ## Recommended immediate decision
 
-Do not start another broad module after v3.9.1. Deploy it to staging, prove the full league billing cycle and then execute v3.9.2 as a hardening release. The product already has enough breadth. The next increase in value comes from reliability, speed, onboarding and evidence that real operators can trust it for an entire week and season.
+Deploy v3.10 to staging and prove a real pre-season, winter-training and friendly-booking cycle with Horwich St Mary’s. Do not begin another broad module until that workflow, Matchday integration and the v3.9.2 launch-confidence evidence are accepted. The next increase in value comes from controlled onboarding, reliable operation and proof that clubs save time across an entire calendar year.

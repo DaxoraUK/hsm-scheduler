@@ -47,6 +47,7 @@ import {
   normalisePlannerTimeInput,
 } from "../../../lib/engines/matchdayPlannerEngine.js";
 import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";
+import { DB, isSupaConfigured } from "../../../lib/supabase.js";
 
 const PITCH_COLUMN_WIDTH = 184;
 const EDGE_SCROLL_DISTANCE = 68;
@@ -72,6 +73,8 @@ export default function MatchdayTimelineCard({
   onSave,
   onMoveRequest,
   onFixtureClick = () => {},
+  matchDate = "",
+  annualPlannerEnabled = false,
 }) {
   const isCompact = variant === "compact";
   const canEdit = !readOnly && typeof onMoveRequest === "function";
@@ -84,6 +87,7 @@ export default function MatchdayTimelineCard({
   const [proposal, setProposal] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(900);
+  const [annualPlannerResources, setAnnualPlannerResources] = useState({ bookings: [], blackouts: [] });
   const scrollRef = useRef(null);
   const rowRefs = useRef(new Map());
   const dragRef = useRef(null);
@@ -127,6 +131,40 @@ export default function MatchdayTimelineCard({
   }, [closedPitches, pitchCfg, selectedFixture]);
 
   useEffect(() => {
+    let cancelled = false;
+    const clubId = String(club?.id || "").trim();
+    if (!annualPlannerEnabled || !clubId || !matchDate || !isSupaConfigured()) {
+      setAnnualPlannerResources({ bookings: [], blackouts: [] });
+      return undefined;
+    }
+
+    const loadResources = async () => {
+      try {
+        const result = await DB.listAnnualPlannerWorkspace(clubId, { startDate: matchDate, endDate: matchDate });
+        if (!cancelled) {
+          setAnnualPlannerResources({
+            bookings: Array.isArray(result?.bookings) ? result.bookings : [],
+            blackouts: Array.isArray(result?.blackouts) ? result.blackouts : [],
+          });
+        }
+      } catch {
+        if (!cancelled) setAnnualPlannerResources({ bookings: [], blackouts: [] });
+      }
+    };
+
+    loadResources();
+    const refresh = (event) => {
+      const changedClubId = String(event?.detail?.clubId || "").trim();
+      if (!changedClubId || changedClubId === clubId) loadResources();
+    };
+    window.addEventListener("daxora-annual-planner-updated", refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("daxora-annual-planner-updated", refresh);
+    };
+  }, [annualPlannerEnabled, club?.id, matchDate]);
+
+  useEffect(() => {
     if (!scrollRef.current || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect?.width;
@@ -160,8 +198,11 @@ export default function MatchdayTimelineCard({
         koMins,
         start: timeline.start,
         end: timeline.end,
+        matchDate,
+        resourceBookings: annualPlannerResources.bookings,
+        resourceBlackouts: annualPlannerResources.blackouts,
       }),
-    [closedPitches, club, games, pitchCfg, timeline.end, timeline.start],
+    [annualPlannerResources.blackouts, annualPlannerResources.bookings, closedPitches, club, games, matchDate, pitchCfg, timeline.end, timeline.start],
   );
 
   const commitCandidate = useCallback(

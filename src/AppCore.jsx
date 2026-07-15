@@ -142,6 +142,7 @@ const OperationsCentrePage = lazy(
 const OperationsTimelinePage = lazy(
   () => import("./pages/OperationsTimelinePage.jsx"),
 );
+const AnnualPlannerPage = lazy(() => import("./pages/AnnualPlannerPage.jsx"));
 const CommunicationsPage = lazy(() => import("./pages/CommunicationsPage.jsx"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage.jsx"));
@@ -2329,6 +2330,25 @@ function App() {
                 midweekUnresolved={activeMidweekUnresolved}
                 midweekConflicts={activeMidweekConflicts}
                 closedPitches={closedPitches}
+              />
+            </Suspense>
+          )}
+
+          {mainPage === "planner" && pageEntitled && (
+            <Suspense fallback={<LazyPageFallback label="Annual Planner" />}>
+              <AnnualPlannerPage
+                club={club}
+                pitchCfg={pitchCfg}
+                teamCfg={teamCfg}
+                workspaceAccess={operationalWorkspaceAccess}
+                subscription={subscription}
+                satFinal={satFinal}
+                sunFinal={sunFinal}
+                midweekFinal={activeMidweekFinal}
+                satDate={satDate}
+                sunDate={sunDate}
+                midweekDate={midweekDate}
+                midweekEnabled={midweekEnabled}
               />
             </Suspense>
           )}

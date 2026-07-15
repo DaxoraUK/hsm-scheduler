@@ -62,6 +62,7 @@ import {
   buildPlannerChangeRecord,
   getPlannerFixtureIdentity,
 } from "../lib/engines/matchdayPlannerEngine.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 const WORKSPACES = [
   {
@@ -976,6 +977,8 @@ export default function MatchdayPage({
             onSave={props.saveWeek ? saveTimelineChanges : undefined}
             onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
+            matchDate={matchdayDate}
+            annualPlannerEnabled={hasEntitlement(props.subscription, ENTITLEMENTS.ANNUAL_PLANNER)}
           />
         ),
       },
@@ -1165,6 +1168,8 @@ export default function MatchdayPage({
           <OfficialsIntelligenceCard
             intelligence={officialsIntelligence}
             onFixtureClick={openFixture}
+            matchDate={matchdayDate}
+            annualPlannerEnabled={hasEntitlement(props.subscription, ENTITLEMENTS.ANNUAL_PLANNER)}
           />
         ),
       },
