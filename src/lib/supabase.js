@@ -2399,6 +2399,74 @@ export const DB = {
     });
   },
 
+  async upsertLeagueFinanceClubProfile(leagueId, profile = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_finance_club_profile", {
+      target_league_id: id,
+      profile_data: {
+        parent_club_id: profile.parentClubId || null,
+        billing_email: String(profile.billingEmail || "").trim().toLowerCase() || null,
+        cc_emails: (Array.isArray(profile.ccEmails) ? profile.ccEmails : []).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean),
+        account_reference: String(profile.accountReference || "").trim() || null,
+        payment_terms_days: Math.max(1, Number(profile.paymentTermsDays || 30)),
+        reminders_enabled: profile.remindersEnabled !== false,
+        reminder_days: (Array.isArray(profile.reminderDays) ? profile.reminderDays : [0, 7, 14]).map((value) => Math.max(0, Number(value || 0))),
+        purchase_order_required: Boolean(profile.purchaseOrderRequired),
+        notes: String(profile.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async upsertLeagueFinanceBillingTemplate(leagueId, template = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/upsert_league_finance_billing_template", {
+      target_league_id: id,
+      template_data: {
+        id: template.id || null,
+        season_id: template.seasonId || null,
+        charge_type_id: template.chargeTypeId || null,
+        name: String(template.name || "").trim(),
+        scope: template.scope || "club",
+        quantity: Math.max(0.001, Number(template.quantity || 1)),
+        due_days: Math.max(1, Number(template.dueDays || 30)),
+        active: template.active !== false,
+        notes: String(template.notes || "").trim() || null,
+      },
+    });
+  },
+
+  async createLeagueFinanceBillingRun(leagueId, run = {}) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/create_league_finance_billing_run", {
+      target_league_id: id,
+      run_data: {
+        template_id: run.templateId || null,
+        season_id: run.seasonId || null,
+        name: String(run.name || "Bulk billing run").trim(),
+        idempotency_key: String(run.idempotencyKey || "").trim(),
+        issue_on: run.issueOn || null,
+        due_on: run.dueOn || null,
+        issue_immediately: Boolean(run.issueImmediately),
+        parent_club_ids: Array.isArray(run.parentClubIds) ? run.parentClubIds : [],
+      },
+    });
+  },
+
+  async applyLeagueFinancePaymentBatch(leagueId, filename, rows = []) {
+    const id = requireLeagueId(leagueId);
+    return supaFetch("POST", "rpc/apply_league_finance_payment_batch", {
+      target_league_id: id,
+      filename_value: String(filename || "payment-import.csv").trim(),
+      payment_rows: (Array.isArray(rows) ? rows : []).map((row, index) => ({
+        row_number: Math.max(1, Number(row.rowNumber || index + 2)),
+        invoice_id: row.matchedInvoiceId || row.invoiceId || null,
+        paid_on: row.date || row.paidOn || null,
+        amount_pence: Math.max(1, Number(row.amountPence || 0)),
+        reference: String(row.reference || "").trim() || null,
+      })),
+    });
+  },
+
   async getClubOnboarding(clubId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/get_club_onboarding", {
