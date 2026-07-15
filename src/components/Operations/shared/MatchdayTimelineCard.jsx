@@ -88,6 +88,7 @@ export default function MatchdayTimelineCard({
   const rowRefs = useRef(new Map());
   const dragRef = useRef(null);
   const candidateRef = useRef(null);
+  const suppressFixtureClickRef = useRef(false);
 
   const timeline = useMemo(
     () =>
@@ -182,11 +183,13 @@ export default function MatchdayTimelineCard({
   useEffect(() => {
     function onPointerMove(event) {
       const session = dragRef.current;
-      if (!session) return;
+      if (!session || event.pointerId !== session.pointerId) return;
 
-      const moved = session.moved || Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 5;
+      const moved = session.moved || Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 6;
       dragRef.current = { ...session, moved, clientX: event.clientX, clientY: event.clientY };
       if (!moved) return;
+      if (!session.moved) document.body.style.cursor = "grabbing";
+      if (event.cancelable) event.preventDefault();
 
       const scroll = scrollRef.current;
       if (scroll) {
@@ -214,19 +217,25 @@ export default function MatchdayTimelineCard({
       setCandidate(next);
     }
 
-    function onPointerUp() {
+    function onPointerUp(event) {
       const session = dragRef.current;
+      if (!session || event.pointerId !== session.pointerId) return;
       const next = candidateRef.current;
+      const moved = Boolean(session.moved);
       clearDrag();
-      if (!session?.moved || !next) return;
-      commitCandidate(next);
+      if (!moved) return;
+      suppressFixtureClickRef.current = true;
+      window.setTimeout(() => {
+        suppressFixtureClickRef.current = false;
+      }, 0);
+      if (next) commitCandidate(next);
     }
 
     function onKeyDown(event) {
       if (event.key === "Escape" && dragRef.current) clearDrag();
     }
 
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", clearDrag);
     window.addEventListener("keydown", onKeyDown);
@@ -239,20 +248,21 @@ export default function MatchdayTimelineCard({
   }, [buildCandidate, clearDrag, commitCandidate, timeline.range, timeline.start]);
 
   function startPointerDrag(event, fixture, fixtureIndex) {
-    if (!canEdit) return;
-    event.preventDefault();
+    if (!canEdit || event.button !== 0 || !event.isPrimary) return;
     event.stopPropagation();
     setProposal(null);
     dragRef.current = {
       fixtureIndex,
       fixture: fixture.source,
       timelineFixture: fixture,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
     };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     document.body.style.userSelect = "none";
-    document.body.style.cursor = "grabbing";
   }
 
   function previewSlotForSelected(pitchId, koMins) {
@@ -334,6 +344,7 @@ export default function MatchdayTimelineCard({
             activeOverlays={activeOverlays}
             toggleOverlay={toggleOverlay}
             canEdit={canEdit}
+            locked={readOnly}
           />
 
           {view === "timeline" ? (
@@ -382,6 +393,7 @@ export default function MatchdayTimelineCard({
                                 setProposal(null);
                               }}
                               onPointerDrag={startPointerDrag}
+                              shouldSuppressFixtureClick={() => suppressFixtureClickRef.current}
                               onSlotSelect={previewSlotForSelected}
                             />
                           ))
@@ -455,7 +467,7 @@ export default function MatchdayTimelineCard({
   );
 }
 
-function PlannerToolbar({ view, setView, zoom, setZoom, activeOverlays, toggleOverlay, canEdit }) {
+function PlannerToolbar({ view, setView, zoom, setZoom, activeOverlays, toggleOverlay, canEdit, locked }) {
   return (
     <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -464,7 +476,11 @@ function PlannerToolbar({ view, setView, zoom, setZoom, activeOverlays, toggleOv
           <SegmentButton active={view === "board"} onClick={() => setView("board")} icon={LayoutGrid}>Pitch board</SegmentButton>
           {canEdit ? (
             <div className="ml-0 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 sm:ml-2">
-              <MousePointer2 size={14} /> Drag the handle or select a fixture
+              <MousePointer2 size={14} /> Drag any fixture card or select it
+            </div>
+          ) : locked ? (
+            <div className="ml-0 flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 sm:ml-2">
+              <ShieldAlert size={14} /> Schedule locked — unlock it to move fixtures
             </div>
           ) : null}
         </div>
@@ -573,6 +589,7 @@ function PlannerRow({
   rowRefs,
   onFixtureSelect,
   onPointerDrag,
+  shouldSuppressFixtureClick,
   onSlotSelect,
 }) {
   const pitchState = dragFixture ? getTimelinePitchState({ pitch: row.pitch, fixture: dragFixture, closedPitches }) : null;
@@ -645,7 +662,26 @@ function PlannerRow({
             <div
               key={fixture.id}
               data-fixture-card
-              className={`absolute z-10 flex overflow-hidden rounded-2xl border text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${colour} ${isSelected ? "ring-4 ring-sky-300 ring-offset-2" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`${fixture.title} vs ${fixture.opposition} at ${fixture.koTime}${canEdit ? ". Drag to move or press Enter for details." : ". Press Enter for details."}`}
+              title={`${fixture.title} vs ${fixture.opposition} · ${fixture.koTime}${canEdit ? " · Drag anywhere on this card to move" : ""}`}
+              onPointerDown={(event) => onPointerDrag(event, fixture, fixtureIndex)}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (shouldSuppressFixtureClick?.()) {
+                  event.preventDefault();
+                  return;
+                }
+                onFixtureSelect(fixture.source, fixtureIndex);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                onFixtureSelect(fixture.source, fixtureIndex);
+              }}
+              className={`absolute z-10 flex touch-none select-none overflow-hidden rounded-2xl border text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-300 focus-visible:ring-offset-2 ${canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${colour} ${isSelected ? "ring-4 ring-sky-300 ring-offset-2" : ""}`}
               style={{
                 left: `${fixture.leftPct}%`,
                 width: `${fixture.displayWidthPct || fixture.widthPct}%`,
@@ -655,31 +691,20 @@ function PlannerRow({
               }}
             >
               {canEdit ? (
-                <button
-                  type="button"
-                  aria-label={`Move ${fixture.title} vs ${fixture.opposition}`}
-                  title="Drag to move"
-                  onPointerDown={(event) => onPointerDrag(event, fixture, fixtureIndex)}
-                  className="flex w-8 shrink-0 touch-none items-center justify-center border-r border-white/20 bg-black/10 text-white/80 transition hover:bg-black/20 hover:text-white active:cursor-grabbing"
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none flex w-8 shrink-0 items-center justify-center border-r border-white/20 bg-black/10 text-white/80"
                 >
                   <GripVertical size={15} />
-                </button>
+                </span>
               ) : null}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onFixtureSelect(fixture.source, fixtureIndex);
-                }}
-                className="min-w-0 flex-1 px-2.5 py-1.5 text-left"
-                title={`${fixture.title} vs ${fixture.opposition} · ${fixture.koTime}`}
-              >
+              <div className="pointer-events-none min-w-0 flex-1 px-2.5 py-1.5 text-left">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[11px] font-black">{fixture.title}</span>
                   {activeOverlays.has("warnings") && risk.count ? <AlertTriangle size={11} className="shrink-0 text-amber-100" /> : null}
                 </div>
                 <div className="mt-0.5 truncate text-[9px] font-bold text-white/80">{fixture.koTime} · {fixture.opposition}</div>
-              </button>
+              </div>
             </div>
           );
         })}
