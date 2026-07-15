@@ -58,6 +58,10 @@ import {
 import { getParkingStats } from "../lib/dashboardStats.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { getTimelineCandidateSummary } from "../lib/engines/timelineDragEngine.js";
+import {
+  buildPlannerChangeRecord,
+  getPlannerFixtureIdentity,
+} from "../lib/engines/matchdayPlannerEngine.js";
 
 const WORKSPACES = [
   {
@@ -303,6 +307,8 @@ export default function MatchdayPage({
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [timelineDirty, setTimelineDirty] = useState(false);
   const [timelineSaving, setTimelineSaving] = useState(false);
+  const [timelineHistory, setTimelineHistory] = useState([]);
+  const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
 
   useEffect(() => {
     setIsLocked(readMatchdayLock(lockIdentity));
@@ -310,6 +316,8 @@ export default function MatchdayPage({
 
   useEffect(() => {
     setTimelineDirty(false);
+    setTimelineHistory([]);
+    setTimelineRedoHistory([]);
   }, [day, matchdayDate]);
 
   const clubWithTiming = useMemo(
@@ -586,6 +594,71 @@ export default function MatchdayPage({
     window.setTimeout(() => setHighlightedSection(null), 2200);
   }, []);
 
+  const getTimelineRecordIndex = useCallback(
+    (record) => {
+      const matchedIndex = final.findIndex(
+        (fixture, fixtureIndex) =>
+          getPlannerFixtureIdentity(fixture, fixtureIndex) === record?.fixtureId,
+      );
+      return matchedIndex >= 0 ? matchedIndex : record?.fixtureIndex;
+    },
+    [final],
+  );
+
+  const applyTimelineRecordPatch = useCallback(
+    (record, patch) => {
+      if (typeof onOverride !== "function" || !record || !patch) return;
+      const fixtureIndex = getTimelineRecordIndex(record);
+      if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
+      Object.entries(patch).forEach(([field, value]) =>
+        onOverride(fixtureIndex, field, value),
+      );
+    },
+    [getTimelineRecordIndex, onOverride],
+  );
+
+  const undoTimelineMove = useCallback(() => {
+    const record = timelineHistory.at(-1);
+    if (!record || isLocked) return;
+    applyTimelineRecordPatch(record, record.previousPatch);
+    setTimelineHistory((current) => current.slice(0, -1));
+    setTimelineRedoHistory((current) => [...current, record]);
+    setTimelineDirty(timelineHistory.length > 1);
+    toast.info("Planner change undone", {
+      description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+
+  const redoTimelineMove = useCallback(() => {
+    const record = timelineRedoHistory.at(-1);
+    if (!record || isLocked) return;
+    applyTimelineRecordPatch(record, record.patch);
+    setTimelineRedoHistory((current) => current.slice(0, -1));
+    setTimelineHistory((current) => [...current, record]);
+    setTimelineDirty(true);
+    toast.success("Planner change reapplied", {
+      description: record.summary || "The fixture move has been reapplied.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineRedoHistory]);
+
+  const discardTimelineChanges = useCallback(() => {
+    if (!timelineHistory.length || isLocked) return;
+    [...timelineHistory].reverse().forEach((record) =>
+      applyTimelineRecordPatch(record, record.previousPatch),
+    );
+    setTimelineHistory([]);
+    setTimelineRedoHistory([]);
+    setTimelineDirty(false);
+    toast.info("Planner changes discarded", {
+      description: "The matchday schedule has returned to its last saved state.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+
+  const requestDiscardTimelineChanges = useCallback(() => {
+    if (!timelineHistory.length || isLocked) return;
+    setPendingConfirmation({ type: "timeline-discard", count: timelineHistory.length });
+  }, [isLocked, timelineHistory.length]);
+
   const applyTimelineMove = useCallback(
     (candidate) => {
       if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
@@ -593,22 +666,14 @@ export default function MatchdayPage({
       Object.entries(candidate.patch).forEach(([field, value]) =>
         onOverride(candidate.fixtureIndex, field, value),
       );
+      const record = buildPlannerChangeRecord(candidate);
+      if (record) setTimelineHistory((current) => [...current, record]);
+      setTimelineRedoHistory([]);
       setTimelineDirty(true);
       setPendingConfirmation(null);
 
-      const undo = () => {
-        Object.entries(candidate.previousPatch || {}).forEach(([field, value]) =>
-          onOverride(candidate.fixtureIndex, field, value),
-        );
-        setTimelineDirty(true);
-        toast.info("Timeline move undone", {
-          description: "The fixture has returned to its previous pitch and kick-off time.",
-        });
-      };
-
-      toast.success("Fixture moved on the timeline", {
+      toast.success("Fixture moved in Matchday Planner", {
         description: getTimelineCandidateSummary(candidate),
-        action: { label: "Undo", onClick: undo },
       });
     },
     [isLocked, onOverride],
@@ -643,7 +708,11 @@ export default function MatchdayPage({
     setTimelineSaving(true);
     try {
       const saved = await props.saveWeek();
-      if (saved !== false) setTimelineDirty(false);
+      if (saved !== false) {
+        setTimelineDirty(false);
+        setTimelineHistory([]);
+        setTimelineRedoHistory([]);
+      }
     } finally {
       setTimelineSaving(false);
     }
@@ -898,6 +967,12 @@ export default function MatchdayPage({
             readOnly={isLocked}
             dirty={timelineDirty}
             saving={timelineSaving}
+            changeHistory={timelineHistory}
+            canUndo={timelineHistory.length > 0}
+            canRedo={timelineRedoHistory.length > 0}
+            onUndo={undoTimelineMove}
+            onRedo={redoTimelineMove}
+            onDiscard={requestDiscardTimelineChanges}
             onSave={props.saveWeek ? saveTimelineChanges : undefined}
             onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
@@ -1168,6 +1243,15 @@ export default function MatchdayPage({
     operationsIntelligence,
     recommendationCentre,
     refWarnings,
+    requestDiscardTimelineChanges,
+    requestTimelineMove,
+    saveTimelineChanges,
+    timelineDirty,
+    timelineHistory,
+    timelineRedoHistory.length,
+    timelineSaving,
+    undoTimelineMove,
+    redoTimelineMove,
     unresolved.length,
     weatherIntelligence,
   ]);
@@ -1556,6 +1640,23 @@ export default function MatchdayPage({
           </div>
         ) : null}
       </ConfirmDialog>
+
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "timeline-discard"}
+        eyebrow="Discard draft changes"
+        title={`Discard ${pendingConfirmation?.count || 0} planner change${pendingConfirmation?.count === 1 ? "" : "s"}?`}
+        description="Ground Control will restore every affected fixture to the last saved pitch and kick-off time. This action cannot be redone after the draft is cleared."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        tone="danger"
+        initialFocus="cancel"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={() => {
+          discardTimelineChanges();
+          setPendingConfirmation(null);
+        }}
+      />
 
       <ConfirmDialog
         open={pendingConfirmation?.type === "optimise"}
