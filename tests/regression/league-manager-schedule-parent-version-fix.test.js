@@ -12,7 +12,9 @@ describe("League Manager schedule draft parent-version fix", () => {
     expect(migration).toContain("parent_version_id uuid default null");
     expect(migration).toContain("safe_parent_version_id uuid := parent_version_id;");
     expect(migration).toContain("where version_row.id = safe_parent_version_id");
-    expect(migration).toContain("safe_parent_version_id,\n    next_version_number");
+    expect(migration).toContain("safe_parent_version_id,");
+    expect(migration).toContain("next_version_number");
+    expect(migration).toMatch(/values\s*\([\s\S]*safe_parent_version_id,[\s\S]*next_version_number/);
     expect(migration).not.toContain("where id = parent_version_id");
   });
 

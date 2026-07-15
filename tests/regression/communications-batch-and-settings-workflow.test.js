@@ -39,8 +39,8 @@ describe("communications reservation and registry settings workflow", () => {
   });
 
   test("keeps the save control accessible while editing long settings registries", () => {
-    expect(teams).toContain("<SaveBar\n        sticky");
-    expect(pitches).toContain("<SaveBar\n        sticky");
+    expect(teams).toMatch(/<SaveBar\s+sticky/);
+    expect(pitches).toMatch(/<SaveBar\s+sticky/);
     expect(primitives).toContain("sticky top-24 z-30");
     expect(primitives).toContain('aria-live="polite"');
   });

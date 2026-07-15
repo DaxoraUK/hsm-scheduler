@@ -3,6 +3,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    environmentOptions: {
+      jsdom: {
+        url: "https://ground-control.test/",
+      },
+    },
+    setupFiles: ["./tests/setup/browser-globals.js"],
     include: ["tests/**/*.test.js"],
     globals: false,
     clearMocks: true,
