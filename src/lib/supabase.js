@@ -735,6 +735,30 @@ export const DB = {
     });
   },
 
+  async upsertCoachHubPerson(clubId, person = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/upsert_coach_hub_person", {
+      target_club_id: id,
+      person_data: person && typeof person === "object" ? person : {},
+    });
+  },
+
+  async saveCoachHubTeamAssignment(clubId, assignment = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_coach_hub_team_assignment", {
+      target_club_id: id,
+      assignment_data: assignment && typeof assignment === "object" ? assignment : {},
+    });
+  },
+
+  async deleteCoachHubTeamAssignment(clubId, assignmentId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_coach_hub_team_assignment", {
+      target_club_id: id,
+      target_assignment_id: String(assignmentId || "").trim(),
+    });
+  },
+
   async listCoachHubPilotMetrics(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
     const emptyMetrics = {

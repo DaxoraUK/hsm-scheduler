@@ -410,7 +410,10 @@ export default function TeamSettingsPanel({
 
                 <div className="border-t border-slate-200 p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <p className="max-w-3xl text-xs font-semibold leading-5 text-slate-500">Enter adult coach or manager details only. This same protected record powers Communications and Coach Hub invitations, so the club does not set the person up twice. Do not enter player or child contact information.</p>
+                    <div className="max-w-3xl space-y-2">
+                      <p className="text-xs font-semibold leading-5 text-slate-500">Enter the main adult contact and optional assistant here. This protected record powers Communications and Coach Hub invitations, so the club does not set the person up twice. Do not enter player or child contact information.</p>
+                      <button type="button" onClick={() => setSettingsTab?.("coachhub")} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 transition hover:bg-violet-100"><UsersRound size={15} /> Assign more coaches, assistants or team roles</button>
+                    </div>
                     {canManageContacts && selectedContactReady ? <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove contact data</button> : null}
                   </div>
 

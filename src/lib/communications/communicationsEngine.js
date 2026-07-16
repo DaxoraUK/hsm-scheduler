@@ -91,10 +91,22 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   const contact = contactForTeam(teamCfg, teamContacts, teamName, index);
   const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
   const assistantDestination = contact.preferredChannel === "email" ? contact.assistantEmail : contact.assistantPhone;
+  const additionalRecipients = (Array.isArray(contact.additionalContacts) ? contact.additionalContacts : []).map((person) => {
+    const destination = person.preferredChannel === "email" ? person.email : person.mobile;
+    return destination ? {
+      type: person.staffRole || "coach",
+      name: person.name || "Coach",
+      destination,
+      channel: person.preferredChannel || "email",
+      personId: person.personId || "",
+      assignmentId: person.assignmentId || "",
+    } : null;
+  }).filter(Boolean);
   const recipientRecords = [
     primaryDestination ? { type: "coach", name: contact.coachName || "Coach", destination: primaryDestination, channel: contact.preferredChannel } : null,
     contact.assistantEnabled && assistantDestination ? { type: "assistant", name: contact.assistantName || "Assistant coach", destination: assistantDestination, channel: contact.preferredChannel } : null,
-  ].filter(Boolean);
+    ...additionalRecipients,
+  ].filter(Boolean).filter((recipient, index, rows) => rows.findIndex((candidate) => `${candidate.channel}:${candidate.destination}`.toLowerCase() === `${recipient.channel}:${recipient.destination}`.toLowerCase()) === index);
   const issues = [];
 
   if (status === "scheduled" && ko === "TBC") issues.push("Kick-off time missing");

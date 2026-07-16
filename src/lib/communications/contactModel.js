@@ -23,6 +23,25 @@ function editableText(value) {
   return value == null ? "" : String(value);
 }
 
+function normaliseAdditionalContact(contact = {}) {
+  const channel = text(contact.preferredChannel || contact.preferred_channel || "email").toLowerCase();
+  return {
+    personId: text(contact.personId || contact.person_id),
+    assignmentId: text(contact.assignmentId || contact.assignment_id),
+    name: text(contact.name || contact.displayName || contact.display_name),
+    email: text(contact.email).toLowerCase(),
+    mobile: text(contact.mobile || contact.phone),
+    preferredChannel: ["whatsapp", "sms", "email"].includes(channel) ? channel : "email",
+    staffRole: text(contact.staffRole || contact.staff_role || "coach"),
+    isPrimary: Boolean(contact.isPrimary ?? contact.is_primary),
+  };
+}
+
+function additionalContacts(contact = {}) {
+  const rows = contact.additionalContacts || contact.additional_contacts || [];
+  return (Array.isArray(rows) ? rows : []).map(normaliseAdditionalContact).filter((row) => row.name || row.email || row.mobile);
+}
+
 function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null) ?? "";
 }
@@ -68,6 +87,7 @@ export function normaliseTeamContact(contact = {}, team = {}, index = 0) {
     privacyNoticeProvidedAt: contact.privacyNoticeProvidedAt || contact.privacy_notice_provided_at || team.privacyNoticeProvidedAt || null,
     lastVerifiedAt: contact.lastVerifiedAt || contact.last_verified_at || team.contactLastVerifiedAt || null,
     updatedAt: contact.updatedAt || contact.updated_at || null,
+    additionalContacts: additionalContacts(contact),
   };
 }
 
@@ -101,6 +121,7 @@ export function normaliseEditableTeamContact(contact = {}, team = {}, index = 0)
     privacyNoticeProvidedAt: contact.privacyNoticeProvidedAt || contact.privacy_notice_provided_at || team.privacyNoticeProvidedAt || null,
     lastVerifiedAt: contact.lastVerifiedAt || contact.last_verified_at || team.contactLastVerifiedAt || null,
     updatedAt: contact.updatedAt || contact.updated_at || null,
+    additionalContacts: additionalContacts(contact),
   };
 }
 

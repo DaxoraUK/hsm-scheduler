@@ -260,7 +260,8 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
 export default function CommunicationsPage(props) {
   const eliteCommunicationGovernance = hasEntitlement(props.subscription, ENTITLEMENTS.COMMUNICATION_GOVERNANCE);
   const [governedTemplates, setGovernedTemplates] = useState([]);
-  const model = useMemo(() => buildCommunicationsModel({ ...props, governedTemplates }), [props, governedTemplates]);
+  const [liveTeamContacts, setLiveTeamContacts] = useState(() => Array.isArray(props.teamContacts) ? props.teamContacts : []);
+  const model = useMemo(() => buildCommunicationsModel({ ...props, teamContacts: liveTeamContacts, governedTemplates }), [props, liveTeamContacts, governedTemplates]);
   const privacy = useMemo(() => normaliseCommunicationPrivacy(props.communicationPrivacy), [props.communicationPrivacy]);
   const [day, setDay] = useState("all");
   const [filter, setFilter] = useState("all");
@@ -275,6 +276,23 @@ export default function CommunicationsPage(props) {
   const [sendConfirmation, setSendConfirmation] = useState(null);
   const [sendFailure, setSendFailure] = useState(null);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
+
+  useEffect(() => {
+    setLiveTeamContacts(Array.isArray(props.teamContacts) ? props.teamContacts : []);
+  }, [props.teamContacts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!props.activeClubId || !props.workspaceAccess?.canOperate) return undefined;
+    DB.loadTeamContacts(props.activeClubId)
+      .then((rows) => {
+        if (!cancelled && Array.isArray(rows)) setLiveTeamContacts(rows);
+      })
+      .catch(() => {
+        // Existing in-memory contacts remain available if the protected directory is temporarily unavailable.
+      });
+    return () => { cancelled = true; };
+  }, [props.activeClubId, props.workspaceAccess?.canOperate]);
 
   const audienceRecipients = Array.isArray(props.audience?.recipients) ? props.audience.recipients.filter((row) => row.ready) : [];
   const audienceRows = filterCommunicationRowsByAudience(model.rows, props.audience);
