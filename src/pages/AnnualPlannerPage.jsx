@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import DaxoraConfirmDialog from "../components/system/DaxoraConfirmDialog.jsx";
+import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorBoundary.jsx";
 import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDialog.jsx";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
@@ -574,12 +575,18 @@ export default function AnnualPlannerPage({
       ) : null}
 
       {tab === "insights" ? (
-        <PilotInsightsWorkspace
-          snapshot={pilotSnapshot}
-          canViewCosts={canViewCosts}
-          metricsUnavailable={pilotWorkspace.unavailable}
-          onCommunicateAll={() => openCoachAudience({ reason: "Annual Planner schedule update", teamKeys: [...new Set(workspace.bookings.map((booking) => booking.teamKey).filter(Boolean))] })}
-        />
+        <DaxoraSectionErrorBoundary
+          resetKey={`${clubId}:${year}:${pilotWorkspace.unavailable ? "unavailable" : "ready"}`}
+          title="Annual Planner insights could not be displayed"
+          description="Bookings, requests and approvals remain available. Retry Insights after the reporting data refreshes."
+        >
+          <PilotInsightsWorkspace
+            snapshot={pilotSnapshot}
+            canViewCosts={canViewCosts}
+            metricsUnavailable={pilotWorkspace.unavailable}
+            onCommunicateAll={() => openCoachAudience({ reason: "Annual Planner schedule update", teamKeys: [...new Set(workspace.bookings.map((booking) => booking.teamKey).filter(Boolean))] })}
+          />
+        </DaxoraSectionErrorBoundary>
       ) : null}
 
       <BookingDrawer
@@ -723,10 +730,11 @@ function AvailabilityWorkspace({ blackouts, pitchCfg, canOperate, canManage, onC
   </div>;
 }
 
-function PilotInsightsWorkspace({ snapshot, canViewCosts, onCommunicateAll }) {
+function PilotInsightsWorkspace({ snapshot, canViewCosts, metricsUnavailable = false, onCommunicateAll }) {
   const engagement = snapshot?.engagement || {};
   const utilisation = snapshot?.utilisation || {};
   const finance = snapshot?.finance || {};
+  const pitchRows = Array.isArray(utilisation.byPitch) ? utilisation.byPitch : [];
   return <div className="space-y-6">
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">Pilot intelligence</div><h2 className="mt-1 text-xl font-black text-slate-950">Utilisation, coach engagement and cost control</h2><p className="mt-2 max-w-3xl text-sm font-semibold text-slate-500">Measure whether the Annual Planner is reducing wasted pitch time, closing communication gaps and keeping supplier costs governed.</p></div><button type="button" onClick={onCommunicateAll} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white"><Megaphone size={17} /> Message active coaches</button></div>
@@ -734,7 +742,7 @@ function PilotInsightsWorkspace({ snapshot, canViewCosts, onCommunicateAll }) {
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><InsightMetric icon={Activity} label="Facility use" value={`${utilisation.utilisationPct || 0}%`} detail={`${utilisation.usedHours || 0} booked hours`} /><InsightMetric icon={UserCheck} label="Coach verification" value={`${engagement.verificationPct || 0}%`} detail={`${engagement.verified || 0} of ${engagement.people || 0} contacts`} /><InsightMetric icon={MessageSquareText} label="Acknowledgements" value={`${engagement.acknowledgementPct ?? 100}%`} detail="Action messages confirmed" /><InsightMetric icon={CheckCircle2} label="Requests resolved" value={`${engagement.requestResolutionPct || 0}%`} detail={`${engagement.requestsResolved || 0} completed decisions`} /></div>
       {canViewCosts ? <div className="mt-4 grid gap-3 sm:grid-cols-3"><InsightMetric icon={PoundSterling} label="Planned cost" value={money(finance.plannedPence)} detail="Active bookings" /><InsightMetric icon={Receipt} label="Reconciled" value={`${finance.reconciledPct ?? 100}%`} detail={money(finance.reconciledPence)} /><InsightMetric icon={AlertTriangle} label="Needs reconciliation" value={finance.unreconciledCount || 0} detail={money(finance.outstandingPence)} tone="warning" /></div> : null}
     </section>
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Pitch utilisation</div><h3 className="mt-1 text-lg font-black text-slate-950">Where the calendar year is being used</h3><div className="mt-5 overflow-hidden rounded-2xl border border-slate-200"><div className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500"><span>Pitch</span><span>Bookings</span><span>Hours</span><span>Use</span></div>{utilisation.byPitch?.length ? utilisation.byPitch.map((pitch) => <div key={pitch.pitchId} className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 border-t border-slate-100 px-4 py-3 text-sm"><span className="font-black text-slate-900">{pitch.pitchName}</span><span className="font-bold text-slate-600">{pitch.bookings}</span><span className="font-bold text-slate-600">{pitch.hours}</span><span className="font-black text-emerald-700">{pitch.utilisationPct}%</span></div>) : <div className="p-6 text-center text-sm font-semibold text-slate-500">Add bookings to build a utilisation baseline.</div>}</div></section>
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Pitch utilisation</div><h3 className="mt-1 text-lg font-black text-slate-950">Where the calendar year is being used</h3><div className="mt-5 overflow-hidden rounded-2xl border border-slate-200"><div className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500"><span>Pitch</span><span>Bookings</span><span>Hours</span><span>Use</span></div>{pitchRows.length ? pitchRows.map((pitch) => <div key={pitch.pitchId} className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 border-t border-slate-100 px-4 py-3 text-sm"><span className="font-black text-slate-900">{pitch.pitchName}</span><span className="font-bold text-slate-600">{pitch.bookings}</span><span className="font-bold text-slate-600">{pitch.hours}</span><span className="font-black text-emerald-700">{pitch.utilisationPct}%</span></div>) : <div className="p-6 text-center text-sm font-semibold text-slate-500">Add bookings to build a utilisation baseline.</div>}</div></section>
   </div>;
 }
 

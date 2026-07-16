@@ -110,8 +110,37 @@ function CompactMetric({ label, value, detail, tone = "slate" }) {
   );
 }
 
-function hasContactData(contact = {}) {
+function hasDirectContactData(contact = {}) {
   return Boolean(contact.coachName || contact.coachPhone || contact.coachEmail || contact.assistantName || contact.assistantPhone || contact.assistantEmail);
+}
+
+function primaryCoachHubAssignment(contact = {}) {
+  const assignments = Array.isArray(contact.additionalContacts) ? contact.additionalContacts : [];
+  return assignments.find((assignment) => assignment?.isPrimary)
+    || assignments.find((assignment) => ["manager", "lead_coach", "coach"].includes(String(assignment?.staffRole || "").toLowerCase()))
+    || assignments[0]
+    || null;
+}
+
+function visibleTeamContact(contact = {}) {
+  const assignedPrimary = primaryCoachHubAssignment(contact);
+  const hasPrimaryTeamContact = Boolean(contact.coachName || contact.coachPhone || contact.coachEmail);
+  if (hasPrimaryTeamContact || !assignedPrimary) {
+    return { ...contact, coachHubManagedPrimary: false, assignedPrimary };
+  }
+  return {
+    ...contact,
+    coachName: assignedPrimary.name || "",
+    coachPhone: assignedPrimary.mobile || "",
+    coachEmail: assignedPrimary.email || "",
+    preferredChannel: assignedPrimary.preferredChannel || contact.preferredChannel || "email",
+    coachHubManagedPrimary: true,
+    assignedPrimary,
+  };
+}
+
+function hasContactData(contact = {}) {
+  return hasDirectContactData(contact) || Boolean(primaryCoachHubAssignment(contact));
 }
 
 export default function TeamSettingsPanel({
@@ -164,7 +193,8 @@ export default function TeamSettingsPanel({
         if (!needle) return true;
         const resolvedSiteId = resolveSiteId(team.siteId || team.homeSiteId, sites, primarySite?.id);
         const siteName = sites.find((site) => site.id === resolvedSiteId)?.name || "";
-        return [team.name, team.day, team.format, teamTypeLabel(team), siteName, contact?.coachName, contact?.coachEmail]
+        const visibleContact = visibleTeamContact(contact);
+        return [team.name, team.day, team.format, teamTypeLabel(team), siteName, visibleContact?.coachName, visibleContact?.coachEmail]
           .some((value) => String(value || "").toLowerCase().includes(needle));
       });
   }, [contacts, primarySite?.id, query, sites, teamCfg]);
@@ -272,13 +302,16 @@ export default function TeamSettingsPanel({
   };
 
   const selectedTeam = teamCfg[selectedIndex] || null;
-  const selectedContact = selectedTeam
+  const selectedStoredContact = selectedTeam
     ? contacts[selectedIndex] || normaliseEditableTeamContact({}, selectedTeam, selectedIndex)
     : null;
+  const selectedContact = selectedStoredContact ? visibleTeamContact(selectedStoredContact) : null;
   const selectedHomeSiteId = resolveSiteId(selectedTeam?.siteId || selectedTeam?.homeSiteId, sites, primarySite?.id);
   const selectedSitePitches = sortedPitches.filter((pitch) => resolveSiteId(pitch.siteId, sites, primarySite?.id) === selectedHomeSiteId);
   const selectedPitchOptions = selectedSitePitches.length ? selectedSitePitches : sortedPitches;
-  const selectedContactReady = hasContactData(selectedContact);
+  const selectedContactReady = hasContactData(selectedStoredContact);
+  const selectedDirectContactReady = hasDirectContactData(selectedStoredContact);
+  const coachHubManagedPrimary = Boolean(selectedContact?.coachHubManagedPrimary);
 
   return (
     <SettingsPanel className="p-5 sm:p-6">
@@ -405,7 +438,7 @@ export default function TeamSettingsPanel({
                     <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700"><ShieldCheck size={15} /> Protected coach contact</span>
                     <span className="mt-1 block truncate text-sm font-black text-slate-950">{selectedContactReady ? selectedContact.coachName || selectedContact.coachEmail || selectedContact.coachPhone || "Contact details added" : "No contact details added"}</span>
                   </span>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${selectedContactReady ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selectedContactReady ? "Configured" : "Open to add"}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${selectedContactReady ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{coachHubManagedPrimary ? "Coach Hub" : selectedContactReady ? "Configured" : "Open to add"}</span>
                 </summary>
 
                 <div className="border-t border-slate-200 p-4 sm:p-5">
@@ -414,15 +447,17 @@ export default function TeamSettingsPanel({
                       <p className="text-xs font-semibold leading-5 text-slate-500">Enter the main adult contact and optional assistant here. This protected record powers Communications and Coach Hub invitations, so the club does not set the person up twice. Do not enter player or child contact information.</p>
                       <button type="button" onClick={() => setSettingsTab?.("coachhub")} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 transition hover:bg-violet-100"><UsersRound size={15} /> Assign more coaches, assistants or team roles</button>
                     </div>
-                    {canManageContacts && selectedContactReady ? <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove contact data</button> : null}
+                    {canManageContacts && selectedDirectContactReady ? <button type="button" onClick={() => clearContact(selectedIndex)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-50">Remove Team-form contact data</button> : null}
                   </div>
+
+                  {coachHubManagedPrimary ? <Notice tone="info" className="mt-4">The primary contact is assigned through Coach Hub and is shown here automatically. Edit the person or their team role in Coach Hub; assistant details can still be maintained below.</Notice> : null}
 
                   {canManageContacts ? (
                     <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-x-4 gap-y-4">
-                      <Field label="Coach / manager name"><input className={inputClass} value={selectedContact.coachName} onChange={(event) => updateContact(selectedIndex, "coachName", event.target.value)} placeholder="Primary adult contact" /></Field>
-                      <Field label="Mobile number"><input className={inputClass} value={selectedContact.coachPhone} onChange={(event) => updateContact(selectedIndex, "coachPhone", event.target.value)} placeholder="07xxx xxxxxx" inputMode="tel" /></Field>
-                      <Field label="Email address"><input type="email" className={inputClass} value={selectedContact.coachEmail} onChange={(event) => updateContact(selectedIndex, "coachEmail", event.target.value)} placeholder="coach@club.org.uk" /></Field>
-                      <Field label="Preferred channel"><select className={selectClass} value={selectedContact.preferredChannel} onChange={(event) => updateContact(selectedIndex, "preferredChannel", event.target.value)}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></Field>
+                      <Field label="Coach / manager name"><input disabled={coachHubManagedPrimary} className={inputClass} value={selectedContact.coachName} onChange={(event) => updateContact(selectedIndex, "coachName", event.target.value)} placeholder="Primary adult contact" /></Field>
+                      <Field label="Mobile number"><input disabled={coachHubManagedPrimary} className={inputClass} value={selectedContact.coachPhone} onChange={(event) => updateContact(selectedIndex, "coachPhone", event.target.value)} placeholder="07xxx xxxxxx" inputMode="tel" /></Field>
+                      <Field label="Email address"><input disabled={coachHubManagedPrimary} type="email" className={inputClass} value={selectedContact.coachEmail} onChange={(event) => updateContact(selectedIndex, "coachEmail", event.target.value)} placeholder="coach@club.org.uk" /></Field>
+                      <Field label="Preferred channel"><select disabled={coachHubManagedPrimary} className={selectClass} value={selectedContact.preferredChannel} onChange={(event) => updateContact(selectedIndex, "preferredChannel", event.target.value)}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></Field>
                       <Field label="Assistant coach name"><input className={inputClass} value={selectedContact.assistantName} onChange={(event) => updateContact(selectedIndex, "assistantName", event.target.value)} placeholder="Optional" /></Field>
                       <Field label="Assistant mobile"><input className={inputClass} value={selectedContact.assistantPhone} onChange={(event) => updateContact(selectedIndex, "assistantPhone", event.target.value)} placeholder="Optional" inputMode="tel" /></Field>
                       <Field label="Assistant email"><input type="email" className={inputClass} value={selectedContact.assistantEmail} onChange={(event) => updateContact(selectedIndex, "assistantEmail", event.target.value)} placeholder="Optional" /></Field>

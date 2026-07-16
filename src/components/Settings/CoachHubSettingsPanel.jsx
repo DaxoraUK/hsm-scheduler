@@ -13,7 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getTeamContactKey } from "../../lib/communications/contactModel.js";
+import { alignTeamContacts, getTeamContactKey } from "../../lib/communications/contactModel.js";
 import { Auth, DB } from "../../lib/supabase.js";
 import {
   coachInvitationUrl,
@@ -89,6 +89,7 @@ export default function CoachHubSettingsPanel({
   setSettingsTab,
   workspaceAccess,
   teamCfg = [],
+  setTeamContacts,
 }) {
   const clubId = activeClubId || club.id;
   const [workspace, setWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], metricsUnavailable: false });
@@ -105,10 +106,14 @@ export default function CoachHubSettingsPanel({
     if (!clubId) return;
     if (!quiet) setStatus("loading");
     try {
-      const [payload, pilot] = await Promise.all([
+      const [payload, pilot, sharedContacts] = await Promise.all([
         DB.listCoachHubAdminWorkspace(clubId),
         DB.listCoachHubPilotMetrics(clubId),
+        DB.loadTeamContacts(clubId).catch(() => null),
       ]);
+      if (Array.isArray(sharedContacts)) {
+        setTeamContacts?.(alignTeamContacts(teamCfg, sharedContacts));
+      }
       setWorkspace({
         people: Array.isArray(payload?.people) ? payload.people : [],
         assignments: Array.isArray(payload?.assignments) ? payload.assignments : [],
@@ -123,7 +128,7 @@ export default function CoachHubSettingsPanel({
       setStatus("error");
       toast.error("Coach Hub could not be loaded", { description: error?.message });
     }
-  }, [clubId]);
+  }, [clubId, setTeamContacts, teamCfg]);
 
   useEffect(() => {
     load();
