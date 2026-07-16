@@ -1108,37 +1108,65 @@ function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Validate auth session on mount
+  // Consume Supabase email-confirmation callbacks before validating any stored session.
+  // This deliberately replaces an existing admin session when a coach confirms a
+  // different account in the same browser, then leaves the invitation query intact
+  // so useClubAccess can accept the Coach Hub invitation with the confirmed identity.
   useEffect(() => {
-    const session = Auth.getSession();
-    if (!session || !session.access_token) {
-      setAuthLoading(false);
-      return;
-    }
-    // Verify token is still valid
-    Auth.getUser(session.access_token).then((user) => {
-      if (user && !user.error) {
-        setAuthSession(session);
-      } else {
-        // Try refresh
-        if (session.refresh_token) {
-          Auth.refreshSession(session.refresh_token).then((res) => {
-            if (res && res.access_token) {
-              Auth.saveSession(res);
-              setAuthSession(res);
-            } else {
-              Auth.clearSession();
-              setAuthSession(null);
-            }
-            setAuthLoading(false);
-          });
-          return;
-        }
+    let cancelled = false;
+
+    const initialiseAuth = async () => {
+      const callback = await Auth.consumeRedirectSession();
+      if (cancelled) return;
+      if (callback?.error) {
         Auth.clearSession();
         setAuthSession(null);
+        setAuthLoading(false);
+        toast.error("Email confirmation could not be completed", {
+          description: callback.error,
+        });
+        return;
       }
+
+      const session = callback?.session || Auth.getSession();
+      if (!session?.access_token) {
+        setAuthLoading(false);
+        return;
+      }
+
+      const user = callback?.session?.user || await Auth.getUser(session.access_token);
+      if (cancelled) return;
+      if (user && !user.error) {
+        const verifiedSession = { ...session, user };
+        Auth.saveSession(verifiedSession);
+        setAuthSession(verifiedSession);
+        setAuthLoading(false);
+        return;
+      }
+
+      if (session.refresh_token) {
+        const refreshed = await Auth.refreshSession(session.refresh_token);
+        if (cancelled) return;
+        if (refreshed?.access_token) {
+          Auth.saveSession(refreshed);
+          setAuthSession(refreshed);
+        } else {
+          Auth.clearSession();
+          setAuthSession(null);
+        }
+        setAuthLoading(false);
+        return;
+      }
+
+      Auth.clearSession();
+      setAuthSession(null);
       setAuthLoading(false);
-    });
+    };
+
+    initialiseAuth();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

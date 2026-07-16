@@ -7,10 +7,19 @@ const ACTIVE_CLUB_KEY = "selected";
 const INVITE_QUERY_KEY = "club_invite";
 const COACH_INVITE_QUERY_KEY = "coach_invite";
 
+function pendingInviteStorageKey(key) {
+  return `gc_pending_auth_context_${String(key || "").trim()}`;
+}
+
 function readInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return "";
   try {
-    return new URL(window.location.href).searchParams.get(key)?.trim() || "";
+    const liveToken = new URL(window.location.href).searchParams.get(key)?.trim() || "";
+    if (liveToken) {
+      window.localStorage?.setItem(pendingInviteStorageKey(key), liveToken);
+      return liveToken;
+    }
+    return window.localStorage?.getItem(pendingInviteStorageKey(key))?.trim() || "";
   } catch {
     return "";
   }
@@ -19,6 +28,7 @@ function readInviteToken(key = INVITE_QUERY_KEY) {
 function clearInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return;
   try {
+    window.localStorage?.removeItem(pendingInviteStorageKey(key));
     const url = new URL(window.location.href);
     if (!url.searchParams.has(key)) return;
     url.searchParams.delete(key);

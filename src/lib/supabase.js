@@ -21,6 +21,60 @@ export const SUPA_AUTH = `${SUPA_URL}/auth/v1`;
 
 let refreshPromise = null;
 
+const AUTH_CONTEXT_QUERY_KEYS = Object.freeze([
+  "coach_invite",
+  "club_invite",
+  "league_invite",
+  "league_club_invite",
+]);
+
+function pendingAuthContextKey(queryKey) {
+  return `gc_pending_auth_context_${String(queryKey || "").trim()}`;
+}
+
+function rememberAuthContext(url) {
+  if (typeof window === "undefined") return;
+  const storage = getLocalStorage();
+  if (!storage) return;
+  for (const key of AUTH_CONTEXT_QUERY_KEYS) {
+    const value = url.searchParams.get(key)?.trim() || "";
+    if (value) storage.setItem(pendingAuthContextKey(key), value);
+  }
+}
+
+function currentAuthRedirectUrl() {
+  if (typeof window === "undefined") return "";
+  try {
+    const current = new URL(window.location.href);
+    rememberAuthContext(current);
+    const configured = String(import.meta.env?.VITE_AUTH_REDIRECT_URL || "").trim();
+    const target = configured
+      ? new URL(configured, current.origin)
+      : new URL(`${current.origin}${current.pathname}`);
+    for (const key of AUTH_CONTEXT_QUERY_KEYS) {
+      const liveValue = current.searchParams.get(key)?.trim() || "";
+      const storedValue = getLocalStorage()?.getItem(pendingAuthContextKey(key))?.trim() || "";
+      const value = liveValue || storedValue;
+      if (value) target.searchParams.set(key, value);
+    }
+    target.hash = "";
+    return target.toString();
+  } catch {
+    return "";
+  }
+}
+
+function clearAuthCallbackFragment() {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.hash) return;
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+  } catch {
+    // A malformed callback URL must not block the sign-in screen.
+  }
+}
+
 function getLocalStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   return window.localStorage;
@@ -117,7 +171,11 @@ function sessionExpiresSoon(session, bufferSeconds = 90) {
 
 export const Auth = {
   async signUp(email, password, displayName) {
-    return authFetch("/signup", {
+    const redirectTo = currentAuthRedirectUrl();
+    const path = redirectTo
+      ? `/signup?redirect_to=${encodeURIComponent(redirectTo)}`
+      : "/signup";
+    return authFetch(path, {
       email,
       password,
       data: { display_name: displayName || email.split("@")[0] },
@@ -142,7 +200,50 @@ export const Auth = {
   },
 
   async resetPassword(email) {
-    return authFetch("/recover", { email });
+    const redirectTo = currentAuthRedirectUrl();
+    const path = redirectTo
+      ? `/recover?redirect_to=${encodeURIComponent(redirectTo)}`
+      : "/recover";
+    return authFetch(path, { email });
+  },
+
+  async consumeRedirectSession() {
+    if (typeof window === "undefined" || !window.location.hash) return null;
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const callbackError = params.get("error_description") || params.get("error");
+    const accessToken = params.get("access_token") || "";
+    const refreshToken = params.get("refresh_token") || "";
+    const looksLikeAuthCallback = Boolean(callbackError || accessToken || refreshToken || params.get("type"));
+    if (!looksLikeAuthCallback) return null;
+
+    if (callbackError) {
+      clearAuthCallbackFragment();
+      return { error: callbackError };
+    }
+    if (!accessToken || !refreshToken) {
+      clearAuthCallbackFragment();
+      return { error: "The email confirmation callback did not contain a complete secure session." };
+    }
+
+    const user = await Auth.getUser(accessToken);
+    if (!user || user.error) {
+      clearAuthCallbackFragment();
+      return { error: user?.error || "The confirmed account could not be verified." };
+    }
+
+    const expiresIn = Math.max(1, Number(params.get("expires_in") || 3600));
+    const explicitExpiresAt = Number(params.get("expires_at") || 0);
+    const session = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: params.get("token_type") || "bearer",
+      expires_in: expiresIn,
+      expires_at: explicitExpiresAt || Math.floor(Date.now() / 1000) + expiresIn,
+      user,
+    };
+    Auth.saveSession(session);
+    clearAuthCallbackFragment();
+    return { session, type: params.get("type") || "" };
   },
 
   async refreshSession(refreshToken) {
