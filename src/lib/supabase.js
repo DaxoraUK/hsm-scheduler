@@ -756,6 +756,13 @@ export const DB = {
     });
   },
 
+  async claimPendingCoachHubInvitations() {
+    const result = await supaFetch("POST", "rpc/claim_my_pending_coach_hub_invitations", {});
+    return result && typeof result === "object"
+      ? result
+      : { claimed_count: 0, repaired_count: 0, club_ids: [] };
+  },
+
   async getCoachHubWorkspace(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
     const result = await supaFetch("POST", "rpc/get_coach_hub_workspace", {

@@ -78,6 +78,7 @@ export function useClubAccess(authSession) {
       let nextMemberships = await DB.listMemberships();
       const inviteToken = readInviteToken();
       const coachInviteToken = readInviteToken(COACH_INVITE_QUERY_KEY);
+      let coachInviteError = null;
 
       if (inviteToken) {
         try {
@@ -96,10 +97,30 @@ export function useClubAccess(authSession) {
           clearInviteToken(COACH_INVITE_QUERY_KEY);
           nextMemberships = await DB.listMemberships();
         } catch (inviteError) {
-          if (!nextMemberships.length) throw inviteError;
-          setError(inviteError?.message || "The Coach Hub invitation could not be accepted.");
+          coachInviteError = inviteError;
         }
       }
+
+      // Email confirmation can be opened in a different browser context from the
+      // original invitation. In that case the raw token is unavailable even though
+      // the authenticated email still matches a live Coach Hub invitation. Recover
+      // that invitation securely by verified email before denying workspace access.
+      if (!nextMemberships.length) {
+        try {
+          const recovery = await DB.claimPendingCoachHubInvitations();
+          const recoveredCount = Number(recovery?.claimed_count || 0)
+            + Number(recovery?.repaired_count || 0);
+          if (recoveredCount > 0) {
+            clearInviteToken(COACH_INVITE_QUERY_KEY);
+            coachInviteError = null;
+            nextMemberships = await DB.listMemberships();
+          }
+        } catch (recoveryError) {
+          if (!coachInviteError) coachInviteError = recoveryError;
+        }
+      }
+
+      if (!nextMemberships.length && coachInviteError) throw coachInviteError;
 
       setMemberships(nextMemberships);
 
