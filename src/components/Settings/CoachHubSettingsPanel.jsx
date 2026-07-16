@@ -52,7 +52,7 @@ export default function CoachHubSettingsPanel({
   workspaceAccess,
 }) {
   const clubId = activeClubId || club.id;
-  const [workspace, setWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [] });
+  const [workspace, setWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], metricsUnavailable: false });
   const [status, setStatus] = useState("loading");
   const [busyId, setBusyId] = useState("");
   const [review, setReview] = useState(null);
@@ -75,6 +75,7 @@ export default function CoachHubSettingsPanel({
         requests: Array.isArray(payload?.requests) ? payload.requests.map(normaliseCoachRequest) : [],
         messages: Array.isArray(pilot?.messages) ? pilot.messages : [],
         reminders: Array.isArray(pilot?.reminders) ? pilot.reminders : [],
+        metricsUnavailable: Boolean(pilot?.unavailable),
       });
       setStatus("ready");
     } catch (error) {
@@ -238,6 +239,7 @@ export default function CoachHubSettingsPanel({
       </SettingsPanel>
 
       {!canManage ? <Notice tone="warning">Only club owners and administrators can issue Coach Hub invitations or decide requests.</Notice> : null}
+      {workspace.metricsUnavailable ? <Notice tone="warning">Coach engagement metrics are temporarily unavailable. Contacts, invitations, requests and booking operations remain available.</Notice> : null}
 
       <SettingsPanel>
         <SettingsSectionHeader

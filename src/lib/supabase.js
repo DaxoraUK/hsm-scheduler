@@ -737,12 +737,35 @@ export const DB = {
 
   async listCoachHubPilotMetrics(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
-    const result = await supaFetch("POST", "rpc/list_coach_hub_pilot_metrics", {
-      target_club_id: id,
-      range_start: startDate || null,
-      range_end: endDate || null,
-    });
-    return result && typeof result === "object" ? result : { people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] };
+    const emptyMetrics = {
+      people: [],
+      assignments: [],
+      invitations: [],
+      requests: [],
+      messages: [],
+      reminders: [],
+      bookings: [],
+    };
+
+    try {
+      const result = await supaFetch("POST", "rpc/list_coach_hub_pilot_metrics", {
+        target_club_id: id,
+        range_start: startDate || null,
+        range_end: endDate || null,
+      });
+      return result && typeof result === "object" ? { ...emptyMetrics, ...result, unavailable: false } : emptyMetrics;
+    } catch (error) {
+      // Pilot metrics are supplementary. A reporting RPC fault must never prevent
+      // Annual Planner, Coach Hub settings or core booking operations from loading.
+      if (error instanceof SupabaseRequestError && Number(error.status || 0) >= 400) {
+        return {
+          ...emptyMetrics,
+          unavailable: true,
+          unavailableCode: String(error.code || "COACH_HUB_METRICS_UNAVAILABLE"),
+        };
+      }
+      throw error;
+    }
   },
 
   async reconcileAnnualPlannerBookingCost(clubId, bookingId, reconciliation = {}) {

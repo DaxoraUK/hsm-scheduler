@@ -177,7 +177,7 @@ export default function AnnualPlannerPage({
   const [tab, setTab] = useState("calendar");
   const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [] });
   const [coachRequests, setCoachRequests] = useState([]);
-  const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] });
+  const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
   const [conversationRequest, setConversationRequest] = useState(null);
   const [status, setStatus] = useState("loading");
@@ -233,6 +233,7 @@ export default function AnnualPlannerPage({
         messages: Array.isArray(pilotPayload?.messages) ? pilotPayload.messages : [],
         reminders: Array.isArray(pilotPayload?.reminders) ? pilotPayload.reminders : [],
         bookings: Array.isArray(pilotPayload?.bookings) ? pilotPayload.bookings.map(normaliseAnnualBooking) : [],
+        unavailable: Boolean(pilotPayload?.unavailable),
       });
       setStatus("ready");
     } catch (loadError) {
@@ -576,6 +577,7 @@ export default function AnnualPlannerPage({
         <PilotInsightsWorkspace
           snapshot={pilotSnapshot}
           canViewCosts={canViewCosts}
+          metricsUnavailable={pilotWorkspace.unavailable}
           onCommunicateAll={() => openCoachAudience({ reason: "Annual Planner schedule update", teamKeys: [...new Set(workspace.bookings.map((booking) => booking.teamKey).filter(Boolean))] })}
         />
       ) : null}
@@ -728,6 +730,7 @@ function PilotInsightsWorkspace({ snapshot, canViewCosts, onCommunicateAll }) {
   return <div className="space-y-6">
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">Pilot intelligence</div><h2 className="mt-1 text-xl font-black text-slate-950">Utilisation, coach engagement and cost control</h2><p className="mt-2 max-w-3xl text-sm font-semibold text-slate-500">Measure whether the Annual Planner is reducing wasted pitch time, closing communication gaps and keeping supplier costs governed.</p></div><button type="button" onClick={onCommunicateAll} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white"><Megaphone size={17} /> Message active coaches</button></div>
+      {metricsUnavailable ? <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950"><AlertTriangle className="mt-0.5 shrink-0" size={18} /><div><div className="font-black">Coach engagement metrics are temporarily unavailable</div><div className="mt-1 text-sm font-semibold text-amber-900/75">Annual bookings, requests and approvals remain operational while Daxora retries the reporting service.</div></div></div> : null}
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><InsightMetric icon={Activity} label="Facility use" value={`${utilisation.utilisationPct || 0}%`} detail={`${utilisation.usedHours || 0} booked hours`} /><InsightMetric icon={UserCheck} label="Coach verification" value={`${engagement.verificationPct || 0}%`} detail={`${engagement.verified || 0} of ${engagement.people || 0} contacts`} /><InsightMetric icon={MessageSquareText} label="Acknowledgements" value={`${engagement.acknowledgementPct ?? 100}%`} detail="Action messages confirmed" /><InsightMetric icon={CheckCircle2} label="Requests resolved" value={`${engagement.requestResolutionPct || 0}%`} detail={`${engagement.requestsResolved || 0} completed decisions`} /></div>
       {canViewCosts ? <div className="mt-4 grid gap-3 sm:grid-cols-3"><InsightMetric icon={PoundSterling} label="Planned cost" value={money(finance.plannedPence)} detail="Active bookings" /><InsightMetric icon={Receipt} label="Reconciled" value={`${finance.reconciledPct ?? 100}%`} detail={money(finance.reconciledPence)} /><InsightMetric icon={AlertTriangle} label="Needs reconciliation" value={finance.unreconciledCount || 0} detail={money(finance.outstandingPence)} tone="warning" /></div> : null}
     </section>
