@@ -441,9 +441,20 @@ export const DB = {
 
   async loadTeamContacts(clubId) {
     const id = requireClubId(clubId);
-    return asArray(await supaFetch("POST", "rpc/list_team_contacts", {
-      target_club_id: id,
-    }));
+    try {
+      return asArray(await supaFetch("POST", "rpc/list_team_contacts_v2", {
+        target_club_id: id,
+      }));
+    } catch (error) {
+      // v2 was introduced with the multi-team coach directory. Keep the legacy
+      // RPC as a rollout fallback while PostgREST refreshes its schema cache.
+      const missingRpc = error instanceof SupabaseRequestError
+        && (Number(error.status || 0) === 404 || String(error.code || "") === "PGRST202");
+      if (!missingRpc) throw error;
+      return asArray(await supaFetch("POST", "rpc/list_team_contacts", {
+        target_club_id: id,
+      }));
+    }
   },
 
   async saveTeamContacts(clubId, contacts = []) {
