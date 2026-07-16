@@ -1,3 +1,5 @@
+import { mergeCoachHubWorkspaceIntoContacts } from "./coachHubContactBridge.js";
+
 // Authenticated Supabase REST client and club-scoped data repository.
 // The anon key identifies the application; the signed-in user's JWT identifies
 // the actor and is mandatory for all database requests protected by RLS.
@@ -441,8 +443,9 @@ export const DB = {
 
   async loadTeamContacts(clubId) {
     const id = requireClubId(clubId);
+    let contacts;
     try {
-      return asArray(await supaFetch("POST", "rpc/list_team_contacts_v2", {
+      contacts = asArray(await supaFetch("POST", "rpc/list_team_contacts_v2", {
         target_club_id: id,
       }));
     } catch (error) {
@@ -451,9 +454,23 @@ export const DB = {
       const missingRpc = error instanceof SupabaseRequestError
         && (Number(error.status || 0) === 404 || String(error.code || "") === "PGRST202");
       if (!missingRpc) throw error;
-      return asArray(await supaFetch("POST", "rpc/list_team_contacts", {
+      contacts = asArray(await supaFetch("POST", "rpc/list_team_contacts", {
         target_club_id: id,
       }));
+    }
+
+    // The contacts RPC omits assignments created from the original coach and
+    // assistant source slots. Merge the authoritative Coach Hub workspace so
+    // Settings -> Teams always receives every active assignment.
+    try {
+      const workspace = await supaFetch("POST", "rpc/list_coach_hub_admin_workspace", {
+        target_club_id: id,
+      });
+      return mergeCoachHubWorkspaceIntoContacts(contacts, workspace);
+    } catch {
+      // Users without Coach Hub administration access retain the protected
+      // team-contact rows that their current role is permitted to read.
+      return contacts;
     }
   },
 

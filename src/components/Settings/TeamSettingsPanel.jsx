@@ -124,9 +124,8 @@ function primaryCoachHubAssignment(contact = {}) {
 
 function visibleTeamContact(contact = {}) {
   const assignedPrimary = primaryCoachHubAssignment(contact);
-  const hasPrimaryTeamContact = Boolean(contact.coachName || contact.coachPhone || contact.coachEmail);
-  if (hasPrimaryTeamContact || !assignedPrimary) {
-    return { ...contact, coachHubManagedPrimary: false, assignedPrimary };
+  if (!assignedPrimary) {
+    return { ...contact, coachHubManagedPrimary: false, assignedPrimary: null };
   }
   return {
     ...contact,
