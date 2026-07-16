@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   Ban,
   CalendarDays,
@@ -13,14 +14,18 @@ import {
   Filter,
   ListChecks,
   MapPin,
+  Megaphone,
+  MessageSquareText,
   MoreHorizontal,
   Plus,
   PoundSterling,
+  Receipt,
   RefreshCw,
   Search,
   Settings2,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   Trash2,
   Users,
   X,
@@ -28,6 +33,7 @@ import {
 import { toast } from "sonner";
 import DaxoraConfirmDialog from "../components/system/DaxoraConfirmDialog.jsx";
 import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDialog.jsx";
+import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import {
   ANNUAL_BOOKING_STATUSES,
@@ -48,6 +54,11 @@ import {
   normaliseTime,
 } from "../lib/planning/annualPlannerEngine.js";
 import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
+import {
+  buildPilotRefinementSnapshot,
+  buildCoachCommunicationAudience,
+} from "../lib/coach/coachHubPilotEngine.js";
+import { buildAnnualPlannerCoachAudience } from "../lib/communications/coachAudience.js";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -129,7 +140,12 @@ function blankBooking({ year, month, pitchCfg, settings, canManage = false } = {
     endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
     recurrence: "none",
     recurrenceUntil: date,
+    exceptionDates: [],
+    exceptionDatesText: "",
+    holidayPolicy: "include",
     costPence: 0,
+    financeStatus: "unreconciled",
+    financeReference: "",
     supplierReference: "",
     bookingReference: "",
     contactName: "",
@@ -150,6 +166,7 @@ export default function AnnualPlannerPage({
   sunDate = "",
   midweekDate = "",
   midweekEnabled = true,
+  onOpenCoachAudience,
 }) {
   const clubId = club.id || "";
   const canOperate = Boolean(workspaceAccess.canOperate);
@@ -160,7 +177,9 @@ export default function AnnualPlannerPage({
   const [tab, setTab] = useState("calendar");
   const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [] });
   const [coachRequests, setCoachRequests] = useState([]);
+  const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] });
   const [coachReview, setCoachReview] = useState(null);
+  const [conversationRequest, setConversationRequest] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -186,10 +205,12 @@ export default function AnnualPlannerPage({
     try {
       let result;
       let coachPayload = { requests: [] };
+      let pilotPayload = { people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] };
       if (isSupaConfigured() && clubId) {
-        [result, coachPayload] = await Promise.all([
+        [result, coachPayload, pilotPayload] = await Promise.all([
           DB.listAnnualPlannerWorkspace(clubId, dateRangeForYear(year)),
           canOperate ? DB.listCoachHubRequestQueue(clubId) : Promise.resolve({ requests: [] }),
+          canOperate ? DB.listCoachHubPilotMetrics(clubId, dateRangeForYear(year)) : Promise.resolve({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] }),
         ]);
       } else {
         result = readLocalWorkspace(clubId);
@@ -204,6 +225,15 @@ export default function AnnualPlannerPage({
           .map(normaliseCoachRequest)
           .filter((request) => ["submitted", "needs_information", "alternative_offered"].includes(request.status)),
       );
+      setPilotWorkspace({
+        people: Array.isArray(pilotPayload?.people) ? pilotPayload.people : [],
+        assignments: Array.isArray(pilotPayload?.assignments) ? pilotPayload.assignments : [],
+        invitations: Array.isArray(pilotPayload?.invitations) ? pilotPayload.invitations : [],
+        requests: Array.isArray(pilotPayload?.requests) ? pilotPayload.requests : [],
+        messages: Array.isArray(pilotPayload?.messages) ? pilotPayload.messages : [],
+        reminders: Array.isArray(pilotPayload?.reminders) ? pilotPayload.reminders : [],
+        bookings: Array.isArray(pilotPayload?.bookings) ? pilotPayload.bookings.map(normaliseAnnualBooking) : [],
+      });
       setStatus("ready");
     } catch (loadError) {
       setError(loadError?.message || "The annual planner could not be loaded.");
@@ -238,6 +268,46 @@ export default function AnnualPlannerPage({
   }, [query, snapshot.bookings, typeFilter]);
   const requestQueue = useMemo(() => snapshot.bookings.filter((booking) => booking.status === "requested"), [snapshot.bookings]);
   const totalRequests = requestQueue.length + coachRequests.length;
+  const pilotSnapshot = useMemo(() => buildPilotRefinementSnapshot({
+    workspace: { ...pilotWorkspace, bookings: workspace.bookings },
+    pitches: pitchCfg,
+    rangeStart: `${year}-01-01`,
+    rangeEnd: `${year + 1}-01-01`,
+  }), [pilotWorkspace, pitchCfg, workspace.bookings, year]);
+
+  const openCoachAudience = useCallback(({ reason, bookingIds = [], blackoutIds = [], teamKeys = [] } = {}) => {
+    const audience = buildAnnualPlannerCoachAudience({
+      reason,
+      bookings: workspace.bookings,
+      blackouts: workspace.blackouts,
+      selectedBookingIds: bookingIds,
+      selectedBlackoutIds: blackoutIds,
+      teamKeys,
+    });
+    const enriched = buildCoachCommunicationAudience({
+      people: pilotWorkspace.people,
+      assignments: pilotWorkspace.assignments,
+      teamKeys: audience.teamKeys,
+      reason: audience.reason,
+    });
+    onOpenCoachAudience?.({ ...audience, ...enriched, teamKeys: audience.teamKeys });
+    if (!onOpenCoachAudience) {
+      toast.info("Coach audience prepared", { description: `${enriched.readyCount} connected coach contact${enriched.readyCount === 1 ? "" : "s"} identified.` });
+    }
+  }, [onOpenCoachAudience, pilotWorkspace.assignments, pilotWorkspace.people, workspace.blackouts, workspace.bookings]);
+
+  function openCoachReview(request) {
+    const candidate = normaliseAnnualBooking({
+      id: `coach-request-${request.id}`,
+      title: request.title, bookingType: request.requestType === "friendly" ? "friendly" : "training", status: "requested",
+      teamKey: request.teamKey, teamName: request.teamName, venueId: request.preferredVenueId, venueName: request.preferredVenueName,
+      pitchId: request.preferredPitchId, pitchName: request.preferredPitchName, startAt: request.preferredStartAt, endAt: request.preferredEndAt,
+    });
+    const suggestions = findAnnualPlannerSuggestions(candidate, {
+      bookings: workspace.bookings, blackouts: workspace.blackouts, matchdayBookings, pitches: pitchCfg,
+    }, { limit: 4 });
+    setCoachReview({ ...request, suggestions });
+  }
 
   async function decideCoachRequest(decision, data = {}) {
     if (!coachReview) return;
@@ -263,6 +333,34 @@ export default function AnnualPlannerPage({
     const effectiveDraft = approvalRequired && !canManage
       ? { ...draft, status: "requested" }
       : draft;
+
+    if (effectiveDraft.id && effectiveDraft.seriesId && effectiveDraft.applyToSeries) {
+      const seriesRows = workspace.bookings
+        .filter((row) => row.seriesId === effectiveDraft.seriesId && row.startDate >= effectiveDraft.startDate && !["cancelled", "rejected"].includes(row.status))
+        .sort((a, b) => `${a.startDate}${a.startTime}`.localeCompare(`${b.startDate}${b.startTime}`))
+        .map((row) => ({
+          ...row,
+          title: effectiveDraft.title, bookingType: effectiveDraft.bookingType, status: effectiveDraft.status,
+          teamKey: effectiveDraft.teamKey, teamName: effectiveDraft.teamName, opponentName: effectiveDraft.opponentName,
+          venueId: effectiveDraft.venueId, venueName: effectiveDraft.venueName, pitchId: effectiveDraft.pitchId, pitchName: effectiveDraft.pitchName,
+          startTime: effectiveDraft.startTime, endTime: effectiveDraft.endTime, recurrence: "none", recurrenceUntil: row.startDate,
+          costPence: effectiveDraft.costPence, supplierReference: effectiveDraft.supplierReference, bookingReference: effectiveDraft.bookingReference,
+          contactName: effectiveDraft.contactName, contactEmail: effectiveDraft.contactEmail, notes: effectiveDraft.notes,
+          holidayPolicy: effectiveDraft.holidayPolicy, exceptionDates: effectiveDraft.exceptionDates || [],
+        }));
+      if (!seriesRows.length) throw new Error("No remaining bookings were found in this series.");
+      if (isSupaConfigured() && clubId) {
+        await DB.saveAnnualPlannerBookingSeries(clubId, seriesRows.map(annualBookingToPayload));
+      } else {
+        const ids = new Set(seriesRows.map((row) => row.id));
+        const current = readLocalWorkspace(clubId);
+        const replacements = new Map(seriesRows.map((row) => [row.id, normaliseAnnualBooking(row)]));
+        const next = (current.bookings || []).map(normaliseAnnualBooking).map((row) => ids.has(row.id) ? replacements.get(row.id) : row);
+        writeLocalWorkspace(clubId, { ...current, settings: workspace.settings, bookings: next, blackouts: workspace.blackouts });
+      }
+      return;
+    }
+
     const occurrences = expandRecurringBookingDraft(effectiveDraft);
     if (!occurrences.length) throw new Error("Choose a valid booking date and time.");
     const accepted = [];
@@ -306,7 +404,7 @@ export default function AnnualPlannerPage({
       await loadWorkspace({ quiet: true });
       announceUpdate();
       toast.success(draft.id ? "Booking updated" : "Booking added to the annual planner", {
-        description: draft.recurrence && draft.recurrence !== "none" ? "The complete recurring series has been checked for conflicts." : `${draft.startDate} · ${draft.startTime}`,
+        description: draft.applyToSeries ? "The remaining recurring series has been updated together." : draft.recurrence && draft.recurrence !== "none" ? "The complete recurring series has been checked for conflicts." : `${draft.startDate} · ${draft.startTime}`,
       });
     } catch (saveError) {
       toast.error("Booking could not be saved", { description: saveError?.message || "Review the booking and try again." });
@@ -419,12 +517,13 @@ export default function AnnualPlannerPage({
       {error ? <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><AlertTriangle className="mt-0.5 shrink-0" size={18} /><div><div className="font-black">Annual planner needs attention</div><div className="mt-1 text-sm font-semibold">{error}</div></div><button type="button" onClick={() => loadWorkspace()} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black shadow-sm"><RefreshCw size={14} /> Retry</button></div> : null}
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {[
             ["calendar", "Calendar", CalendarDays, "Full year and monthly planning"],
             ["bookings", "Bookings", ListChecks, "Search and manage every booking"],
             ["requests", "Requests", ShieldCheck, "Approvals and provisional demand"],
             ["availability", "Availability", Ban, "Closures, blackouts and controls"],
+            ["insights", "Insights", Activity, "Utilisation, engagement and costs"],
           ].map(([key, label, Icon, detail]) => (
             <button key={key} type="button" onClick={() => setTab(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${tab === key ? "bg-slate-950 text-white shadow-md" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}>
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tab === key ? "bg-white/10 text-emerald-300" : "bg-white text-slate-500 shadow-sm"}`}><Icon size={19} /></span>
@@ -457,7 +556,8 @@ export default function AnnualPlannerPage({
           canOperate={canManage}
           saving={saving}
           onSelect={setSelectedBooking}
-          onSelectCoachRequest={setCoachReview}
+          onSelectCoachRequest={openCoachReview}
+          onConversation={setConversationRequest}
           onApprove={(booking) => updateBookingStatus(booking, "confirmed")}
           onReject={(booking) => updateBookingStatus(booking, "rejected")}
         />
@@ -468,6 +568,15 @@ export default function AnnualPlannerPage({
           blackouts={workspace.blackouts} pitchCfg={pitchCfg} canOperate={canOperate} canManage={canManage}
           onCreate={() => setBlackoutEditor({ title: "Pitch unavailable", startDate: normaliseDateKey(new Date()), endDate: normaliseDateKey(new Date()), startTime: "08:00", endTime: "22:00", venueId: "", pitchId: "", reason: "" })}
           settings={workspace.settings}
+          onCommunicate={(blackout) => openCoachAudience({ reason: `Facility update: ${blackout.title}`, blackoutIds: [blackout.id] })}
+        />
+      ) : null}
+
+      {tab === "insights" ? (
+        <PilotInsightsWorkspace
+          snapshot={pilotSnapshot}
+          canViewCosts={canViewCosts}
+          onCommunicateAll={() => openCoachAudience({ reason: "Annual Planner schedule update", teamKeys: [...new Set(workspace.bookings.map((booking) => booking.teamKey).filter(Boolean))] })}
         />
       ) : null}
 
@@ -478,8 +587,18 @@ export default function AnnualPlannerPage({
         canViewCosts={canViewCosts}
         saving={saving}
         onClose={() => setSelectedBooking(null)}
-        onEdit={(booking) => setEditor({ ...booking, status: approvalRequired && !canManage ? "requested" : booking.status, recurrence: "none", recurrenceUntil: booking.startDate })}
+        onEdit={(booking) => setEditor({ ...booking, status: approvalRequired && !canManage ? "requested" : booking.status, recurrence: "none", recurrenceUntil: booking.startDate, applyToSeries: false })}
         onApprove={(booking) => canManage ? updateBookingStatus(booking, "confirmed") : undefined}
+        onCommunicate={(booking) => openCoachAudience({ reason: `Booking update: ${booking.title}`, bookingIds: [booking.id] })}
+        onReconcile={async (booking) => {
+          try {
+            await DB.reconcileAnnualPlannerBookingCost(clubId, booking.id, { status: "reconciled", reference: booking.financeReference || booking.bookingReference || "Annual Planner" });
+            await loadWorkspace({ quiet: true });
+            toast.success("Booking cost reconciled");
+          } catch (reconcileError) {
+            toast.error("Cost reconciliation failed", { description: reconcileError?.message });
+          }
+        }}
         onDelete={(booking) => setConfirmRequest({
           tone: "danger",
           title: booking.seriesId ? "Remove this booking or the whole series?" : "Remove this booking?",
@@ -509,6 +628,7 @@ export default function AnnualPlannerPage({
       <BlackoutEditor draft={blackoutEditor} setDraft={setBlackoutEditor} pitchCfg={pitchCfg} saving={saving} onSave={saveBlackout} />
 
       {coachReview ? <CoachRequestReviewDialog request={coachReview} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
+      {conversationRequest ? <CoachRequestConversation clubId={clubId} request={conversationRequest} role="club" onClose={() => setConversationRequest(null)} /> : null}
 
       <DaxoraConfirmDialog
         request={confirmRequest}
@@ -555,25 +675,25 @@ function BookingsWorkspace({ bookings, query, setQuery, typeFilter, setTypeFilte
   </section>;
 }
 
-function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, onSelect, onSelectCoachRequest, onApprove, onReject }) {
+function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, onSelect, onSelectCoachRequest, onConversation, onApprove, onReject }) {
   const total = bookings.length + coachRequests.length;
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div>
         <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Approval queue</div>
         <h2 className="mt-1 text-xl font-black text-slate-950">Facility requests awaiting a decision</h2>
-        <p className="mt-2 text-sm font-semibold text-slate-500">Coach Hub requests and administrator-created provisional bookings share one queue.</p>
+        <p className="mt-2 text-sm font-semibold text-slate-500">Coach Hub requests, conversations and administrator-created provisional bookings share one queue.</p>
       </div>
       <div className="mt-6 space-y-3">
         {coachRequests.map((request) => (
-          <button key={`coach-${request.id}`} type="button" onClick={() => onSelectCoachRequest?.(request)} className="flex w-full flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
+          <div key={`coach-${request.id}`} className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <button type="button" onClick={() => onSelectCoachRequest?.(request)} className="min-w-0 flex-1 text-left">
               <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-emerald-950">{request.title}</span><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Coach Hub</span></div>
               <div className="mt-1 text-xs font-bold text-emerald-900/70">{request.preferredDate} · {request.preferredStartTime}–{request.preferredEndTime} · {request.preferredPitchName || "Pitch requested"}</div>
-              <div className="mt-1 text-xs font-semibold text-emerald-900/70">{request.teamName} · {requestStatusLabel(request.status)}</div>
-            </div>
-            {canOperate ? <span className="rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white">Review request</span> : null}
-          </button>
+              <div className="mt-1 text-xs font-semibold text-emerald-900/70">{request.teamName} · {requestStatusLabel(request.status)}{request.exceptionDates?.length ? ` · ${request.exceptionDates.length} skipped date${request.exceptionDates.length === 1 ? "" : "s"}` : ""}</div>
+            </button>
+            {canOperate ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onConversation?.(request)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-900"><MessageSquareText size={15} /> Conversation</button><button type="button" onClick={() => onSelectCoachRequest?.(request)} className="h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white">Review request</button></div> : null}
+          </div>
         ))}
         {bookings.map((booking) => (
           <div key={booking.id} className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -591,17 +711,57 @@ function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, o
   );
 }
 
-function AvailabilityWorkspace({ blackouts, pitchCfg, canOperate, canManage, onCreate, settings }) {
-  return <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Protected availability</div><h2 className="mt-1 text-xl font-black text-slate-950">Blackouts and unavailable periods</h2><p className="mt-2 text-sm font-semibold text-slate-500">Block maintenance, external hires, council closures and seasonal shutdowns.</p></div>{canOperate ? <button type="button" onClick={onCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={17} /> Add blackout</button> : null}</div><div className="mt-6 space-y-3">{blackouts.length ? blackouts.map((blackout) => <div key={blackout.id} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-600 shadow-sm"><Ban size={18} /></span><div><div className="text-sm font-black text-rose-950">{blackout.title}</div><div className="mt-1 text-xs font-bold text-rose-900/70">{formatDate(blackout.startAt)} to {formatDate(blackout.endAt)}</div><div className="mt-1 text-xs font-semibold text-rose-900/70">{pitchCfg.find((pitch) => pitch.id === blackout.pitchId)?.label || (blackout.pitchId ? blackout.pitchId : "All relevant facilities")}</div>{blackout.reason ? <div className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{blackout.reason}</div> : null}</div></div></div>) : <Empty icon={Ban} title="No annual blackouts" description="Existing matchday pitch closures remain separate and continue to protect each fixture day." />}</div></section><aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600"><Settings2 size={20} /></span><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Planner policy</div><h3 className="text-lg font-black text-slate-950">Booking defaults</h3></div></div><dl className="mt-5 space-y-3"><Policy label="Default status" value={settings.default_status || "Provisional"} /><Policy label="Training duration" value={`${settings.default_training_duration_minutes || 90} minutes`} /><Policy label="Friendly duration" value={`${settings.default_friendly_duration_minutes || 150} minutes`} /><Policy label="Approval required" value={settings.require_approval ? "Yes" : "No"} /><Policy label="Cost visibility" value={settings.show_costs_to_schedulers === false ? "Owners/admins" : "Schedulers"} /></dl>{canManage ? <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-5 text-sky-900">Detailed planner policy controls are stored securely and can be expanded during the controlled pilot without changing the booking model.</div> : null}</aside></div>;
+function AvailabilityWorkspace({ blackouts, pitchCfg, canOperate, canManage, onCreate, onCommunicate, settings }) {
+  return <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Protected availability</div><h2 className="mt-1 text-xl font-black text-slate-950">Blackouts and unavailable periods</h2><p className="mt-2 text-sm font-semibold text-slate-500">Block maintenance, external hires, council closures and seasonal shutdowns.</p></div>{canOperate ? <button type="button" onClick={onCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={17} /> Add blackout</button> : null}</div>
+      <div className="mt-6 space-y-3">{blackouts.length ? blackouts.map((blackout) => <div key={blackout.id} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-600 shadow-sm"><Ban size={18} /></span><div className="min-w-0 flex-1"><div className="text-sm font-black text-rose-950">{blackout.title}</div><div className="mt-1 text-xs font-bold text-rose-900/70">{formatDate(blackout.startAt)} to {formatDate(blackout.endAt)}</div><div className="mt-1 text-xs font-semibold text-rose-900/70">{pitchCfg.find((pitch) => pitch.id === blackout.pitchId)?.label || (blackout.pitchId ? blackout.pitchId : "All relevant facilities")}</div>{blackout.reason ? <div className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{blackout.reason}</div> : null}{canOperate ? <button type="button" onClick={() => onCommunicate?.(blackout)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-[11px] font-black text-rose-800"><Megaphone size={14} /> Contact affected coaches</button> : null}</div></div></div>) : <Empty icon={Ban} title="No annual blackouts" description="Existing matchday pitch closures remain separate and continue to protect each fixture day." />}</div>
+    </section>
+    <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600"><Settings2 size={20} /></span><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Planner policy</div><h3 className="text-lg font-black text-slate-950">Booking defaults</h3></div></div><dl className="mt-5 space-y-3"><Policy label="Default status" value={settings.default_status || "Provisional"} /><Policy label="Training duration" value={`${settings.default_training_duration_minutes || 90} minutes`} /><Policy label="Friendly duration" value={`${settings.default_friendly_duration_minutes || 150} minutes`} /><Policy label="Approval required" value={settings.require_approval ? "Yes" : "No"} /><Policy label="Cost visibility" value={settings.show_costs_to_schedulers === false ? "Owners/admins" : "Schedulers"} /></dl>{canManage ? <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-5 text-sky-900">Detailed planner policy controls are stored securely and can be expanded during the controlled pilot without changing the booking model.</div> : null}</aside>
+  </div>;
+}
+
+function PilotInsightsWorkspace({ snapshot, canViewCosts, onCommunicateAll }) {
+  const engagement = snapshot?.engagement || {};
+  const utilisation = snapshot?.utilisation || {};
+  const finance = snapshot?.finance || {};
+  return <div className="space-y-6">
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">Pilot intelligence</div><h2 className="mt-1 text-xl font-black text-slate-950">Utilisation, coach engagement and cost control</h2><p className="mt-2 max-w-3xl text-sm font-semibold text-slate-500">Measure whether the Annual Planner is reducing wasted pitch time, closing communication gaps and keeping supplier costs governed.</p></div><button type="button" onClick={onCommunicateAll} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white"><Megaphone size={17} /> Message active coaches</button></div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><InsightMetric icon={Activity} label="Facility use" value={`${utilisation.utilisationPct || 0}%`} detail={`${utilisation.usedHours || 0} booked hours`} /><InsightMetric icon={UserCheck} label="Coach verification" value={`${engagement.verificationPct || 0}%`} detail={`${engagement.verified || 0} of ${engagement.people || 0} contacts`} /><InsightMetric icon={MessageSquareText} label="Acknowledgements" value={`${engagement.acknowledgementPct ?? 100}%`} detail="Action messages confirmed" /><InsightMetric icon={CheckCircle2} label="Requests resolved" value={`${engagement.requestResolutionPct || 0}%`} detail={`${engagement.requestsResolved || 0} completed decisions`} /></div>
+      {canViewCosts ? <div className="mt-4 grid gap-3 sm:grid-cols-3"><InsightMetric icon={PoundSterling} label="Planned cost" value={money(finance.plannedPence)} detail="Active bookings" /><InsightMetric icon={Receipt} label="Reconciled" value={`${finance.reconciledPct ?? 100}%`} detail={money(finance.reconciledPence)} /><InsightMetric icon={AlertTriangle} label="Needs reconciliation" value={finance.unreconciledCount || 0} detail={money(finance.outstandingPence)} tone="warning" /></div> : null}
+    </section>
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Pitch utilisation</div><h3 className="mt-1 text-lg font-black text-slate-950">Where the calendar year is being used</h3><div className="mt-5 overflow-hidden rounded-2xl border border-slate-200"><div className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-500"><span>Pitch</span><span>Bookings</span><span>Hours</span><span>Use</span></div>{utilisation.byPitch?.length ? utilisation.byPitch.map((pitch) => <div key={pitch.pitchId} className="grid grid-cols-[minmax(140px,1fr)_90px_90px_100px] gap-3 border-t border-slate-100 px-4 py-3 text-sm"><span className="font-black text-slate-900">{pitch.pitchName}</span><span className="font-bold text-slate-600">{pitch.bookings}</span><span className="font-bold text-slate-600">{pitch.hours}</span><span className="font-black text-emerald-700">{pitch.utilisationPct}%</span></div>) : <div className="p-6 text-center text-sm font-semibold text-slate-500">Add bookings to build a utilisation baseline.</div>}</div></section>
+  </div>;
+}
+
+function InsightMetric({ icon: Icon, label, value, detail, tone = "neutral" }) {
+  return <div className={`rounded-2xl border p-4 ${tone === "warning" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span><Icon size={17} className={tone === "warning" ? "text-amber-600" : "text-violet-600"} /></div><div className="mt-2 text-2xl font-black text-slate-950">{value}</div><div className="mt-1 text-xs font-semibold text-slate-500">{detail}</div></div>;
 }
 
 function BookingMiniCard({ booking, onClick, readOnly }) {
   return <button type="button" disabled={readOnly} onClick={onClick} className={`w-full rounded-2xl border p-4 text-left ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting} ${readOnly ? "cursor-default" : "hover:shadow-sm"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-black uppercase tracking-wide opacity-70">{booking.startTime}–{booking.endTime}</div><div className="mt-1 truncate text-sm font-black">{booking.title}</div><div className="mt-1 text-xs font-semibold opacity-80">{booking.pitchName || "Pitch TBC"}{booking.teamName ? ` · ${booking.teamName}` : ""}</div></div>{readOnly ? <span className="rounded-full bg-white/70 px-2 py-1 text-[9px] font-black uppercase">Matchday</span> : <StatusBadge status={booking.status} />}</div></button>;
 }
 
-function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, onClose, onEdit, onApprove, onDelete }) {
+function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, onClose, onEdit, onApprove, onCommunicate, onReconcile, onDelete }) {
   if (!booking) return null;
-  return <div className="fixed inset-0 z-[220] flex justify-end bg-slate-950/55 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="h-full w-full max-w-lg overflow-y-auto bg-white shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Annual planner booking</div><h2 className="mt-1 text-xl font-black text-slate-950">{booking.title}</h2></div><button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"><X size={18} /></button></div><div className="space-y-5 p-5"><div className={`rounded-2xl border p-4 ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting}`}><div className="flex items-center justify-between"><span className="text-xs font-black uppercase tracking-wide">{ANNUAL_BOOKING_TYPES.find((type) => type.value === booking.bookingType)?.label || booking.bookingType}</span><StatusBadge status={booking.status} /></div><div className="mt-4 text-lg font-black">{formatDate(booking.startAt, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><div className="mt-1 text-sm font-bold">{booking.startTime}–{booking.endTime}</div></div><Detail icon={Users} label="Team" value={booking.teamName || "Club-wide booking"} /><Detail icon={MapPin} label="Facility" value={[booking.venueName, booking.pitchName].filter(Boolean).join(" · ") || "To be allocated"} />{booking.opponentName ? <Detail icon={Sparkles} label="Opponent" value={booking.opponentName} /> : null}{canViewCosts ? <Detail icon={PoundSterling} label="Planned cost" value={money(booking.costPence)} /> : null}{booking.contactName || booking.contactEmail ? <Detail icon={Users} label="Booking contact" value={[booking.contactName, booking.contactEmail].filter(Boolean).join(" · ")} /> : null}{booking.bookingReference || booking.supplierReference ? <Detail icon={FileSpreadsheet} label="References" value={[booking.bookingReference, booking.supplierReference].filter(Boolean).join(" · ")} /> : null}{booking.notes ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-600">{booking.notes}</div> : null}{canOperate ? <div className="grid gap-2 sm:grid-cols-2"><button disabled={saving} type="button" onClick={() => onEdit(booking)} className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-700">Edit booking</button>{booking.status === "requested" && canApprove ? <button disabled={saving} type="button" onClick={() => onApprove?.(booking)} className="h-11 rounded-xl bg-emerald-600 text-sm font-black text-white">Approve request</button> : <button disabled={saving} type="button" onClick={() => onDelete(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-sm font-black text-rose-700"><Trash2 size={16} /> Remove</button>}</div> : null}</div></aside></div>;
+  const financeStatus = booking.financeStatus || "unreconciled";
+  return <div className="fixed inset-0 z-[220] flex justify-end bg-slate-950/55 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <aside className="h-full w-full max-w-lg overflow-y-auto bg-white shadow-2xl">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Annual planner booking</div><h2 className="mt-1 text-xl font-black text-slate-950">{booking.title}</h2></div><button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"><X size={18} /></button></div>
+      <div className="space-y-5 p-5">
+        <div className={`rounded-2xl border p-4 ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting}`}><div className="flex items-center justify-between"><span className="text-xs font-black uppercase tracking-wide">{ANNUAL_BOOKING_TYPES.find((type) => type.value === booking.bookingType)?.label || booking.bookingType}</span><StatusBadge status={booking.status} /></div><div className="mt-4 text-lg font-black">{formatDate(booking.startAt, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><div className="mt-1 text-sm font-bold">{booking.startTime}–{booking.endTime}</div></div>
+        <Detail icon={Users} label="Team" value={booking.teamName || "Club-wide booking"} />
+        <Detail icon={MapPin} label="Facility" value={[booking.venueName, booking.pitchName].filter(Boolean).join(" · ") || "To be allocated"} />
+        {booking.opponentName ? <Detail icon={Sparkles} label="Opponent" value={booking.opponentName} /> : null}
+        {canViewCosts ? <Detail icon={PoundSterling} label="Planned cost" value={`${money(booking.costPence)} · ${financeStatus.replaceAll("_", " ")}`} /> : null}
+        {booking.contactName || booking.contactEmail ? <Detail icon={Users} label="Booking contact" value={[booking.contactName, booking.contactEmail].filter(Boolean).join(" · ")} /> : null}
+        {booking.bookingReference || booking.supplierReference || booking.financeReference ? <Detail icon={FileSpreadsheet} label="References" value={[booking.bookingReference, booking.supplierReference, booking.financeReference].filter(Boolean).join(" · ")} /> : null}
+        {booking.notes ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-600">{booking.notes}</div> : null}
+        {canOperate ? <div className="grid gap-2 sm:grid-cols-2"><button disabled={saving} type="button" onClick={() => onEdit(booking)} className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-700">Edit booking</button><button disabled={saving || !booking.teamKey} type="button" onClick={() => onCommunicate?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 text-sm font-black text-violet-800 disabled:opacity-40"><Megaphone size={16} /> Contact coaches</button>{canViewCosts && Number(booking.costPence || 0) > 0 && financeStatus !== "reconciled" ? <button disabled={saving} type="button" onClick={() => onReconcile?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-black text-emerald-800"><Receipt size={16} /> Mark reconciled</button> : null}{booking.status === "requested" && canApprove ? <button disabled={saving} type="button" onClick={() => onApprove?.(booking)} className="h-11 rounded-xl bg-emerald-600 text-sm font-black text-white">Approve request</button> : <button disabled={saving} type="button" onClick={() => onDelete(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-sm font-black text-rose-700"><Trash2 size={16} /> Remove</button>}</div> : null}
+      </div>
+    </aside>
+  </div>;
 }
 
 function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, blackouts, matchdayBookings, canViewCosts, approvalRequired, canManage, onSave }) {
@@ -619,7 +779,7 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
     if (conflicts.length) return setLocalError(conflicts[0].message);
     try { await onSave({ ...draft, pitchName: selectedPitch?.label || draft.pitchName, venueId: selectedPitch?.siteId || draft.venueId, venueName: selectedPitch?.siteLabel || draft.venueName }); } catch (error) { setLocalError(error?.message || "The booking could not be saved."); }
   };
-  return <div className="fixed inset-0 z-[230] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDraft(null); }}><section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[30px] bg-white shadow-2xl"><div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">{draft.id ? "Edit annual booking" : "New annual booking"}</div><h2 className="mt-1 text-xl font-black text-slate-950">Plan facility use</h2></div><button disabled={saving} type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"><X size={18} /></button></div><div className="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_310px]"><div className="grid gap-4 sm:grid-cols-2"><Field label="Booking title" wide><input value={draft.title || ""} onChange={(e) => set("title", e.target.value)} className="input" /></Field><Field label="Type"><select value={draft.bookingType || "training"} onChange={(e) => set("bookingType", e.target.value)} className="input">{ANNUAL_BOOKING_TYPES.filter((type) => type.value !== "match").map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></Field><Field label="Status"><select disabled={approvalRequired && !canManage} value={approvalRequired && !canManage ? "requested" : draft.status || "provisional"} onChange={(e) => set("status", e.target.value)} className="input disabled:bg-slate-100 disabled:text-slate-500">{(approvalRequired && !canManage ? ANNUAL_BOOKING_STATUSES.filter((status) => status.value === "requested") : ANNUAL_BOOKING_STATUSES.filter((status) => !["cancelled", "rejected"].includes(status.value))).map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select>{approvalRequired && !canManage ? <span className="mt-1 block text-[11px] font-semibold text-amber-700">Changes are submitted for owner or administrator approval.</span> : null}</Field><Field label="Team"><select value={draft.teamKey || ""} onChange={(e) => { const team = teamCfg.find((row) => String(row.id || row.name) === e.target.value); setDraft((current) => ({ ...current, teamKey: e.target.value, teamName: team?.name || "" })); }} className="input"><option value="">Club-wide / no team</option>{teamCfg.map((team) => <option key={team.id || team.name} value={team.id || team.name}>{team.name}</option>)}</select></Field>{draft.bookingType === "friendly" ? <Field label="Opponent"><input value={draft.opponentName || ""} onChange={(e) => set("opponentName", e.target.value)} className="input" placeholder="Visiting club or internal team" /></Field> : null}<Field label="Pitch"><select value={draft.pitchId || ""} onChange={(e) => { const pitch = pitchCfg.find((row) => String(row.id) === e.target.value); setDraft((current) => ({ ...current, pitchId: e.target.value, pitchName: pitch?.label || pitch?.name || "", venueId: pitch?.siteId || current.venueId || "", venueName: pitch?.siteLabel || pitch?.venueName || current.venueName || "" })); }} className="input"><option value="">Choose pitch</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field><Field label="Date"><input type="date" value={draft.startDate || ""} onChange={(e) => set("startDate", e.target.value)} className="input" /></Field><Field label="Starts"><input type="time" step="900" value={normaliseTime(draft.startTime)} onChange={(e) => set("startTime", e.target.value)} className="input" /></Field><Field label="Finishes"><input type="time" step="900" value={normaliseTime(draft.endTime, "19:30")} onChange={(e) => set("endTime", e.target.value)} className="input" /></Field>{!draft.id ? <><Field label="Repeats"><select value={draft.recurrence || "none"} onChange={(e) => set("recurrence", e.target.value)} className="input">{RECURRENCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>{draft.recurrence !== "none" ? <Field label="Repeat until"><input type="date" value={draft.recurrenceUntil || draft.startDate || ""} min={draft.startDate || ""} onChange={(e) => set("recurrenceUntil", e.target.value)} className="input" /></Field> : null}</> : null}{canViewCosts ? <Field label="Cost (£)"><input type="number" min="0" step="0.01" value={(Number(draft.costPence || 0) / 100).toFixed(2)} onChange={(e) => set("costPence", Math.round(Number(e.target.value || 0) * 100))} className="input" /></Field> : null}<Field label="Booking reference"><input value={draft.bookingReference || ""} onChange={(e) => set("bookingReference", e.target.value)} className="input" /></Field>{canViewCosts ? <Field label="Supplier reference"><input value={draft.supplierReference || ""} onChange={(e) => set("supplierReference", e.target.value)} className="input" /></Field> : null}<Field label="Contact name"><input value={draft.contactName || ""} onChange={(e) => set("contactName", e.target.value)} className="input" /></Field><Field label="Contact email"><input type="email" value={draft.contactEmail || ""} onChange={(e) => set("contactEmail", e.target.value)} className="input" /></Field><Field label="Notes" wide><textarea value={draft.notes || ""} onChange={(e) => set("notes", e.target.value)} rows="4" className="input min-h-[110px] py-3" /></Field></div><aside className="space-y-4"><div className={`rounded-2xl border p-4 ${conflicts.length ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-center gap-2 text-sm font-black">{conflicts.length ? <AlertTriangle className="text-rose-600" size={18} /> : <CheckCircle2 className="text-emerald-600" size={18} />}{conflicts.length ? "Conflict found" : "Booking can be saved"}</div><p className="mt-2 text-xs font-semibold leading-5 opacity-80">{conflicts.length ? conflicts[0].message : `${occurrences.length || 1} occurrence${occurrences.length === 1 ? "" : "s"} checked against training, friendlies, blackouts and current matchdays.`}</p></div>{suggestions.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Available alternatives</div><div className="mt-3 space-y-2">{suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => setDraft((current) => ({ ...current, startDate: suggestion.startDate, startTime: suggestion.startTime, endTime: suggestion.endTime, pitchId: suggestion.pitchId }))} className="w-full rounded-xl bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{formatDate(`${suggestion.startDate}T12:00:00`, { weekday: "short", day: "numeric", month: "short" })} · {suggestion.startTime}</span><span className="mt-1 block text-sky-700">{suggestion.pitchName || suggestion.pitchId}</span></button>)}</div></div> : null}<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Series preview</div><div className="mt-2 text-2xl font-black text-slate-950">{occurrences.length || 0}</div><div className="text-xs font-semibold text-slate-500">bookings will be created</div></div></aside></div>{localError ? <div className="mx-5 mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-900 sm:mx-6">{localError}</div> : null}<div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:flex-row sm:justify-end sm:px-6"><button disabled={saving} type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700">Cancel</button><button disabled={saving || conflicts.length > 0} type="button" onClick={submit} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : draft.id ? "Save changes" : occurrences.length > 1 ? `Create ${occurrences.length} bookings` : "Add booking"}</button></div></section></div>;
+  return <div className="fixed inset-0 z-[230] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDraft(null); }}><section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[30px] bg-white shadow-2xl"><div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">{draft.id ? "Edit annual booking" : "New annual booking"}</div><h2 className="mt-1 text-xl font-black text-slate-950">Plan facility use</h2></div><button disabled={saving} type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"><X size={18} /></button></div><div className="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_310px]"><div className="grid gap-4 sm:grid-cols-2"><Field label="Booking title" wide><input value={draft.title || ""} onChange={(e) => set("title", e.target.value)} className="input" /></Field><Field label="Type"><select value={draft.bookingType || "training"} onChange={(e) => set("bookingType", e.target.value)} className="input">{ANNUAL_BOOKING_TYPES.filter((type) => type.value !== "match").map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></Field><Field label="Status"><select disabled={approvalRequired && !canManage} value={approvalRequired && !canManage ? "requested" : draft.status || "provisional"} onChange={(e) => set("status", e.target.value)} className="input disabled:bg-slate-100 disabled:text-slate-500">{(approvalRequired && !canManage ? ANNUAL_BOOKING_STATUSES.filter((status) => status.value === "requested") : ANNUAL_BOOKING_STATUSES.filter((status) => !["cancelled", "rejected"].includes(status.value))).map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select>{approvalRequired && !canManage ? <span className="mt-1 block text-[11px] font-semibold text-amber-700">Changes are submitted for owner or administrator approval.</span> : null}</Field><Field label="Team"><select value={draft.teamKey || ""} onChange={(e) => { const team = teamCfg.find((row) => String(row.id || row.name) === e.target.value); setDraft((current) => ({ ...current, teamKey: e.target.value, teamName: team?.name || "" })); }} className="input"><option value="">Club-wide / no team</option>{teamCfg.map((team) => <option key={team.id || team.name} value={team.id || team.name}>{team.name}</option>)}</select></Field>{draft.bookingType === "friendly" ? <Field label="Opponent"><input value={draft.opponentName || ""} onChange={(e) => set("opponentName", e.target.value)} className="input" placeholder="Visiting club or internal team" /></Field> : null}<Field label="Pitch"><select value={draft.pitchId || ""} onChange={(e) => { const pitch = pitchCfg.find((row) => String(row.id) === e.target.value); setDraft((current) => ({ ...current, pitchId: e.target.value, pitchName: pitch?.label || pitch?.name || "", venueId: pitch?.siteId || current.venueId || "", venueName: pitch?.siteLabel || pitch?.venueName || current.venueName || "" })); }} className="input"><option value="">Choose pitch</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field><Field label="Date"><input type="date" value={draft.startDate || ""} onChange={(e) => set("startDate", e.target.value)} className="input" /></Field><Field label="Starts"><input type="time" step="900" value={normaliseTime(draft.startTime)} onChange={(e) => set("startTime", e.target.value)} className="input" /></Field><Field label="Finishes"><input type="time" step="900" value={normaliseTime(draft.endTime, "19:30")} onChange={(e) => set("endTime", e.target.value)} className="input" /></Field>{!draft.id ? <><Field label="Repeats"><select value={draft.recurrence || "none"} onChange={(e) => set("recurrence", e.target.value)} className="input">{RECURRENCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>{draft.recurrence !== "none" ? <><Field label="Repeat until"><input type="date" value={draft.recurrenceUntil || draft.startDate || ""} min={draft.startDate || ""} onChange={(e) => set("recurrenceUntil", e.target.value)} className="input" /></Field><Field label="School holidays"><select value={draft.holidayPolicy || "include"} onChange={(e) => set("holidayPolicy", e.target.value)} className="input"><option value="include">Keep every scheduled date</option><option value="exclude">Exclude supplied holiday dates</option><option value="custom">Use custom exceptions</option></select></Field><Field label="Dates to skip" wide><textarea rows="3" value={draft.exceptionDatesText || (draft.exceptionDates || []).join(", ")} onChange={(e) => set("exceptionDatesText", e.target.value)} className="input min-h-[88px] py-3" placeholder="2026-10-26, 2026-11-02" /><span className="mt-1 block text-[11px] font-semibold text-slate-500">Comma, space or new-line separated. These dates are excluded from the saved series.</span></Field></> : null}</> : null}{draft.id && draft.seriesId ? <Field label="Recurring series" wide><label className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4"><input type="checkbox" checked={Boolean(draft.applyToSeries)} onChange={(e) => set("applyToSeries", e.target.checked)} className="mt-0.5" /><span><span className="block text-sm font-black text-violet-950">Apply this change to remaining dates</span><span className="mt-1 block text-xs font-semibold leading-5 text-violet-800">Keeps each date but updates pitch, time, status, team, cost and booking details across the rest of this series.</span></span></label></Field> : null}{canViewCosts ? <Field label="Cost (£)"><input type="number" min="0" step="0.01" value={(Number(draft.costPence || 0) / 100).toFixed(2)} onChange={(e) => set("costPence", Math.round(Number(e.target.value || 0) * 100))} className="input" /></Field> : null}<Field label="Booking reference"><input value={draft.bookingReference || ""} onChange={(e) => set("bookingReference", e.target.value)} className="input" /></Field>{canViewCosts ? <Field label="Supplier reference"><input value={draft.supplierReference || ""} onChange={(e) => set("supplierReference", e.target.value)} className="input" /></Field> : null}<Field label="Contact name"><input value={draft.contactName || ""} onChange={(e) => set("contactName", e.target.value)} className="input" /></Field><Field label="Contact email"><input type="email" value={draft.contactEmail || ""} onChange={(e) => set("contactEmail", e.target.value)} className="input" /></Field><Field label="Notes" wide><textarea value={draft.notes || ""} onChange={(e) => set("notes", e.target.value)} rows="4" className="input min-h-[110px] py-3" /></Field></div><aside className="space-y-4"><div className={`rounded-2xl border p-4 ${conflicts.length ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-center gap-2 text-sm font-black">{conflicts.length ? <AlertTriangle className="text-rose-600" size={18} /> : <CheckCircle2 className="text-emerald-600" size={18} />}{conflicts.length ? "Conflict found" : "Booking can be saved"}</div><p className="mt-2 text-xs font-semibold leading-5 opacity-80">{conflicts.length ? conflicts[0].message : `${occurrences.length || 1} occurrence${occurrences.length === 1 ? "" : "s"} checked against training, friendlies, blackouts and current matchdays.`}</p></div>{suggestions.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Available alternatives</div><div className="mt-3 space-y-2">{suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => setDraft((current) => ({ ...current, startDate: suggestion.startDate, startTime: suggestion.startTime, endTime: suggestion.endTime, pitchId: suggestion.pitchId }))} className="w-full rounded-xl bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{formatDate(`${suggestion.startDate}T12:00:00`, { weekday: "short", day: "numeric", month: "short" })} · {suggestion.startTime}</span><span className="mt-1 block text-sky-700">{suggestion.pitchName || suggestion.pitchId}</span></button>)}</div></div> : null}<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Series preview</div><div className="mt-2 text-2xl font-black text-slate-950">{occurrences.length || 0}</div><div className="text-xs font-semibold text-slate-500">bookings will be created</div></div></aside></div>{localError ? <div className="mx-5 mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-900 sm:mx-6">{localError}</div> : null}<div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:flex-row sm:justify-end sm:px-6"><button disabled={saving} type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700">Cancel</button><button disabled={saving || conflicts.length > 0} type="button" onClick={submit} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : draft.id ? "Save changes" : occurrences.length > 1 ? `Create ${occurrences.length} bookings` : "Add booking"}</button></div></section></div>;
 }
 
 function BlackoutEditor({ draft, setDraft, pitchCfg, saving, onSave }) {

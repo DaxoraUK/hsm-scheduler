@@ -28,6 +28,7 @@ import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import { buildCommunicationsModel } from "../lib/communications/communicationsEngine.js";
 import { maskContactDestination } from "../lib/communications/contactModel.js";
 import { communicationPrivacyGaps, normaliseCommunicationPrivacy } from "../lib/communications/privacyModel.js";
+import { coachAudienceSummary, filterCommunicationRowsByAudience } from "../lib/communications/coachAudience.js";
 import { DB } from "../lib/supabase.js";
 import {
   buildDeliveryMessages,
@@ -275,12 +276,24 @@ export default function CommunicationsPage(props) {
   const [sendFailure, setSendFailure] = useState(null);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
 
-  const rows = model.rows.filter((row) => {
+  const audienceRecipients = Array.isArray(props.audience?.recipients) ? props.audience.recipients.filter((row) => row.ready) : [];
+  const audienceRows = filterCommunicationRowsByAudience(model.rows, props.audience);
+  const rows = audienceRows.filter((row) => {
     if (day !== "all" && row.day !== day) return false;
     if (filter !== "all" && row.readyState !== filter) return false;
     return true;
   });
   const readyRows = rows.filter((row) => row.readyState === "ready" && row.recipients.length && row.contact.receiveMatchdayMessages);
+
+  const copyAudienceContacts = async () => {
+    const contacts = audienceRecipients.map((row) => [row.name, row.teamName, row.email || row.mobile].filter(Boolean).join(" · ")).join("\n");
+    if (!contacts) {
+      toast.warning("No contact-ready coaches found", { description: "Synchronise team contacts and complete missing email or mobile details." });
+      return;
+    }
+    await navigator.clipboard.writeText(contacts);
+    toast.success("Affected coach contacts copied", { description: `${audienceRecipients.length} contact${audienceRecipients.length === 1 ? "" : "s"} ready for the update.` });
+  };
 
   const loadEvents = useCallback(async () => {
     if (!auditAvailable) {
@@ -577,6 +590,13 @@ export default function CommunicationsPage(props) {
         <UsersRound size={19} className="mt-0.5 shrink-0 text-sky-700" />
         <span><strong>Shared team contacts.</strong> The same adult contact record powers Communications, Coach Hub invitations, booking requests, calendar updates and acknowledgements. Update it once in Settings → Teams.</span>
       </div>
+
+      {props.audience?.teamKeys?.length ? (
+        <div className="mb-5 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm font-semibold leading-6 text-violet-950">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><UsersRound size={19} className="mt-0.5 shrink-0 text-violet-700" /><span><strong>Automatic Annual Planner audience.</strong> {coachAudienceSummary(props.audience)}. {audienceRecipients.length} connected coach contact{audienceRecipients.length === 1 ? " is" : "s are"} ready; matching matchweek messages are filtered below.</span></div><div className="flex shrink-0 flex-wrap gap-2"><button type="button" onClick={copyAudienceContacts} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-xs font-black text-violet-800"><Copy size={14} className="mr-2 inline" />Copy contacts</button><button type="button" onClick={props.onClearAudience} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-xs font-black text-violet-800">Clear audience</button></div></div>
+          {audienceRecipients.length ? <div className="mt-3 flex flex-wrap gap-2">{audienceRecipients.slice(0, 12).map((recipient) => <span key={`${recipient.personId}-${recipient.teamKey}`} className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-800 shadow-sm">{recipient.teamName} · {recipient.name}</span>)}{audienceRecipients.length > 12 ? <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black text-violet-800">+{audienceRecipients.length - 12} more</span> : null}</div> : null}
+        </div>
+      ) : null}
 
       <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${deliveryCapabilities.webSendingEnabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
         <div className="flex items-start gap-3">

@@ -250,6 +250,7 @@ function App() {
     }
   }, []);
   const [mainPage, setMainPage] = useState("dashboard");
+  const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
   const [settingsTab, setSettingsTab] = useState("overview");
   const [navigationTarget, setNavigationTarget] = useState(null);
   const clearNavigationTarget = useCallback(
@@ -2386,6 +2387,11 @@ function App() {
                 teamCfg={teamCfg}
                 workspaceAccess={operationalWorkspaceAccess}
                 subscription={subscription}
+                teamContacts={teamContacts}
+                onOpenCoachAudience={(audience) => {
+                  setCoachCommunicationAudience(audience);
+                  setMainPage("communications");
+                }}
                 satFinal={satFinal}
                 sunFinal={sunFinal}
                 midweekFinal={activeMidweekFinal}
@@ -2746,6 +2752,8 @@ function App() {
                 sunDateLabel={sunDateLabel}
                 midweekDateLabel={midweekDateLabel}
                 midweekEnabled={midweekEnabled}
+                audience={coachCommunicationAudience}
+                onClearAudience={() => setCoachCommunicationAudience(null)}
               />
             </Suspense>
           )}

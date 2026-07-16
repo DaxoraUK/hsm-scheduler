@@ -104,6 +104,10 @@ export function normaliseAnnualBooking(row = {}) {
     endTime,
     recurrence: clean(row.recurrence || "none").toLowerCase(),
     recurrenceUntil: normaliseDateKey(row.recurrence_until || row.recurrenceUntil),
+    exceptionDates: normaliseExceptionDates(row.exception_dates || row.exceptionDates || []),
+    holidayPolicy: clean(row.holiday_policy || row.holidayPolicy || "include").toLowerCase(),
+    financeStatus: clean(row.finance_status || row.financeStatus || "unreconciled").toLowerCase(),
+    financeReference: clean(row.finance_reference || row.financeReference),
     costPence: Math.max(0, Math.round(finite(row.cost_pence ?? row.costPence, 0))),
     supplierReference: clean(row.supplier_reference || row.supplierReference),
     bookingReference: clean(row.booking_reference || row.bookingReference),
@@ -150,6 +154,10 @@ export function annualBookingToPayload(booking = {}) {
     series_id: normalised.seriesId || null,
     recurrence: normalised.recurrence,
     recurrence_until: normalised.recurrenceUntil || null,
+    exception_dates: normalised.exceptionDates,
+    holiday_policy: normalised.holidayPolicy || "include",
+    finance_status: normalised.financeStatus || "unreconciled",
+    finance_reference: normalised.financeReference || null,
     cost_pence: normalised.costPence,
     supplier_reference: normalised.supplierReference || null,
     booking_reference: normalised.bookingReference || null,
@@ -168,6 +176,11 @@ function addDays(dateKey, days) {
   return normaliseDateKey(date);
 }
 
+export function normaliseExceptionDates(value) {
+  const values = Array.isArray(value) ? value : clean(value).split(/[\s,;]+/g);
+  return [...new Set(values.map((row) => normaliseDateKey(row)).filter(Boolean))].sort();
+}
+
 export function expandRecurringBookingDraft(draft = {}, { maximumOccurrences = 120 } = {}) {
   const startDate = normaliseDateKey(draft.startDate || draft.start_date);
   const startTime = normaliseTime(draft.startTime || draft.start_time, "18:00");
@@ -176,6 +189,7 @@ export function expandRecurringBookingDraft(draft = {}, { maximumOccurrences = 1
   const recurrenceUntil = normaliseDateKey(draft.recurrenceUntil || draft.recurrence_until || startDate);
   const stepDays = recurrence === "weekly" ? 7 : recurrence === "fortnightly" ? 14 : 0;
   const seriesId = clean(draft.seriesId || draft.series_id) || (stepDays ? `series_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : "");
+  const exceptionDates = new Set(normaliseExceptionDates(draft.exceptionDates || draft.exception_dates || draft.exceptionDatesText || draft.exception_dates_text || []));
   const results = [];
   let currentDate = startDate;
 
@@ -189,18 +203,21 @@ export function expandRecurringBookingDraft(draft = {}, { maximumOccurrences = 1
       end = new Date(end);
       end.setDate(end.getDate() + 1);
     }
-    results.push(normaliseAnnualBooking({
-      ...draft,
-      id: "",
-      seriesId,
-      startAt: start.toISOString(),
-      endAt: end.toISOString(),
-      startDate: currentDate,
-      startTime,
-      endTime,
-      recurrence,
-      recurrenceUntil,
-    }));
+    if (!exceptionDates.has(currentDate)) {
+      results.push(normaliseAnnualBooking({
+        ...draft,
+        id: "",
+        seriesId,
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        startDate: currentDate,
+        startTime,
+        endTime,
+        recurrence,
+        recurrenceUntil,
+        exceptionDates: [...exceptionDates],
+      }));
+    }
     if (!stepDays || currentDate >= recurrenceUntil) break;
     const nextDate = addDays(currentDate, stepDays);
     if (!nextDate || nextDate > recurrenceUntil) break;

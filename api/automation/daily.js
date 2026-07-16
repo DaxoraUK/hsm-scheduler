@@ -3,6 +3,7 @@ import { serviceRpc } from "../../server/communications/supabase.js";
 import { sendDaxoraEmail } from "../../server/notifications/email.js";
 import { processLeagueReportRun } from "../../server/reports/processor.js";
 import { deliverLeagueFinanceDocument } from "../../server/finance/delivery.js";
+import { deliverCoachHubReminder } from "../../server/coach/reminders.js";
 
 function authorised(request) {
   const secret = String(process.env.CRON_SECRET || process.env.DAXORA_AUTOMATION_SECRET || "").trim();
@@ -17,7 +18,7 @@ function digestHtml(item = {}) {
 
 export async function GET(request) {
   if (!authorised(request)) return json({ error: "Automation secret rejected.", code: "AUTOMATION_UNAUTHORISED" }, 401);
-  const summary = { reportsEnqueued: 0, reportsProcessed: [], financeRemindersProcessed: [], digestsProcessed: [] };
+  const summary = { reportsEnqueued: 0, reportsProcessed: [], financeRemindersProcessed: [], coachRemindersProcessed: [], digestsProcessed: [] };
   try {
     summary.reportsEnqueued = Number(await serviceRpc("enqueue_due_league_report_deliveries", {})) || 0;
     const runs = await serviceRpc("claim_due_league_report_deliveries", { batch_size: 20 });
@@ -33,6 +34,28 @@ export async function GET(request) {
         const deliveryId = reminder?.delivery_id || reminder?.deliveryId;
         if (deliveryId) await serviceRpc("complete_league_finance_delivery", { target_delivery_id: deliveryId, next_status: "failed", provider_name: "resend", provider_reference_value: "", error_message_value: error?.message || "Automated finance reminder failed." }).catch(() => null);
         summary.financeRemindersProcessed.push({ deliveryId, status: "failed", error: error?.message });
+      }
+    }
+
+    const coachReminders = await serviceRpc("claim_due_coach_hub_reminders", { batch_size: 50 });
+    for (const reminder of Array.isArray(coachReminders) ? coachReminders : []) {
+      try {
+        const result = await deliverCoachHubReminder(reminder);
+        await serviceRpc("complete_coach_hub_reminder", {
+          target_reminder_id: reminder.id,
+          delivered: true,
+          provider_reference_value: result.reference || "",
+          error_message_value: "",
+        });
+        summary.coachRemindersProcessed.push({ reminderId: reminder.id, bookingId: reminder.booking_id, status: "delivered", reference: result.reference });
+      } catch (error) {
+        await serviceRpc("complete_coach_hub_reminder", {
+          target_reminder_id: reminder.id,
+          delivered: false,
+          provider_reference_value: "",
+          error_message_value: error?.message || "Coach reminder delivery failed.",
+        }).catch(() => null);
+        summary.coachRemindersProcessed.push({ reminderId: reminder.id, status: "failed", error: error?.message });
       }
     }
 

@@ -82,12 +82,15 @@ export default function CoachRequestReviewDialog({ request, busy, onClose, onDec
         </label>
 
         {decision === "alternative" ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 space-y-4">
+            {request.suggestions?.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-[10px] font-black uppercase tracking-[0.15em] text-sky-800">Recommended alternatives</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{request.suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => { setDate(suggestion.startDate); setStartTime(suggestion.startTime); setEndTime(suggestion.endTime); setPitchName(suggestion.pitchName || suggestion.pitchId); setVenueName(suggestion.venueName || request.preferredVenueName || ""); }} className="rounded-xl border border-sky-200 bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{suggestion.startDate} · {suggestion.startTime}–{suggestion.endTime}</span><span className="mt-1 block text-sky-700">{suggestion.pitchName || suggestion.pitchId}</span></button>)}</div></div> : null}
+            <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-black text-slate-700">Date<input type="date" className={`${inputClass} mt-2`} value={date} onChange={(event) => setDate(event.target.value)} /></label>
             <label className="text-xs font-black text-slate-700">Venue<input className={`${inputClass} mt-2`} value={venueName} onChange={(event) => setVenueName(event.target.value)} /></label>
             <label className="text-xs font-black text-slate-700">Start<input type="time" className={`${inputClass} mt-2`} value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
             <label className="text-xs font-black text-slate-700">Finish<input type="time" className={`${inputClass} mt-2`} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
             <label className="text-xs font-black text-slate-700 sm:col-span-2">Pitch<input className={`${inputClass} mt-2`} value={pitchName} onChange={(event) => setPitchName(event.target.value)} /></label>
+            </div>
           </div>
         ) : null}
 

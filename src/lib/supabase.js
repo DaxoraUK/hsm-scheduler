@@ -692,6 +692,71 @@ export const DB = {
     });
   },
 
+  async createCoachHubTeamCalendarFeed(clubId, teamKey = "", label = "My team calendar") {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_coach_hub_team_calendar_feed", {
+      target_club_id: id,
+      team_key_value: String(teamKey || "").trim() || null,
+      label_value: String(label || "My team calendar").trim(),
+    });
+  },
+
+  async listCoachHubRequestThread(clubId, requestId) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_coach_hub_request_thread", {
+      target_club_id: id,
+      target_request_id: requestId,
+    });
+    return result && typeof result === "object" ? result : { request: {}, messages: [] };
+  },
+
+  async postCoachHubRequestMessage(clubId, requestId, body) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/post_coach_hub_request_message", {
+      target_club_id: id,
+      target_request_id: requestId,
+      message_body: String(body || "").trim(),
+    });
+  },
+
+  async verifyMyCoachHubContact(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/verify_my_coach_hub_contact", {
+      target_club_id: id,
+    });
+  },
+
+  async replaceCoachHubContact(clubId, personId, replacement) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/replace_coach_hub_contact", {
+      target_club_id: id,
+      target_person_id: personId,
+      replacement_data: replacement && typeof replacement === "object" ? replacement : {},
+    });
+  },
+
+  async listCoachHubPilotMetrics(clubId, { startDate = null, endDate = null } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_coach_hub_pilot_metrics", {
+      target_club_id: id,
+      range_start: startDate || null,
+      range_end: endDate || null,
+    });
+    return result && typeof result === "object" ? result : { people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] };
+  },
+
+  async reconcileAnnualPlannerBookingCost(clubId, bookingId, reconciliation = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/reconcile_annual_planner_booking_cost", {
+      target_club_id: id,
+      target_booking_id: String(bookingId || "").trim(),
+      reconciliation_data: {
+        status: String(reconciliation.status || "reconciled").trim(),
+        reference: String(reconciliation.reference || "").trim() || null,
+      },
+    });
+  },
+
   async loadPitches(clubId) {
     return DB.load("pitches", clubId);
   },

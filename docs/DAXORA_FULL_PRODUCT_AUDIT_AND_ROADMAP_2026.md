@@ -1,8 +1,8 @@
 # Daxora Ground Control and League Manager — Full Product Audit and Roadmap
 
-**Audit date:** 15 July 2026
+**Audit date:** 16 July 2026
 **Repository baseline inspected:** `staging` at `2873ea3`
-**Current product build:** Ground Control v3.10.1 Coach Hub, Team Contacts and Requests
+**Current product build:** Ground Control v3.10.2 Coach Hub and Annual Planner Pilot Refinement
 
 ## Executive verdict
 
@@ -52,14 +52,15 @@ The right commercial strategy is to stop adding unrelated modules, prove the int
 - v3.9.2 platform health, support diagnostics, accessibility safeguards and repeatable pilot evidence.
 - v3.10 annual pitch booking, recurring training, friendlies, blackouts and Matchday facility protection.
 - v3.10.1 unified team contacts, dedicated Coach Hub, secure invitations, booking requests, alternatives, messages, acknowledgements and private team calendars.
+- v3.10.2 request conversations, affected-coach audiences, contact verification and replacement, recurring exceptions, team feeds, reminders, utilisation and cost reconciliation.
 
 ## Technical evidence from this audit
 
 - Clean dependency installation completed.
 - TypeScript and Vite production build completed.
-- Full regression suite passes after v3.10.1: **102 files and 516 tests**.
+- Full regression suite passes after v3.10.2: **103 files and 525 tests**.
 - Lint completes with no errors; existing warning debt remains.
-- PostgreSQL parser accepts the new v3.9.1 migration.
+- The v3.10.2 migration passes structural SQL validation and preserves the existing additive migration sequence.
 - The repository contains approximately **106,000** JavaScript, TypeScript and SQL lines across product, server, migrations and tests.
 - There are no product `alert()`, `confirm()` or `prompt()` calls.
 
@@ -156,35 +157,38 @@ Those results will justify pricing more convincingly than a long feature list.
 
 ## Full roadmap
 
-### Current — v3.10.1 Coach Hub, Team Contacts and Requests
+### Current — v3.10.2 Coach Hub and Annual Planner Pilot Refinement
 
 Delivered in this build:
 
-- one adult team-contact record reused across Communications and Coach Hub;
-- individual and bulk coach invitations;
-- dedicated mobile-first coach workspace;
-- team-scoped calendar, fixtures, messages and profile;
-- training, friendly, camp, tournament, change and cancellation requests;
-- operator approval, rejection, information and alternative-offer workflows;
-- private team calendar feeds;
-- acknowledgement tracking and audit history;
-- Core Annual Planner add-on packaging with inclusion in Pro and Elite;
-- database-enforced entitlement, role and team isolation.
+- direct conversations attached to booking requests;
+- automatic affected-coach audiences from bookings and blackouts;
+- Communications recipient filtering from the unified team-contact record;
+- coach contact verification and administrator-controlled replacement;
+- school-holiday and custom recurring-series exception dates;
+- remaining-series amendments;
+- private team-specific calendar feeds;
+- automated 48-hour and 4-hour booking reminders;
+- acknowledgement tracking linked to reminders;
+- pitch utilisation, coach engagement and request-resolution metrics;
+- annual-booking cost reconciliation and Finance references;
+- forced-RLS request-message and reminder records;
+- service-role-only reminder automation and team-scoped access enforcement.
 
-### v3.10.2 — Coach Hub and Annual Planner Pilot Refinement
+### v3.10.3 — Evidence-led Annual Planner and Coach Hub Completion
 
-Only evidence-led refinements from real club use:
+Only the refinements proven necessary during a real club cycle:
 
-- touch and tablet request/calendar testing;
-- saved Communications audiences for affected coaches;
-- automatic request and fixture-change recipient selection;
-- school-holiday and recurring-series exception patterns;
-- team-manager contact verification and replacement workflow;
-- richer direct request comments and attachments;
-- external facility-calendar integration discovery;
-- booking-cost reconciliation into Finance;
-- utilisation, unused-slot and response-time analytics;
-- managed safeguarding or qualification evidence only after retention and access governance is approved.
+- tablet and touch acceptance across request, calendar and approval workflows;
+- UK school-holiday source discovery with club-controlled confirmation;
+- supplier booking-document storage after retention and access rules are approved;
+- external facility-calendar read integration and conflict discovery;
+- direct creation of controlled Finance expenses or supplier charges from reconciled bookings;
+- richer unused-slot and cancellation analysis;
+- saved coach-audience templates and provider delivery evidence;
+- support for attachments in request conversations only after secure managed storage is approved.
+
+No unrelated broad module should begin before the v3.10.2 workflow has been exercised through a real pre-season and winter-training cycle.
 
 ### v4.0 — Controlled Paid Launch
 
@@ -238,4 +242,4 @@ Link remains held back until League Manager connectivity creates meaningful valu
 
 ## Recommended immediate decision
 
-Deploy v3.10.1 to staging and prove a real pre-season, winter-training and friendly-request cycle with Horwich St Mary’s coaches. Do not begin another broad module until that workflow, Matchday integration and the v3.9.2 launch-confidence evidence are accepted. The next increase in value comes from controlled onboarding, reliable operation and proof that clubs save time across an entire calendar year.
+Deploy v3.10.2 to staging and prove a real pre-season, winter-training, blackout-communication and reminder cycle with Horwich St Mary’s coaches. Do not begin another broad module until that workflow, Matchday integration and the v3.9.2 launch-confidence evidence are accepted. The next increase in value comes from controlled onboarding, reliable operation and proof that clubs save time across an entire calendar year.
