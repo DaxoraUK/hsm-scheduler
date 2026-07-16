@@ -47,6 +47,15 @@ function personAssignments(personId, assignments = []) {
   return assignments.filter((row) => text(row.person_id || row.personId) === text(personId));
 }
 
+function hasUsablePersonDetails(person = {}) {
+  return Boolean(
+    text(person.display_name || person.displayName)
+    || text(person.email)
+    || text(person.mobile)
+    || text(person.user_id || person.userId),
+  );
+}
+
 const ROLE_OPTIONS = [
   ["manager", "Manager"],
   ["lead_coach", "Lead coach"],
@@ -114,9 +123,15 @@ export default function CoachHubSettingsPanel({
       if (Array.isArray(sharedContacts)) {
         setTeamContacts?.(alignTeamContacts(teamCfg, sharedContacts));
       }
+      const assignments = Array.isArray(payload?.assignments) ? payload.assignments : [];
+      const assignedPersonIds = new Set(assignments.map((row) => text(row.person_id || row.personId)).filter(Boolean));
+      const people = (Array.isArray(payload?.people) ? payload.people : []).filter((person) => (
+        hasUsablePersonDetails(person)
+        || assignedPersonIds.has(text(person.id))
+      ));
       setWorkspace({
-        people: Array.isArray(payload?.people) ? payload.people : [],
-        assignments: Array.isArray(payload?.assignments) ? payload.assignments : [],
+        people,
+        assignments,
         invitations: Array.isArray(payload?.invitations) ? payload.invitations : [],
         requests: Array.isArray(payload?.requests) ? payload.requests.map(normaliseCoachRequest) : [],
         messages: Array.isArray(pilot?.messages) ? pilot.messages : [],
@@ -124,6 +139,9 @@ export default function CoachHubSettingsPanel({
         metricsUnavailable: Boolean(pilot?.unavailable),
       });
       setStatus("ready");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ground-control-coach-hub-contacts-changed"));
+      }
     } catch (error) {
       setStatus("error");
       toast.error("Coach Hub could not be loaded", { description: error?.message });
@@ -366,7 +384,7 @@ export default function CoachHubSettingsPanel({
         <SettingsSectionHeader
           eyebrow="People and access"
           title="Coach invitations"
-          description="Email and mobile details continue to come from the team contact record used by Communications."
+          description="One shared adult contact record now powers Teams, Communications, Coach Hub access and team roles."
           icon={UserRoundPlus}
         />
         <div className="mt-4 space-y-2">

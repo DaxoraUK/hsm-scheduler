@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,6 +12,8 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import { sortPitches } from "../../lib/pitches.js";
+import { DB } from "../../lib/supabase.js";
+import { resolveCoachHubContactForTeam } from "../../lib/coachHubContactBridge.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
 import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
 import {
@@ -142,6 +144,29 @@ function hasContactData(contact = {}) {
   return hasDirectContactData(contact) || Boolean(primaryCoachHubAssignment(contact));
 }
 
+function coachHubContactForTeam(team = {}, index = 0, workspace = {}) {
+  return resolveCoachHubContactForTeam(
+    { ...team, key: getTeamContactKey(team, index) },
+    [workspace?.people || [], workspace?.assignments || []],
+  );
+}
+
+function resolvedVisibleTeamContact(team = {}, index = 0, contact = {}, workspace = {}) {
+  const directCoachHubContact = coachHubContactForTeam(team, index, workspace);
+  if (directCoachHubContact) {
+    return {
+      ...contact,
+      coachName: directCoachHubContact.coachName || "",
+      coachPhone: directCoachHubContact.coachPhone || "",
+      coachEmail: directCoachHubContact.coachEmail || "",
+      preferredChannel: directCoachHubContact.preferredChannel || contact.preferredChannel || "email",
+      coachHubManagedPrimary: true,
+      assignedPrimary: directCoachHubContact,
+    };
+  }
+  return visibleTeamContact(contact);
+}
+
 export default function TeamSettingsPanel({
   club = {},
   teamCfg = [],
@@ -156,10 +181,13 @@ export default function TeamSettingsPanel({
   workspaceAccess,
   communicationSchemaReady = false,
   setSettingsTab,
+  activeClubId,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [limitMessage, setLimitMessage] = useState("");
+  const [coachHubWorkspace, setCoachHubWorkspace] = useState({ people: [], assignments: [] });
+  const clubId = activeClubId || club.id;
   const sites = useMemo(() => getClubSites(club), [club]);
   const primarySite = getPrimarySite(sites);
   const assignments = useMemo(() => reconcileSiteAssignments({ club, teams: teamCfg, pitches: pitchCfg }), [club, teamCfg, pitchCfg]);
@@ -176,6 +204,32 @@ export default function TeamSettingsPanel({
     return acc;
   }, {});
 
+  const refreshCoachHubWorkspace = useCallback(async () => {
+    if (!clubId || !canManageContacts) {
+      setCoachHubWorkspace({ people: [], assignments: [] });
+      return;
+    }
+    try {
+      const payload = await DB.listCoachHubAdminWorkspace(clubId);
+      setCoachHubWorkspace({
+        people: Array.isArray(payload?.people) ? payload.people : [],
+        assignments: Array.isArray(payload?.assignments) ? payload.assignments : [],
+      });
+    } catch {
+      // The protected team-contact RPC remains the fallback for non-admin roles
+      // and for brief schema-cache refresh windows during deployment.
+      setCoachHubWorkspace({ people: [], assignments: [] });
+    }
+  }, [canManageContacts, clubId]);
+
+  useEffect(() => {
+    refreshCoachHubWorkspace();
+    if (typeof window === "undefined") return undefined;
+    const refresh = () => refreshCoachHubWorkspace();
+    window.addEventListener("ground-control-coach-hub-contacts-changed", refresh);
+    return () => window.removeEventListener("ground-control-coach-hub-contacts-changed", refresh);
+  }, [refreshCoachHubWorkspace]);
+
   useEffect(() => {
     if (!teamCfg.length) {
       setSelectedIndex(0);
@@ -187,16 +241,23 @@ export default function TeamSettingsPanel({
   const filteredTeams = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return teamCfg
-      .map((team, index) => ({ team, index, contact: contacts[index] }))
-      .filter(({ team, contact }) => {
+      .map((team, index) => {
+        const contact = contacts[index];
+        return {
+          team,
+          index,
+          contact,
+          visibleContact: resolvedVisibleTeamContact(team, index, contact, coachHubWorkspace),
+        };
+      })
+      .filter(({ team, visibleContact }) => {
         if (!needle) return true;
         const resolvedSiteId = resolveSiteId(team.siteId || team.homeSiteId, sites, primarySite?.id);
         const siteName = sites.find((site) => site.id === resolvedSiteId)?.name || "";
-        const visibleContact = visibleTeamContact(contact);
         return [team.name, team.day, team.format, teamTypeLabel(team), siteName, visibleContact?.coachName, visibleContact?.coachEmail]
           .some((value) => String(value || "").toLowerCase().includes(needle));
       });
-  }, [contacts, primarySite?.id, query, sites, teamCfg]);
+  }, [coachHubWorkspace, contacts, primarySite?.id, query, sites, teamCfg]);
 
   const setAlignedContacts = (updater) => {
     setTeamContacts?.((current) => updater(alignTeamContactsForEditing(teamCfg, current)));
@@ -304,11 +365,20 @@ export default function TeamSettingsPanel({
   const selectedStoredContact = selectedTeam
     ? contacts[selectedIndex] || normaliseEditableTeamContact({}, selectedTeam, selectedIndex)
     : null;
-  const selectedContact = selectedStoredContact ? visibleTeamContact(selectedStoredContact) : null;
+  const selectedContact = selectedStoredContact
+    ? resolvedVisibleTeamContact(selectedTeam, selectedIndex, selectedStoredContact, coachHubWorkspace)
+    : null;
   const selectedHomeSiteId = resolveSiteId(selectedTeam?.siteId || selectedTeam?.homeSiteId, sites, primarySite?.id);
   const selectedSitePitches = sortedPitches.filter((pitch) => resolveSiteId(pitch.siteId, sites, primarySite?.id) === selectedHomeSiteId);
   const selectedPitchOptions = selectedSitePitches.length ? selectedSitePitches : sortedPitches;
-  const selectedContactReady = hasContactData(selectedStoredContact);
+  const selectedContactReady = Boolean(
+    selectedContact?.coachName
+    || selectedContact?.coachPhone
+    || selectedContact?.coachEmail
+    || selectedContact?.assistantName
+    || selectedContact?.assistantPhone
+    || selectedContact?.assistantEmail,
+  );
   const selectedDirectContactReady = hasDirectContactData(selectedStoredContact);
   const coachHubManagedPrimary = Boolean(selectedContact?.coachHubManagedPrimary);
 
@@ -339,7 +409,13 @@ export default function TeamSettingsPanel({
         <CompactMetric label="Youth" value={counts.youth || 0} tone="blue" />
         <CompactMetric label="Adult" value={counts.adult || 0} tone="violet" />
         <CompactMetric label="Girls / women" value={(counts.girls || 0) + (counts.women || 0)} tone="rose" />
-        <CompactMetric label="Contacts" value={contacts.filter(hasContactData).length} />
+        <CompactMetric
+          label="Contacts"
+          value={teamCfg.filter((team, index) => {
+            const visible = resolvedVisibleTeamContact(team, index, contacts[index], coachHubWorkspace);
+            return Boolean(visible?.coachName || visible?.coachPhone || visible?.coachEmail || hasContactData(contacts[index]));
+          }).length}
+        />
       </div>
 
       {assignments.repairedTeams > 0 ? (
@@ -389,9 +465,9 @@ export default function TeamSettingsPanel({
           </div>
           <div className="mt-2.5 flex items-center justify-between px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400"><span>{filteredTeams.length} shown</span><span>{teamCfg.length} total</span></div>
           <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
-            {filteredTeams.map(({ team, index, contact }) => {
+            {filteredTeams.map(({ team, index, contact, visibleContact }) => {
               const active = index === selectedIndex;
-              const contactReady = hasContactData(contact);
+              const contactReady = Boolean(visibleContact?.coachName || visibleContact?.coachPhone || visibleContact?.coachEmail || hasContactData(contact));
               return (
                 <button key={contact?.teamKey || `team-${index}`} type="button" onClick={() => setSelectedIndex(index)} className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${active ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-transparent bg-white text-slate-800 hover:border-slate-200"}`}>
                   <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-white/10 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>{contactReady ? <CheckCircle2 size={16} /> : <UsersRound size={16} />}</span>
