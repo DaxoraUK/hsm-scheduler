@@ -100,6 +100,8 @@ export function buildCoachCalendarEvents(workspace = {}) {
     ...row,
     kind: "booking",
     calendarStatus: row.status,
+    pitchAreaId: text(row.pitchAreaId || row.pitch_area_id),
+    pitchAreaName: text(row.pitchAreaName || row.pitch_area_name),
   }));
   const requests = (Array.isArray(workspace.requests) ? workspace.requests : [])
     .filter((row) => ["submitted", "needs_information", "alternative_offered", "accepted"].includes(row.status))
@@ -112,6 +114,8 @@ export function buildCoachCalendarEvents(workspace = {}) {
       teamName: row.teamName,
       pitchId: row.preferredPitchId,
       pitchName: row.preferredPitchName,
+      pitchAreaId: row.preferredPitchAreaId,
+      pitchAreaName: row.preferredPitchAreaName,
       venueId: row.preferredVenueId,
       venueName: row.preferredVenueName,
       startAt: row.preferredStartAt,

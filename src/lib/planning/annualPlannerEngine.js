@@ -97,6 +97,8 @@ export function normaliseAnnualBooking(row = {}) {
     venueName: clean(row.venue_name || row.venueName),
     pitchId: clean(row.pitch_id || row.pitchId),
     pitchName: clean(row.pitch_name || row.pitchName),
+    pitchAreaId: clean(row.pitch_area_id || row.pitchAreaId),
+    pitchAreaName: clean(row.pitch_area_name || row.pitchAreaName),
     startAt: startAt ? new Date(startAt).toISOString() : localDateTime(startDate, startTime)?.toISOString() || null,
     endAt: endAt ? new Date(endAt).toISOString() : localDateTime(startDate, endTime)?.toISOString() || null,
     startDate,
@@ -162,6 +164,8 @@ export function annualBookingToPayload(booking = {}) {
     venue_name: normalised.venueName || null,
     pitch_id: normalised.pitchId || null,
     pitch_name: normalised.pitchName || null,
+    pitch_area_id: normalised.pitchAreaId || null,
+    pitch_area_name: normalised.pitchAreaName || null,
     start_at: normalised.startAt,
     end_at: normalised.endAt,
     series_id: normalised.seriesId || null,
@@ -277,17 +281,23 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
     const trainingCapacity = Math.max(1, Math.min(20, finite(pitch?.trainingCapacity ?? pitch?.training_capacity ?? 1, 1)));
     const trainingOnly = normalised.bookingType === "training" && samePitch.every((booking) => booking.bookingType === "training");
     const capacityManaged = trainingOnly && !!pitch;
+    const sameNamedArea = normalised.pitchAreaId
+      ? samePitch.find((booking) => booking.pitchAreaId && booking.pitchAreaId === normalised.pitchAreaId)
+      : null;
     const full = trainingOnly ? samePitch.length >= trainingCapacity : samePitch.length > 0;
-    if (full) {
-      const booking = samePitch[0];
+    if (sameNamedArea || full) {
+      const booking = sameNamedArea || samePitch[0];
+      const areaLabel = normalised.pitchAreaName || normalised.pitchAreaId;
       conflicts.push({
-        type: capacityManaged ? "pitch_training_capacity" : "pitch_double_booking",
+        type: sameNamedArea ? "pitch_area_overlap" : capacityManaged ? "pitch_training_capacity" : "pitch_double_booking",
         severity: "danger",
         booking,
-        title: capacityManaged ? "Pitch training capacity reached" : "Pitch already booked",
-        message: capacityManaged
-          ? `${normalised.pitchName || normalised.pitchId} already has ${samePitch.length} of ${trainingCapacity} training team${trainingCapacity === 1 ? "" : "s"} in this slot.`
-          : `${booking?.title || "Another booking"} already uses ${booking?.pitchName || booking?.pitchId || normalised.pitchId} at this time.`,
+        title: sameNamedArea ? "Pitch area already booked" : capacityManaged ? "Pitch training capacity reached" : "Pitch already booked",
+        message: sameNamedArea
+          ? `${areaLabel || "This pitch area"} is already allocated to ${booking?.teamName || booking?.title || "another team"} during this slot.`
+          : capacityManaged
+            ? `${normalised.pitchName || normalised.pitchId} already has ${samePitch.length} of ${trainingCapacity} training team${trainingCapacity === 1 ? "" : "s"} in this slot.`
+            : `${booking?.title || "Another booking"} already uses ${booking?.pitchName || booking?.pitchId || normalised.pitchId} at this time.`,
       });
     }
   }
@@ -416,7 +426,8 @@ export function buildMonthCalendar(year, month, bookings = []) {
 export function findAnnualPlannerSuggestions(candidate = {}, context = {}, { limit = 4 } = {}) {
   const normalised = normaliseAnnualBooking(candidate);
   const duration = bookingDurationMinutes(normalised);
-  const pitchIds = (context.pitches || []).map((pitch) => clean(pitch.id)).filter(Boolean);
+  const pitches = Array.isArray(context.pitches) ? context.pitches : [];
+  const pitchIds = pitches.map((pitch) => clean(pitch.id)).filter(Boolean);
   const startingMinutes = timeToMinutes(normalised.startTime);
   const suggestions = [];
   const dateOffsets = [0, 1, -1, 7, -7, 14];
@@ -426,17 +437,37 @@ export function findAnnualPlannerSuggestions(candidate = {}, context = {}, { lim
     const dateKey = addDays(normalised.startDate, dateOffset);
     if (!dateKey) continue;
     for (const pitchId of [normalised.pitchId, ...pitchIds].filter((value, index, all) => value && all.indexOf(value) === index)) {
-      for (const timeOffset of timeOffsets) {
-        const startMinutes = Math.max(6 * 60, Math.min(22 * 60, startingMinutes + timeOffset));
-        const startTime = `${pad(Math.floor(startMinutes / 60))}:${pad(startMinutes % 60)}`;
-        const endMinutes = startMinutes + duration;
-        const endTime = `${pad(Math.floor(endMinutes / 60) % 24)}:${pad(endMinutes % 60)}`;
-        const draft = normaliseAnnualBooking({ ...normalised, startDate: dateKey, startTime, endTime, startAt: null, endAt: null, pitchId });
-        const conflicts = detectAnnualPlannerConflicts(draft, context);
-        if (!conflicts.length) {
-          const pitch = (context.pitches || []).find((row) => clean(row.id) === pitchId);
-          suggestions.push({ ...draft, pitchName: pitch?.label || pitch?.name || draft.pitchName || pitchId });
-          if (suggestions.length >= limit) return suggestions;
+      const pitch = pitches.find((row) => clean(row.id) === pitchId);
+      const rawAreas = Array.isArray(pitch?.trainingAreas || pitch?.training_areas) ? (pitch.trainingAreas || pitch.training_areas) : [];
+      const areaOptions = normalised.bookingType === "training" && rawAreas.length
+        ? [
+          ...(pitchId === normalised.pitchId && normalised.pitchAreaId ? [{ id: normalised.pitchAreaId, label: normalised.pitchAreaName }] : []),
+          ...rawAreas.map((area, index) => ({ id: clean(area?.id || `area-${index + 1}`), label: clean(area?.label || area?.name || `Area ${index + 1}`) })),
+        ].filter((area, index, all) => area.id && all.findIndex((candidateArea) => candidateArea.id === area.id) === index)
+        : [{ id: "", label: "" }];
+      for (const area of areaOptions) {
+        for (const timeOffset of timeOffsets) {
+          const startMinutes = Math.max(6 * 60, Math.min(22 * 60, startingMinutes + timeOffset));
+          const startTime = `${pad(Math.floor(startMinutes / 60))}:${pad(startMinutes % 60)}`;
+          const endMinutes = startMinutes + duration;
+          const endTime = `${pad(Math.floor(endMinutes / 60) % 24)}:${pad(endMinutes % 60)}`;
+          const draft = normaliseAnnualBooking({
+            ...normalised,
+            startDate: dateKey,
+            startTime,
+            endTime,
+            startAt: null,
+            endAt: null,
+            pitchId,
+            pitchName: pitch?.label || pitch?.name || normalised.pitchName || pitchId,
+            pitchAreaId: area.id,
+            pitchAreaName: area.label,
+          });
+          const conflicts = detectAnnualPlannerConflicts(draft, context);
+          if (!conflicts.length) {
+            suggestions.push(draft);
+            if (suggestions.length >= limit) return suggestions;
+          }
         }
       }
     }
@@ -445,7 +476,7 @@ export function findAnnualPlannerSuggestions(candidate = {}, context = {}, { lim
 }
 
 export function buildAnnualPlannerCsv(bookings = [], { includeCosts = true } = {}) {
-  const headings = ["Date", "Start", "End", "Type", "Status", "Team", "Opponent", "Venue", "Pitch", "Title"];
+  const headings = ["Date", "Start", "End", "Type", "Status", "Team", "Opponent", "Venue", "Pitch", "Pitch area", "Title"];
   if (includeCosts) headings.push("Cost");
   headings.push("Reference", "Contact", "Contact email", "Notes");
   const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -461,6 +492,7 @@ export function buildAnnualPlannerCsv(bookings = [], { includeCosts = true } = {
       booking.opponentName,
       booking.venueName,
       booking.pitchName,
+      booking.pitchAreaName,
       booking.title,
     ];
     if (includeCosts) row.push((booking.costPence / 100).toFixed(2));

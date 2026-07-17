@@ -105,6 +105,8 @@ export function normaliseCoachBooking(row = {}) {
     venueName: text(row.venue_name || row.venueName),
     pitchId: text(row.pitch_id || row.pitchId),
     pitchName: text(row.pitch_name || row.pitchName),
+    pitchAreaId: text(row.pitch_area_id || row.pitchAreaId),
+    pitchAreaName: text(row.pitch_area_name || row.pitchAreaName),
     startAt,
     endAt,
     startDate: dateKey(startAt),
