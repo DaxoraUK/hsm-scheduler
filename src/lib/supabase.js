@@ -786,6 +786,31 @@ export const DB = {
       : { bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [] };
   },
 
+  async saveAnnualPlannerTeamPreference(clubId, preference) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_team_preference", {
+      target_club_id: id,
+      preference_data: preference && typeof preference === "object" ? preference : {},
+    });
+  },
+
+  async saveAnnualPlannerAllocationRun(clubId, run, items = []) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_allocation_run", {
+      target_club_id: id,
+      run_data: run && typeof run === "object" ? run : {},
+      item_rows: Array.isArray(items) ? items : [],
+    });
+  },
+
+  async publishAnnualPlannerAllocationRun(clubId, runId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/publish_annual_planner_allocation_run", {
+      target_club_id: id,
+      target_run_id: String(runId || "").trim(),
+    });
+  },
+
 
   async syncCoachHubContacts(clubId) {
     const id = requireClubId(clubId);

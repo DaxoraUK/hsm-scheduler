@@ -38,6 +38,7 @@ import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorB
 import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDialog.jsx";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
 import WinterSiteWorkspace from "../components/planning/WinterSiteWorkspace.jsx";
+import SmartTrainingAllocationWorkspace from "../components/planning/SmartTrainingAllocationWorkspace.jsx";
 import WeatherDisruptionDialog from "../components/planning/WeatherDisruptionDialog.jsx";
 import AnnualPlannerAnalyticsSummary from "../components/analytics/AnnualPlannerAnalyticsSummary.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
@@ -64,6 +65,7 @@ import {
 } from "../lib/planning/annualPlannerEngine.js";
 import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
 import { buildAnnualPlannerAnalyticsModel } from "../lib/analytics/annualPlannerAnalyticsEngine.js";
+import { allocationItemToPayload, allocationRunToPayload, trainingPreferenceToPayload } from "../lib/planning/smartTrainingAllocationEngine.js";
 import { calendarEventTone, COACH_CALENDAR_LEGEND, eventOccursOnDate, normaliseCoachPitchClosure } from "../lib/coach/sharedCalendarEngine.js";
 import {
   buildPilotRefinementSnapshot,
@@ -192,7 +194,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -255,6 +257,9 @@ export default function AnnualPlannerPage({
         closureImpacts: Array.isArray(closureImpactPayload) ? closureImpactPayload : [],
         winterSites: Array.isArray(result?.winter_sites || result?.winterSites) ? (result.winter_sites || result.winterSites) : [],
         winterSlots: Array.isArray(result?.winter_slots || result?.winterSlots) ? (result.winter_slots || result.winterSlots) : [],
+        allocationPreferences: Array.isArray(result?.allocation_preferences || result?.allocationPreferences) ? (result.allocation_preferences || result.allocationPreferences) : [],
+        allocationRuns: Array.isArray(result?.allocation_runs || result?.allocationRuns) ? (result.allocation_runs || result.allocationRuns) : [],
+        allocationItems: Array.isArray(result?.allocation_items || result?.allocationItems) ? (result.allocation_items || result.allocationItems) : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -727,6 +732,61 @@ export default function AnnualPlannerPage({
     });
   }
 
+  async function saveSmartPreference(preference) {
+    setSaving(true);
+    try {
+      const payload = trainingPreferenceToPayload(preference);
+      if (isSupaConfigured() && clubId) {
+        await DB.saveAnnualPlannerTeamPreference(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const rows = Array.isArray(current.allocationPreferences) ? current.allocationPreferences : [];
+        const index = rows.findIndex((row) => String(row.team_key || row.teamKey) === payload.team_key && String(row.season_phase || row.seasonPhase) === payload.season_phase);
+        const next = index >= 0 ? rows.map((row, rowIndex) => rowIndex === index ? payload : row) : [...rows, payload];
+        writeLocalWorkspace(clubId, { ...current, allocationPreferences: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Team scheduling profile saved");
+    } catch (preferenceError) {
+      toast.error("Scheduling profile could not be saved", { description: preferenceError?.message });
+      throw preferenceError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSmartDraft(draft, { publish = false } = {}) {
+    setSaving(true);
+    try {
+      if (isSupaConfigured() && clubId) {
+        const saved = await DB.saveAnnualPlannerAllocationRun(
+          clubId,
+          allocationRunToPayload(draft),
+          draft.items.map(allocationItemToPayload),
+        );
+        const runId = saved?.run?.id || saved?.run_id || saved?.id;
+        if (publish) {
+          if (!runId) throw new Error("The smart allocation draft did not return a run ID.");
+          await DB.publishAnnualPlannerAllocationRun(clubId, runId);
+        }
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const run = { ...allocationRunToPayload(draft), id: draft.id || crypto.randomUUID(), createdAt: new Date().toISOString(), status: publish ? "published" : "draft" };
+        writeLocalWorkspace(clubId, { ...current, allocationRuns: [run, ...(current.allocationRuns || [])], allocationItems: draft.items });
+      }
+      await loadWorkspace({ quiet: true });
+      announceUpdate();
+      toast.success(publish ? "Smart training allocation published" : "Smart allocation draft saved", {
+        description: publish ? "Recurring bookings were created after a final database capacity check." : "The explainable draft is available for continued review.",
+      });
+    } catch (draftError) {
+      toast.error(publish ? "Smart allocation could not be published" : "Smart allocation draft could not be saved", { description: draftError?.message });
+      throw draftError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function recordWeatherDisruption(action, data) {
     if (!weatherBooking) return;
     setSaving(true);
@@ -785,13 +845,14 @@ export default function AnnualPlannerPage({
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
         <div className="mb-2 flex min-h-4 items-center justify-end px-2 text-[10px] font-black uppercase tracking-wide text-slate-400">{lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
           {[
             ["calendar", "Calendar", CalendarDays, "Full year and monthly planning"],
             ["bookings", "Bookings", ListChecks, "Search and manage every booking"],
             ["requests", "Requests", ShieldCheck, "Approvals and provisional demand"],
             ["availability", "Availability", Ban, "Closures, blackouts and controls"],
             ["winter", "Winter sites", Snowflake, "Fixed external and seasonal slots"],
+            ["smart", "Smart allocation", Sparkles, "Manual, assisted and automatic drafts"],
             ["insights", "Insights", Activity, "Utilisation, weather and grant evidence"],
           ].map(([key, label, Icon, detail]) => (
             <button key={key} type="button" onClick={() => setTab(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${tab === key ? "bg-slate-950 text-white shadow-md" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}>
@@ -854,6 +915,24 @@ export default function AnnualPlannerPage({
           onSaveSlot={saveWinterSlot}
           onDeleteSlot={deleteWinterSlot}
           onBookSlot={openWinterSlotBooking}
+        />
+      ) : null}
+
+      {tab === "smart" ? (
+        <SmartTrainingAllocationWorkspace
+          teams={teamCfg}
+          pitches={pitchCfg}
+          winterSites={workspace.winterSites}
+          winterSlots={workspace.winterSlots}
+          bookings={workspace.bookings}
+          assignments={pilotWorkspace.assignments}
+          preferences={workspace.allocationPreferences}
+          allocationRuns={workspace.allocationRuns}
+          canManage={canManage}
+          saving={saving}
+          onSavePreference={saveSmartPreference}
+          onSaveDraft={(draft) => saveSmartDraft(draft)}
+          onPublishDraft={(draft) => saveSmartDraft(draft, { publish: true })}
         />
       ) : null}
 

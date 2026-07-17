@@ -63,6 +63,8 @@ export function normaliseAnnualPlannerAnalyticsPayload(payload = {}) {
     winterSites: (Array.isArray(payload.winter_sites || payload.winterSites) ? (payload.winter_sites || payload.winterSites) : []).map(normaliseSite),
     winterSlots: (Array.isArray(payload.winter_slots || payload.winterSlots) ? (payload.winter_slots || payload.winterSlots) : []).map(normaliseSlot),
     requests: Array.isArray(payload.requests) ? payload.requests : [],
+    allocationRuns: Array.isArray(payload.allocation_runs || payload.allocationRuns) ? (payload.allocation_runs || payload.allocationRuns) : [],
+    allocationItems: Array.isArray(payload.allocation_items || payload.allocationItems) ? (payload.allocation_items || payload.allocationItems) : [],
   };
 }
 
@@ -128,11 +130,19 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   const resolvedRequests = requestRows.filter((row) => ["approved", "rejected", "cancelled", "accepted"].includes(text(row.status)));
   const pendingRequests = requestRows.filter((row) => ["submitted", "needs_information", "alternative_offered"].includes(text(row.status)));
   const weatherBlackouts = data.blackouts.filter((row) => row.closureType === "weather" && row.startDate.startsWith(yearText));
+  const allocationRuns = data.allocationRuns.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
+  const allocationItems = data.allocationItems.filter((row) => allocationRuns.some((run) => String(run.id) === String(row.run_id || row.runId)));
+  const publishedAllocationRuns = allocationRuns.filter((row) => text(row.status) === "published");
+  const automaticAllocationRuns = allocationRuns.filter((row) => text(row.mode) === "automatic");
+  const unassignedAllocationItems = allocationItems.filter((row) => text(row.status) === "unassigned");
+  const scoredAllocationItems = allocationItems.filter((row) => number(row.score) > 0);
+  const averageAllocationScore = scoredAllocationItems.length ? round(scoredAllocationItems.reduce((sum, row) => sum + number(row.score), 0) / scoredAllocationItems.length, 0) : 0;
 
   const grantNarratives = [];
   if (weatherLostHours > 0) grantNarratives.push(`${round(weatherLostHours)} scheduled training and friendly hours were lost or postponed because of weather.`);
   if (winterHours > 0) grantNarratives.push(`${round(winterHours)} team-hours were scheduled at winter or external facilities.`);
   if (externalWinterCostPence > 0) grantNarratives.push(`External winter provision currently represents GBP ${(externalWinterCostPence / 100).toFixed(2)} of recorded facility cost.`);
+  if (publishedAllocationRuns.length > 0) grantNarratives.push(`${publishedAllocationRuns.length} reviewed smart allocation run${publishedAllocationRuns.length === 1 ? "" : "s"} supported consistent seasonal training access.`);
   if (!grantNarratives.length) grantNarratives.push("Record completed sessions, weather disruptions and winter allocations to build grant-ready facility evidence.");
 
   return Object.freeze({
@@ -159,6 +169,12 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
       resolvedRequests: resolvedRequests.length,
       requestResolutionPct: requestRows.length ? Math.round((resolvedRequests.length / requestRows.length) * 100) : 100,
       weatherClosures: weatherBlackouts.length,
+      allocationRuns: allocationRuns.length,
+      publishedAllocationRuns: publishedAllocationRuns.length,
+      automaticAllocationRuns: automaticAllocationRuns.length,
+      smartAllocatedTeams: allocationItems.filter((row) => text(row.status) === "published").length,
+      unassignedAllocationTeams: unassignedAllocationItems.length,
+      averageAllocationScore,
     }),
     pitchRows: [...pitchMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours), weatherLostHours: round(row.weatherLostHours) })).sort((a, b) => b.hours - a.hours),
     teamRows: [...teamMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours) })).sort((a, b) => b.hours - a.hours),

@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.6
+**Current implementation release:** Ground Control v3.10.7
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current implementation through v3.10.6
+## 3. Current implementation through v3.10.7
 
 ### Shared calendar
 
@@ -112,13 +112,26 @@ This roadmap defines the integration contract with those areas without replacing
 - Annual Planner Insights and the main Analytics page use the same shared planner analytics model.
 - Weather-lost hours, winter hours and external facility costs are available as grant-evidence measures.
 
-### Remaining limitations after v3.10.6
+### v3.10.7 implementation delivered
+
+- A dedicated Smart allocation workspace supports Manual, Assisted and Automatic Draft season runs.
+- Per-team scheduling profiles can inherit the season-run mode or override it.
+- Team preferences include preferred and unavailable days, start times, pitch/site choices, duration, minimum area, priority, current-allocation protection and manual-only control.
+- Summer/pre-season, regular-season and winter inventories are allocated separately.
+- The engine scores usual slots, historic allocations, age-group timing, pitch format, named-area efficiency, winter costs and team priority.
+- All active Coach Hub people assigned to a team are considered, preventing clashes where any coach is shared across teams.
+- Drafts include confidence, reasons, warnings, alternative slots, locks and unassigned teams.
+- Automatic allocation remains an unpublished draft until an authorised operator publishes it.
+- Publication creates recurring confirmed bookings only after final database conflict validation.
+- Manual-only or unassigned teams block publication rather than being silently omitted.
+- Smart-run activity and allocation scores feed the shared Annual Planner and main Analytics model.
+
+### Remaining limitations after v3.10.7
 
 - The approval dialog supports allocation changes, but the full side-by-side calendar comparison and coach acceptance of an offered alternative still need refinement.
 - Weather reinstatement, completion-after-rearrangement and delivery-status reporting for notifications remain later lifecycle work.
 - Winter-site provider contacts, accessibility, travel and cancellation automation require a deeper inventory phase.
-- Smart Manual, Assisted and Automatic Draft team allocation is not yet implemented.
-- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling.
+- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling beyond the initial smart-run measures.
 - Closure-impact resolution, coach notifications and bulk relocation need further hardening.
 
 ---
@@ -263,60 +276,77 @@ The same query/view or service layer must supply both interfaces so headline tot
 
 ---
 
-## 6. Next implementation phase - v3.10.7 smart summer and winter allocation
+## 6. Implementation phase delivered in v3.10.7 - smart summer and winter allocation
 
-### Scheduling modes
+### Scheduling modes - delivered
 
-Clubs can select at club, season and team level:
+Each allocation run selects:
 
-- **Manual:** club assigns every slot; Ground Control validates and recommends.
-- **Assisted:** Ground Control ranks suitable slots; the operator accepts or edits suggestions.
-- **Automatic draft:** Ground Control prepares a full unpublished allocation for review.
+- **Manual:** recommendations and validation only; publication is blocked.
+- **Assisted:** ranked suggestions for operator review and publication.
+- **Automatic draft:** a complete proposed allocation, never published automatically.
 
-Assisted should be the recommended default. Automatic allocation must never publish without operator review.
+Team profiles can follow the selected run mode or use a specific override. Manual-only teams always remain recommendations and must be resolved separately before publication.
 
-### Allocation inputs
+### Allocation inputs - initial delivery
 
-The scoring model should consider:
+The scoring model now considers:
 
-- previous and preferred slots;
-- acceptable alternatives and unavailable days;
+- previous and preferred day, time and resource;
+- unavailable days and acceptable start times;
 - age group and appropriate start time;
-- team format, squad size and required area;
-- session duration and weekly frequency;
-- site, surface, floodlights and seasonal suitability;
-- fixed winter-provider slots;
-- coach availability and coaches shared across teams;
-- linked teams or shared-player constraints where configured;
-- travel, access and accessibility;
-- curfews and changeover buffers;
-- cost and contracted slot commitments;
-- performance-pathway or club priority;
-- fairness in prime-slot allocation;
-- locked and already-approved allocations.
+- team format and minimum pitch area;
+- session duration;
+- regular, pre-season and winter inventory separation;
+- fixed winter-provider slots and costs;
+- all active coaches shared across teams;
+- pitch/site preferences;
+- priority weighting;
+- current-allocation protection;
+- existing confirmed, provisional and requested training allocations.
 
-### Allocation outputs
+Travel, accessibility, linked-player constraints, curfews, changeover buffers and provider-contract commitments remain later scoring inputs.
 
-The engine produces:
+### Allocation outputs - delivered
 
-- proposed allocation for every team;
+Each draft includes:
+
+- a proposed or suggested allocation for every eligible team;
+- manual-only recommendations;
 - unassigned teams;
-- hard conflicts;
-- soft compromises;
-- confidence score;
-- explanation for each recommendation;
-- comparison with previous allocation;
-- total cost and capacity summary.
+- hard-conflict warnings;
+- confidence and numeric score;
+- concise reasons for each recommendation;
+- up to three alternative slots;
+- operator locks;
+- summary totals and publication readiness.
 
-Example explanation:
+### Publication controls - delivered
 
-> Assigned Monday 18:00 on Pitch 4 Half A because it matches the team’s established slot, is suitable for the age group, avoids the coach’s Wednesday conflict and preserves later slots for adult teams.
+- Only club operators/admins with Annual Planner authority can save or publish runs.
+- Manual runs cannot publish.
+- Runs containing unassigned or manual-only recommendation items cannot publish.
+- Every publishable item requires a valid day, time and resource.
+- Final booking creation rechecks database capacity for every weekly occurrence.
+- Any conflict rolls back the publication transaction.
+- Published allocations create linked recurring booking series and an audit event.
+- Nothing moves or publishes silently.
 
-Manual overrides remain possible and are retained as future preferences where the operator chooses.
+### Shared analytics - initial delivery
 
+Both Annual Planner Insights and main Analytics now receive:
+
+- smart allocation run count;
+- published run count;
+- automatic draft count;
+- teams allocated through smart runs;
+- unresolved/unassigned allocation items;
+- average allocation score.
+
+Preferred-slot success, fairness, override rate, cost optimisation and unmet-demand analysis remain next analytical increments.
 ---
 
-## 7. Subsequent phase — closure impact, notifications and calendar refinement
+## 7. Next implementation phase - v3.10.8 closure impact, notifications and calendar refinement
 
 ### Closure-impact workflow
 
@@ -605,7 +635,7 @@ Commercial claims must remain grounded in validated operational data and should 
 ### Confirmed
 
 - Roadmaps are maintained one module at a time.
-- Manual, Assisted and Automatic Draft allocation modes are required.
+- Manual, Assisted and Automatic Draft allocation modes are implemented, with team-level inheritance/override and operator-only publication.
 - Full Pitch must coexist with named areas as an explicit resource option.
 - Weather disruption and winter training are first-class workflows.
 - Planner data feeds both Annual Planner Insights and main Analytics through one data layer.
@@ -614,7 +644,7 @@ Commercial claims must remain grounded in validated operational data and should 
 ### To confirm during implementation/design
 
 - Whether Pro includes the module or receives discounted add-on pricing.
-- Default weighting and fairness policy for automatic allocation.
+- Default weighting, fairness policy and advanced constraint priorities for automatic allocation.
 - Exact retention period for detailed request conversations and audit events.
 - Whether provider costs are visible to operators or admin/owner only.
 - Scope of SMS/WhatsApp notifications by package.
