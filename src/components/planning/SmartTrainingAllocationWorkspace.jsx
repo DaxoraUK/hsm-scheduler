@@ -14,7 +14,8 @@ import {
   WandSparkles,
 } from "lucide-react";
 import TrainingSchedulingPolicyPanel from "./TrainingSchedulingPolicyPanel.jsx";
-import { resolveTrainingSchedulingPolicy } from "../../lib/planning/trainingPolicyEngine.js";
+import HalfHourTimeSelector from "./HalfHourTimeSelector.jsx";
+import { normaliseTrainingSchedulingPolicy, resolveTrainingSchedulingPolicy } from "../../lib/planning/trainingPolicyEngine.js";
 import {
   SMART_ALLOCATION_MODES,
   TEAM_ALLOCATION_MODE_OPTIONS,
@@ -56,6 +57,15 @@ function normalisePreferences(teams, rows, seasonPhase, policies = []) {
   return teams.map((team, index) => normaliseTrainingPreference(map.get(teamKey(team, index)) || {}, team, index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team, seasonPhase })));
 }
 
+function seasonClubPolicy(policies, seasonPhase) {
+  const row = (Array.isArray(policies) ? policies : []).find((policy) =>
+    String(policy.season_phase || policy.seasonPhase || "regular") === seasonPhase
+    && String(policy.scope_type || policy.scopeType || "club") === "club"
+    && String(policy.scope_key || policy.scopeKey || "all").toLowerCase() === "all",
+  );
+  return normaliseTrainingSchedulingPolicy(row || { seasonPhase, scopeType: "club", scopeKey: "all" }, seasonPhase);
+}
+
 function PreferenceEditor({ preference, pitches, winterSites, saving, onChange, onSave }) {
   const set = (field, value) => onChange({ ...preference, [field]: value });
   const toggleDay = (field, day) => {
@@ -76,7 +86,7 @@ function PreferenceEditor({ preference, pitches, winterSites, saving, onChange, 
       <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Session duration</span><select className="input" value={preference.requiredDurationMinutes} onChange={(event) => set("requiredDurationMinutes", Number(event.target.value))}>{[45,60,75,90,105,120].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></label>
       <div className="lg:col-span-2"><div className="text-xs font-black text-slate-700">Preferred days</div><div className="mt-2 flex flex-wrap gap-2">{DAYS.map(([day, label]) => <button key={day} type="button" disabled={!preference.allowedDays?.includes(day)} onClick={() => toggleDay("preferredDays", day)} className={`h-9 rounded-xl border px-3 text-xs font-black ${preference.preferredDays.includes(day) ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}>{label}</button>)}</div></div>
       <div className="lg:col-span-2"><div className="text-xs font-black text-slate-700">Unavailable days</div><div className="mt-2 flex flex-wrap gap-2">{DAYS.map(([day, label]) => <button key={day} type="button" disabled={!preference.allowedDays?.includes(day)} onClick={() => toggleDay("unavailableDays", day)} className={`h-9 rounded-xl border px-3 text-xs font-black ${preference.unavailableDays.includes(day) ? "border-rose-300 bg-rose-50 text-rose-800" : "border-slate-200 bg-white text-slate-600"}`}>{label}</button>)}</div></div>
-      <label className="space-y-1.5 lg:col-span-2"><span className="text-xs font-black text-slate-700">Preferred start times</span><input className="input" value={preference.preferredStartTimes.join(", ")} onChange={(event) => set("preferredStartTimes", event.target.value.split(/[,;]+/).map((value) => value.trim()).filter(Boolean))} placeholder="18:00, 19:00" /></label>
+      <div className="lg:col-span-2"><HalfHourTimeSelector value={preference.preferredStartTimes} earliestStartTime={preference.earliestStartTime} latestEndTime={preference.latestEndTime} durationMinutes={preference.requiredDurationMinutes} onChange={(value) => set("preferredStartTimes", value)} compact /></div>
       {preference.seasonPhase === "winter" ? <div className="lg:col-span-2"><div className="text-xs font-black text-slate-700">Preferred winter sites</div><div className="mt-2 grid gap-2 sm:grid-cols-2">{winterSites.map((site) => <button key={site.id} type="button" onClick={() => toggleValue("preferredWinterSiteIds", String(site.id))} className={`rounded-xl border p-3 text-left text-xs font-black ${preference.preferredWinterSiteIds.includes(String(site.id)) ? "border-violet-300 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-700"}`}>{site.name}</button>)}</div></div> : <div className="lg:col-span-2"><div className="text-xs font-black text-slate-700">Preferred club pitches</div><div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{pitches.map((pitch) => <button key={pitch.id} type="button" onClick={() => toggleValue("preferredPitchIds", String(pitch.id))} className={`rounded-xl border p-3 text-left text-xs font-black ${preference.preferredPitchIds.includes(String(pitch.id)) ? "border-sky-300 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-700"}`}>{pitch.label || pitch.id}</button>)}</div></div>}
       <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Minimum space</span><select className="input" value={preference.minimumAreaMode} onChange={(event) => set("minimumAreaMode", event.target.value)}><option value="any">Any suitable allocation</option><option value="named_area">Named area / half</option><option value="full_pitch">Full pitch only</option></select></label>
       <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">Club priority</span><input type="number" min="1" max="100" className="input" value={preference.priorityWeight} onChange={(event) => set("priorityWeight", Number(event.target.value))} /></label>
@@ -94,7 +104,7 @@ function AllocationCard({ item, onToggleLock, onUseAlternative }) {
     </div>
     {item.reasons.length ? <div className="mt-3 flex flex-wrap gap-2">{item.reasons.slice(0, 5).map((reason) => <span key={reason} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800">{reason}</span>)}</div> : null}
     {item.warnings.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900"><AlertTriangle className="mr-2 inline" size={14} />{item.warnings.join(" · ")}</div> : null}
-    {item.alternatives.length ? <details className="mt-3"><summary className="cursor-pointer text-xs font-black text-sky-700">View {item.alternatives.length} alternatives</summary><div className="mt-2 space-y-2">{item.alternatives.map((alternative, index) => <button key={`${alternative.resourceLabel}-${alternative.dayOfWeek}-${alternative.startTime}`} type="button" onClick={() => onUseAlternative(item.teamKey, alternative)} className="flex w-full flex-col rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs font-bold text-slate-700 hover:border-sky-300"><span className="font-black text-slate-950">{allocationDayLabel(alternative.dayOfWeek)} {alternative.startTime}–{alternative.endTime}</span><span className="mt-1">{alternative.resourceLabel} · score {alternative.score}</span></button>)}</div></details> : null}
+    {item.alternatives.length ? <details className="mt-3"><summary className="cursor-pointer text-xs font-black text-sky-700">View {item.alternatives.length} alternatives</summary><div className="mt-2 space-y-2">{item.alternatives.map((alternative) => <button key={`${alternative.resourceLabel}-${alternative.dayOfWeek}-${alternative.startTime}`} type="button" onClick={() => onUseAlternative(item.teamKey, alternative)} className="flex w-full flex-col rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs font-bold text-slate-700 hover:border-sky-300"><span className="font-black text-slate-950">{allocationDayLabel(alternative.dayOfWeek)} {alternative.startTime}–{alternative.endTime}</span><span className="mt-1">{alternative.resourceLabel} · score {alternative.score}</span></button>)}</div></details> : null}
   </article>;
 }
 
@@ -118,19 +128,24 @@ export default function SmartTrainingAllocationWorkspace({
   onPublishDraft,
 }) {
   const [seasonPhase, setSeasonPhase] = useState("regular");
-  const [mode, setMode] = useState("assisted");
+  const initialClubPolicy = seasonClubPolicy(policies, "regular");
+  const [mode, setMode] = useState(initialClubPolicy.allocationMode);
   const [range, setRange] = useState(() => dateDefaults("regular"));
-  const [defaultStartTimes, setDefaultStartTimes] = useState(["17:00", "18:00", "19:00", "20:00"]);
+  const [defaultStartTimes, setDefaultStartTimes] = useState(initialClubPolicy.preferredStartTimes);
   const [selectedTeamKey, setSelectedTeamKey] = useState(() => teamKey(teams[0] || {}, 0));
   const [editablePreferences, setEditablePreferences] = useState(() => normalisePreferences(teams, preferences, "regular", policies));
   const [draft, setDraft] = useState(null);
 
+  const savedSeasonPolicy = useMemo(() => seasonClubPolicy(policies, seasonPhase), [policies, seasonPhase]);
+
   useEffect(() => {
     setRange(dateDefaults(seasonPhase));
+    setMode(savedSeasonPolicy.allocationMode);
+    setDefaultStartTimes(savedSeasonPolicy.preferredStartTimes);
     setEditablePreferences(normalisePreferences(teams, preferences, seasonPhase, policies));
     setSelectedTeamKey((current) => current && teams.some((team, index) => teamKey(team, index) === current) ? current : teamKey(teams[0] || {}, 0));
     setDraft(null);
-  }, [policies, preferences, seasonPhase, teams]);
+  }, [policies, preferences, savedSeasonPolicy, seasonPhase, teams]);
 
   const selectedPreference = editablePreferences.find((preference) => preference.teamKey === selectedTeamKey) || editablePreferences[0] || null;
   const latestRun = useMemo(() => (Array.isArray(allocationRuns) ? allocationRuns : []).filter((run) => String(run.season_phase || run.seasonPhase) === seasonPhase).sort((a, b) => String(b.created_at || b.createdAt || "").localeCompare(String(a.created_at || a.createdAt || "")))[0] || null, [allocationRuns, seasonPhase]);
@@ -145,7 +160,7 @@ export default function SmartTrainingAllocationWorkspace({
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-violet-300"><WandSparkles size={15} /> Smart training allocation</div><h2 className="mt-2 text-2xl font-black">Build an explainable summer or winter draft</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-300">Ground Control respects usual slots, age groups, pitch suitability, winter inventory, coach clashes and locked allocations. Nothing is published until an operator approves it.</p></div>{latestRun ? <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs font-bold text-slate-300"><div className="text-[10px] font-black uppercase tracking-wide text-violet-300">Latest saved run</div><div className="mt-1 text-sm font-black text-white">{modeLabel(latestRun.mode)} · {String(latestRun.status || "draft")}</div></div> : null}</div>
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Season</span><select value={seasonPhase} onChange={(event) => setSeasonPhase(event.target.value)} className="input">{SEASON_PHASE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Scheduling mode</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="input">{SMART_ALLOCATION_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Scheduling mode</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="input">{SMART_ALLOCATION_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><span className={`block text-[10px] font-bold ${mode === savedSeasonPolicy.allocationMode ? "text-emerald-300" : "text-amber-300"}`}>{mode === savedSeasonPolicy.allocationMode ? "Saved season default" : "Unsaved - save the Club default master rule"}</span></label>
         <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">From</span><input type="date" value={range.startDate} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} className="input" /></label>
         <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">To</span><input type="date" value={range.endDate} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} className="input" /></label>
         <button type="button" onClick={buildDraft} disabled={!teams.length || (seasonPhase === "winter" && !winterSlots.length)} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-400 px-4 text-sm font-black text-slate-950 disabled:opacity-50"><Sparkles size={17} /> Build draft</button>
@@ -160,6 +175,8 @@ export default function SmartTrainingAllocationWorkspace({
       proposals={preferenceProposals}
       pitches={pitches}
       winterSites={winterSites}
+      allocationMode={mode}
+      onAllocationModeChange={setMode}
       saving={saving}
       onSavePolicy={onSavePolicy}
       onReviewProposal={onReviewProposal}

@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.8
+**Current implementation release:** Ground Control v3.10.8.1
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current implementation through v3.10.8
+## 3. Current implementation through v3.10.8.1
 
 ### Shared calendar
 
@@ -141,7 +141,19 @@ This roadmap defines the integration contract with those areas without replacing
 - Approval-required changes enter an Annual Planner review queue; approval updates the team profile and rejection notifies the coach.
 - Policy saves, coach proposals and review decisions are club scoped and audited.
 
-### Remaining limitations after v3.10.8
+### v3.10.8.1 scheduling-rule UX and persistence delivered
+
+- The Applies to selector now supports All teams, team type, age group and a specific team.
+- Specific-team rules sit above age-group and team-type defaults in the inheritance hierarchy.
+- Preferred start times are selected from 30-minute options rather than entered as free text.
+- Available start choices respect the earliest start, latest finish and selected session duration.
+- The same half-hour selector is used for master rules, operator team profiles and Coach Hub preferences.
+- Manual, Assisted and Automatic Draft mode is saved against the club default for each season.
+- The Smart Allocation header reloads the saved season mode and clearly marks unsaved changes.
+- Master-rule saves show saved, unsaved and failure states and are verified after workspace reload.
+- Supabase validates rule scope, half-hour intervals, time-window completion and season mode.
+
+### Remaining limitations after v3.10.8.1
 
 - The approval dialog supports allocation changes, but the full side-by-side calendar comparison and coach acceptance of an offered alternative still need refinement.
 - Weather reinstatement, completion-after-rearrangement and delivery-status reporting for notifications remain later lifecycle work.
@@ -367,7 +379,7 @@ Preferred-slot success, fairness, override rate, cost optimisation and unmet-dem
 
 The scheduling hierarchy is now:
 
-`Club master rule -> season rule -> team-type/age-group rule -> team profile -> coach preference proposal`
+`Club master rule -> season rule -> team-type/age-group rule -> specific-team rule -> team profile -> coach preference proposal`
 
 Club rules remain authoritative. A coach preference can improve the scoring input but cannot bypass a blocked day, restricted time, prohibited pitch/site or club-only control.
 
@@ -392,6 +404,17 @@ Club administrators choose one policy per rule scope:
 ### Review and explanation
 
 The Annual Planner shows pending coach changes in a review queue. Approved proposals become the team preference used by smart allocation. Rejected proposals retain the decision note and generate a Coach Hub message. Recommendation explanations identify the inherited policy source and state when no permitted allocation exists.
+
+### v3.10.8.1 rule targeting, half-hour choices and persistence
+
+- Rule targeting now includes club, team type, age group and specific team scopes.
+- The Applies to selector must always contain real values derived from the current team register.
+- Preferred times use selectable 30-minute starts only.
+- Start choices are recalculated whenever the rule window or session duration changes.
+- A selected start must allow the complete session to finish before the latest permitted finish.
+- The season scheduling mode is part of the saved club default and must survive sign-out, refresh and a new browser session.
+- The UI must visibly distinguish a saved season mode from an unsaved mode change.
+- Saving a narrower age, type or team rule must not accidentally overwrite the club season mode.
 
 ---
 
@@ -705,11 +728,12 @@ Commercial claims must remain grounded in validated operational data and should 
 
 1. Maintain this roadmap after every Annual Planner release.
 2. v3.10.8: master scheduling rules, weekday defaults and coach-managed preferences under club control.
-3. Validate master rules and coach proposals with HSM across regular and winter scenarios.
-4. v3.10.9: closure-impact resolution, alternative acceptance, notifications and calendar refinement.
-5. Recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
-6. Grant evidence statements and facility scenario planning.
-7. Start the next module roadmap only after this module phase is validated.
+3. v3.10.8.1: functional rule targeting, half-hour time choices and persisted season modes.
+4. Validate master rules and coach proposals with HSM across regular and winter scenarios.
+5. v3.10.9: closure-impact resolution, alternative acceptance, notifications and calendar refinement.
+6. Recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
+7. Grant evidence statements and facility scenario planning.
+8. Start the next module roadmap only after this module phase is validated.
 
 ---
 
@@ -722,6 +746,7 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.7 | Complete | Manual, Assisted and Automatic Draft smart summer/winter allocation. |
 | v3.10.7.1 | Complete | Annual Planner workspace navigation refinement. |
 | v3.10.8 | Complete | Club master scheduling rules, weekday defaults and coach-managed preferences with approval controls. |
+| v3.10.8.1 | Complete | Functional Applies to scopes, 30-minute preferred-time selectors and persisted season scheduling modes. |
 | v3.10.9 | Next | Closure impacts, alternatives, notifications and shared-calendar refinement. |
 
 The roadmap must be updated after each implementation release and before the next module roadmap is started.
