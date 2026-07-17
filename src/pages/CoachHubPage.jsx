@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  ClipboardCopy,
   Clock3,
   LogOut,
   Mail,
@@ -16,7 +15,6 @@ import {
   Plus,
   Pencil,
   RefreshCw,
-  Send,
   Settings,
   Sparkles,
   Users,
@@ -24,6 +22,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
+import CoachRequestWizard from "../components/coach/CoachRequestWizard.jsx";
+import CoachSharedCalendar from "../components/coach/CoachSharedCalendar.jsx";
 import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorBoundary.jsx";
 import { DB } from "../lib/supabase.js";
 import {
@@ -34,7 +34,6 @@ import {
   buildRequestPayload,
   normaliseCoachHubWorkspace,
   requestStatusLabel,
-  requestTypeOptions,
 } from "../lib/coach/coachHubEngine.js";
 
 const TABS = [
@@ -131,12 +130,17 @@ export default function CoachHubPage({
   const unread = metrics.unreadMessages + metrics.acknowledgements;
   const clubName = workspace.club?.name || activeMembership?.club?.name || "Your club";
 
-  const openRequest = (assignment = workspace.assignments[0]) => {
+  const openRequest = (assignment = workspace.assignments[0], date = null) => {
+    if (typeof assignment === "string") {
+      date = assignment;
+      assignment = workspace.assignments[0];
+    }
     if (!assignment) {
       toast.error("No team assignment found", { description: "Ask a club administrator to connect your contact record to a team." });
       return;
     }
-    setRequestDraft(buildBlankCoachRequest(assignment));
+    const blank = buildBlankCoachRequest(assignment, date ? new Date(`${date}T12:00:00`) : new Date());
+    setRequestDraft(blank);
   };
 
   const editRequest = (request) => {
@@ -217,7 +221,7 @@ export default function CoachHubPage({
             description="The rest of Coach Hub is still safe. Retry this section without restarting the whole workspace."
           ><>
             {tab === "home" ? <HomeTab workspace={workspace} metrics={metrics} upcoming={upcoming} onRequest={openRequest} setTab={setTab} /> : null}
-            {tab === "calendar" ? <CalendarTab bookings={upcoming} assignments={workspace.assignments} onCreateFeed={async (assignment = null) => {
+            {tab === "calendar" ? <CoachSharedCalendar workspace={workspace} assignments={workspace.assignments} onRequestSlot={(date) => openRequest(date)} onCreateFeed={async (assignment = null) => {
               setBusy(true);
               try {
                 const label = assignment ? `${assignment.teamName} calendar` : `${workspace.assignments.map((row) => row.teamName).join(" & ")} calendar`;
@@ -226,7 +230,7 @@ export default function CoachHubPage({
                   : await DB.createCoachHubCalendarFeed(clubId, label);
                 const url = buildCoachHubIcsUrl(result?.token);
                 await navigator.clipboard.writeText(url);
-                toast.success("Private calendar link copied", { description: assignment ? `${assignment.teamName} only · add it to Google, Apple or Outlook.` : "All assigned teams · add it to Google, Apple or Outlook." });
+                toast.success("Private calendar link copied", { description: assignment ? `${assignment.teamName} only · add it to Google, Apple or Outlook.` : "All assigned teams, blackouts and closures · add it to Google, Apple or Outlook." });
               } catch (feedError) { toast.error("Calendar feed could not be created", { description: feedError?.message }); }
               finally { setBusy(false); }
             }} busy={busy} /> : null}
@@ -241,7 +245,7 @@ export default function CoachHubPage({
       <button type="button" onClick={() => openRequest()} className="fixed bottom-5 right-5 z-30 flex h-14 items-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-900/20 lg:hidden"><Plus size={20} /> Request</button>
 
       {mobileNav ? <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileNav(false); }}><aside className="h-full w-[86%] max-w-sm bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Coach Hub</div><div className="mt-1 text-lg font-black">{workspace.person.displayName || authSession?.user?.email}</div></div><button type="button" onClick={() => setMobileNav(false)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="mt-6"><CoachNavigation tab={tab} setTab={(next) => { setTab(next); setMobileNav(false); }} metrics={metrics} /></div><button type="button" onClick={onSignOut} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 text-sm font-black text-white"><LogOut size={17} /> Sign out</button></aside></div> : null}
-      {requestDraft ? <RequestDialog draft={requestDraft} setDraft={setRequestDraft} assignments={workspace.assignments} bookings={workspace.bookings} pitches={workspace.pitches} busy={busy} onSubmit={submitRequest} /> : null}
+      {requestDraft ? <CoachRequestWizard clubId={clubId} draft={requestDraft} setDraft={setRequestDraft} assignments={workspace.assignments} bookings={workspace.bookings} pitches={workspace.pitches} busy={busy} onSubmit={submitRequest} /> : null}
       {conversationRequest ? <DaxoraSectionErrorBoundary resetKey={conversationRequest.id} title="Conversation needs a refresh"><CoachRequestConversation clubId={clubId} request={conversationRequest} role="coach" onUpdated={() => load({ quiet: true })} onClose={() => setConversationRequest(null)} /></DaxoraSectionErrorBoundary> : null}
     </div>
   );
@@ -270,25 +274,6 @@ function BookingCard({ booking }) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black">{booking.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{booking.teamName}</div></div><Badge tone={statusTone(booking.status)}>{booking.status}</Badge></div><div className="mt-4 space-y-1.5 text-xs font-bold text-slate-600"><div className="flex items-center gap-2"><CalendarDays size={14} /> {formatDate(booking.startAt)}</div><div className="flex items-center gap-2"><Clock3 size={14} /> {time(booking.startAt)}–{time(booking.endAt)}</div><div className="flex items-center gap-2"><MapPin size={14} /> {[booking.venueName, booking.pitchName].filter(Boolean).join(" · ") || "Venue TBC"}</div></div></div>;
 }
 
-function CalendarTab({ bookings, assignments = [], onCreateFeed, busy }) {
-  const grouped = useMemo(() => bookings.reduce((map, row) => {
-    const key = new Date(row.startAt).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(row);
-    return map;
-  }, new Map()), [bookings]);
-  return <>
-    <section className="rounded-[30px] bg-gradient-to-br from-sky-700 to-slate-950 p-6 text-white shadow-xl sm:p-8">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-200">My calendar</div><h1 className="mt-2 text-3xl font-black">Every team commitment</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-sky-100/80">Fixtures, approved training, friendlies and club events stay together and update automatically.</p></div>
-        <button disabled={busy} type="button" onClick={() => onCreateFeed(null)} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-black text-slate-950"><ClipboardCopy size={17} /> Copy all-team calendar</button>
-      </div>
-      {assignments.length ? <div className="mt-5 flex gap-2 overflow-x-auto pb-1">{assignments.map((assignment) => <button key={assignment.id} disabled={busy} type="button" onClick={() => onCreateFeed(assignment)} className="shrink-0 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-white hover:bg-white/15"><ClipboardCopy size={14} className="mr-1 inline" /> {assignment.teamName}</button>)}</div> : null}
-    </section>
-    <div className="space-y-5">{[...grouped.entries()].map(([month, rows]) => <Panel key={month} className="overflow-hidden"><div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm font-black">{month}</div><div className="divide-y divide-slate-100">{rows.map((row) => <div key={row.id} className="grid gap-3 p-4 sm:grid-cols-[90px_minmax(0,1fr)_auto] sm:items-center"><div><div className="text-lg font-black">{new Date(row.startAt).getDate()}</div><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(row.startAt).toLocaleDateString("en-GB", { weekday: "short" })}</div></div><div><div className="text-sm font-black">{row.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{time(row.startAt)}–{time(row.endAt)} · {[row.venueName, row.pitchName].filter(Boolean).join(" · ") || "Venue TBC"}</div></div><Badge tone={statusTone(row.status)}>{row.bookingType}</Badge></div>)}</div></Panel>)}{!bookings.length ? <Empty icon={CalendarDays} title="No upcoming dates" body="Approved team bookings will appear here automatically." /> : null}</div>
-  </>;
-}
-
 function RequestsTab({ requests, assignments, onRequest, onEdit, onAlternative, onConversation, busy }) {
   return <>
     <section className="rounded-[30px] bg-gradient-to-br from-emerald-600 to-slate-950 p-6 text-white shadow-xl sm:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Booking requests</div><h1 className="mt-2 text-3xl font-black">Ask once. Track everything.</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-emerald-100/80">Request training, friendlies, changes and cancellations, then keep the conversation attached to the request.</p></div><button type="button" onClick={() => onRequest(assignments[0])} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-5 text-sm font-black text-slate-950"><Plus size={18} /> New request</button></div></section>
@@ -315,161 +300,6 @@ function ProfileTab({ clubId, person, authSession, subscription, onSaved, onSign
   const verify = async () => { setBusy(true); try { await DB.verifyMyCoachHubContact(clubId); await onSaved?.(); toast.success("Contact details verified", { description: "The club now knows this contact record is current." }); } catch (error) { toast.error("Contact verification failed", { description: error?.message }); } finally { setBusy(false); } };
   const verified = person.verificationStatus === "verified" || Boolean(person.lastVerifiedAt);
   return <><section className="rounded-[30px] bg-slate-950 p-6 text-white shadow-xl sm:p-8"><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">My profile</div><h1 className="mt-2 text-3xl font-black">One contact record across Daxora</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Changes update Coach Hub and the club communications contact used for your teams.</p></section><Panel className="p-5 sm:p-6"><div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${verified ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div><div className={`text-sm font-black ${verified ? "text-emerald-950" : "text-amber-950"}`}>{verified ? "Contact details verified" : "Please confirm your contact details"}</div><div className={`mt-1 text-xs font-semibold ${verified ? "text-emerald-800" : "text-amber-800"}`}>{person.lastVerifiedAt ? `Last checked ${formatDate(person.lastVerifiedAt, { day: "numeric", month: "short", year: "numeric" })}` : "Verification keeps Communications and emergency contact lists reliable."}</div></div><button disabled={busy} type="button" onClick={verify} className="h-10 rounded-xl bg-white px-4 text-xs font-black shadow-sm">{verified ? "Verify again" : "Confirm details"}</button></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} className="input" /></Field><Field label="Mobile"><input value={form.mobile} onChange={(event) => setForm((current) => ({ ...current, mobile: event.target.value }))} className="input" /></Field><Field label="Sign-in email"><input readOnly value={person.email || authSession?.user?.email || ""} className="input bg-slate-50 text-slate-500" /><div className="mt-1 text-[11px] font-semibold text-slate-400">Account email changes require a new secure invitation.</div></Field><Field label="Preferred updates"><select value={form.preferredChannel} onChange={(event) => setForm((current) => ({ ...current, preferredChannel: event.target.value }))} className="input"><option value="email">Email</option><option value="in_app">Coach Hub only</option><option value="sms">SMS when enabled</option><option value="whatsapp">WhatsApp when enabled</option></select></Field></div><div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><div className="text-xs font-semibold text-slate-500"><span className="font-black text-slate-800">{subscription?.planName || "Club plan"}</span> · Coach Hub included with Annual Planner</div><div className="flex gap-2"><button type="button" onClick={onSignOut} className="h-11 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700">Sign out</button><button disabled={busy} type="button" onClick={save} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white">{busy ? "Saving…" : "Save profile"}</button></div></div></Panel></>;
-}
-
-function RequestDialog({ draft, setDraft, assignments, bookings, pitches = [], busy, onSubmit }) {
-  const assignment = assignments.find((row) => row.id === draft.assignmentId) || assignments[0] || {};
-  const options = requestTypeOptions(assignment);
-  const isExistingBookingRequest = ["change", "cancellation"].includes(draft.requestType);
-  const eligibleBookings = (Array.isArray(bookings) ? bookings : [])
-    .filter((row) => row.teamKey === assignment.teamKey && !["cancelled", "rejected"].includes(row.status))
-    .sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
-  const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  const selectedPitch = pitches.find((row) => String(row.id) === String(draft.pitchId));
-
-  const selectPitch = (pitchId) => {
-    const pitch = pitches.find((row) => String(row.id) === String(pitchId));
-    setDraft((current) => ({
-      ...current,
-      pitchId: pitch?.id || "",
-      pitchName: pitch?.label || "",
-      venueId: pitch?.siteId || "",
-      venueName: pitch?.siteName || current.venueName || "",
-    }));
-  };
-
-  const selectBooking = (bookingId) => {
-    const booking = eligibleBookings.find((row) => row.id === bookingId);
-    if (!booking) {
-      set("targetBookingId", "");
-      return;
-    }
-    setDraft((current) => ({
-      ...current,
-      targetBookingId: booking.id,
-      title: current.requestType === "cancellation" ? `Cancel ${booking.title}` : `Change ${booking.title}`,
-      venueId: booking.venueId || "",
-      venueName: booking.venueName || "",
-      pitchId: booking.pitchId || "",
-      pitchName: booking.pitchName || "",
-      date: booking.startDate || current.date,
-      startTime: booking.startTime || current.startTime,
-      endTime: booking.endTime || current.endTime,
-      recurrence: "none",
-      recurrenceUntil: booking.startDate || current.recurrenceUntil,
-    }));
-  };
-
-  const changeRequestType = (requestType) => {
-    setDraft((current) => ({
-      ...current,
-      requestType,
-      targetBookingId: ["change", "cancellation"].includes(requestType) ? current.targetBookingId : "",
-      title: assignment.teamName ? `${assignment.teamName} ${requestType}` : `${requestType} request`,
-      recurrence: requestType === "cancellation" ? "none" : current.recurrence,
-    }));
-  };
-
-  const submit = async () => {
-    if (!draft.assignmentId || !draft.date || !draft.startTime || !draft.endTime) {
-      toast.error("Complete the team, date and time fields");
-      return;
-    }
-    if (isExistingBookingRequest && !draft.targetBookingId) {
-      toast.error("Choose the booking you want to change or cancel");
-      return;
-    }
-    if (draft.endTime <= draft.startTime) {
-      toast.error("Finish time must be after the start time");
-      return;
-    }
-    try {
-      await onSubmit(draft);
-    } catch {
-      // The submit handler presents the grounded error and keeps the dialog open.
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[220] flex items-end justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setDraft(null); }}>
-      <section className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-[28px] bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Coach request</div>
-            <h2 className="mt-1 text-xl font-black">{draft.requestId ? "Edit booking request" : "Request a team booking"}</h2>
-          </div>
-          <button type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200" aria-label="Close request"><X size={18} /></button>
-        </div>
-
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <Field label="Team">
-            <select
-              value={draft.assignmentId}
-              onChange={(event) => {
-                const next = assignments.find((row) => row.id === event.target.value);
-                setDraft((current) => ({
-                  ...current,
-                  assignmentId: event.target.value,
-                  targetBookingId: "",
-                  title: next?.teamName ? `${next.teamName} ${current.requestType}` : current.title,
-                }));
-              }}
-              className="input"
-            >
-              {assignments.map((row) => <option key={row.id} value={row.id}>{row.teamName} · {row.staffRole}</option>)}
-            </select>
-          </Field>
-          <Field label="Request type">
-            <select value={draft.requestType} onChange={(event) => changeRequestType(event.target.value)} className="input">
-              {options.map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}
-            </select>
-          </Field>
-
-          {isExistingBookingRequest ? (
-            <Field label={draft.requestType === "cancellation" ? "Booking to cancel" : "Booking to change"} wide>
-              <select value={draft.targetBookingId || ""} onChange={(event) => selectBooking(event.target.value)} className="input">
-                <option value="">Choose an active team booking…</option>
-                {eligibleBookings.map((booking) => (
-                  <option key={booking.id} value={booking.id}>
-                    {formatDate(booking.startAt, { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · {booking.startTime} · {booking.pitchName || booking.venueName || booking.title}
-                  </option>
-                ))}
-              </select>
-              {!eligibleBookings.length ? <div className="mt-2 text-xs font-semibold text-amber-700">There are no active Annual Planner bookings for this team.</div> : null}
-            </Field>
-          ) : null}
-
-          <Field label="Title" wide><input value={draft.title} onChange={(event) => set("title", event.target.value)} className="input" /></Field>
-          {draft.requestType === "friendly" ? <><Field label="Opponent"><input value={draft.opponentName} onChange={(event) => set("opponentName", event.target.value)} className="input" /></Field><Field label="Format"><input value={draft.format} onChange={(event) => set("format", event.target.value)} placeholder="11v11, 9v9…" className="input" /></Field></> : null}
-
-          <Field label={draft.requestType === "change" ? "Requested date" : "Date"}><input type="date" value={draft.date} onChange={(event) => set("date", event.target.value)} className="input" /></Field>
-          <Field label="Starts"><input type="time" step="900" value={draft.startTime} onChange={(event) => set("startTime", event.target.value)} className="input" /></Field>
-          <Field label="Finishes"><input type="time" step="900" value={draft.endTime} onChange={(event) => set("endTime", event.target.value)} className="input" /></Field>
-          <Field label="Preferred pitch"><select value={draft.pitchId || ""} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}{pitch.trainingCapacity > 1 ? ` · up to ${pitch.trainingCapacity} training teams` : ""}</option>)}</select>{selectedPitch ? <div className="mt-2 text-[11px] font-semibold text-slate-500">Training capacity: {selectedPitch.trainingCapacity} team{selectedPitch.trainingCapacity === 1 ? "" : "s"} in the same slot.</div> : null}</Field>
-
-          {!isExistingBookingRequest ? (
-            <>
-              <Field label="Repeats"><select value={draft.recurrence} onChange={(event) => set("recurrence", event.target.value)} className="input"><option value="none">One-off</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option></select></Field>
-              {draft.recurrence !== "none" ? <>
-                <Field label="Repeat until"><input type="date" min={draft.date} value={draft.recurrenceUntil} onChange={(event) => set("recurrenceUntil", event.target.value)} className="input" /></Field>
-                <Field label="School holidays"><select value={draft.holidayPolicy || "include"} onChange={(event) => set("holidayPolicy", event.target.value)} className="input"><option value="include">Keep every scheduled date</option><option value="exclude">Exclude school-holiday dates supplied below</option><option value="custom">Use a custom exception list</option></select></Field>
-                <Field label="Dates to skip" wide><textarea rows="3" value={draft.exceptionDatesText || ""} onChange={(event) => set("exceptionDatesText", event.target.value)} className="input min-h-[88px] py-3" placeholder="2026-10-26, 2026-11-02 — comma, space or new line separated" /><div className="mt-2 text-[11px] font-semibold leading-5 text-slate-500">Skipped dates are checked before the request is submitted and are carried into the approved booking series.</div></Field>
-              </> : null}
-            </>
-          ) : null}
-
-          <Field label="Estimated attendance"><input type="number" min="0" value={draft.estimatedAttendance} onChange={(event) => set("estimatedAttendance", event.target.value)} className="input" /></Field>
-          {draft.requestType === "friendly" ? <div className="flex flex-wrap items-center gap-4 sm:col-span-2"><label className="inline-flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={draft.refereeRequired} onChange={(event) => set("refereeRequired", event.target.checked)} /> Referee required</label><label className="inline-flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={draft.changingRoomsRequired} onChange={(event) => set("changingRoomsRequired", event.target.checked)} /> Changing rooms required</label></div> : null}
-          <Field label="Notes for the club" wide><textarea rows="4" value={draft.notes} onChange={(event) => set("notes", event.target.value)} className="input min-h-[110px] py-3" placeholder="Alternative dates, opponent contact, access needs or anything the scheduler should know." /></Field>
-        </div>
-
-        <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
-          <button type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-black">Cancel</button>
-          <button disabled={busy || (isExistingBookingRequest && !eligibleBookings.length)} type="button" onClick={submit} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send size={16} /> {busy ? (draft.requestId ? "Saving…" : "Sending…") : (draft.requestId ? "Save changes" : "Send request")}</button>
-        </div>
-      </section>
-    </div>
-  );
 }
 
 function Field({ label, children, wide = false }) { return <label className={wide ? "sm:col-span-2" : ""}><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</span>{children}</label>; }

@@ -9,6 +9,7 @@ import { detectAnnualPlannerConflicts } from "../../src/lib/planning/annualPlann
 const read = (path) => fs.readFileSync(path, "utf8");
 const migration = read("supabase/migrations/202607160009_coach_hub_request_live_capacity.sql");
 const coachPage = read("src/pages/CoachHubPage.jsx");
+const requestWizard = read("src/components/coach/CoachRequestWizard.jsx");
 const conversation = read("src/components/coach/CoachRequestConversation.jsx");
 const pitchSettings = read("src/components/Settings/PitchSettingsPanel.jsx");
 const appCore = read("src/AppCore.jsx");
@@ -104,8 +105,8 @@ describe("Ground Control v3.10.4 Coach Hub requests and training capacity", () =
   it("adds request editing and a pitch selector to Coach Hub", () => {
     expect(coachPage).toContain("Edit request");
     expect(coachPage).toContain("DB.updateMyCoachHubRequest");
-    expect(coachPage).toContain('label="Preferred pitch"');
-    expect(coachPage).toContain("workspace.pitches");
+    expect(requestWizard).toContain('label="Preferred pitch"');
+    expect(requestWizard).toContain("pitches.map");
   });
 
   it("silently refreshes request messages so the conversation behaves like live chat", () => {

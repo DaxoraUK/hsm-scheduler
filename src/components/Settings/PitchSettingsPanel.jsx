@@ -38,6 +38,7 @@ const PITCH_COLUMNS = [
   { key: "innerOf", label: "Inside Pitch", aliases: ["Inner Of", "Parent Pitch"] },
   { key: "independent", label: "Independent" },
   { key: "trainingCapacity", label: "Training Capacity", aliases: ["Simultaneous Training Teams", "Training Teams"] },
+  { key: "trainingAreas", label: "Training Areas", aliases: ["Bookable Areas", "Pitch Areas"] },
   { key: "desc", label: "Description", aliases: ["Notes"] },
 ];
 
@@ -56,6 +57,18 @@ function surfaceLabel(pitch) {
   return SURFACES.find(([value]) => value === surface)?.[1] || "Grass";
 }
 
+function normaliseTrainingAreas(value) {
+  const rows = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[|;,]+/g).map((label) => ({ label }));
+  return rows.map((area, index) => {
+    const label = String(area?.label || area?.name || area || "").trim();
+    if (!label) return null;
+    const id = String(area?.id || `area-${index + 1}`).trim().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || `area-${index + 1}`;
+    return { id, label };
+  }).filter(Boolean);
+}
+
 function normaliseImportedPitch(row, index, primarySiteId) {
   const id = String(row.id || `P${index + 1}`).trim().replace(/\s+/g, "");
   if (!id) return null;
@@ -69,6 +82,7 @@ function normaliseImportedPitch(row, index, primarySiteId) {
     innerOf: String(row.innerOf || "").trim() || null,
     independent: booleanValue(row.independent, false),
     trainingCapacity: Math.max(1, Math.min(20, Number(row.trainingCapacity || row.training_capacity || 1) || 1)),
+    trainingAreas: normaliseTrainingAreas(row.trainingAreas || row.training_areas),
     desc: String(row.desc || "").trim(),
   };
 }
@@ -153,8 +167,41 @@ export default function PitchSettingsPanel({
     }));
   };
 
+  const updateTrainingArea = (realIndex, areaIndex, field, value) => {
+    setPitchCfg((current) => current.map((pitch, index) => {
+      if (index !== realIndex) return pitch;
+      const areas = normaliseTrainingAreas(pitch.trainingAreas || pitch.training_areas);
+      const nextAreas = areas.map((area, currentIndex) => currentIndex === areaIndex ? { ...area, [field]: value } : area);
+      return { ...pitch, trainingAreas: normaliseTrainingAreas(nextAreas) };
+    }));
+  };
+
+  const addTrainingArea = (realIndex) => {
+    setPitchCfg((current) => current.map((pitch, index) => {
+      if (index !== realIndex) return pitch;
+      const areas = normaliseTrainingAreas(pitch.trainingAreas || pitch.training_areas);
+      const nextNumber = areas.length + 1;
+      return {
+        ...pitch,
+        trainingAreas: [...areas, { id: `area-${nextNumber}`, label: `Area ${nextNumber}` }],
+        trainingCapacity: Math.max(Number(pitch.trainingCapacity || 1), nextNumber),
+      };
+    }));
+  };
+
+  const removeTrainingArea = (realIndex, areaIndex) => {
+    setPitchCfg((current) => current.map((pitch, index) => index === realIndex
+      ? { ...pitch, trainingAreas: normaliseTrainingAreas(pitch.trainingAreas || pitch.training_areas).filter((_, currentIndex) => currentIndex !== areaIndex) }
+      : pitch));
+  };
+
   const savePitches = () => {
-    const nextPitches = reconcileSiteAssignments({ club, pitches: pitchCfg }).pitches;
+    const preparedPitches = pitchCfg.map((pitch) => ({
+      ...pitch,
+      trainingCapacity: Math.max(1, Math.min(20, Number(pitch.trainingCapacity || pitch.training_capacity || 1) || 1)),
+      trainingAreas: normaliseTrainingAreas(pitch.trainingAreas || pitch.training_areas),
+    }));
+    const nextPitches = reconcileSiteAssignments({ club, pitches: preparedPitches }).pitches;
     if (nextPitches.some((pitch, index) => pitch.siteId !== pitchCfg[index]?.siteId)) setPitchCfg(nextPitches);
     return saveTab?.("pitches", { pitchCfg: nextPitches });
   };
@@ -176,6 +223,7 @@ export default function PitchSettingsPanel({
       innerOf: null,
       independent: false,
       trainingCapacity: 1,
+      trainingAreas: [],
     }]);
     setQuery("");
     setSelectedIndex(nextIndex);
@@ -273,7 +321,7 @@ export default function PitchSettingsPanel({
             rows={assignments.pitches}
             columns={PITCH_COLUMNS}
             filename="ground-control-pitches"
-            templateRows={[{ id: "P1", label: "Pitch 1", siteId: primarySite?.id || "main-ground", format: "11v11", surface: "grass", innerOf: "", independent: false, trainingCapacity: 1, desc: "Full-size grass pitch" }]}
+            templateRows={[{ id: "P1", label: "Pitch 1", siteId: primarySite?.id || "main-ground", format: "11v11", surface: "grass", innerOf: "", independent: false, trainingCapacity: 1, trainingAreas: "", desc: "Full-size grass pitch" }]}
             normaliseRow={(row, index) => normaliseImportedPitch(row, index, primarySite?.id)}
             onImport={importPitches}
           />
@@ -334,6 +382,10 @@ export default function PitchSettingsPanel({
                 <Field label="Surface"><select className={selectClass} value={selectedPitch.surface || inferSurface(selectedPitch)} onChange={(event) => updatePitch(selectedIndex, "surface", event.target.value)}>{SURFACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                 <Field label="Inside pitch" hint="Optional parent layout."><select className={selectClass} value={selectedPitch.innerOf || ""} onChange={(event) => updatePitch(selectedIndex, "innerOf", event.target.value || null)}><option value="">None</option>{pitchCfg.filter((candidate) => candidate.id !== selectedPitch.id && !candidate.innerOf).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label || candidate.id}</option>)}</select></Field>
                 <Field label="Capacity handling"><label className="flex h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700"><input type="checkbox" checked={!!selectedPitch.independent} onChange={(event) => updatePitch(selectedIndex, "independent", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" /> Independent pitch</label></Field><Field label="Simultaneous training teams" hint="Use 2 when two teams can safely share this pitch in one time slot."><input type="number" min="1" max="20" step="1" className={inputClass} value={Math.max(1, Number(selectedPitch.trainingCapacity || 1))} onChange={(event) => updatePitch(selectedIndex, "trainingCapacity", Math.max(1, Math.min(20, Number(event.target.value) || 1)))} /></Field>
+                <div className="col-span-full rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.15em] text-sky-800">Bookable training areas</div><p className="mt-1 text-xs font-semibold leading-5 text-sky-900/75">Optional named areas make shared use clear to coaches—for example Half A and Half B. Leaving this empty keeps capacity-based whole-pitch sharing.</p></div><button type="button" onClick={() => addTrainingArea(selectedIndex)} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-sky-800 shadow-sm"><Plus size={14} /> Add area</button></div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">{normaliseTrainingAreas(selectedPitch.trainingAreas || selectedPitch.training_areas).map((area, areaIndex) => <div key={`${area.id}-${areaIndex}`} className="grid grid-cols-[minmax(0,1fr)_42px] gap-2 rounded-xl bg-white p-2"><input className={inputClass} value={area.label} onChange={(event) => updateTrainingArea(selectedIndex, areaIndex, "label", event.target.value)} aria-label={`Training area ${areaIndex + 1}`} /><button type="button" onClick={() => removeTrainingArea(selectedIndex, areaIndex)} className="flex h-11 w-10 items-center justify-center rounded-xl border border-rose-200 text-rose-700" aria-label={`Remove ${area.label}`}><Trash2 size={15} /></button></div>)}{!normaliseTrainingAreas(selectedPitch.trainingAreas || selectedPitch.training_areas).length ? <div className="rounded-xl border border-dashed border-sky-200 bg-white/60 p-4 text-center text-xs font-semibold text-sky-800 sm:col-span-2">No named areas. The pitch still supports {Math.max(1, Number(selectedPitch.trainingCapacity || 1))} simultaneous training team{Number(selectedPitch.trainingCapacity || 1) === 1 ? "" : "s"}.</div> : null}</div>
+                </div>
                 <Field label="Description" className="col-span-full"><input className={inputClass} value={selectedPitch.desc || ""} onChange={(event) => updatePitch(selectedIndex, "desc", event.target.value)} placeholder="Optional notes" /></Field>
               </div>
             </article>

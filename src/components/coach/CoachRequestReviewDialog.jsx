@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -17,16 +17,36 @@ function iso(date, time) {
   return Number.isNaN(value.getTime()) ? "" : value.toISOString();
 }
 
-export default function CoachRequestReviewDialog({ request, busy, onClose, onDecision }) {
+function pitchAreas(pitch = {}) {
+  return Array.isArray(pitch.trainingAreas) ? pitch.trainingAreas : [];
+}
+
+export default function CoachRequestReviewDialog({ request, pitches = [], busy, onClose, onDecision }) {
   const [decision, setDecision] = useState("approve");
   const [message, setMessage] = useState("");
   const [date, setDate] = useState(request.preferredDate || "");
   const [startTime, setStartTime] = useState(request.preferredStartTime || "");
   const [endTime, setEndTime] = useState(request.preferredEndTime || "");
-  const [pitchName, setPitchName] = useState(request.preferredPitchName || "");
-  const [venueName, setVenueName] = useState(request.preferredVenueName || "");
+  const [pitchId, setPitchId] = useState(request.preferredPitchId || "");
+  const [pitchAreaId, setPitchAreaId] = useState(request.preferredPitchAreaId || "");
 
+  const selectedPitch = useMemo(() => pitches.find((pitch) => String(pitch.id) === String(pitchId)) || null, [pitchId, pitches]);
+  const areas = pitchAreas(selectedPitch || {});
   const isCancellation = request.requestType === "cancellation";
+
+  const choosePitch = (nextPitchId) => {
+    setPitchId(nextPitchId);
+    const nextPitch = pitches.find((pitch) => String(pitch.id) === String(nextPitchId));
+    if (!pitchAreas(nextPitch || {}).some((area) => String(area.id) === String(pitchAreaId))) setPitchAreaId("");
+  };
+
+  const chooseSuggestion = (suggestion) => {
+    setDate(suggestion.startDate);
+    setStartTime(suggestion.startTime);
+    setEndTime(suggestion.endTime);
+    choosePitch(suggestion.pitchId || "");
+    setPitchAreaId(suggestion.pitchAreaId || "");
+  };
 
   const submit = () => {
     const data = { message: text(message) || null };
@@ -37,11 +57,20 @@ export default function CoachRequestReviewDialog({ request, busy, onClose, onDec
         toast.error("Alternative slot needs attention", { description: "Choose a valid date and a finish time after the start time." });
         return;
       }
+      if (!selectedPitch) {
+        toast.error("Choose an alternative pitch", { description: "Select a pitch from the club facility list rather than typing one manually." });
+        return;
+      }
+      const area = areas.find((row) => String(row.id) === String(pitchAreaId));
       Object.assign(data, {
         start_at: startAt,
         end_at: endAt,
-        pitch_name: text(pitchName) || null,
-        venue_name: text(venueName) || null,
+        pitch_id: selectedPitch.id,
+        pitch_name: selectedPitch.label || selectedPitch.name || selectedPitch.id,
+        venue_id: selectedPitch.siteId || selectedPitch.venueId || null,
+        venue_name: selectedPitch.siteLabel || selectedPitch.siteName || selectedPitch.venueName || null,
+        pitch_area_id: area?.id || null,
+        pitch_area_name: area?.label || null,
       });
     }
     onDecision(decision, data);
@@ -65,11 +94,7 @@ export default function CoachRequestReviewDialog({ request, busy, onClose, onDec
             <ul className="mt-2 space-y-1 text-xs font-semibold text-amber-900">{request.conflicts.map((row, index) => <li key={`${row.type}-${index}`}>• {row.message || row.type}</li>)}</ul>
           </div>
         ) : null}
-        {request.targetBookingId ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-600">
-            Existing booking reference: <span className="font-black text-slate-900">{request.targetBookingId}</span>
-          </div>
-        ) : null}
+        {request.targetBookingId ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-600">Existing booking reference: <span className="font-black text-slate-900">{request.targetBookingId}</span></div> : null}
         {request.coachNotes ? <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">{request.coachNotes}</div> : null}
 
         <label className="mt-5 block text-xs font-black text-slate-700">Decision
@@ -83,13 +108,14 @@ export default function CoachRequestReviewDialog({ request, busy, onClose, onDec
 
         {decision === "alternative" ? (
           <div className="mt-4 space-y-4">
-            {request.suggestions?.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-[10px] font-black uppercase tracking-[0.15em] text-sky-800">Recommended alternatives</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{request.suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => { setDate(suggestion.startDate); setStartTime(suggestion.startTime); setEndTime(suggestion.endTime); setPitchName(suggestion.pitchName || suggestion.pitchId); setVenueName(suggestion.venueName || request.preferredVenueName || ""); }} className="rounded-xl border border-sky-200 bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{suggestion.startDate} · {suggestion.startTime}–{suggestion.endTime}</span><span className="mt-1 block text-sky-700">{suggestion.pitchName || suggestion.pitchId}</span></button>)}</div></div> : null}
+            {request.suggestions?.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-[10px] font-black uppercase tracking-[0.15em] text-sky-800">Recommended alternatives</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{request.suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => chooseSuggestion(suggestion)} className="rounded-xl border border-sky-200 bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{suggestion.startDate} · {suggestion.startTime}–{suggestion.endTime}</span><span className="mt-1 block text-sky-700">{suggestion.pitchName || suggestion.pitchId}</span></button>)}</div></div> : null}
             <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-black text-slate-700">Date<input type="date" className={`${inputClass} mt-2`} value={date} onChange={(event) => setDate(event.target.value)} /></label>
-            <label className="text-xs font-black text-slate-700">Venue<input className={`${inputClass} mt-2`} value={venueName} onChange={(event) => setVenueName(event.target.value)} /></label>
-            <label className="text-xs font-black text-slate-700">Start<input type="time" className={`${inputClass} mt-2`} value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
-            <label className="text-xs font-black text-slate-700">Finish<input type="time" className={`${inputClass} mt-2`} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
-            <label className="text-xs font-black text-slate-700 sm:col-span-2">Pitch<input className={`${inputClass} mt-2`} value={pitchName} onChange={(event) => setPitchName(event.target.value)} /></label>
+              <label className="text-xs font-black text-slate-700">Date<input type="date" className={`${inputClass} mt-2`} value={date} onChange={(event) => setDate(event.target.value)} /></label>
+              <label className="text-xs font-black text-slate-700">Pitch<select className={`${selectClass} mt-2`} value={pitchId} onChange={(event) => choosePitch(event.target.value)}><option value="">Choose pitch</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.name || pitch.id}</option>)}</select></label>
+              <label className="text-xs font-black text-slate-700">Start<input type="time" className={`${inputClass} mt-2`} value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
+              <label className="text-xs font-black text-slate-700">Finish<input type="time" className={`${inputClass} mt-2`} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
+              {areas.length ? <label className="text-xs font-black text-slate-700 sm:col-span-2">Pitch area<select className={`${selectClass} mt-2`} value={pitchAreaId} onChange={(event) => setPitchAreaId(event.target.value)}><option value="">Whole pitch / allocate later</option>{areas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></label> : null}
+              {selectedPitch ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-600 sm:col-span-2">{selectedPitch.siteLabel || selectedPitch.siteName || selectedPitch.venueName || "Club venue"} · capacity {Math.max(1, Number(selectedPitch.trainingCapacity || 1))} simultaneous training team{Number(selectedPitch.trainingCapacity || 1) === 1 ? "" : "s"}</div> : null}
             </div>
           </div>
         ) : null}

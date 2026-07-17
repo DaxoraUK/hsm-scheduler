@@ -162,6 +162,12 @@ export function normaliseCoachRequest(row = {}) {
     proposedStartTime: timeKey(proposedStartAt),
     proposedEndTime: timeKey(proposedEndAt),
     proposedMessage: text(row.proposed_message || row.proposedMessage),
+    preferredPitchAreaId: text(row.preferred_pitch_area_id || row.preferredPitchAreaId),
+    preferredPitchAreaName: text(row.preferred_pitch_area_name || row.preferredPitchAreaName),
+    acceptablePitchIds: Array.isArray(row.acceptable_pitch_ids || row.acceptablePitchIds) ? (row.acceptable_pitch_ids || row.acceptablePitchIds).map(text).filter(Boolean) : [],
+    timeFlexible: bool(row.time_flexible ?? row.timeFlexible),
+    flexibilityMinutes: Math.max(0, Math.min(240, number(row.flexibility_minutes ?? row.flexibilityMinutes, 0))),
+    availabilitySnapshot: row.availability_snapshot && typeof row.availability_snapshot === "object" ? row.availability_snapshot : (row.availabilitySnapshot && typeof row.availabilitySnapshot === "object" ? row.availabilitySnapshot : {}),
     resultingBookingId: text(row.resulting_booking_id || row.resultingBookingId),
     reviewedAt: row.reviewed_at || row.reviewedAt || null,
     createdAt: row.created_at || row.createdAt || null,
@@ -191,6 +197,11 @@ export function normaliseCoachMessage(row = {}) {
 export function normaliseCoachPitch(row = {}) {
   const data = row?.data && typeof row.data === "object" ? row.data : row;
   const capacity = Math.max(1, Math.min(20, number(data.training_capacity ?? data.trainingCapacity ?? data.max_simultaneous_training ?? data.maxSimultaneousTraining ?? 1) || 1));
+  const rawAreas = Array.isArray(data.trainingAreas || data.training_areas) ? (data.trainingAreas || data.training_areas) : [];
+  const trainingAreas = rawAreas.map((area, index) => ({
+    id: text(area?.id || `area-${index + 1}`),
+    label: text(area?.label || area?.name || `Area ${index + 1}`),
+  })).filter((area) => area.id && area.label);
   return {
     id: text(data.id || row.id),
     label: text(data.label || data.name || data.id || row.id || "Pitch"),
@@ -199,6 +210,7 @@ export function normaliseCoachPitch(row = {}) {
     format: text(data.format),
     surface: text(data.surface || "grass"),
     trainingCapacity: capacity,
+    trainingAreas,
     independent: bool(data.independent),
     innerOf: text(data.innerOf || data.inner_of),
   };
@@ -222,6 +234,11 @@ export function buildCoachRequestDraft(request = {}, assignments = []) {
     venueName: normalised.preferredVenueName || "",
     pitchId: normalised.preferredPitchId || "",
     pitchName: normalised.preferredPitchName || "",
+    pitchAreaId: normalised.preferredPitchAreaId || "",
+    pitchAreaName: normalised.preferredPitchAreaName || "",
+    acceptablePitchIds: normalised.acceptablePitchIds || [],
+    timeFlexible: normalised.timeFlexible,
+    flexibilityMinutes: normalised.flexibilityMinutes || 30,
     date: normalised.preferredDate || dateKey(new Date()),
     startTime: normalised.preferredStartTime || "18:00",
     endTime: normalised.preferredEndTime || "19:30",
@@ -251,6 +268,9 @@ export function normaliseCoachHubWorkspace(payload = {}) {
     messages: (Array.isArray(payload.messages) ? payload.messages : []).map(normaliseCoachMessage),
     teamContacts: Array.isArray(payload.team_contacts || payload.teamContacts) ? (payload.team_contacts || payload.teamContacts) : [],
     pitches: (Array.isArray(payload.pitches) ? payload.pitches : []).map(normaliseCoachPitch).filter((row) => row.id),
+    blackouts: Array.isArray(payload.blackouts) ? payload.blackouts : [],
+    pitchClosures: Array.isArray(payload.pitch_closures || payload.pitchClosures) ? (payload.pitch_closures || payload.pitchClosures) : [],
+    closureImpacts: Array.isArray(payload.closure_impacts || payload.closureImpacts) ? (payload.closure_impacts || payload.closureImpacts) : [],
   };
 }
 
@@ -274,6 +294,7 @@ export function buildRequestPayload(draft = {}) {
   const startAt = localIso(draft.date, draft.startTime);
   const endAt = localIso(draft.date, draft.endTime);
   return {
+    request_id: text(draft.requestId) || null,
     assignment_id: text(draft.assignmentId),
     target_booking_id: text(draft.targetBookingId) || null,
     request_type: text(draft.requestType || "training"),
@@ -284,6 +305,11 @@ export function buildRequestPayload(draft = {}) {
     preferred_venue_name: text(draft.venueName) || null,
     preferred_pitch_id: text(draft.pitchId) || null,
     preferred_pitch_name: text(draft.pitchName) || null,
+    preferred_pitch_area_id: text(draft.pitchAreaId) || null,
+    preferred_pitch_area_name: text(draft.pitchAreaName) || null,
+    acceptable_pitch_ids: [...new Set((Array.isArray(draft.acceptablePitchIds) ? draft.acceptablePitchIds : []).map(text).filter(Boolean))],
+    time_flexible: bool(draft.timeFlexible),
+    flexibility_minutes: bool(draft.timeFlexible) ? Math.max(0, Math.min(240, number(draft.flexibilityMinutes, 30))) : 0,
     preferred_start_at: startAt,
     preferred_end_at: endAt,
     recurrence: text(draft.recurrence || "none"),
@@ -312,6 +338,11 @@ export function buildBlankCoachRequest(assignment = {}, date = new Date()) {
     venueName: "",
     pitchId: "",
     pitchName: "",
+    pitchAreaId: "",
+    pitchAreaName: "",
+    acceptablePitchIds: [],
+    timeFlexible: false,
+    flexibilityMinutes: 30,
     date: dateValue,
     startTime: "18:00",
     endTime: "19:30",

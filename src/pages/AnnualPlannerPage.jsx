@@ -55,6 +55,7 @@ import {
   normaliseTime,
 } from "../lib/planning/annualPlannerEngine.js";
 import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
+import { eventOccursOnDate, normaliseCoachPitchClosure } from "../lib/coach/sharedCalendarEngine.js";
 import {
   buildPilotRefinementSnapshot,
   buildCoachCommunicationAudience,
@@ -176,7 +177,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -207,19 +208,27 @@ export default function AnnualPlannerPage({
       let result;
       let coachPayload = { requests: [] };
       let pilotPayload = { people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] };
+      let pitchClosurePayload = [];
+      let closureImpactPayload = [];
       if (isSupaConfigured() && clubId) {
-        [result, coachPayload, pilotPayload] = await Promise.all([
+        [result, coachPayload, pilotPayload, pitchClosurePayload, closureImpactPayload] = await Promise.all([
           DB.listAnnualPlannerWorkspace(clubId, dateRangeForYear(year)),
           canOperate ? DB.listCoachHubRequestQueue(clubId) : Promise.resolve({ requests: [] }),
           canOperate ? DB.listCoachHubPilotMetrics(clubId, dateRangeForYear(year)) : Promise.resolve({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [] }),
+          DB.loadPitchClosures(clubId),
+          canOperate ? DB.listAnnualPlannerClosureImpacts(clubId, dateRangeForYear(year)) : Promise.resolve([]),
         ]);
       } else {
         result = readLocalWorkspace(clubId);
+        pitchClosurePayload = Array.isArray(result?.pitchClosures) ? result.pitchClosures : [];
+        closureImpactPayload = Array.isArray(result?.closureImpacts) ? result.closureImpacts : [];
       }
       setWorkspace({
         settings: result?.settings || {},
         bookings: Array.isArray(result?.bookings) ? result.bookings.map(normaliseAnnualBooking) : [],
         blackouts: Array.isArray(result?.blackouts) ? result.blackouts.map(normaliseAnnualBlackout) : [],
+        pitchClosures: Array.isArray(pitchClosurePayload) ? pitchClosurePayload.map(normaliseCoachPitchClosure) : [],
+        closureImpacts: Array.isArray(closureImpactPayload) ? closureImpactPayload : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -258,9 +267,41 @@ export default function AnnualPlannerPage({
   }, [clubId, loadWorkspace]);
 
   const snapshot = useMemo(() => buildAnnualPlannerSnapshot({ bookings: workspace.bookings, blackouts: workspace.blackouts, year }), [workspace, year]);
-  const allCalendarBookings = useMemo(() => [...snapshot.bookings, ...matchdayBookings.filter((booking) => Number(booking.startDate.slice(0, 4)) === year)], [matchdayBookings, snapshot.bookings, year]);
-  const calendar = useMemo(() => buildMonthCalendar(year, month, allCalendarBookings), [allCalendarBookings, month, year]);
+  const coachRequestCalendarBookings = useMemo(() => coachRequests.map((request) => normaliseAnnualBooking({
+    id: `coach-request-${request.id}`,
+    title: request.title,
+    bookingType: request.requestType === "friendly" ? "friendly" : "training",
+    status: "requested",
+    teamKey: request.teamKey,
+    teamName: request.teamName,
+    venueId: request.preferredVenueId,
+    venueName: request.preferredVenueName,
+    pitchId: request.preferredPitchId,
+    pitchName: request.preferredPitchName,
+    startAt: request.preferredStartAt,
+    endAt: request.preferredEndAt,
+    sourceType: "coach_request",
+    sourceId: request.id,
+  })), [coachRequests]);
+  const allCalendarBookings = useMemo(() => [
+    ...snapshot.bookings,
+    ...matchdayBookings.filter((booking) => Number(booking.startDate.slice(0, 4)) === year),
+    ...coachRequestCalendarBookings.filter((booking) => Number(booking.startDate.slice(0, 4)) === year),
+  ], [coachRequestCalendarBookings, matchdayBookings, snapshot.bookings, year]);
+  const calendarClosures = useMemo(() => [
+    ...workspace.blackouts.map((blackout) => ({
+      ...blackout,
+      kind: "blackout",
+      pitchName: blackout.pitchName || pitchCfg.find((pitch) => pitch.id === blackout.pitchId)?.label || blackout.pitchId,
+    })),
+    ...workspace.pitchClosures,
+  ], [pitchCfg, workspace.blackouts, workspace.pitchClosures]);
+  const calendar = useMemo(() => buildMonthCalendar(year, month, allCalendarBookings).map((cell) => ({
+    ...cell,
+    closures: calendarClosures.filter((closure) => eventOccursOnDate(closure, cell.dateKey)),
+  })), [allCalendarBookings, calendarClosures, month, year]);
   const selectedDayBookings = useMemo(() => allCalendarBookings.filter((booking) => booking.startDate === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)), [allCalendarBookings, selectedDate]);
+  const selectedDayClosures = useMemo(() => calendarClosures.filter((closure) => eventOccursOnDate(closure, selectedDate)), [calendarClosures, selectedDate]);
   const filteredBookings = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return snapshot.bookings
@@ -461,6 +502,10 @@ export default function AnnualPlannerPage({
       start_at: start.toISOString(),
       end_at: end.toISOString(),
       reason: draft.reason || null,
+      closure_type: draft.closureType || "blackout",
+      visibility: draft.visibility || "club",
+      public_note: draft.publicNote || draft.reason || null,
+      internal_note: draft.internalNote || null,
     };
     setSaving(true);
     try {
@@ -474,6 +519,24 @@ export default function AnnualPlannerPage({
       await loadWorkspace({ quiet: true });
       announceUpdate();
       toast.success("Facility blackout saved");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resolveClosureImpact(impact, statusValue) {
+    if (!impact?.id) return;
+    setSaving(true);
+    try {
+      await DB.resolveAnnualPlannerClosureImpact(clubId, impact.id, {
+        status: statusValue,
+        note: statusValue === "relocated" ? "Booking relocated by a club operator." : statusValue === "cancelled" ? "Affected booking cancelled by a club operator." : "Closure impact reviewed by a club operator.",
+      });
+      await loadWorkspace({ quiet: true });
+      announceUpdate();
+      toast.success(statusValue === "relocated" ? "Closure impact marked as relocated" : statusValue === "cancelled" ? "Closure impact marked as cancelled" : "Closure impact resolved");
+    } catch (impactError) {
+      toast.error("Closure impact could not be updated", { description: impactError?.message });
     } finally {
       setSaving(false);
     }
@@ -540,7 +603,7 @@ export default function AnnualPlannerPage({
         <CalendarWorkspace
           year={year} month={month} setYear={setYear} setMonth={setMonth}
           cells={calendar} selectedDate={selectedDate} setSelectedDate={setSelectedDate}
-          selectedDayBookings={selectedDayBookings} onSelectBooking={setSelectedBooking}
+          selectedDayBookings={selectedDayBookings} selectedDayClosures={selectedDayClosures} onSelectBooking={(booking) => booking.sourceType === "coach_request" ? openCoachReview(coachRequests.find((request) => request.id === booking.sourceId) || {}) : setSelectedBooking(booking)}
           onCreate={canOperate ? openCreateBooking : null} matchdayBookings={matchdayBookings}
         />
       ) : null}
@@ -568,9 +631,11 @@ export default function AnnualPlannerPage({
 
       {tab === "availability" ? (
         <AvailabilityWorkspace
-          blackouts={workspace.blackouts} pitchCfg={pitchCfg} canOperate={canOperate} canManage={canManage}
-          onCreate={() => setBlackoutEditor({ title: "Pitch unavailable", startDate: normaliseDateKey(new Date()), endDate: normaliseDateKey(new Date()), startTime: "08:00", endTime: "22:00", venueId: "", pitchId: "", reason: "" })}
+          blackouts={workspace.blackouts} pitchClosures={workspace.pitchClosures} closureImpacts={workspace.closureImpacts} pitchCfg={pitchCfg} canOperate={canOperate} canManage={canManage}
+          onCreate={() => setBlackoutEditor({ title: "Pitch unavailable", closureType: "blackout", visibility: "club", startDate: normaliseDateKey(new Date()), endDate: normaliseDateKey(new Date()), startTime: "08:00", endTime: "22:00", venueId: "", pitchId: "", reason: "", publicNote: "", internalNote: "" })}
           settings={workspace.settings}
+          saving={saving}
+          onResolveImpact={resolveClosureImpact}
           onCommunicate={(blackout) => openCoachAudience({ reason: `Facility update: ${blackout.title}`, blackoutIds: [blackout.id] })}
         />
       ) : null}
@@ -637,7 +702,7 @@ export default function AnnualPlannerPage({
 
       <BlackoutEditor draft={blackoutEditor} setDraft={setBlackoutEditor} pitchCfg={pitchCfg} saving={saving} onSave={saveBlackout} />
 
-      {coachReview ? <CoachRequestReviewDialog request={coachReview} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
+      {coachReview ? <CoachRequestReviewDialog request={coachReview} pitches={pitchCfg} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
       {conversationRequest ? <CoachRequestConversation clubId={clubId} request={conversationRequest} role="club" onClose={() => setConversationRequest(null)} /> : null}
 
       <DaxoraConfirmDialog
@@ -654,7 +719,7 @@ function Metric({ icon: Icon, label, value, detail, tone = "neutral" }) {
   return <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</span><span className={`flex h-8 w-8 items-center justify-center rounded-xl ${toneClass}`}><Icon size={16} /></span></div><div className="mt-3 text-2xl font-black text-white">{value}</div><div className="mt-1 text-xs font-semibold text-slate-500">{detail}</div></div>;
 }
 
-function CalendarWorkspace({ year, month, setYear, setMonth, cells, selectedDate, setSelectedDate, selectedDayBookings, onSelectBooking, onCreate, matchdayBookings }) {
+function CalendarWorkspace({ year, month, setYear, setMonth, cells, selectedDate, setSelectedDate, selectedDayBookings, selectedDayClosures = [], onSelectBooking, onCreate, matchdayBookings }) {
   const moveMonth = (delta) => {
     const next = new Date(year, month + delta, 1);
     setYear(next.getFullYear());
@@ -663,15 +728,25 @@ function CalendarWorkspace({ year, month, setYear, setMonth, cells, selectedDate
   return <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
     <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Calendar year {year}</div><h2 className="mt-1 text-xl font-black text-slate-950">{MONTHS[month]}</h2></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Shared calendar · year {year}</div><h2 className="mt-1 text-xl font-black text-slate-950">{MONTHS[month]}</h2><p className="mt-1 text-xs font-semibold text-slate-500">Bookings, coach requests, blackouts and pitch closures share one calendar.</p></div>
         <div className="flex items-center gap-2"><button type="button" onClick={() => moveMonth(-1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Previous month"><ChevronLeft size={18} /></button><button type="button" onClick={() => { const now = new Date(); setYear(now.getFullYear()); setMonth(now.getMonth()); setSelectedDate(normaliseDateKey(now)); }} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50">Today</button><button type="button" onClick={() => moveMonth(1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Next month"><ChevronRight size={18} /></button></div>
       </div>
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 px-5 py-3 text-[10px] font-black uppercase tracking-wide"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">Approved booking</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">Pending</span><span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-800">Closed / unavailable</span><span className="rounded-full bg-sky-100 px-2.5 py-1 text-sky-800">Fixture / friendly</span></div>
       <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">{WEEKDAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">{day}</div>)}</div>
-      <div className="grid grid-cols-7">{cells.map((cell) => <button type="button" key={cell.dateKey} onClick={() => setSelectedDate(cell.dateKey)} className={`min-h-[112px] border-b border-r border-slate-100 p-2 text-left align-top transition hover:bg-slate-50 ${!cell.inMonth ? "bg-slate-50/60 text-slate-400" : "bg-white"} ${selectedDate === cell.dateKey ? "ring-2 ring-inset ring-emerald-400" : ""}`}><div className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${cell.today ? "bg-emerald-500 text-white" : "text-slate-700"}`}>{cell.date.getDate()}</span>{cell.bookings.length > 3 ? <span className="text-[10px] font-black text-slate-400">+{cell.bookings.length - 3}</span> : null}</div><div className="mt-2 space-y-1">{cell.bookings.slice(0, 3).map((booking) => <span key={booking.id} className={`block truncate rounded-md border px-1.5 py-1 text-[10px] font-black ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting}`}>{booking.startTime} {booking.teamName || booking.title}</span>)}</div></button>)}</div>
+      <div className="grid grid-cols-7">{cells.map((cell) => {
+        const closures = Array.isArray(cell.closures) ? cell.closures : [];
+        const totalItems = closures.length + cell.bookings.length;
+        const visibleItems = [
+          ...closures.slice(0, 2).map((closure) => ({ id: `closure-${closure.kind}-${closure.id}-${cell.dateKey}`, kind: "closure", label: closure.pitchName || closure.title || "Unavailable" })),
+          ...cell.bookings.slice(0, Math.max(0, 3 - Math.min(2, closures.length))).map((booking) => ({ id: `booking-${booking.id}`, kind: "booking", booking })),
+        ].slice(0, 3);
+        return <button type="button" key={cell.dateKey} onClick={() => setSelectedDate(cell.dateKey)} className={`min-h-[118px] border-b border-r border-slate-100 p-2 text-left align-top transition hover:bg-slate-50 ${!cell.inMonth ? "bg-slate-50/60 text-slate-400" : "bg-white"} ${selectedDate === cell.dateKey ? "ring-2 ring-inset ring-emerald-400" : ""}`}><div className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${cell.today ? "bg-emerald-500 text-white" : "text-slate-700"}`}>{cell.date.getDate()}</span>{totalItems > 3 ? <span className="text-[10px] font-black text-slate-400">+{totalItems - 3}</span> : null}</div><div className="mt-2 space-y-1">{visibleItems.map((item) => item.kind === "closure" ? <span key={item.id} className="block truncate rounded-md border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-black text-rose-800">Closed · {item.label}</span> : <span key={item.id} className={`block truncate rounded-md border px-1.5 py-1 text-[10px] font-black ${TYPE_TONES[item.booking.bookingType] || TYPE_TONES.meeting}`}>{item.booking.startTime} {item.booking.teamName || item.booking.title}</span>)}</div></button>;
+      })}</div>
     </section>
     <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Selected day</div><h3 className="mt-1 text-lg font-black text-slate-950">{formatDate(`${selectedDate}T12:00:00`, { weekday: "long", day: "numeric", month: "long" })}</h3></div>{onCreate ? <button type="button" onClick={() => onCreate(selectedDate)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white"><Plus size={18} /></button> : null}</div>
-      <div className="mt-5 space-y-3">{selectedDayBookings.length ? selectedDayBookings.map((booking) => <BookingMiniCard key={booking.id} booking={booking} onClick={() => booking.sourceType === "matchday" ? null : onSelectBooking(booking)} readOnly={booking.sourceType === "matchday"} />) : <Empty icon={CalendarDays} title="No facility use planned" description="Add training, a friendly or another booking for this day." />}</div>
+      {selectedDayClosures.length ? <div className="mt-5 space-y-2">{selectedDayClosures.map((closure) => <div key={`${closure.kind}-${closure.id}`} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><Ban className="mt-0.5 shrink-0 text-rose-600" size={17} /><div><div className="text-xs font-black uppercase tracking-wide text-rose-700">{closure.kind === "pitch_closure" ? "Pitch closure" : "Unavailable period"}</div><div className="mt-1 text-sm font-black text-rose-950">{closure.title}</div><div className="mt-1 text-xs font-semibold text-rose-900/75">{closure.pitchName || "All relevant facilities"}{closure.startTime && closure.endTime ? ` · ${closure.startTime}–${closure.endTime}` : ""}</div>{closure.publicNote || closure.reason ? <p className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{closure.publicNote || closure.reason}</p> : null}</div></div></div>)}</div> : null}
+      <div className="mt-5 space-y-3">{selectedDayBookings.length ? selectedDayBookings.map((booking) => <BookingMiniCard key={booking.id} booking={booking} onClick={() => booking.sourceType === "matchday" ? null : onSelectBooking(booking)} readOnly={booking.sourceType === "matchday"} />) : !selectedDayClosures.length ? <Empty icon={CalendarDays} title="No facility use planned" description="Add training, a friendly or another booking for this day." /> : null}</div>
       {matchdayBookings.length ? <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-5 text-emerald-900"><ShieldCheck className="mb-2" size={18} />Ground Control fixtures are shown as protected facility bookings and are included in every conflict check.</div> : null}
     </aside>
   </div>;
@@ -721,13 +796,18 @@ function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, o
   );
 }
 
-function AvailabilityWorkspace({ blackouts, pitchCfg, canOperate, canManage, onCreate, onCommunicate, settings }) {
-  return <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Protected availability</div><h2 className="mt-1 text-xl font-black text-slate-950">Blackouts and unavailable periods</h2><p className="mt-2 text-sm font-semibold text-slate-500">Block maintenance, external hires, council closures and seasonal shutdowns.</p></div>{canOperate ? <button type="button" onClick={onCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={17} /> Add blackout</button> : null}</div>
-      <div className="mt-6 space-y-3">{blackouts.length ? blackouts.map((blackout) => <div key={blackout.id} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-600 shadow-sm"><Ban size={18} /></span><div className="min-w-0 flex-1"><div className="text-sm font-black text-rose-950">{blackout.title}</div><div className="mt-1 text-xs font-bold text-rose-900/70">{formatDate(blackout.startAt)} to {formatDate(blackout.endAt)}</div><div className="mt-1 text-xs font-semibold text-rose-900/70">{pitchCfg.find((pitch) => pitch.id === blackout.pitchId)?.label || (blackout.pitchId ? blackout.pitchId : "All relevant facilities")}</div>{blackout.reason ? <div className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{blackout.reason}</div> : null}{canOperate ? <button type="button" onClick={() => onCommunicate?.(blackout)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-[11px] font-black text-rose-800"><Megaphone size={14} /> Contact affected coaches</button> : null}</div></div></div>) : <Empty icon={Ban} title="No annual blackouts" description="Existing matchday pitch closures remain separate and continue to protect each fixture day." />}</div>
-    </section>
-    <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600"><Settings2 size={20} /></span><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Planner policy</div><h3 className="text-lg font-black text-slate-950">Booking defaults</h3></div></div><dl className="mt-5 space-y-3"><Policy label="Default status" value={settings.default_status || "Provisional"} /><Policy label="Training duration" value={`${settings.default_training_duration_minutes || 90} minutes`} /><Policy label="Friendly duration" value={`${settings.default_friendly_duration_minutes || 150} minutes`} /><Policy label="Approval required" value={settings.require_approval ? "Yes" : "No"} /><Policy label="Cost visibility" value={settings.show_costs_to_schedulers === false ? "Owners/admins" : "Schedulers"} /></dl>{canManage ? <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-5 text-sky-900">Detailed planner policy controls are stored securely and can be expanded during the controlled pilot without changing the booking model.</div> : null}</aside>
+function AvailabilityWorkspace({ blackouts, pitchClosures = [], closureImpacts = [], pitchCfg, canOperate, canManage, onCreate, onCommunicate, onResolveImpact, settings, saving = false }) {
+  const activeImpacts = closureImpacts.filter((impact) => (impact.status || "action_required") === "action_required");
+  return <div className="space-y-6">
+    {activeImpacts.length ? <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 shadow-sm sm:p-6"><div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm"><AlertTriangle size={20} /></span><div className="min-w-0 flex-1"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Action required</div><h2 className="mt-1 text-xl font-black text-amber-950">Closures affect {activeImpacts.length} existing booking{activeImpacts.length === 1 ? "" : "s"}</h2><p className="mt-2 text-sm font-semibold text-amber-900/75">Relocate, cancel or acknowledge every affected session. Ground Control will never silently remove an approved booking.</p></div></div><div className="mt-5 grid gap-3 lg:grid-cols-2">{activeImpacts.map((impact) => <div key={impact.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="text-sm font-black text-slate-950">{impact.booking_title || "Affected booking"}</div><div className="mt-1 text-xs font-bold text-slate-600">{impact.team_name || impact.team_key || "Club-wide"} · {impact.pitch_name || "Facility TBC"}</div><div className="mt-1 text-xs font-semibold text-slate-500">{formatDate(impact.booking_start_at || impact.created_at)} · affected by {impact.blackout_title || "facility closure"}</div>{canOperate ? <div className="mt-4 flex flex-wrap gap-2"><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "relocated")} className="h-9 rounded-xl border border-sky-200 bg-sky-50 px-3 text-[11px] font-black text-sky-800">Mark relocated</button><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "cancelled")} className="h-9 rounded-xl border border-rose-200 bg-rose-50 px-3 text-[11px] font-black text-rose-800">Mark cancelled</button><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "resolved")} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-black text-slate-700">Resolve</button></div> : null}</div>)}</div></section> : null}
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Protected availability</div><h2 className="mt-1 text-xl font-black text-slate-950">Blackouts and unavailable periods</h2><p className="mt-2 text-sm font-semibold text-slate-500">Visible closures automatically appear in operator and Coach Hub calendars.</p></div>{canOperate ? <button type="button" onClick={onCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={17} /> Add blackout</button> : null}</div>
+        <div className="mt-6 space-y-3">{blackouts.length ? blackouts.map((blackout) => <div key={blackout.id} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-600 shadow-sm"><Ban size={18} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><div className="text-sm font-black text-rose-950">{blackout.title}</div><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-wide text-rose-700">{blackout.visibility === "operators" ? "Operators only" : "Shared calendar"}</span>{blackout.affectedBookingCount ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-800">{blackout.affectedBookingCount} affected</span> : null}</div><div className="mt-1 text-xs font-bold text-rose-900/70">{formatDate(blackout.startAt)} to {formatDate(blackout.endAt)}</div><div className="mt-1 text-xs font-semibold text-rose-900/70">{pitchCfg.find((pitch) => pitch.id === blackout.pitchId)?.label || blackout.pitchName || (blackout.pitchId ? blackout.pitchId : "All relevant facilities")}</div>{blackout.publicNote || blackout.reason ? <div className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{blackout.publicNote || blackout.reason}</div> : null}{blackout.internalNote && canManage ? <div className="mt-2 rounded-xl border border-rose-200 bg-white/70 p-3 text-xs font-semibold text-slate-600"><span className="font-black text-slate-800">Internal:</span> {blackout.internalNote}</div> : null}{canOperate && blackout.visibility !== "operators" ? <button type="button" onClick={() => onCommunicate?.(blackout)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-[11px] font-black text-rose-800"><Megaphone size={14} /> Contact affected coaches</button> : null}</div></div></div>) : <Empty icon={Ban} title="No annual blackouts" description="Create a shared or operator-only closure to protect the calendar." />}</div>
+        {pitchClosures.length ? <div className="mt-7"><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Matchday pitch closures</div><div className="mt-3 grid gap-3 sm:grid-cols-2">{pitchClosures.map((closure) => <div key={closure.id || `${closure.pitchId}-${closure.startDate}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-black text-slate-900">{closure.pitchName || closure.pitchId || "Pitch closure"}</div><div className="mt-1 text-xs font-bold text-slate-600">{formatDate(`${closure.startDate}T12:00:00`)}{closure.untilReopened ? " · until reopened" : closure.endDate && closure.endDate !== closure.startDate ? ` to ${formatDate(`${closure.endDate}T12:00:00`)}` : ""}</div>{closure.publicNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{closure.publicNote}</p> : null}</div>)}</div></div> : null}
+      </section>
+      <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600"><Settings2 size={20} /></span><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Planner policy</div><h3 className="text-lg font-black text-slate-950">Booking defaults</h3></div></div><dl className="mt-5 space-y-3"><Policy label="Default status" value={settings.default_status || "Provisional"} /><Policy label="Training duration" value={`${settings.default_training_duration_minutes || 90} minutes`} /><Policy label="Friendly duration" value={`${settings.default_friendly_duration_minutes || 150} minutes`} /><Policy label="Approval required" value={settings.require_approval ? "Yes" : "No"} /><Policy label="Cost visibility" value={settings.show_costs_to_schedulers === false ? "Owners/admins" : "Schedulers"} /></dl>{canManage ? <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-5 text-sky-900">Closures are rechecked at request and approval time. Affected bookings stay visible until an operator records the outcome.</div> : null}</aside>
+    </div>
   </div>;
 }
 
@@ -798,7 +878,7 @@ function BlackoutEditor({ draft, setDraft, pitchCfg, saving, onSave }) {
   const [error, setError] = useState("");
   if (!draft) return null;
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  return <div className="fixed inset-0 z-[235] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:items-center sm:p-6"><section className="w-full max-w-2xl rounded-[28px] bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 p-5"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Facility protection</div><h2 className="mt-1 text-xl font-black">Add unavailable period</h2></div><button type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Title" wide><input className="input" value={draft.title} onChange={(e) => set("title", e.target.value)} /></Field><Field label="Pitch"><select className="input" value={draft.pitchId} onChange={(e) => set("pitchId", e.target.value)}><option value="">All relevant pitches</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field><Field label="Start date"><input type="date" className="input" value={draft.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field><Field label="Start time"><input type="time" className="input" value={draft.startTime} onChange={(e) => set("startTime", e.target.value)} /></Field><Field label="End date"><input type="date" className="input" value={draft.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field><Field label="End time"><input type="time" className="input" value={draft.endTime} onChange={(e) => set("endTime", e.target.value)} /></Field><Field label="Reason" wide><textarea className="input min-h-[100px] py-3" value={draft.reason} onChange={(e) => set("reason", e.target.value)} /></Field></div>{error ? <div className="mx-5 mb-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div> : null}<div className="flex justify-end gap-2 border-t border-slate-200 p-5"><button type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-black">Cancel</button><button disabled={saving} type="button" onClick={async () => { setError(""); try { await onSave(draft); } catch (saveError) { setError(saveError?.message || "Could not save blackout."); } }} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white">Save blackout</button></div></section></div>;
+  return <div className="fixed inset-0 z-[235] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:items-center sm:p-6"><section className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-[28px] bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 p-5"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Facility protection</div><h2 className="mt-1 text-xl font-black">Add unavailable period</h2><p className="mt-1 text-xs font-semibold text-slate-500">Shared closures appear automatically on Coach Hub and operator calendars.</p></div><button type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="grid gap-4 p-5 sm:grid-cols-2"><Field label="Title" wide><input className="input" value={draft.title} onChange={(e) => set("title", e.target.value)} /></Field><Field label="Closure type"><select className="input" value={draft.closureType || "blackout"} onChange={(e) => set("closureType", e.target.value)}><option value="blackout">Club blackout</option><option value="pitch_closure">Pitch closure</option><option value="maintenance">Maintenance</option><option value="external_hire">External hire</option><option value="weather">Weather</option><option value="club_event">Club event</option></select></Field><Field label="Calendar visibility"><select className="input" value={draft.visibility || "club"} onChange={(e) => set("visibility", e.target.value)}><option value="club">Shared with affected coaches</option><option value="operators">Operators only</option></select></Field><Field label="Pitch"><select className="input" value={draft.pitchId} onChange={(e) => { const pitch = pitchCfg.find((row) => row.id === e.target.value); setDraft((current) => ({ ...current, pitchId: e.target.value, venueId: pitch?.siteId || current.venueId || "" })); }}><option value="">All relevant pitches</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field><Field label="Start date"><input type="date" className="input" value={draft.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field><Field label="Start time"><input type="time" className="input" value={draft.startTime} onChange={(e) => set("startTime", e.target.value)} /></Field><Field label="End date"><input type="date" className="input" value={draft.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field><Field label="End time"><input type="time" className="input" value={draft.endTime} onChange={(e) => set("endTime", e.target.value)} /></Field><Field label="Public coach-facing note" wide><textarea className="input min-h-[96px] py-3" value={draft.publicNote || ""} onChange={(e) => set("publicNote", e.target.value)} placeholder="Explain what is unavailable and what coaches should do next." /></Field><Field label="Operational reason" wide><textarea className="input min-h-[88px] py-3" value={draft.reason || ""} onChange={(e) => set("reason", e.target.value)} placeholder="Closure reason used in the operational record." /></Field><Field label="Internal note" wide><textarea className="input min-h-[88px] py-3" value={draft.internalNote || ""} onChange={(e) => set("internalNote", e.target.value)} placeholder="Visible only to club operators." /></Field></div>{error ? <div className="mx-5 mb-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div> : null}<div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white/95 p-5 backdrop-blur"><button type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-black">Cancel</button><button disabled={saving} type="button" onClick={async () => { setError(""); try { await onSave(draft); } catch (saveError) { setError(saveError?.message || "Could not save blackout."); } }} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white">{saving ? "Saving…" : "Save closure"}</button></div></section></div>;
 }
 
 function StatusBadge({ status }) {

@@ -14,6 +14,7 @@ import { expandRecurringBookingDraft } from "../../src/lib/planning/annualPlanne
 
 const migration = readFileSync("supabase/migrations/202607150005_coach_hub_annual_planner_pilot_refinement.sql", "utf8");
 const coachPage = readFileSync("src/pages/CoachHubPage.jsx", "utf8");
+const requestWizard = readFileSync("src/components/coach/CoachRequestWizard.jsx", "utf8");
 const annualPage = readFileSync("src/pages/AnnualPlannerPage.jsx", "utf8");
 const settings = readFileSync("src/components/Settings/CoachHubSettingsPanel.jsx", "utf8");
 const communications = readFileSync("src/pages/CommunicationsPage.jsx", "utf8");
@@ -119,8 +120,8 @@ describe("Ground Control v3.10.2 Coach Hub and Annual Planner pilot refinement",
 
   it("ships direct request conversations, team feeds and contact replacement", () => {
     expect(coachPage).toContain("Open conversation");
-    expect(coachPage).toContain("School holidays");
-    expect(coachPage).toContain("Dates to skip");
+    expect(requestWizard).toContain("School holidays");
+    expect(requestWizard).toContain("Dates to skip");
     expect(settings).toContain("Replace contact");
     expect(settings).toContain("CoachRequestConversation");
     expect(migration).toContain("create table if not exists public.coach_hub_request_messages");

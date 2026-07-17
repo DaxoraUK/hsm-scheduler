@@ -122,15 +122,28 @@ export function normaliseAnnualBooking(row = {}) {
 }
 
 export function normaliseAnnualBlackout(row = {}) {
+  const startAt = row.start_at || row.startAt || null;
+  const endAt = row.end_at || row.endAt || null;
   return Object.freeze({
     id: clean(row.id),
     clubId: clean(row.club_id || row.clubId),
     title: clean(row.title) || "Unavailable",
+    closureType: clean(row.closure_type || row.closureType || "blackout").toLowerCase(),
+    visibility: clean(row.visibility || "club").toLowerCase(),
     venueId: clean(row.venue_id || row.venueId),
+    venueName: clean(row.venue_name || row.venueName),
     pitchId: clean(row.pitch_id || row.pitchId),
-    startAt: row.start_at || row.startAt || null,
-    endAt: row.end_at || row.endAt || null,
+    pitchName: clean(row.pitch_name || row.pitchName),
+    startAt,
+    endAt,
+    startDate: normaliseDateKey(startAt),
+    endDate: normaliseDateKey(endAt),
+    startTime: normaliseTime(row.start_time || row.startTime || clean(startAt).slice(11, 16), "00:00"),
+    endTime: normaliseTime(row.end_time || row.endTime || clean(endAt).slice(11, 16), "23:59"),
     reason: clean(row.reason),
+    publicNote: clean(row.public_note || row.publicNote || row.reason),
+    internalNote: clean(row.internal_note || row.internalNote),
+    affectedBookingCount: Math.max(0, Math.round(finite(row.affected_booking_count ?? row.affectedBookingCount, 0))),
     createdAt: row.created_at || row.createdAt || null,
   });
 }

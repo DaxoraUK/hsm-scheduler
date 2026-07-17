@@ -16,6 +16,8 @@ import {
 const migration = readFileSync("supabase/migrations/202607150004_coach_hub_team_contacts_requests.sql", "utf8");
 const app = readFileSync("src/AppCore.jsx", "utf8");
 const coachPage = readFileSync("src/pages/CoachHubPage.jsx", "utf8");
+const sharedCalendar = readFileSync("src/components/coach/CoachSharedCalendar.jsx", "utf8");
+const requestWizard = readFileSync("src/components/coach/CoachRequestWizard.jsx", "utf8");
 const settingsPanel = readFileSync("src/components/Settings/CoachHubSettingsPanel.jsx", "utf8");
 const teamPanel = readFileSync("src/components/Settings/TeamSettingsPanel.jsx", "utf8");
 const communications = readFileSync("src/pages/CommunicationsPage.jsx", "utf8");
@@ -73,9 +75,9 @@ describe("Daxora Ground Control v3.10.1 Coach Hub, contacts and requests", () =>
     expect(app).toContain("<CoachHubPage");
     expect(app).toContain('roleWorkspaceAccess.isCoach');
     expect(coachPage).toContain("My Team Planner");
-    expect(coachPage).toContain("My calendar");
+    expect(sharedCalendar).toContain("My calendar");
     expect(coachPage).toContain("One contact record across Daxora");
-    expect(coachPage).toContain("Choose the booking you want to change or cancel");
+    expect(requestWizard).toContain("Choose the booking you want to change or cancel");
   });
 
   it("enforces Coach Hub and request permissions inside Supabase", () => {

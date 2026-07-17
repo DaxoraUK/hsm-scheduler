@@ -15,35 +15,85 @@ function icsDate(value) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
+function closureDate(value, endOfDay = false) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return icsDate(`${raw}T${endOfDay ? "23:59:59" : "00:00:00"}Z`);
+  return icsDate(raw);
+}
+
+function calendarEvent({ id, startAt, endAt, title, location = "", description = "", now }) {
+  const start = icsDate(startAt);
+  const end = icsDate(endAt);
+  if (!start || !end) return "";
+  return [
+    "BEGIN:VEVENT",
+    `UID:${icsEscape(id || crypto.randomUUID())}@daxora.co.uk`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${icsEscape(title)}`,
+    location ? `LOCATION:${icsEscape(location)}` : "",
+    description ? `DESCRIPTION:${icsEscape(description)}` : "",
+    "END:VEVENT",
+  ].filter(Boolean).join("\r\n");
+}
+
 function buildCalendar(payload = {}) {
   const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
+  const blackouts = Array.isArray(payload.blackouts) ? payload.blackouts : [];
+  const pitchClosures = Array.isArray(payload.pitch_closures || payload.pitchClosures) ? payload.pitch_closures || payload.pitchClosures : [];
   const now = icsDate(new Date());
-  const events = bookings.map((booking) => {
-    const start = icsDate(booking.start_at || booking.startAt);
-    const end = icsDate(booking.end_at || booking.endAt);
-    if (!start || !end) return "";
-    const title = booking.title || [booking.team_name || booking.teamName, booking.booking_type || booking.bookingType].filter(Boolean).join(" · ") || "Team booking";
-    const location = [booking.venue_name || booking.venueName, booking.pitch_name || booking.pitchName].filter(Boolean).join(" · ");
-    const description = [booking.opponent_name || booking.opponentName ? `Opponent: ${booking.opponent_name || booking.opponentName}` : "", booking.booking_reference || booking.bookingReference ? `Reference: ${booking.booking_reference || booking.bookingReference}` : ""].filter(Boolean).join("\\n");
-    return [
-      "BEGIN:VEVENT",
-      `UID:${icsEscape(booking.id || crypto.randomUUID())}@daxora.co.uk`,
-      `DTSTAMP:${now}`,
-      `DTSTART:${start}`,
-      `DTEND:${end}`,
-      `SUMMARY:${icsEscape(title)}`,
-      location ? `LOCATION:${icsEscape(location)}` : "",
-      description ? `DESCRIPTION:${icsEscape(description)}` : "",
-      "END:VEVENT",
-    ].filter(Boolean).join("\r\n");
-  }).filter(Boolean);
+
+  const bookingEvents = bookings.map((booking) => calendarEvent({
+    id: booking.id,
+    startAt: booking.start_at || booking.startAt,
+    endAt: booking.end_at || booking.endAt,
+    title: booking.title || [booking.team_name || booking.teamName, booking.booking_type || booking.bookingType].filter(Boolean).join(" · ") || "Team booking",
+    location: [booking.venue_name || booking.venueName, booking.pitch_name || booking.pitchName, booking.pitch_area_name || booking.pitchAreaName].filter(Boolean).join(" · "),
+    description: [
+      booking.opponent_name || booking.opponentName ? `Opponent: ${booking.opponent_name || booking.opponentName}` : "",
+      booking.booking_reference || booking.bookingReference ? `Reference: ${booking.booking_reference || booking.bookingReference}` : "",
+    ].filter(Boolean).join("\n"),
+    now,
+  }));
+
+  const blackoutEvents = blackouts.map((blackout) => calendarEvent({
+    id: `blackout-${blackout.id || crypto.randomUUID()}`,
+    startAt: blackout.start_at || blackout.startAt,
+    endAt: blackout.end_at || blackout.endAt,
+    title: `UNAVAILABLE · ${blackout.title || "Club blackout"}`,
+    location: [blackout.venue_name || blackout.venueName, blackout.pitch_name || blackout.pitchName].filter(Boolean).join(" · "),
+    description: blackout.public_note || blackout.publicNote || blackout.reason || "This facility period is unavailable.",
+    now,
+  }));
+
+  const closureEvents = pitchClosures.map((closure) => {
+    const data = closure.data && typeof closure.data === "object" ? closure.data : closure;
+    const startDate = data.effectiveFrom || data.effective_from || data.date || data.startDate || data.start_date;
+    const untilReopened = Boolean(data.untilReopened || data.until_reopened || String(data.mode || "").toLowerCase() === "untilreopened");
+    const endDate = untilReopened ? startDate : data.effectiveTo || data.effective_to || data.endDate || data.end_date || startDate;
+    const startAt = closureDate(startDate);
+    const endAt = closureDate(endDate, true);
+    return calendarEvent({
+      id: `pitch-closure-${data.id || closure.id || crypto.randomUUID()}`,
+      startAt,
+      endAt,
+      title: `PITCH CLOSED · ${data.pitch_name || data.pitchName || data.title || data.pitch_id || data.pitchId || "Facility"}`,
+      location: data.pitch_name || data.pitchName || data.pitch_id || data.pitchId || "",
+      description: data.public_note || data.publicNote || data.reason || data.notes || (untilReopened ? "Closed until the club confirms reopening." : "This pitch is unavailable."),
+      now,
+    });
+  });
+
+  const events = [...bookingEvents, ...blackoutEvents, ...closureEvents].filter(Boolean);
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Daxora//Coach Hub//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${icsEscape(payload.label || `${payload.club_name || "Daxora"} team calendar`)}`,
+    `X-WR-CALNAME:${icsEscape(payload.label || `${payload.club_name || "Daxora"} shared team calendar`)}`,
     ...events,
     "END:VCALENDAR",
     "",

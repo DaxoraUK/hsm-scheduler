@@ -691,9 +691,28 @@ export const DB = {
 
   async saveAnnualPlannerBlackout(clubId, blackout) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/save_annual_planner_blackout", {
+    return supaFetch("POST", "rpc/save_annual_planner_blackout_v2", {
       target_club_id: id,
       blackout_data: blackout && typeof blackout === "object" ? blackout : {},
+    });
+  },
+
+  async listAnnualPlannerClosureImpacts(clubId, { startDate = null, endDate = null } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_annual_planner_closure_impacts", {
+      target_club_id: id,
+      range_start: startDate || null,
+      range_end: endDate || null,
+    });
+    return asArray(result);
+  },
+
+  async resolveAnnualPlannerClosureImpact(clubId, impactId, resolution = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/resolve_annual_planner_closure_impact", {
+      target_club_id: id,
+      target_impact_id: impactId,
+      resolution_data: resolution && typeof resolution === "object" ? resolution : {},
     });
   },
 
@@ -765,19 +784,36 @@ export const DB = {
 
   async getCoachHubWorkspace(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
-    const result = await supaFetch("POST", "rpc/get_coach_hub_workspace", {
-      target_club_id: id,
-      range_start: startDate || null,
-      range_end: endDate || null,
-    });
-    return result && typeof result === "object"
+    const [result, calendarContext] = await Promise.all([
+      supaFetch("POST", "rpc/get_coach_hub_workspace", {
+        target_club_id: id,
+        range_start: startDate || null,
+        range_end: endDate || null,
+      }),
+      supaFetch("POST", "rpc/get_coach_hub_calendar_context", {
+        target_club_id: id,
+        range_start: startDate || null,
+        range_end: endDate || null,
+      }),
+    ]);
+    const base = result && typeof result === "object"
       ? result
       : { club: {}, person: {}, assignments: [], bookings: [], requests: [], messages: [], team_contacts: [] };
+    return { ...base, ...(calendarContext && typeof calendarContext === "object" ? calendarContext : {}) };
+  },
+
+  async checkCoachHubRequestAvailability(clubId, request) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/check_coach_hub_request_availability", {
+      target_club_id: id,
+      request_data: request && typeof request === "object" ? request : {},
+    });
+    return result && typeof result === "object" ? result : { available: false, status: "unavailable", reasons: [], alternatives: [] };
   },
 
   async submitCoachHubRequest(clubId, request) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/submit_coach_hub_request", {
+    return supaFetch("POST", "rpc/submit_coach_hub_request_v2", {
       target_club_id: id,
       request_data: request && typeof request === "object" ? request : {},
     });
@@ -785,7 +821,7 @@ export const DB = {
 
   async updateMyCoachHubRequest(clubId, requestId, request) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/update_my_coach_hub_request", {
+    return supaFetch("POST", "rpc/update_my_coach_hub_request_v2", {
       target_club_id: id,
       target_request_id: String(requestId || "").trim(),
       request_data: request && typeof request === "object" ? request : {},
@@ -794,7 +830,7 @@ export const DB = {
 
   async reviewCoachHubRequest(clubId, requestId, decision, data = {}) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/review_coach_hub_request", {
+    return supaFetch("POST", "rpc/review_coach_hub_request_v2", {
       target_club_id: id,
       target_request_id: requestId,
       decision: String(decision || "").trim(),
