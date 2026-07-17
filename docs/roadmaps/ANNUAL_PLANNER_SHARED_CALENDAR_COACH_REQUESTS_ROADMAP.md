@@ -1,9 +1,9 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
-**Roadmap status:** Active  
-**Baseline release:** Ground Control v3.10.5.3  
-**Roadmap baseline release:** v3.10.5.4  
-**Primary product area:** Annual Pitch Booking, Training and Friendlies Planner  
+**Roadmap status:** Active
+**Current implementation release:** Ground Control v3.10.6
+**Roadmap baseline release:** v3.10.5.4
+**Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
 
 ---
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current baseline through v3.10.5.3
+## 3. Current implementation through v3.10.6
 
 ### Shared calendar
 
@@ -101,16 +101,25 @@ This roadmap defines the integration contract with those areas without replacing
 - Database checks protect final submission and approval rather than relying only on browser validation.
 - Club isolation and active-club access remain mandatory.
 
-### Known baseline limitations
+### v3.10.6 implementation delivered
 
-- Split pitches do not yet expose an explicit **Full Pitch** resource alongside named areas.
-- A friendly requesting all of a split pitch can still receive area-capacity wording such as “two training slots available”.
-- Operator approval needs a stronger side-by-side calendar and alternative-offer workflow.
-- Weather disruption does not yet have a complete lifecycle or analytics model.
-- Winter sites and fixed seasonal slots are not yet first-class inventory.
-- Smart team allocation is not yet implemented.
-- Planner metrics do not yet flow through one shared analytics layer into both Annual Planner Insights and the main Analytics page.
-- Closure-impact resolution and notifications need further hardening.
+- Split pitches expose an explicit **Full Pitch** allocation alongside every configured named area.
+- Full Pitch blocks all overlapping named areas; any active named-area booking blocks Full Pitch.
+- Friendlies default to Full Pitch and receive resource-specific availability wording.
+- Operators can approve a request while changing its pitch, area, date, time or fixed winter slot.
+- Weather actions support postponement, cancellation and linked rearrangement while preserving the original booking.
+- Winter sites and fixed weekly slots are first-class seasonal inventory with dates, capacity, surface, floodlights, costs, access notes and restrictions.
+- Annual Planner Insights and the main Analytics page use the same shared planner analytics model.
+- Weather-lost hours, winter hours and external facility costs are available as grant-evidence measures.
+
+### Remaining limitations after v3.10.6
+
+- The approval dialog supports allocation changes, but the full side-by-side calendar comparison and coach acceptance of an offered alternative still need refinement.
+- Weather reinstatement, completion-after-rearrangement and delivery-status reporting for notifications remain later lifecycle work.
+- Winter-site provider contacts, accessibility, travel and cancellation automation require a deeper inventory phase.
+- Smart Manual, Assisted and Automatic Draft team allocation is not yet implemented.
+- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling.
+- Closure-impact resolution, coach notifications and bulk relocation need further hardening.
 
 ---
 
@@ -127,9 +136,9 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 5. Next implementation phase — v3.10.6
+## 5. Implementation phase delivered in v3.10.6
 
-### 5.1 Full-pitch resource semantics
+### 5.1 Full-pitch resource semantics - delivered
 
 Every subdivided pitch must support an explicit hierarchy:
 
@@ -159,7 +168,7 @@ Availability wording must be selected-resource aware:
 
 A friendly request for Full Pitch must never report remaining training-area capacity as though it were relevant availability.
 
-### 5.2 Operator approval workspace
+### 5.2 Operator approval workspace - foundation delivered
 
 The operator review should show the request and relevant calendar capacity together.
 
@@ -175,7 +184,7 @@ Actions:
 
 Alternative offers must show the original request and proposed alternative side by side. Coaches can accept, decline or message the club. Final approval must recheck capacity transactionally to protect against two operators approving conflicting requests at the same time.
 
-### 5.3 Weather disruption lifecycle
+### 5.3 Weather disruption lifecycle - foundation delivered
 
 Approved training sessions and friendlies must support:
 
@@ -201,7 +210,7 @@ Each weather action records:
 
 The original event must remain visible in history and analytics. Rearrangement should link the original and replacement rather than creating an unrelated booking.
 
-### 5.4 Winter-site inventory and fixed slots
+### 5.4 Winter-site inventory and fixed slots - foundation delivered
 
 Winter training must be a separate seasonal resource inventory.
 
@@ -232,7 +241,7 @@ Planner views and allocation runs must distinguish:
 
 Availability and capacity from one seasonal inventory must not leak into another.
 
-### 5.5 Shared analytics data foundation
+### 5.5 Shared analytics data foundation - delivered
 
 Introduce a common analytics contract for planner activity, used by both Annual Planner Insights and the main Analytics page.
 
@@ -254,7 +263,7 @@ The same query/view or service layer must supply both interfaces so headline tot
 
 ---
 
-## 6. Near-term phase — smart summer and winter allocation
+## 6. Next implementation phase - v3.10.7 smart summer and winter allocation
 
 ### Scheduling modes
 
@@ -630,3 +639,16 @@ Commercial claims must remain grounded in validated operational data and should 
 | Release | Change |
 |---|---|
 | v3.10.5.4 | Initial committed module roadmap covering baseline through v3.10.5.3 and agreed next phases. |
+
+
+---
+
+## 13. Release history
+
+| Release | Status | Scope |
+|---|---|---|
+| v3.10.5.4 | Complete | Committed module roadmap baseline. |
+| v3.10.6 | Complete | Full Pitch authority, winter-site inventory, weather disruption foundation, operator allocation changes and shared analytics foundation. |
+| v3.10.7 | Next | Manual, Assisted and Automatic Draft summer/winter team allocation with explainable recommendations and locks. |
+
+The roadmap must be updated after each implementation release and before the next module roadmap is started.

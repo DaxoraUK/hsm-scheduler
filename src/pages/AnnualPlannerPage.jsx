@@ -5,6 +5,7 @@ import {
   Ban,
   CalendarDays,
   CalendarRange,
+  CloudRain,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -25,6 +26,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Snowflake,
   UserCheck,
   Trash2,
   Users,
@@ -35,10 +37,15 @@ import DaxoraConfirmDialog from "../components/system/DaxoraConfirmDialog.jsx";
 import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorBoundary.jsx";
 import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDialog.jsx";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
+import WinterSiteWorkspace from "../components/planning/WinterSiteWorkspace.jsx";
+import WeatherDisruptionDialog from "../components/planning/WeatherDisruptionDialog.jsx";
+import AnnualPlannerAnalyticsSummary from "../components/analytics/AnnualPlannerAnalyticsSummary.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import {
   ANNUAL_BOOKING_STATUSES,
   ANNUAL_BOOKING_TYPES,
+  FULL_PITCH_AREA_ID,
+  FULL_PITCH_AREA_LABEL,
   RECURRENCE_OPTIONS,
   annualBookingToPayload,
   buildAnnualPlannerCsv,
@@ -53,8 +60,10 @@ import {
   normaliseAnnualBlackout,
   normaliseDateKey,
   normaliseTime,
+  pitchAreaOptions,
 } from "../lib/planning/annualPlannerEngine.js";
 import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
+import { buildAnnualPlannerAnalyticsModel } from "../lib/analytics/annualPlannerAnalyticsEngine.js";
 import { calendarEventTone, COACH_CALENDAR_LEGEND, eventOccursOnDate, normaliseCoachPitchClosure } from "../lib/coach/sharedCalendarEngine.js";
 import {
   buildPilotRefinementSnapshot,
@@ -117,13 +126,6 @@ function dateRangeForYear(year) {
   return { startDate: `${year}-01-01`, endDate: `${year}-12-31` };
 }
 
-function pitchTrainingAreas(pitch = {}) {
-  const raw = Array.isArray(pitch.trainingAreas || pitch.training_areas) ? (pitch.trainingAreas || pitch.training_areas) : [];
-  return raw.map((area, index) => ({
-    id: String(area?.id || `area-${index + 1}`),
-    label: String(area?.label || area?.name || `Area ${index + 1}`).trim(),
-  })).filter((area) => area.id && area.label);
-}
 
 function blankBooking({ year, month, pitchCfg, settings, canManage = false } = {}) {
   const today = new Date();
@@ -147,6 +149,9 @@ function blankBooking({ year, month, pitchCfg, settings, canManage = false } = {
     pitchName: pitchCfg?.[0]?.label || "",
     pitchAreaId: "",
     pitchAreaName: "",
+    seasonPhase: "regular",
+    siteInventoryId: "",
+    siteSlotId: "",
     startDate: date,
     startTime: "18:00",
     endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
@@ -187,7 +192,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -200,6 +205,7 @@ export default function AnnualPlannerPage({
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [editor, setEditor] = useState(null);
   const [blackoutEditor, setBlackoutEditor] = useState(null);
+  const [weatherBooking, setWeatherBooking] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -247,6 +253,8 @@ export default function AnnualPlannerPage({
         blackouts: Array.isArray(result?.blackouts) ? result.blackouts.map(normaliseAnnualBlackout) : [],
         pitchClosures: Array.isArray(pitchClosurePayload) ? pitchClosurePayload.map(normaliseCoachPitchClosure) : [],
         closureImpacts: Array.isArray(closureImpactPayload) ? closureImpactPayload : [],
+        winterSites: Array.isArray(result?.winter_sites || result?.winterSites) ? (result.winter_sites || result.winterSites) : [],
+        winterSlots: Array.isArray(result?.winter_slots || result?.winterSlots) ? (result.winter_slots || result.winterSlots) : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -397,6 +405,13 @@ export default function AnnualPlannerPage({
     rangeStart: `${year}-01-01`,
     rangeEnd: `${year + 1}-01-01`,
   }), [pilotWorkspace, pitchCfg, workspace.bookings, year]);
+  const annualAnalytics = useMemo(() => buildAnnualPlannerAnalyticsModel({
+    bookings: workspace.bookings,
+    blackouts: workspace.blackouts,
+    winterSites: workspace.winterSites,
+    winterSlots: workspace.winterSlots,
+    requests: coachRequests,
+  }, { year }), [coachRequests, workspace.blackouts, workspace.bookings, workspace.winterSites, workspace.winterSlots, year]);
 
   const openCoachAudience = useCallback(({ reason, bookingIds = [], blackoutIds = [], teamKeys = [] } = {}) => {
     const audience = buildAnnualPlannerCoachAudience({
@@ -466,6 +481,8 @@ export default function AnnualPlannerPage({
           title: effectiveDraft.title, bookingType: effectiveDraft.bookingType, status: effectiveDraft.status,
           teamKey: effectiveDraft.teamKey, teamName: effectiveDraft.teamName, opponentName: effectiveDraft.opponentName,
           venueId: effectiveDraft.venueId, venueName: effectiveDraft.venueName, pitchId: effectiveDraft.pitchId, pitchName: effectiveDraft.pitchName,
+          pitchAreaId: effectiveDraft.pitchAreaId, pitchAreaName: effectiveDraft.pitchAreaName,
+          seasonPhase: effectiveDraft.seasonPhase, siteInventoryId: effectiveDraft.siteInventoryId, siteSlotId: effectiveDraft.siteSlotId,
           startTime: effectiveDraft.startTime, endTime: effectiveDraft.endTime, recurrence: "none", recurrenceUntil: row.startDate,
           costPence: effectiveDraft.costPence, supplierReference: effectiveDraft.supplierReference, bookingReference: effectiveDraft.bookingReference,
           contactName: effectiveDraft.contactName, contactEmail: effectiveDraft.contactEmail, notes: effectiveDraft.notes,
@@ -622,6 +639,109 @@ export default function AnnualPlannerPage({
     }
   }
 
+  async function saveWinterSite(site) {
+    setSaving(true);
+    try {
+      await DB.saveAnnualPlannerWinterSite(clubId, site);
+      await loadWorkspace({ quiet: true });
+      toast.success(site.id ? "Winter site updated" : "Winter site added");
+    } finally { setSaving(false); }
+  }
+
+  async function performDeleteWinterSite(site) {
+    setSaving(true);
+    try {
+      await DB.deleteAnnualPlannerWinterSite(clubId, site.id);
+      await loadWorkspace({ quiet: true });
+      toast.success("Winter site removed");
+    } finally { setSaving(false); setConfirmRequest(null); }
+  }
+
+  function deleteWinterSite(site) {
+    setConfirmRequest({
+      tone: "danger",
+      title: "Remove winter site?",
+      description: `${site.name || "This winter site"} and its fixed slots will be removed from the seasonal inventory.`,
+      confirmLabel: "Remove winter site",
+      cancelLabel: "Keep winter site",
+      action: "delete_winter_site",
+      site,
+    });
+  }
+
+  async function saveWinterSlot(slot) {
+    setSaving(true);
+    try {
+      await DB.saveAnnualPlannerWinterSlot(clubId, slot);
+      await loadWorkspace({ quiet: true });
+      toast.success(slot.id ? "Winter slot updated" : "Winter slot added");
+    } finally { setSaving(false); }
+  }
+
+  async function performDeleteWinterSlot(slot) {
+    setSaving(true);
+    try {
+      await DB.deleteAnnualPlannerWinterSlot(clubId, slot.id);
+      await loadWorkspace({ quiet: true });
+      toast.success("Winter slot removed");
+    } finally { setSaving(false); setConfirmRequest(null); }
+  }
+
+  function deleteWinterSlot(slot) {
+    setConfirmRequest({
+      tone: "danger",
+      title: "Remove fixed winter slot?",
+      description: `${slot.label || "This fixed slot"} will be removed from the seasonal inventory.`,
+      confirmLabel: "Remove winter slot",
+      cancelLabel: "Keep winter slot",
+      action: "delete_winter_slot",
+      slot,
+    });
+  }
+
+  function nextDateForWeekday(dayOfWeek) {
+    const date = new Date();
+    const delta = (Number(dayOfWeek) - date.getDay() + 7) % 7;
+    date.setDate(date.getDate() + delta);
+    return normaliseDateKey(date);
+  }
+
+  function openWinterSlotBooking(site, slot) {
+    const base = blankBooking({ year, month, pitchCfg, settings: workspace.settings, canManage });
+    setEditor({
+      ...base,
+      title: `${slot.label || slot.areaName || "Winter training"} booking`,
+      seasonPhase: "winter",
+      siteInventoryId: site.id,
+      siteSlotId: slot.id,
+      venueId: `winter-site:${site.id}`,
+      venueName: site.name,
+      pitchId: `winter-slot:${slot.id}`,
+      pitchName: slot.label || slot.areaName || "Winter slot",
+      pitchAreaId: FULL_PITCH_AREA_ID,
+      pitchAreaName: slot.areaName || FULL_PITCH_AREA_LABEL,
+      startDate: nextDateForWeekday(slot.dayOfWeek ?? slot.day_of_week),
+      startTime: String(slot.startTime || slot.start_time || "18:00").slice(0, 5),
+      endTime: String(slot.endTime || slot.end_time || "19:00").slice(0, 5),
+      costPence: Number(slot.costPence ?? slot.cost_pence ?? site.costPence ?? site.cost_pence ?? 0) || 0,
+    });
+  }
+
+  async function recordWeatherDisruption(action, data) {
+    if (!weatherBooking) return;
+    setSaving(true);
+    try {
+      await DB.recordAnnualPlannerWeatherDisruption(clubId, weatherBooking.id, action, data);
+      setWeatherBooking(null);
+      setSelectedBooking(null);
+      await loadWorkspace({ quiet: true });
+      announceUpdate();
+      toast.success(action === "rearrange" ? "Session rearranged" : action === "cancel" ? "Session cancelled due to weather" : "Session postponed due to weather");
+    } catch (weatherError) {
+      toast.error("Weather update could not be saved", { description: weatherError?.message });
+    } finally { setSaving(false); }
+  }
+
   function openCreateBooking(date = selectedDate) {
     setEditor({ ...blankBooking({ year, month, pitchCfg, settings: workspace.settings, canManage }), startDate: date || normaliseDateKey(new Date()) });
   }
@@ -665,13 +785,14 @@ export default function AnnualPlannerPage({
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
         <div className="mb-2 flex min-h-4 items-center justify-end px-2 text-[10px] font-black uppercase tracking-wide text-slate-400">{lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
           {[
             ["calendar", "Calendar", CalendarDays, "Full year and monthly planning"],
             ["bookings", "Bookings", ListChecks, "Search and manage every booking"],
             ["requests", "Requests", ShieldCheck, "Approvals and provisional demand"],
             ["availability", "Availability", Ban, "Closures, blackouts and controls"],
-            ["insights", "Insights", Activity, "Utilisation, engagement and costs"],
+            ["winter", "Winter sites", Snowflake, "Fixed external and seasonal slots"],
+            ["insights", "Insights", Activity, "Utilisation, weather and grant evidence"],
           ].map(([key, label, Icon, detail]) => (
             <button key={key} type="button" onClick={() => setTab(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${tab === key ? "bg-slate-950 text-white shadow-md" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}>
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tab === key ? "bg-white/10 text-emerald-300" : "bg-white text-slate-500 shadow-sm"}`}><Icon size={19} /></span>
@@ -722,18 +843,35 @@ export default function AnnualPlannerPage({
         />
       ) : null}
 
+      {tab === "winter" ? (
+        <WinterSiteWorkspace
+          sites={workspace.winterSites}
+          slots={workspace.winterSlots}
+          canManage={canManage}
+          saving={saving}
+          onSaveSite={saveWinterSite}
+          onDeleteSite={deleteWinterSite}
+          onSaveSlot={saveWinterSlot}
+          onDeleteSlot={deleteWinterSlot}
+          onBookSlot={openWinterSlotBooking}
+        />
+      ) : null}
+
       {tab === "insights" ? (
         <DaxoraSectionErrorBoundary
           resetKey={`${clubId}:${year}:${pilotWorkspace.unavailable ? "unavailable" : "ready"}`}
           title="Annual Planner insights could not be displayed"
           description="Bookings, requests and approvals remain available. Retry Insights after the reporting data refreshes."
         >
+          <div className="space-y-6">
+            <AnnualPlannerAnalyticsSummary model={annualAnalytics} title="Annual Planner operational insights" />
           <PilotInsightsWorkspace
             snapshot={pilotSnapshot}
             canViewCosts={canViewCosts}
             metricsUnavailable={pilotWorkspace.unavailable}
             onCommunicateAll={() => openCoachAudience({ reason: "Annual Planner schedule update", teamKeys: [...new Set(workspace.bookings.map((booking) => booking.teamKey).filter(Boolean))] })}
           />
+          </div>
         </DaxoraSectionErrorBoundary>
       ) : null}
 
@@ -747,6 +885,7 @@ export default function AnnualPlannerPage({
         onEdit={(booking) => setEditor({ ...booking, status: approvalRequired && !canManage ? "requested" : booking.status, recurrence: "none", recurrenceUntil: booking.startDate, applyToSeries: false })}
         onApprove={(booking) => canManage ? updateBookingStatus(booking, "confirmed") : undefined}
         onCommunicate={(booking) => openCoachAudience({ reason: `Booking update: ${booking.title}`, bookingIds: [booking.id] })}
+        onWeather={(booking) => setWeatherBooking(booking)}
         onReconcile={async (booking) => {
           try {
             await DB.reconcileAnnualPlannerBookingCost(clubId, booking.id, { status: "reconciled", reference: booking.financeReference || booking.bookingReference || "Annual Planner" });
@@ -779,18 +918,26 @@ export default function AnnualPlannerPage({
         canViewCosts={canViewCosts}
         approvalRequired={approvalRequired}
         canManage={canManage}
+        winterSites={workspace.winterSites}
+        winterSlots={workspace.winterSlots}
         onSave={saveBooking}
       />
 
       <BlackoutEditor draft={blackoutEditor} setDraft={setBlackoutEditor} pitchCfg={pitchCfg} saving={saving} onSave={saveBlackout} />
 
-      {coachReview ? <CoachRequestReviewDialog request={coachReview} pitches={pitchCfg} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
+      {coachReview ? <CoachRequestReviewDialog request={coachReview} pitches={pitchCfg} winterSites={workspace.winterSites} winterSlots={workspace.winterSlots} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
       {conversationRequest ? <CoachRequestConversation clubId={clubId} request={conversationRequest} role="club" onClose={() => setConversationRequest(null)} /> : null}
+      {weatherBooking ? <WeatherDisruptionDialog booking={weatherBooking} pitches={pitchCfg} winterSites={workspace.winterSites} winterSlots={workspace.winterSlots} saving={saving} onClose={() => setWeatherBooking(null)} onSubmit={recordWeatherDisruption} /> : null}
 
       <DaxoraConfirmDialog
         request={confirmRequest}
         onCancel={() => setConfirmRequest(null)}
-        onConfirm={() => confirmRequest?.booking ? deleteBooking(confirmRequest) : setConfirmRequest(null)}
+        onConfirm={() => {
+          if (confirmRequest?.booking) return deleteBooking(confirmRequest);
+          if (confirmRequest?.action === "delete_winter_site" && confirmRequest.site) return performDeleteWinterSite(confirmRequest.site);
+          if (confirmRequest?.action === "delete_winter_slot" && confirmRequest.slot) return performDeleteWinterSlot(confirmRequest.slot);
+          setConfirmRequest(null);
+        }}
       />
     </div>
   );
@@ -917,7 +1064,7 @@ function BookingMiniCard({ booking, onClick, readOnly }) {
   return <button type="button" disabled={readOnly} onClick={onClick} className={`w-full rounded-2xl border p-4 text-left ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting} ${readOnly ? "cursor-default" : "hover:shadow-sm"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-black uppercase tracking-wide opacity-70">{booking.startTime}–{booking.endTime}</div><div className="mt-1 truncate text-sm font-black">{booking.title}</div><div className="mt-1 text-xs font-semibold opacity-80">{[booking.pitchName || "Pitch TBC", booking.pitchAreaName, booking.teamName].filter(Boolean).join(" · ")}</div></div>{readOnly ? <span className="rounded-full bg-white/70 px-2 py-1 text-[9px] font-black uppercase">Matchday</span> : <StatusBadge status={booking.status} />}</div></button>;
 }
 
-function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, onClose, onEdit, onApprove, onCommunicate, onReconcile, onDelete }) {
+function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, onClose, onEdit, onApprove, onCommunicate, onWeather, onReconcile, onDelete }) {
   if (!booking) return null;
   const financeStatus = booking.financeStatus || "unreconciled";
   return <div className="fixed inset-0 z-[220] flex justify-end bg-slate-950/55 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -932,18 +1079,20 @@ function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, 
         {booking.contactName || booking.contactEmail ? <Detail icon={Users} label="Booking contact" value={[booking.contactName, booking.contactEmail].filter(Boolean).join(" · ")} /> : null}
         {booking.bookingReference || booking.supplierReference || booking.financeReference ? <Detail icon={FileSpreadsheet} label="References" value={[booking.bookingReference, booking.supplierReference, booking.financeReference].filter(Boolean).join(" · ")} /> : null}
         {booking.notes ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-600">{booking.notes}</div> : null}
-        {canOperate ? <div className="grid gap-2 sm:grid-cols-2"><button disabled={saving} type="button" onClick={() => onEdit(booking)} className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-700">Edit booking</button><button disabled={saving || !booking.teamKey} type="button" onClick={() => onCommunicate?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 text-sm font-black text-violet-800 disabled:opacity-40"><Megaphone size={16} /> Contact coaches</button>{canViewCosts && Number(booking.costPence || 0) > 0 && financeStatus !== "reconciled" ? <button disabled={saving} type="button" onClick={() => onReconcile?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-black text-emerald-800"><Receipt size={16} /> Mark reconciled</button> : null}{booking.status === "requested" && canApprove ? <button disabled={saving} type="button" onClick={() => onApprove?.(booking)} className="h-11 rounded-xl bg-emerald-600 text-sm font-black text-white">Approve request</button> : <button disabled={saving} type="button" onClick={() => onDelete(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-sm font-black text-rose-700"><Trash2 size={16} /> Remove</button>}</div> : null}
+        {canOperate ? <div className="grid gap-2 sm:grid-cols-2"><button disabled={saving} type="button" onClick={() => onEdit(booking)} className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-700">Edit booking</button><button disabled={saving || ["cancelled", "rejected", "postponed"].includes(booking.status)} type="button" onClick={() => onWeather?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 text-sm font-black text-sky-800 disabled:opacity-40"><CloudRain size={16} /> Weather action</button><button disabled={saving || !booking.teamKey} type="button" onClick={() => onCommunicate?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 text-sm font-black text-violet-800 disabled:opacity-40"><Megaphone size={16} /> Contact coaches</button>{canViewCosts && Number(booking.costPence || 0) > 0 && financeStatus !== "reconciled" ? <button disabled={saving} type="button" onClick={() => onReconcile?.(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-black text-emerald-800"><Receipt size={16} /> Mark reconciled</button> : null}{booking.status === "requested" && canApprove ? <button disabled={saving} type="button" onClick={() => onApprove?.(booking)} className="h-11 rounded-xl bg-emerald-600 text-sm font-black text-white">Approve request</button> : <button disabled={saving} type="button" onClick={() => onDelete(booking)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-sm font-black text-rose-700"><Trash2 size={16} /> Remove</button>}</div> : null}
       </div>
     </aside>
   </div>;
 }
 
-function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, blackouts, matchdayBookings, canViewCosts, approvalRequired, canManage, onSave }) {
+function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, blackouts, matchdayBookings, canViewCosts, approvalRequired, canManage, winterSites = [], winterSlots = [], onSave }) {
   const [localError, setLocalError] = useState("");
   if (!draft) return null;
 
   const selectedPitch = pitchCfg.find((pitch) => String(pitch.id) === String(draft.pitchId));
-  const selectedAreas = pitchTrainingAreas(selectedPitch);
+  const selectedAreas = pitchAreaOptions(selectedPitch || {}, { includeFullPitch: true });
+  const selectedWinterSlot = winterSlots.find((slot) => String(slot.id) === String(draft.siteSlotId));
+  const selectedWinterSite = winterSites.find((site) => String(site.id) === String(draft.siteInventoryId || selectedWinterSlot?.site_id || selectedWinterSlot?.siteId));
   const occurrences = expandRecurringBookingDraft(draft);
   const conflicts = occurrences.flatMap((occurrence) => detectAnnualPlannerConflicts(occurrence, {
     bookings,
@@ -959,14 +1108,19 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
 
   const choosePitch = (pitchId) => {
     const pitch = pitchCfg.find((row) => String(row.id) === String(pitchId));
+    const areas = pitchAreaOptions(pitch || {}, { includeFullPitch: true });
+    const fullPitchByDefault = ["friendly", "camp", "tournament", "maintenance", "external_hire"].includes(draft.bookingType) && areas.length;
     setDraft((current) => ({
       ...current,
       pitchId,
       pitchName: pitch?.label || pitch?.name || "",
       venueId: pitch?.siteId || current.venueId || "",
       venueName: pitch?.siteLabel || pitch?.venueName || current.venueName || "",
-      pitchAreaId: "",
-      pitchAreaName: "",
+      pitchAreaId: fullPitchByDefault ? FULL_PITCH_AREA_ID : "",
+      pitchAreaName: fullPitchByDefault ? FULL_PITCH_AREA_LABEL : "",
+      seasonPhase: current.seasonPhase === "winter" ? "regular" : (current.seasonPhase || "regular"),
+      siteInventoryId: "",
+      siteSlotId: "",
     }));
   };
 
@@ -975,18 +1129,40 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
     setDraft((current) => ({ ...current, pitchAreaId: areaId, pitchAreaName: area?.label || "" }));
   };
 
+  const chooseWinterSlot = (slotId) => {
+    const slot = winterSlots.find((row) => String(row.id) === String(slotId));
+    const site = winterSites.find((row) => String(row.id) === String(slot?.site_id || slot?.siteId));
+    if (!slot || !site) return;
+    setDraft((current) => ({
+      ...current,
+      seasonPhase: "winter",
+      siteInventoryId: site.id,
+      siteSlotId: slot.id,
+      venueId: `winter-site:${site.id}`,
+      venueName: site.name,
+      pitchId: `winter-slot:${slot.id}`,
+      pitchName: slot.label || slot.area_name || slot.areaName || "Winter slot",
+      pitchAreaId: FULL_PITCH_AREA_ID,
+      pitchAreaName: slot.area_name || slot.areaName || FULL_PITCH_AREA_LABEL,
+      startTime: String(slot.start_time || slot.startTime || current.startTime).slice(0, 5),
+      endTime: String(slot.end_time || slot.endTime || current.endTime).slice(0, 5),
+      costPence: Number(slot.cost_pence ?? slot.costPence ?? site.cost_pence ?? site.costPence ?? current.costPence ?? 0) || 0,
+    }));
+  };
+
   const submit = async () => {
     setLocalError("");
     if (!draft.title?.trim()) return setLocalError("Enter a clear booking title.");
-    if (!draft.pitchId) return setLocalError("Choose a pitch before saving.");
+    if (!draft.pitchId && !draft.siteSlotId) return setLocalError("Choose a club pitch or fixed winter slot before saving.");
+    if (selectedAreas.length && !draft.pitchAreaId && !draft.siteSlotId) return setLocalError("Choose Full Pitch or a named pitch area before saving.");
     if (conflicts.length) return setLocalError(conflicts[0].message);
     try {
       await onSave({
         ...draft,
-        pitchName: selectedPitch?.label || draft.pitchName,
-        pitchAreaName: selectedAreas.find((area) => area.id === draft.pitchAreaId)?.label || draft.pitchAreaName || "",
-        venueId: selectedPitch?.siteId || draft.venueId,
-        venueName: selectedPitch?.siteLabel || draft.venueName,
+        pitchName: selectedPitch?.label || selectedWinterSlot?.label || draft.pitchName,
+        pitchAreaName: selectedAreas.find((area) => area.id === draft.pitchAreaId)?.label || selectedWinterSlot?.area_name || selectedWinterSlot?.areaName || draft.pitchAreaName || "",
+        venueId: selectedPitch?.siteId || (selectedWinterSite ? `winter-site:${selectedWinterSite.id}` : draft.venueId),
+        venueName: selectedPitch?.siteLabel || selectedWinterSite?.name || draft.venueName,
       });
     } catch (error) {
       setLocalError(error?.message || "The booking could not be saved.");
@@ -1004,12 +1180,14 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
         <div className="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_310px]">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Booking title" wide><input value={draft.title || ""} onChange={(event) => set("title", event.target.value)} className="input" /></Field>
-            <Field label="Type"><select value={draft.bookingType || "training"} onChange={(event) => set("bookingType", event.target.value)} className="input">{ANNUAL_BOOKING_TYPES.filter((type) => type.value !== "match").map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></Field>
+            <Field label="Type"><select value={draft.bookingType || "training"} onChange={(event) => { const nextType = event.target.value; setDraft((current) => ({ ...current, bookingType: nextType, pitchAreaId: selectedAreas.length && ["friendly", "camp", "tournament", "maintenance", "external_hire"].includes(nextType) ? FULL_PITCH_AREA_ID : current.pitchAreaId, pitchAreaName: selectedAreas.length && ["friendly", "camp", "tournament", "maintenance", "external_hire"].includes(nextType) ? FULL_PITCH_AREA_LABEL : current.pitchAreaName })); }} className="input">{ANNUAL_BOOKING_TYPES.filter((type) => type.value !== "match").map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></Field>
             <Field label="Status"><select disabled={approvalRequired && !canManage} value={approvalRequired && !canManage ? "requested" : draft.status || "provisional"} onChange={(event) => set("status", event.target.value)} className="input disabled:bg-slate-100 disabled:text-slate-500">{(approvalRequired && !canManage ? ANNUAL_BOOKING_STATUSES.filter((status) => status.value === "requested") : ANNUAL_BOOKING_STATUSES.filter((status) => !["cancelled", "rejected"].includes(status.value))).map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select>{approvalRequired && !canManage ? <span className="mt-1 block text-[11px] font-semibold text-amber-700">Changes are submitted for owner or administrator approval.</span> : null}</Field>
             <Field label="Team"><select value={draft.teamKey || ""} onChange={(event) => { const team = teamCfg.find((row) => String(row.id || row.name) === event.target.value); setDraft((current) => ({ ...current, teamKey: event.target.value, teamName: team?.name || "" })); }} className="input"><option value="">Club-wide / no team</option>{teamCfg.map((team) => <option key={team.id || team.name} value={team.id || team.name}>{team.name}</option>)}</select></Field>
             {draft.bookingType === "friendly" ? <Field label="Opponent"><input value={draft.opponentName || ""} onChange={(event) => set("opponentName", event.target.value)} className="input" placeholder="Visiting club or internal team" /></Field> : null}
-            <Field label="Pitch"><select value={draft.pitchId || ""} onChange={(event) => choosePitch(event.target.value)} className="input"><option value="">Choose pitch</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field>
-            {selectedAreas.length && draft.bookingType === "training" ? <Field label="Pitch area"><select value={draft.pitchAreaId || ""} onChange={(event) => chooseArea(event.target.value)} className="input"><option value="">Unallocated shared space</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Choose Half A or Half B so simultaneous bookings display separately and cannot use the same area twice.</span></Field> : null}
+            <Field label="Season"><select value={draft.seasonPhase || "regular"} onChange={(event) => { const next = event.target.value; setDraft((current) => ({ ...current, seasonPhase: next, ...(next !== "winter" ? { siteInventoryId: "", siteSlotId: "" } : {}) })); }} className="input"><option value="preseason">Pre-season</option><option value="regular">Regular season</option><option value="winter">Winter training</option></select></Field>
+            {draft.seasonPhase === "winter" && winterSlots.length ? <Field label="Fixed winter slot" wide><select value={draft.siteSlotId || ""} onChange={(event) => chooseWinterSlot(event.target.value)} className="input"><option value="">Choose fixed winter slot</option>{winterSlots.filter((slot) => slot.active !== false).map((slot) => { const site = winterSites.find((row) => String(row.id) === String(slot.site_id || slot.siteId)); return <option key={slot.id} value={slot.id}>{site?.name || "Winter site"} · {slot.label || slot.area_name || slot.areaName || "Training slot"} · {String(slot.start_time || slot.startTime).slice(0,5)}–{String(slot.end_time || slot.endTime).slice(0,5)}</option>; })}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Winter availability uses this site's dates, weekly slots, capacity and cost rather than the normal grass-pitch inventory.</span></Field> : null}
+            {draft.seasonPhase !== "winter" || !draft.siteSlotId ? <Field label="Pitch"><select value={draft.siteSlotId ? "" : (draft.pitchId || "")} onChange={(event) => choosePitch(event.target.value)} className="input"><option value="">Choose pitch</option>{pitchCfg.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label || pitch.id}</option>)}</select></Field> : null}
+            {selectedAreas.length && !draft.siteSlotId ? <Field label="Pitch allocation"><select value={draft.pitchAreaId || ""} onChange={(event) => chooseArea(event.target.value)} className="input"><option value="">Choose allocation</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Full Pitch blocks every half. Named halves can run simultaneously up to the pitch capacity.</span></Field> : null}
             <Field label="Date"><input type="date" value={draft.startDate || ""} onChange={(event) => set("startDate", event.target.value)} className="input" /></Field>
             <Field label="Starts"><input type="time" step="900" value={normaliseTime(draft.startTime)} onChange={(event) => set("startTime", event.target.value)} className="input" /></Field>
             <Field label="Finishes"><input type="time" step="900" value={normaliseTime(draft.endTime, "19:30")} onChange={(event) => set("endTime", event.target.value)} className="input" /></Field>
@@ -1034,7 +1212,7 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
 
           <aside className="space-y-4">
             <div className={`rounded-2xl border p-4 ${conflicts.length ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-center gap-2 text-sm font-black">{conflicts.length ? <AlertTriangle className="text-rose-600" size={18} /> : <CheckCircle2 className="text-emerald-600" size={18} />}{conflicts.length ? "Conflict found" : "Booking can be saved"}</div><p className="mt-2 text-xs font-semibold leading-5 opacity-80">{conflicts.length ? conflicts[0].message : `${occurrences.length || 1} occurrence${occurrences.length === 1 ? "" : "s"} checked against areas, pitch capacity, training, friendlies, blackouts and current matchdays.`}</p></div>
-            {selectedPitch && draft.bookingType === "training" ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-[10px] font-black uppercase tracking-wide text-sky-800">Shared pitch capacity</div><div className="mt-2 text-sm font-black text-sky-950">{selectedPitch.label || selectedPitch.id} supports {Math.max(1, Number(selectedPitch.trainingCapacity || selectedPitch.training_capacity || 1))} simultaneous teams</div>{selectedAreas.length ? <div className="mt-2 text-xs font-semibold text-sky-800">Areas: {selectedAreas.map((area) => area.label).join(" · ")}</div> : null}</div> : null}
+            {selectedPitch && draft.bookingType === "training" ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-[10px] font-black uppercase tracking-wide text-sky-800">Shared pitch capacity</div><div className="mt-2 text-sm font-black text-sky-950">{selectedPitch.label || selectedPitch.id} supports {Math.max(1, Number(selectedPitch.trainingCapacity || selectedPitch.training_capacity || 1))} simultaneous teams</div>{selectedAreas.length ? <div className="mt-2 text-xs font-semibold text-sky-800">Allocations: {selectedAreas.map((area) => area.label).join(" · ")}</div> : null}</div> : null}
             {suggestions.length ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Available alternatives</div><div className="mt-3 space-y-2">{suggestions.map((suggestion) => <button key={`${suggestion.startDate}-${suggestion.startTime}-${suggestion.pitchId}`} type="button" onClick={() => setDraft((current) => ({ ...current, startDate: suggestion.startDate, startTime: suggestion.startTime, endTime: suggestion.endTime, pitchId: suggestion.pitchId, pitchName: suggestion.pitchName, pitchAreaId: suggestion.pitchAreaId || "", pitchAreaName: suggestion.pitchAreaName || "" }))} className="w-full rounded-xl bg-white p-3 text-left text-xs font-bold text-sky-950 shadow-sm"><span className="block font-black">{formatDate(`${suggestion.startDate}T12:00:00`, { weekday: "short", day: "numeric", month: "short" })} · {suggestion.startTime}</span><span className="mt-1 block text-sky-700">{[suggestion.pitchName || suggestion.pitchId, suggestion.pitchAreaName].filter(Boolean).join(" · ")}</span></button>)}</div></div> : null}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Series preview</div><div className="mt-2 text-2xl font-black text-slate-950">{occurrences.length || 0}</div><div className="text-xs font-semibold text-slate-500">bookings will be created</div></div>
           </aside>
@@ -1055,7 +1233,7 @@ function BlackoutEditor({ draft, setDraft, pitchCfg, saving, onSave }) {
 }
 
 function StatusBadge({ status }) {
-  const tones = { confirmed: "bg-emerald-100 text-emerald-800", provisional: "bg-sky-100 text-sky-800", requested: "bg-amber-100 text-amber-800", cancelled: "bg-slate-100 text-slate-600", rejected: "bg-rose-100 text-rose-700" };
+  const tones = { confirmed: "bg-emerald-100 text-emerald-800", completed: "bg-emerald-100 text-emerald-800", provisional: "bg-sky-100 text-sky-800", requested: "bg-amber-100 text-amber-800", postponed: "bg-violet-100 text-violet-800", cancelled: "bg-slate-100 text-slate-600", rejected: "bg-rose-100 text-rose-700" };
   return <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${tones[status] || tones.provisional}`}>{status || "provisional"}</span>;
 }
 

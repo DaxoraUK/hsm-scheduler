@@ -3,6 +3,7 @@ import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, C
 import { toast } from "sonner";
 import { DB } from "../../lib/supabase.js";
 import { buildRequestPayload, requestTypeOptions } from "../../lib/coach/coachHubEngine.js";
+import { FULL_PITCH_AREA_ID, FULL_PITCH_AREA_LABEL, isFullPitchArea, pitchAreaOptions } from "../../lib/planning/annualPlannerEngine.js";
 import { normaliseAvailabilityResult } from "../../lib/coach/sharedCalendarEngine.js";
 
 function formatDate(value, options = { weekday: "short", day: "numeric", month: "short" }) {
@@ -21,7 +22,7 @@ function Field({ label, children, wide = false, hint = "" }) {
 
 const STEPS = ["Request", "Date & time", "Pitch options", "Review"];
 
-export default function CoachRequestWizard({ clubId, draft, setDraft, assignments, bookings, pitches = [], busy, onSubmit }) {
+export default function CoachRequestWizard({ clubId, draft, setDraft, assignments, bookings, pitches = [], winterSites = [], winterSlots = [], busy, onSubmit }) {
   const [step, setStep] = useState(0);
   const [availability, setAvailability] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -31,9 +32,10 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
   const isExistingBookingRequest = ["change", "cancellation"].includes(draft.requestType);
   const eligibleBookings = (Array.isArray(bookings) ? bookings : []).filter((row) => row.teamKey === assignment.teamKey && !["cancelled", "rejected"].includes(row.status)).sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   const selectedPitch = pitches.find((row) => String(row.id) === String(draft.pitchId));
-  const selectedAreas = selectedPitch?.trainingAreas || [];
-  const requiresNamedArea = !isExistingBookingRequest
-    && draft.requestType === "training"
+  const selectedAreas = pitchAreaOptions(selectedPitch || {}, { includeFullPitch: true });
+  const selectedWinterSlot = winterSlots.find((row) => String(row.id) === String(draft.siteSlotId));
+  const selectedWinterSite = winterSites.find((row) => String(row.id) === String(draft.siteInventoryId || selectedWinterSlot?.site_id || selectedWinterSlot?.siteId));
+  const requiresAllocation = !isExistingBookingRequest
     && Boolean(draft.pitchId)
     && selectedAreas.length > 0;
   const set = (key, value) => { setSubmitError(""); setDraft((current) => ({ ...current, [key]: value })); };
@@ -61,7 +63,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
       }
     }, 450);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [clubId, draft.assignmentId, draft.date, draft.endTime, draft.pitchId, draft.requestType, draft.startTime, draft.timeFlexible, draft.flexibilityMinutes, draft.acceptablePitchIds, isExistingBookingRequest, payload]);
+  }, [clubId, draft.assignmentId, draft.date, draft.endTime, draft.pitchId, draft.requestType, draft.startTime, draft.timeFlexible, draft.flexibilityMinutes, draft.acceptablePitchIds, draft.siteSlotId, isExistingBookingRequest, payload]);
 
   const selectPitch = (pitchId) => {
     const pitch = pitches.find((row) => String(row.id) === String(pitchId));
@@ -69,16 +71,39 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
       ...current,
       pitchId: pitch?.id || "",
       pitchName: pitch?.label || "",
-      pitchAreaId: "",
-      pitchAreaName: "",
+      pitchAreaId: current.requestType === "friendly" && pitchAreaOptions(pitch || {}, { includeFullPitch: true }).length ? FULL_PITCH_AREA_ID : "",
+      pitchAreaName: current.requestType === "friendly" && pitchAreaOptions(pitch || {}, { includeFullPitch: true }).length ? FULL_PITCH_AREA_LABEL : "",
       venueId: pitch?.siteId || "",
-      venueName: pitch?.siteName || current.venueName || "",
+      venueName: pitch?.siteName || pitch?.siteLabel || current.venueName || "",
+      seasonPhase: current.seasonPhase === "winter" ? "regular" : (current.seasonPhase || "regular"),
+      siteInventoryId: "",
+      siteSlotId: "",
     }));
   };
 
   const selectArea = (areaId) => {
     const area = selectedAreas.find((row) => row.id === areaId);
     setDraft((current) => ({ ...current, pitchAreaId: area?.id || "", pitchAreaName: area?.label || "" }));
+  };
+
+  const selectWinterSlot = (slotId) => {
+    const slot = winterSlots.find((row) => String(row.id) === String(slotId));
+    const site = winterSites.find((row) => String(row.id) === String(slot?.site_id || slot?.siteId));
+    if (!slot || !site) return;
+    setDraft((current) => ({
+      ...current,
+      seasonPhase: "winter",
+      siteInventoryId: site.id,
+      siteSlotId: slot.id,
+      venueId: `winter-site:${site.id}`,
+      venueName: site.name,
+      pitchId: `winter-slot:${slot.id}`,
+      pitchName: slot.label || slot.area_name || slot.areaName || "Winter slot",
+      pitchAreaId: FULL_PITCH_AREA_ID,
+      pitchAreaName: slot.area_name || slot.areaName || FULL_PITCH_AREA_LABEL,
+      startTime: String(slot.start_time || slot.startTime || current.startTime).slice(0, 5),
+      endTime: String(slot.end_time || slot.endTime || current.endTime).slice(0, 5),
+    }));
   };
 
   const selectBooking = (bookingId) => {
@@ -105,20 +130,22 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
     targetBookingId: ["change", "cancellation"].includes(requestType) ? current.targetBookingId : "",
     title: assignment.teamName ? `${assignment.teamName} ${requestType}` : `${requestType} request`,
     recurrence: requestType === "cancellation" ? "none" : current.recurrence,
+    pitchAreaId: requestType === "friendly" && pitchAreaOptions(pitches.find((row) => String(row.id) === String(current.pitchId)) || {}, { includeFullPitch: true }).length ? FULL_PITCH_AREA_ID : current.pitchAreaId,
+    pitchAreaName: requestType === "friendly" && pitchAreaOptions(pitches.find((row) => String(row.id) === String(current.pitchId)) || {}, { includeFullPitch: true }).length ? FULL_PITCH_AREA_LABEL : current.pitchAreaName,
   }));
 
   const canContinue = () => {
     if (step === 0) return Boolean(draft.assignmentId && draft.requestType && draft.title?.trim() && (!isExistingBookingRequest || draft.targetBookingId));
     if (step === 1) return Boolean(draft.date && draft.startTime && draft.endTime && draft.endTime > draft.startTime);
-    if (step === 2) return !requiresNamedArea || Boolean(draft.pitchAreaId);
+    if (step === 2) return !requiresAllocation || Boolean(draft.pitchAreaId);
     return true;
   };
 
   const submit = async () => {
     setSubmitError("");
     if (!canContinue()) {
-      toast.error(requiresNamedArea && !draft.pitchAreaId ? "Choose a pitch area" : "Complete the required request details", {
-        description: requiresNamedArea && !draft.pitchAreaId ? "Select Half A, Half B or another named area so shared-pitch capacity can be checked correctly." : undefined,
+      toast.error(requiresAllocation && !draft.pitchAreaId ? "Choose a pitch area" : "Complete the required request details", {
+        description: requiresAllocation && !draft.pitchAreaId ? "Select Full Pitch or a named area so capacity can be checked correctly." : undefined,
       });
       return;
     }
@@ -148,8 +175,8 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
       ...current,
       pitchId: alternative.pitchId,
       pitchName: alternative.pitchName,
-      pitchAreaId: "",
-      pitchAreaName: "",
+      pitchAreaId: current.requestType === "friendly" ? FULL_PITCH_AREA_ID : "",
+      pitchAreaName: current.requestType === "friendly" ? FULL_PITCH_AREA_LABEL : "",
       venueId: alternative.venueId || pitch?.siteId || "",
       venueName: alternative.venueName || pitch?.siteName || "",
       date: alternative.startDate,
@@ -170,7 +197,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
         <div className="p-5 sm:p-6">
           {step === 0 ? <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Team"><select value={draft.assignmentId} onChange={(event) => { const next = assignments.find((row) => row.id === event.target.value); setDraft((current) => ({ ...current, assignmentId: event.target.value, targetBookingId: "", title: next?.teamName ? `${next.teamName} ${current.requestType}` : current.title })); }} className="input">{assignments.map((row) => <option key={row.id} value={row.id}>{row.teamName} · {row.staffRole}</option>)}</select></Field>
-            <Field label="Request type"><select value={draft.requestType} onChange={(event) => changeRequestType(event.target.value)} className="input">{options.map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}</select></Field>
+            <Field label="Season"><select value={draft.seasonPhase || "regular"} onChange={(event) => { const next = event.target.value; setDraft((current) => ({ ...current, seasonPhase: next, ...(next !== "winter" ? { siteInventoryId: "", siteSlotId: "" } : {}) })); }} className="input"><option value="preseason">Pre-season</option><option value="regular">Regular season</option><option value="winter">Winter training</option></select></Field><Field label="Request type"><select value={draft.requestType} onChange={(event) => changeRequestType(event.target.value)} className="input">{options.map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}</select></Field>
             {isExistingBookingRequest ? <Field label={draft.requestType === "cancellation" ? "Booking to cancel" : "Booking to change"} wide><p className="mb-2 text-xs font-semibold text-slate-500">Choose the booking you want to change or cancel.</p><select value={draft.targetBookingId || ""} onChange={(event) => selectBooking(event.target.value)} className="input"><option value="">Choose an active team booking…</option>{eligibleBookings.map((booking) => <option key={booking.id} value={booking.id}>{formatDate(booking.startAt, { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · {booking.startTime} · {booking.pitchName || booking.title}</option>)}</select></Field> : null}
             <Field label="Title" wide><input value={draft.title} onChange={(event) => set("title", event.target.value)} className="input" /></Field>
             {draft.requestType === "friendly" ? <><Field label="Opponent"><input value={draft.opponentName} onChange={(event) => set("opponentName", event.target.value)} className="input" /></Field><Field label="Format"><input value={draft.format} onChange={(event) => set("format", event.target.value)} placeholder="11v11, 9v9…" className="input" /></Field></> : null}
@@ -186,16 +213,17 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
           </div> : null}
 
           {step === 2 ? <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2"><Field label="Preferred pitch"><select value={draft.pitchId || ""} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label} · {pitch.trainingCapacity} training slot{pitch.trainingCapacity === 1 ? "" : "s"}</option>)}</select></Field><Field label="Pitch area" hint={selectedPitch ? `${selectedPitch.trainingCapacity} team${selectedPitch.trainingCapacity === 1 ? "" : "s"} can train simultaneously.` : "Choose a pitch first."}><select disabled={!selectedAreas.length} value={draft.pitchAreaId || ""} onChange={(event) => selectArea(event.target.value)} className="input disabled:bg-slate-100"><option value="">{selectedAreas.length ? "Choose a pitch area…" : "Whole pitch / shared capacity"}</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></Field></div>
+            {draft.seasonPhase === "winter" && winterSlots.length ? <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><Field label="Fixed winter site slot" hint="Winter requests use the provider's specific slot, dates and capacity."><select value={draft.siteSlotId || ""} onChange={(event) => selectWinterSlot(event.target.value)} className="input"><option value="">Choose winter slot</option>{winterSlots.filter((slot) => slot.active !== false).map((slot) => { const site = winterSites.find((row) => String(row.id) === String(slot.site_id || slot.siteId)); return <option key={slot.id} value={slot.id}>{site?.name || "Winter site"} · {slot.label || slot.area_name || slot.areaName || "Training slot"} · {String(slot.start_time || slot.startTime).slice(0,5)}–{String(slot.end_time || slot.endTime).slice(0,5)}</option>; })}</select></Field>{selectedWinterSite ? <p className="mt-3 text-xs font-semibold leading-5 text-violet-900">{selectedWinterSite.address || "Address TBC"} · {selectedWinterSite.surface || "Surface TBC"} · {selectedWinterSite.floodlights ? "Floodlit" : "No floodlights"}</p> : null}</div> : null}
+            {draft.seasonPhase !== "winter" || !draft.siteSlotId ? <div className="grid gap-4 sm:grid-cols-2"><Field label="Preferred pitch"><select value={draft.siteSlotId ? "" : (draft.pitchId || "")} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label} · {pitch.trainingCapacity} training slot{pitch.trainingCapacity === 1 ? "" : "s"}</option>)}</select></Field><Field label="Pitch allocation" hint={selectedPitch ? `${selectedPitch.trainingCapacity} team${selectedPitch.trainingCapacity === 1 ? "" : "s"} can train simultaneously. Full Pitch consumes all capacity.` : "Choose a pitch first."}><select disabled={!selectedAreas.length} value={draft.pitchAreaId || ""} onChange={(event) => selectArea(event.target.value)} className="input disabled:bg-slate-100"><option value="">{selectedAreas.length ? "Choose allocation..." : "No area configuration"}</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></Field></div> : null}
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Acceptable alternatives</div><p className="mt-1 text-xs font-semibold leading-5 text-sky-900/75">Select pitches the club may approve without sending the request back to you.</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{pitches.filter((pitch) => pitch.id !== draft.pitchId).map((pitch) => <label key={pitch.id} className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-xs font-black text-sky-950"><input type="checkbox" checked={(draft.acceptablePitchIds || []).includes(pitch.id)} onChange={() => toggleAcceptablePitch(pitch.id)} /> {pitch.label}</label>)}</div></div>
             <label className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4"><input type="checkbox" className="mt-1" checked={Boolean(draft.timeFlexible)} onChange={(event) => set("timeFlexible", event.target.checked)} /><span className="min-w-0 flex-1"><span className="block text-sm font-black text-violet-950">My time is flexible</span><span className="mt-1 block text-xs font-semibold leading-5 text-violet-800">Let the club offer a nearby slot automatically.</span>{draft.timeFlexible ? <select value={draft.flexibilityMinutes || 30} onChange={(event) => set("flexibilityMinutes", Number(event.target.value))} className="input mt-3"><option value="30">Within 30 minutes</option><option value="60">Within 1 hour</option><option value="90">Within 90 minutes</option><option value="120">Within 2 hours</option></select> : null}</span></label>
-            {selectedAreas.length ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold leading-5 text-emerald-900">Each named area is checked separately. A team may run a split training session on two different halves when the pitch capacity allows it; the same half cannot be booked twice.</div> : null}
+            {selectedAreas.length ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold leading-5 text-emerald-900">Full Pitch blocks every named area. Half A and Half B are checked separately and may run simultaneously when capacity allows; the same half cannot be booked twice.</div> : null}
             <Field label="Notes for the club" wide><textarea rows="4" value={draft.notes} onChange={(event) => set("notes", event.target.value)} className="input min-h-[110px] py-3" placeholder="Access needs, preferred areas or anything the scheduler should know." /></Field>
           </div> : null}
 
           {step === 3 ? <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-4"><div className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Request summary</div><h3 className="mt-2 text-xl font-black">{draft.title}</h3><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="flex items-center gap-2 text-sm font-bold"><CalendarDays size={17} /> {formatDate(`${draft.date}T12:00:00`, { weekday: "long", day: "numeric", month: "long" })}</div><div className="flex items-center gap-2 text-sm font-bold"><Clock3 size={17} /> {draft.startTime}–{draft.endTime}</div><div className="flex items-center gap-2 text-sm font-bold sm:col-span-2"><MapPin size={17} /> {[draft.venueName, draft.pitchName, draft.pitchAreaName].filter(Boolean).join(" · ") || "Club to allocate a pitch"}</div></div></div>
-              {checking ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-black text-sky-900">Checking live availability…</div> : availability ? <div className={`rounded-2xl border p-5 ${availability.available ? "border-emerald-200 bg-emerald-50" : availability.advisory ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}><div className="flex items-center gap-2 text-sm font-black">{availability.available ? <CheckCircle2 className="text-emerald-600" size={19} /> : <AlertTriangle className={availability.advisory ? "text-amber-600" : "text-rose-600"} size={19} />}{availability.available ? "Requested slot is available" : availability.advisory ? "Preferred slot is unavailable, but alternatives exist" : "Requested slot is unavailable"}</div>{availability.available && draft.pitchId ? <p className="mt-2 text-xs font-semibold leading-5 opacity-80">{availability.remainingCapacity} of {availability.capacity} training place{availability.capacity === 1 ? "" : "s"} will remain after this request is approved.</p> : null}{availability.reasons?.length ? <ul className="mt-3 space-y-1 text-xs font-semibold opacity-80">{availability.reasons.map((row, index) => <li key={`${row.type || "reason"}-${index}`}>• {row.message || row.type}</li>)}</ul> : null}</div> : null}
+              {checking ? <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-black text-sky-900">Checking live availability…</div> : availability ? <div className={`rounded-2xl border p-5 ${availability.available ? "border-emerald-200 bg-emerald-50" : availability.advisory ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}><div className="flex items-center gap-2 text-sm font-black">{availability.available ? <CheckCircle2 className="text-emerald-600" size={19} /> : <AlertTriangle className={availability.advisory ? "text-amber-600" : "text-rose-600"} size={19} />}{availability.available ? "Requested slot is available" : availability.advisory ? "Preferred slot is unavailable, but alternatives exist" : "Requested slot is unavailable"}</div>{availability.available && draft.pitchId ? <p className="mt-2 text-xs font-semibold leading-5 opacity-80">{isFullPitchArea(draft.pitchAreaId) || draft.requestType === "friendly" ? "Full pitch available. Approval will block every overlapping pitch area." : `${availability.remainingCapacity} of ${availability.capacity} training place${availability.capacity === 1 ? "" : "s"} will remain after this request is approved.`}</p> : null}{availability.reasons?.length ? <ul className="mt-3 space-y-1 text-xs font-semibold opacity-80">{availability.reasons.map((row, index) => <li key={`${row.type || "reason"}-${index}`}>• {row.message || row.type}</li>)}</ul> : null}</div> : null}
               {availability?.alternatives?.length ? <div><div className="text-[10px] font-black uppercase tracking-wide text-sky-700">Available alternatives</div><div className="mt-2 grid gap-2 sm:grid-cols-2">{availability.alternatives.map((alternative) => <button type="button" key={`${alternative.pitchId}-${alternative.startAt}`} onClick={() => useAlternative(alternative)} className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-left"><span className="block text-sm font-black text-sky-950">{alternative.pitchName}</span><span className="mt-1 block text-xs font-bold text-sky-800">{formatDate(alternative.startAt)} · {time(alternative.startAt)}–{time(alternative.endAt)}</span></button>)}</div></div> : null}
             </div>
             <aside className="space-y-3"><div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><Sparkles className="text-violet-600" size={19} /><div className="mt-2 text-sm font-black text-violet-950">What the club can do</div><p className="mt-1 text-xs font-semibold leading-5 text-violet-800">Approve this slot, use an acceptable pitch, offer another time, ask a question or decline with a reason.</p></div>{draft.timeFlexible || draft.acceptablePitchIds?.length ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-5 text-emerald-900">Flexible approval enabled. The request may still be sent when the preferred slot is unavailable.</div> : null}</aside>

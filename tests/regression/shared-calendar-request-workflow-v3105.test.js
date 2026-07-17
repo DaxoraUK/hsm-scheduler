@@ -131,7 +131,7 @@ describe("Ground Control v3.10.5 shared calendar and request workflow", () => {
 
   it("uses saved club pitches and areas when an operator offers an alternative", () => {
     expect(reviewDialog).toContain("Choose pitch");
-    expect(reviewDialog).toContain("Pitch area");
+    expect(reviewDialog).toContain("Pitch allocation");
     expect(reviewDialog).toContain("pitch_id");
     expect(reviewDialog).toContain("pitch_area_id");
     expect(reviewDialog).not.toContain("setVenueName");

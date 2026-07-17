@@ -661,7 +661,7 @@ export const DB = {
     });
     return result && typeof result === "object"
       ? result
-      : { settings: {}, bookings: [], blackouts: [] };
+      : { settings: {}, bookings: [], blackouts: [], winter_sites: [], winter_slots: [] };
   },
 
   async saveAnnualPlannerBooking(clubId, booking) {
@@ -732,6 +732,60 @@ export const DB = {
     });
   },
 
+  async saveAnnualPlannerWinterSite(clubId, site) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_winter_site", {
+      target_club_id: id,
+      site_data: site && typeof site === "object" ? site : {},
+    });
+  },
+
+  async deleteAnnualPlannerWinterSite(clubId, siteId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_annual_planner_winter_site", {
+      target_club_id: id,
+      target_site_id: siteId,
+    });
+  },
+
+  async saveAnnualPlannerWinterSlot(clubId, slot) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_winter_slot", {
+      target_club_id: id,
+      slot_data: slot && typeof slot === "object" ? slot : {},
+    });
+  },
+
+  async deleteAnnualPlannerWinterSlot(clubId, slotId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_annual_planner_winter_slot", {
+      target_club_id: id,
+      target_slot_id: slotId,
+    });
+  },
+
+  async recordAnnualPlannerWeatherDisruption(clubId, bookingId, action, data = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/record_annual_planner_weather_disruption", {
+      target_club_id: id,
+      target_booking_id: bookingId,
+      action_value: String(action || "postpone").trim(),
+      disruption_data: data && typeof data === "object" ? data : {},
+    });
+  },
+
+  async getAnnualPlannerAnalyticsData(clubId, { startDate = null, endDate = null } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/get_annual_planner_analytics_data", {
+      target_club_id: id,
+      range_start: startDate || null,
+      range_end: endDate || null,
+    });
+    return result && typeof result === "object"
+      ? result
+      : { bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [] };
+  },
+
 
   async syncCoachHubContacts(clubId) {
     const id = requireClubId(clubId);
@@ -784,7 +838,7 @@ export const DB = {
 
   async getCoachHubWorkspace(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
-    const [result, calendarContext] = await Promise.all([
+    const [result, calendarContext, winterContext] = await Promise.all([
       supaFetch("POST", "rpc/get_coach_hub_workspace", {
         target_club_id: id,
         range_start: startDate || null,
@@ -795,11 +849,14 @@ export const DB = {
         range_start: startDate || null,
         range_end: endDate || null,
       }),
+      supaFetch("POST", "rpc/get_coach_hub_winter_inventory", {
+        target_club_id: id,
+      }),
     ]);
     const base = result && typeof result === "object"
       ? result
       : { club: {}, person: {}, assignments: [], bookings: [], requests: [], messages: [], team_contacts: [] };
-    return { ...base, ...(calendarContext && typeof calendarContext === "object" ? calendarContext : {}) };
+    return { ...base, ...(calendarContext && typeof calendarContext === "object" ? calendarContext : {}), ...(winterContext && typeof winterContext === "object" ? winterContext : {}) };
   },
 
   async checkCoachHubRequestAvailability(clubId, request) {

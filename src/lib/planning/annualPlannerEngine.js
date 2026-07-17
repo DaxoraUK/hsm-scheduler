@@ -1,4 +1,23 @@
-const ACTIVE_BOOKING_STATUSES = new Set(["requested", "provisional", "confirmed"]);
+const ACTIVE_BOOKING_STATUSES = new Set(["requested", "provisional", "confirmed", "completed"]);
+
+export const FULL_PITCH_AREA_ID = "__full_pitch__";
+export const FULL_PITCH_AREA_LABEL = "Full Pitch";
+
+export function isFullPitchArea(value) {
+  return clean(value) === FULL_PITCH_AREA_ID;
+}
+
+export function pitchAreaOptions(pitch = {}, { includeFullPitch = true } = {}) {
+  const safePitch = pitch && typeof pitch === "object" ? pitch : {};
+  const raw = Array.isArray(safePitch.trainingAreas || safePitch.training_areas) ? (safePitch.trainingAreas || safePitch.training_areas) : [];
+  const areas = raw.map((area, index) => ({
+    id: clean(area?.id || `area-${index + 1}`),
+    label: clean(area?.label || area?.name || `Area ${index + 1}`),
+  })).filter((area) => area.id && area.label && !isFullPitchArea(area.id));
+  return includeFullPitch && areas.length
+    ? [{ id: FULL_PITCH_AREA_ID, label: FULL_PITCH_AREA_LABEL }, ...areas]
+    : areas;
+}
 
 export const ANNUAL_BOOKING_TYPES = Object.freeze([
   { value: "training", label: "Training" },
@@ -14,6 +33,8 @@ export const ANNUAL_BOOKING_STATUSES = Object.freeze([
   { value: "requested", label: "Requested" },
   { value: "provisional", label: "Provisional" },
   { value: "confirmed", label: "Confirmed" },
+  { value: "completed", label: "Completed" },
+  { value: "postponed", label: "Postponed" },
   { value: "cancelled", label: "Cancelled" },
   { value: "rejected", label: "Rejected" },
 ]);
@@ -99,6 +120,17 @@ export function normaliseAnnualBooking(row = {}) {
     pitchName: clean(row.pitch_name || row.pitchName),
     pitchAreaId: clean(row.pitch_area_id || row.pitchAreaId),
     pitchAreaName: clean(row.pitch_area_name || row.pitchAreaName),
+    seasonPhase: clean(row.season_phase || row.seasonPhase || "regular").toLowerCase(),
+    siteInventoryId: clean(row.site_inventory_id || row.siteInventoryId),
+    siteSlotId: clean(row.site_slot_id || row.siteSlotId),
+    disruptionStatus: clean(row.disruption_status || row.disruptionStatus || "none").toLowerCase(),
+    disruptionReason: clean(row.disruption_reason || row.disruptionReason),
+    disruptionNotes: clean(row.disruption_notes || row.disruptionNotes),
+    disruptedAt: row.disrupted_at || row.disruptedAt || null,
+    originalStartAt: row.original_start_at || row.originalStartAt || null,
+    originalEndAt: row.original_end_at || row.originalEndAt || null,
+    rescheduledFromBookingId: clean(row.rescheduled_from_booking_id || row.rescheduledFromBookingId),
+    rescheduledBookingId: clean(row.rescheduled_booking_id || row.rescheduledBookingId),
     startAt: startAt ? new Date(startAt).toISOString() : localDateTime(startDate, startTime)?.toISOString() || null,
     endAt: endAt ? new Date(endAt).toISOString() : localDateTime(startDate, endTime)?.toISOString() || null,
     startDate,
@@ -166,6 +198,9 @@ export function annualBookingToPayload(booking = {}) {
     pitch_name: normalised.pitchName || null,
     pitch_area_id: normalised.pitchAreaId || null,
     pitch_area_name: normalised.pitchAreaName || null,
+    season_phase: normalised.seasonPhase || "regular",
+    site_inventory_id: normalised.siteInventoryId || null,
+    site_slot_id: normalised.siteSlotId || null,
     start_at: normalised.startAt,
     end_at: normalised.endAt,
     series_id: normalised.seriesId || null,
@@ -279,25 +314,39 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
     const samePitch = overlapping.filter((booking) => booking.pitchId && booking.pitchId === normalised.pitchId);
     const pitch = (Array.isArray(pitches) ? pitches : []).find((row) => clean(row.id) === normalised.pitchId) || null;
     const trainingCapacity = Math.max(1, Math.min(20, finite(pitch?.trainingCapacity ?? pitch?.training_capacity ?? 1, 1)));
-    const trainingOnly = normalised.bookingType === "training" && samePitch.every((booking) => booking.bookingType === "training");
-    const capacityManaged = trainingOnly && !!pitch;
-    const sameNamedArea = normalised.pitchAreaId
-      ? samePitch.find((booking) => booking.pitchAreaId && booking.pitchAreaId === normalised.pitchAreaId)
+    const configuredAreas = pitchAreaOptions(pitch, { includeFullPitch: false });
+    const candidateFullPitch = normalised.bookingType !== "training"
+      || isFullPitchArea(normalised.pitchAreaId)
+      || (configuredAreas.length > 0 && !normalised.pitchAreaId);
+    const existingFullPitch = samePitch.find((booking) => booking.bookingType !== "training"
+      || isFullPitchArea(booking.pitchAreaId)
+      || (configuredAreas.length > 0 && !booking.pitchAreaId));
+    const sameNamedArea = !candidateFullPitch && normalised.pitchAreaId
+      ? samePitch.find((booking) => booking.pitchAreaId === normalised.pitchAreaId)
       : null;
-    const full = trainingOnly ? samePitch.length >= trainingCapacity : samePitch.length > 0;
-    if (sameNamedArea || full) {
-      const booking = sameNamedArea || samePitch[0];
-      const areaLabel = normalised.pitchAreaName || normalised.pitchAreaId;
+    const trainingRows = samePitch.filter((booking) => booking.bookingType === "training" && !isFullPitchArea(booking.pitchAreaId));
+    const capacityReached = normalised.bookingType === "training" && !candidateFullPitch && trainingRows.length >= trainingCapacity;
+    const conflictBooking = candidateFullPitch ? samePitch[0] : existingFullPitch || sameNamedArea || (capacityReached ? samePitch[0] : null);
+    if (conflictBooking) {
+      const explicitAreaModel = configuredAreas.length > 0 || isFullPitchArea(normalised.pitchAreaId) || isFullPitchArea(conflictBooking.pitchAreaId);
+      const title = candidateFullPitch || existingFullPitch
+        ? explicitAreaModel ? "Full pitch unavailable" : "Pitch already booked"
+        : sameNamedArea
+          ? "Pitch area already booked"
+          : "Pitch training capacity reached";
+      const message = candidateFullPitch
+        ? `${conflictBooking.teamName || conflictBooking.title || "Another booking"} already has ${normalised.pitchName || normalised.pitchId} during this slot, so the full pitch cannot be used.`
+        : existingFullPitch
+          ? `${conflictBooking.teamName || conflictBooking.title || "Another booking"} is using the full pitch during this slot.`
+          : sameNamedArea
+            ? `${normalised.pitchAreaName || normalised.pitchAreaId} is already allocated to ${conflictBooking.teamName || conflictBooking.title || "another team"}.`
+            : `${normalised.pitchName || normalised.pitchId} already has ${trainingRows.length} of ${trainingCapacity} training areas in use.`;
       conflicts.push({
-        type: sameNamedArea ? "pitch_area_overlap" : capacityManaged ? "pitch_training_capacity" : "pitch_double_booking",
+        type: candidateFullPitch || existingFullPitch ? (explicitAreaModel ? "full_pitch_overlap" : "pitch_double_booking") : sameNamedArea ? "pitch_area_overlap" : (trainingCapacity === 1 && configuredAreas.length === 0 ? "pitch_double_booking" : "pitch_training_capacity"),
         severity: "danger",
-        booking,
-        title: sameNamedArea ? "Pitch area already booked" : capacityManaged ? "Pitch training capacity reached" : "Pitch already booked",
-        message: sameNamedArea
-          ? `${areaLabel || "This pitch area"} is already allocated to ${booking?.teamName || booking?.title || "another team"} during this slot.`
-          : capacityManaged
-            ? `${normalised.pitchName || normalised.pitchId} already has ${samePitch.length} of ${trainingCapacity} training team${trainingCapacity === 1 ? "" : "s"} in this slot.`
-            : `${booking?.title || "Another booking"} already uses ${booking?.pitchName || booking?.pitchId || normalised.pitchId} at this time.`,
+        booking: conflictBooking,
+        title,
+        message,
       });
     }
   }
@@ -311,6 +360,8 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
       && booking.pitchId === normalised.pitchId
       && normalised.pitchAreaId
       && booking.pitchAreaId
+      && !isFullPitchArea(normalised.pitchAreaId)
+      && !isFullPitchArea(booking.pitchAreaId)
       && normalised.pitchAreaId !== booking.pitchAreaId;
     if (sameTeam && !splitTrainingSession) {
       conflicts.push({
@@ -380,6 +431,10 @@ export function buildAnnualPlannerSnapshot({ bookings = [], blackouts = [], year
   const friendlies = active.filter((booking) => booking.bookingType === "friendly");
   const hours = active.reduce((sum, booking) => sum + bookingDurationMinutes(booking) / 60, 0);
   const costPence = active.reduce((sum, booking) => sum + booking.costPence, 0);
+  const weatherAffected = rows.filter((booking) => ["weather_postponed", "weather_cancelled", "awaiting_rearrangement"].includes(booking.disruptionStatus));
+  const weatherLostHours = weatherAffected.reduce((sum, booking) => sum + bookingDurationMinutes(booking) / 60, 0);
+  const rearranged = rows.filter((booking) => booking.disruptionStatus === "rearranged" || booking.rescheduledFromBookingId);
+  const winter = active.filter((booking) => booking.seasonPhase === "winter" || booking.siteInventoryId);
   const months = Array.from({ length: 12 }, (_, index) => ({
     month: index,
     count: 0,
@@ -407,6 +462,11 @@ export function buildAnnualPlannerSnapshot({ bookings = [], blackouts = [], year
       friendlies: friendlies.length,
       hours: Math.round(hours * 10) / 10,
       costPence,
+      weatherAffected: weatherAffected.length,
+      weatherLostHours: Math.round(weatherLostHours * 10) / 10,
+      rearranged: rearranged.length,
+      winterBookings: winter.length,
+      winterHours: Math.round(winter.reduce((sum, booking) => sum + bookingDurationMinutes(booking) / 60, 0) * 10) / 10,
     }),
     months,
   });
@@ -446,11 +506,11 @@ export function findAnnualPlannerSuggestions(candidate = {}, context = {}, { lim
     if (!dateKey) continue;
     for (const pitchId of [normalised.pitchId, ...pitchIds].filter((value, index, all) => value && all.indexOf(value) === index)) {
       const pitch = pitches.find((row) => clean(row.id) === pitchId);
-      const rawAreas = Array.isArray(pitch?.trainingAreas || pitch?.training_areas) ? (pitch.trainingAreas || pitch.training_areas) : [];
-      const areaOptions = normalised.bookingType === "training" && rawAreas.length
+      const configuredAreaOptions = pitchAreaOptions(pitch, { includeFullPitch: true });
+      const areaOptions = configuredAreaOptions.length
         ? [
           ...(pitchId === normalised.pitchId && normalised.pitchAreaId ? [{ id: normalised.pitchAreaId, label: normalised.pitchAreaName }] : []),
-          ...rawAreas.map((area, index) => ({ id: clean(area?.id || `area-${index + 1}`), label: clean(area?.label || area?.name || `Area ${index + 1}`) })),
+          ...(normalised.bookingType === "training" ? configuredAreaOptions : configuredAreaOptions.filter((area) => isFullPitchArea(area.id))),
         ].filter((area, index, all) => area.id && all.findIndex((candidateArea) => candidateArea.id === area.id) === index)
         : [{ id: "", label: "" }];
       for (const area of areaOptions) {
@@ -484,7 +544,7 @@ export function findAnnualPlannerSuggestions(candidate = {}, context = {}, { lim
 }
 
 export function buildAnnualPlannerCsv(bookings = [], { includeCosts = true } = {}) {
-  const headings = ["Date", "Start", "End", "Type", "Status", "Team", "Opponent", "Venue", "Pitch", "Pitch area", "Title"];
+  const headings = ["Date", "Start", "End", "Type", "Status", "Season", "Disruption", "Team", "Opponent", "Venue", "Pitch", "Pitch area", "Title"];
   if (includeCosts) headings.push("Cost");
   headings.push("Reference", "Contact", "Contact email", "Notes");
   const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -496,6 +556,8 @@ export function buildAnnualPlannerCsv(bookings = [], { includeCosts = true } = {
       booking.endTime,
       booking.bookingType,
       booking.status,
+      booking.seasonPhase,
+      booking.disruptionStatus,
       booking.teamName,
       booking.opponentName,
       booking.venueName,

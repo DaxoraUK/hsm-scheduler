@@ -1,0 +1,167 @@
+import { bookingDurationMinutes, normaliseAnnualBooking, normaliseAnnualBlackout } from "../planning/annualPlannerEngine.js";
+
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function number(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function round(value, places = 1) {
+  const factor = 10 ** places;
+  return Math.round(number(value) * factor) / factor;
+}
+
+function dateKey(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return text(value).slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function normaliseSite(row = {}) {
+  return {
+    id: text(row.id),
+    name: text(row.name || row.site_name || row.siteName || "Winter site"),
+    seasonType: text(row.season_type || row.seasonType || "winter"),
+    providerType: text(row.provider_type || row.providerType || "external"),
+    availableFrom: dateKey(row.available_from || row.availableFrom),
+    availableTo: dateKey(row.available_to || row.availableTo),
+    costPence: Math.max(0, number(row.cost_pence ?? row.costPence)),
+    active: row.active !== false,
+  };
+}
+
+function normaliseSlot(row = {}) {
+  return {
+    id: text(row.id),
+    siteId: text(row.site_id || row.siteId),
+    label: text(row.label || row.slot_label || row.slotLabel || "Training slot"),
+    dayOfWeek: number(row.day_of_week ?? row.dayOfWeek, 1),
+    startTime: text(row.start_time || row.startTime),
+    endTime: text(row.end_time || row.endTime),
+    capacity: Math.max(1, number(row.capacity, 1)),
+    costPence: Math.max(0, number(row.cost_pence ?? row.costPence)),
+    active: row.active !== false,
+  };
+}
+
+function bookingHours(booking) {
+  return bookingDurationMinutes(booking) / 60;
+}
+
+function activeForCapacity(booking) {
+  return ["requested", "provisional", "confirmed", "completed"].includes(booking.status);
+}
+
+export function normaliseAnnualPlannerAnalyticsPayload(payload = {}) {
+  return {
+    bookings: (Array.isArray(payload.bookings) ? payload.bookings : []).map(normaliseAnnualBooking),
+    blackouts: (Array.isArray(payload.blackouts) ? payload.blackouts : []).map(normaliseAnnualBlackout),
+    winterSites: (Array.isArray(payload.winter_sites || payload.winterSites) ? (payload.winter_sites || payload.winterSites) : []).map(normaliseSite),
+    winterSlots: (Array.isArray(payload.winter_slots || payload.winterSlots) ? (payload.winter_slots || payload.winterSlots) : []).map(normaliseSlot),
+    requests: Array.isArray(payload.requests) ? payload.requests : [],
+  };
+}
+
+export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date().getFullYear() } = {}) {
+  const data = normaliseAnnualPlannerAnalyticsPayload(payload);
+  const yearText = String(year);
+  const bookings = data.bookings.filter((booking) => booking.startDate.startsWith(yearText));
+  const active = bookings.filter(activeForCapacity);
+  const completed = bookings.filter((booking) => booking.status === "completed");
+  const weatherAffected = bookings.filter((booking) => ["weather_postponed", "weather_cancelled", "awaiting_rearrangement"].includes(booking.disruptionStatus));
+  const rearranged = bookings.filter((booking) => booking.disruptionStatus === "rearranged" || booking.rescheduledFromBookingId);
+  const winter = active.filter((booking) => booking.seasonPhase === "winter" || booking.siteInventoryId);
+  const regular = active.filter((booking) => !winter.includes(booking));
+  const plannedHours = active.reduce((sum, booking) => sum + bookingHours(booking), 0);
+  const deliveredHours = completed.reduce((sum, booking) => sum + bookingHours(booking), 0);
+  const weatherLostHours = weatherAffected.reduce((sum, booking) => sum + bookingHours(booking), 0);
+  const rearrangedHours = rearranged.reduce((sum, booking) => sum + bookingHours(booking), 0);
+  const winterHours = winter.reduce((sum, booking) => sum + bookingHours(booking), 0);
+  const externalWinterCostPence = winter.reduce((sum, booking) => sum + booking.costPence, 0)
+    + data.winterSites.filter((site) => site.providerType === "external").reduce((sum, site) => sum + site.costPence, 0);
+
+  const pitchMap = new Map();
+  active.forEach((booking) => {
+    const key = booking.pitchId || booking.siteSlotId || "unallocated";
+    const current = pitchMap.get(key) || {
+      id: key,
+      label: booking.pitchName || booking.venueName || "Unallocated",
+      bookings: 0,
+      hours: 0,
+      winterHours: 0,
+      weatherLostHours: 0,
+    };
+    current.bookings += 1;
+    current.hours += bookingHours(booking);
+    if (booking.seasonPhase === "winter" || booking.siteInventoryId) current.winterHours += bookingHours(booking);
+    pitchMap.set(key, current);
+  });
+  weatherAffected.forEach((booking) => {
+    const key = booking.pitchId || booking.siteSlotId || "unallocated";
+    const current = pitchMap.get(key) || {
+      id: key,
+      label: booking.pitchName || booking.venueName || "Unallocated",
+      bookings: 0,
+      hours: 0,
+      winterHours: 0,
+      weatherLostHours: 0,
+    };
+    current.weatherLostHours += bookingHours(booking);
+    pitchMap.set(key, current);
+  });
+
+  const teamMap = new Map();
+  active.forEach((booking) => {
+    const key = booking.teamKey || booking.teamName || "club";
+    const current = teamMap.get(key) || { id: key, label: booking.teamName || "Club-wide", bookings: 0, hours: 0, winterHours: 0 };
+    current.bookings += 1;
+    current.hours += bookingHours(booking);
+    if (booking.seasonPhase === "winter" || booking.siteInventoryId) current.winterHours += bookingHours(booking);
+    teamMap.set(key, current);
+  });
+
+  const requestRows = data.requests.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
+  const resolvedRequests = requestRows.filter((row) => ["approved", "rejected", "cancelled", "accepted"].includes(text(row.status)));
+  const pendingRequests = requestRows.filter((row) => ["submitted", "needs_information", "alternative_offered"].includes(text(row.status)));
+  const weatherBlackouts = data.blackouts.filter((row) => row.closureType === "weather" && row.startDate.startsWith(yearText));
+
+  const grantNarratives = [];
+  if (weatherLostHours > 0) grantNarratives.push(`${round(weatherLostHours)} scheduled training and friendly hours were lost or postponed because of weather.`);
+  if (winterHours > 0) grantNarratives.push(`${round(winterHours)} team-hours were scheduled at winter or external facilities.`);
+  if (externalWinterCostPence > 0) grantNarratives.push(`External winter provision currently represents GBP ${(externalWinterCostPence / 100).toFixed(2)} of recorded facility cost.`);
+  if (!grantNarratives.length) grantNarratives.push("Record completed sessions, weather disruptions and winter allocations to build grant-ready facility evidence.");
+
+  return Object.freeze({
+    year: Number(year),
+    hasData: bookings.length > 0 || data.winterSites.length > 0 || requestRows.length > 0,
+    bookings,
+    winterSites: data.winterSites,
+    winterSlots: data.winterSlots,
+    metrics: Object.freeze({
+      plannedHours: round(plannedHours),
+      deliveredHours: round(deliveredHours),
+      weatherLostHours: round(weatherLostHours),
+      weatherAffectedSessions: weatherAffected.length,
+      rearrangedSessions: rearranged.length,
+      rearrangedHours: round(rearrangedHours),
+      winterBookings: winter.length,
+      winterHours: round(winterHours),
+      regularHours: round(regular.reduce((sum, booking) => sum + bookingHours(booking), 0)),
+      externalWinterCostPence,
+      activeWinterSites: data.winterSites.filter((site) => site.active).length,
+      fixedWinterSlots: data.winterSlots.filter((slot) => slot.active).length,
+      requestCount: requestRows.length,
+      pendingRequests: pendingRequests.length,
+      resolvedRequests: resolvedRequests.length,
+      requestResolutionPct: requestRows.length ? Math.round((resolvedRequests.length / requestRows.length) * 100) : 100,
+      weatherClosures: weatherBlackouts.length,
+    }),
+    pitchRows: [...pitchMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours), weatherLostHours: round(row.weatherLostHours) })).sort((a, b) => b.hours - a.hours),
+    teamRows: [...teamMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours) })).sort((a, b) => b.hours - a.hours),
+    grantNarratives,
+  });
+}

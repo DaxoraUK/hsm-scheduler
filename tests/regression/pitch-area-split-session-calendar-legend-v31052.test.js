@@ -79,10 +79,10 @@ describe("Ground Control v3.10.5.2 split pitch areas and calendar legend", () =>
     expect(annualPlanner).toContain("calendarEventTone(item.booking)");
   });
 
-  it("requires an explicit named area when a shared pitch has configured halves", () => {
-    expect(requestWizard).toContain("requiresNamedArea");
-    expect(requestWizard).toContain('"Choose a pitch area…"');
-    expect(requestWizard).toContain("Each named area is checked separately");
+  it("requires an explicit Full Pitch or named-area allocation on a shared pitch", () => {
+    expect(requestWizard).toContain("requiresAllocation");
+    expect(requestWizard).toContain("Choose allocation...");
+    expect(requestWizard).toContain("Full Pitch blocks every named area");
   });
 
   it("relaxes database team clashes only for different named areas of the same pitch", () => {

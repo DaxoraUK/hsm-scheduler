@@ -1,3 +1,5 @@
+import { FULL_PITCH_AREA_ID, FULL_PITCH_AREA_LABEL } from "../planning/annualPlannerEngine.js";
+
 const REQUEST_TYPES = Object.freeze([
   { value: "training", label: "Training", description: "Regular, pre-season or winter training" },
   { value: "friendly", label: "Friendly", description: "Internal or external friendly fixture" },
@@ -107,6 +109,13 @@ export function normaliseCoachBooking(row = {}) {
     pitchName: text(row.pitch_name || row.pitchName),
     pitchAreaId: text(row.pitch_area_id || row.pitchAreaId),
     pitchAreaName: text(row.pitch_area_name || row.pitchAreaName),
+    seasonPhase: text(row.season_phase || row.seasonPhase || "regular"),
+    siteInventoryId: text(row.site_inventory_id || row.siteInventoryId),
+    siteSlotId: text(row.site_slot_id || row.siteSlotId),
+    disruptionStatus: text(row.disruption_status || row.disruptionStatus || "none"),
+    disruptionReason: text(row.disruption_reason || row.disruptionReason),
+    rescheduledBookingId: text(row.rescheduled_booking_id || row.rescheduledBookingId),
+    rescheduledFromBookingId: text(row.rescheduled_from_booking_id || row.rescheduledFromBookingId),
     startAt,
     endAt,
     startDate: dateKey(startAt),
@@ -158,6 +167,13 @@ export function normaliseCoachRequest(row = {}) {
     proposedVenueName: text(row.proposed_venue_name || row.proposedVenueName),
     proposedPitchId: text(row.proposed_pitch_id || row.proposedPitchId),
     proposedPitchName: text(row.proposed_pitch_name || row.proposedPitchName),
+    proposedPitchAreaId: text(row.proposed_pitch_area_id || row.proposedPitchAreaId),
+    proposedPitchAreaName: text(row.proposed_pitch_area_name || row.proposedPitchAreaName),
+    seasonPhase: text(row.season_phase || row.seasonPhase || "regular"),
+    preferredSiteInventoryId: text(row.preferred_site_inventory_id || row.preferredSiteInventoryId),
+    preferredSiteSlotId: text(row.preferred_site_slot_id || row.preferredSiteSlotId),
+    proposedSiteInventoryId: text(row.proposed_site_inventory_id || row.proposedSiteInventoryId),
+    proposedSiteSlotId: text(row.proposed_site_slot_id || row.proposedSiteSlotId),
     proposedStartAt,
     proposedEndAt,
     proposedDate: dateKey(proposedStartAt),
@@ -238,6 +254,9 @@ export function buildCoachRequestDraft(request = {}, assignments = []) {
     pitchName: normalised.preferredPitchName || "",
     pitchAreaId: normalised.preferredPitchAreaId || "",
     pitchAreaName: normalised.preferredPitchAreaName || "",
+    seasonPhase: normalised.seasonPhase || "regular",
+    siteInventoryId: normalised.preferredSiteInventoryId || "",
+    siteSlotId: normalised.preferredSiteSlotId || "",
     acceptablePitchIds: normalised.acceptablePitchIds || [],
     timeFlexible: normalised.timeFlexible,
     flexibilityMinutes: normalised.flexibilityMinutes || 30,
@@ -270,6 +289,8 @@ export function normaliseCoachHubWorkspace(payload = {}) {
     messages: (Array.isArray(payload.messages) ? payload.messages : []).map(normaliseCoachMessage),
     teamContacts: Array.isArray(payload.team_contacts || payload.teamContacts) ? (payload.team_contacts || payload.teamContacts) : [],
     pitches: (Array.isArray(payload.pitches) ? payload.pitches : []).map(normaliseCoachPitch).filter((row) => row.id),
+    winterSites: Array.isArray(payload.winter_sites || payload.winterSites) ? (payload.winter_sites || payload.winterSites) : [],
+    winterSlots: Array.isArray(payload.winter_slots || payload.winterSlots) ? (payload.winter_slots || payload.winterSlots) : [],
     blackouts: Array.isArray(payload.blackouts) ? payload.blackouts : [],
     pitchClosures: Array.isArray(payload.pitch_closures || payload.pitchClosures) ? (payload.pitch_closures || payload.pitchClosures) : [],
     closureImpacts: Array.isArray(payload.closure_impacts || payload.closureImpacts) ? (payload.closure_impacts || payload.closureImpacts) : [],
@@ -309,6 +330,9 @@ export function buildRequestPayload(draft = {}) {
     preferred_pitch_name: text(draft.pitchName) || null,
     preferred_pitch_area_id: text(draft.pitchAreaId) || null,
     preferred_pitch_area_name: text(draft.pitchAreaName) || null,
+    season_phase: text(draft.seasonPhase || "regular"),
+    preferred_site_inventory_id: text(draft.siteInventoryId) || null,
+    preferred_site_slot_id: text(draft.siteSlotId) || null,
     acceptable_pitch_ids: [...new Set((Array.isArray(draft.acceptablePitchIds) ? draft.acceptablePitchIds : []).map(text).filter(Boolean))],
     time_flexible: bool(draft.timeFlexible),
     flexibility_minutes: bool(draft.timeFlexible) ? Math.max(0, Math.min(240, number(draft.flexibilityMinutes, 30))) : 0,
@@ -342,6 +366,9 @@ export function buildBlankCoachRequest(assignment = {}, date = new Date()) {
     pitchName: "",
     pitchAreaId: "",
     pitchAreaName: "",
+    seasonPhase: "regular",
+    siteInventoryId: "",
+    siteSlotId: "",
     acceptablePitchIds: [],
     timeFlexible: false,
     flexibilityMinutes: 30,
@@ -395,4 +422,4 @@ export function buildCoachHubIcsUrl(token, baseUrl = typeof window !== "undefine
   return `${base}/api/coach/calendar?token=${encodeURIComponent(text(token))}`;
 }
 
-export { REQUEST_TYPES, REQUEST_STATUS_LABELS };
+export { REQUEST_TYPES, REQUEST_STATUS_LABELS, FULL_PITCH_AREA_ID, FULL_PITCH_AREA_LABEL };
