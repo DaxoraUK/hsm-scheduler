@@ -7,6 +7,10 @@ import {
   pitchAreaOptions,
   timeToMinutes,
 } from "./annualPlannerEngine.js";
+import {
+  applyPolicyToTrainingPreference,
+  resolveTrainingSchedulingPolicy,
+} from "./trainingPolicyEngine.js";
 
 export const SMART_ALLOCATION_MODES = Object.freeze([
   { value: "manual", label: "Manual", detail: "Keep control; Ground Control only recommends and validates." },
@@ -121,12 +125,12 @@ function defaultPreference(team = {}, index = 0, seasonPhase = "regular") {
   };
 }
 
-export function normaliseTrainingPreference(row = {}, team = {}, index = 0, seasonPhase = "regular") {
+export function normaliseTrainingPreference(row = {}, team = {}, index = 0, seasonPhase = "regular", policy = {}) {
   const fallback = defaultPreference(team, index, seasonPhase);
   const days = array(row.preferred_days || row.preferredDays).map(Number).filter((day) => day >= 0 && day <= 6);
   const unavailable = array(row.unavailable_days || row.unavailableDays).map(Number).filter((day) => day >= 0 && day <= 6);
   const mode = clean(row.allocation_mode || row.allocationMode || fallback.allocationMode).toLowerCase();
-  return Object.freeze({
+  const normalised = {
     id: clean(row.id),
     teamKey: clean(row.team_key || row.teamKey || fallback.teamKey),
     teamName: clean(row.team_name || row.teamName || fallback.teamName),
@@ -143,7 +147,9 @@ export function normaliseTrainingPreference(row = {}, team = {}, index = 0, seas
     keepCurrentAllocation: Boolean(row.keep_current_allocation ?? row.keepCurrentAllocation ?? fallback.keepCurrentAllocation),
     manualOnly: Boolean(row.manual_only ?? row.manualOnly ?? fallback.manualOnly),
     notes: clean(row.notes),
-  });
+    overrideFields: array(row.override_fields || row.overrideFields),
+  };
+  return Object.freeze(applyPolicyToTrainingPreference(normalised, policy));
 }
 
 export function trainingPreferenceToPayload(preference = {}) {
@@ -164,6 +170,10 @@ export function trainingPreferenceToPayload(preference = {}) {
     keep_current_allocation: Boolean(preference.keepCurrentAllocation),
     manual_only: Boolean(preference.manualOnly),
     notes: clean(preference.notes) || null,
+    override_fields: array(preference.overrideFields).length ? array(preference.overrideFields) : [
+      "allocationMode", "preferredDays", "preferredStartTimes", "unavailableDays", "preferredPitchIds", "preferredWinterSiteIds",
+      "requiredDurationMinutes", "minimumAreaMode", "priorityWeight", "keepCurrentAllocation", "manualOnly", "notes",
+    ],
   };
 }
 
@@ -264,10 +274,18 @@ function coachSetsOverlap(first = new Set(), second = new Set()) {
 }
 
 function regularCandidates({ preference, pitches, startTimes }) {
-  const days = preference.preferredDays.length ? preference.preferredDays : [1, 2, 3, 4];
-  const times = preference.preferredStartTimes.length ? preference.preferredStartTimes : startTimes;
+  const allowedDays = preference.allowedDays?.length ? preference.allowedDays : [1, 2, 3, 4, 5];
+  const preferred = preference.preferredDays.filter((day) => allowedDays.includes(day));
+  const days = preferred.length ? preferred : allowedDays;
+  const rawTimes = preference.preferredStartTimes.length ? preference.preferredStartTimes : startTimes;
+  const times = rawTimes.filter((startTime) => {
+    const start = timeToMinutes(startTime);
+    const end = start + preference.requiredDurationMinutes;
+    return start >= timeToMinutes(preference.earliestStartTime || "00:00") && end <= timeToMinutes(preference.latestEndTime || "23:59");
+  });
+  const permittedPitchIds = preference.permittedPitchIds || [];
   const candidates = [];
-  array(pitches).forEach((pitch) => {
+  array(pitches).filter((pitch) => !permittedPitchIds.length || permittedPitchIds.includes(clean(pitch.id))).forEach((pitch) => {
     const options = pitchAreaOptions(pitch, { includeFullPitch: true });
     let allocations = options.length ? options : [{ id: FULL_PITCH_AREA_ID, label: FULL_PITCH_AREA_LABEL }];
     if (preference.minimumAreaMode === "full_pitch") allocations = allocations.filter((area) => area.id === FULL_PITCH_AREA_ID);
@@ -295,6 +313,8 @@ function regularCandidates({ preference, pitches, startTimes }) {
 
 function winterCandidates({ preference, winterSites, winterSlots }) {
   const siteMap = new Map(array(winterSites).map((site) => [clean(site.id), site]));
+  const allowedDays = preference.allowedDays?.length ? preference.allowedDays : [1, 2, 3, 4, 5];
+  const permittedSiteIds = preference.permittedWinterSiteIds || [];
   return array(winterSlots).filter((slot) => slot.active !== false).map((slot) => {
     const siteId = clean(slot.site_id || slot.siteId);
     const site = siteMap.get(siteId) || {};
@@ -315,7 +335,11 @@ function winterCandidates({ preference, winterSites, winterSlots }) {
       resource: slot,
       site,
     };
-  }).filter((candidate) => !preference.unavailableDays.includes(candidate.dayOfWeek));
+  }).filter((candidate) => {
+    if (!allowedDays.includes(candidate.dayOfWeek) || preference.unavailableDays.includes(candidate.dayOfWeek)) return false;
+    if (permittedSiteIds.length && !permittedSiteIds.includes(candidate.siteInventoryId)) return false;
+    return timeToMinutes(candidate.startTime) >= timeToMinutes(preference.earliestStartTime || "00:00") && timeToMinutes(candidate.endTime) <= timeToMinutes(preference.latestEndTime || "23:59");
+  });
 }
 
 function scoreCandidate({ candidate, team, preference, history, seasonPhase }) {
@@ -373,6 +397,7 @@ export function buildSmartTrainingAllocationDraft({
   bookings = [],
   preferences = [],
   assignments = [],
+  policies = [],
   seasonPhase = "regular",
   mode = "assisted",
   startDate,
@@ -386,13 +411,14 @@ export function buildSmartTrainingAllocationDraft({
   const allocated = [];
   const results = [];
   const orderedTeams = array(teams).map((team, index) => ({ team, index, key: teamKey(team, index) })).sort((a, b) => {
-    const prefA = normaliseTrainingPreference(preferenceMap.get(a.key) || {}, a.team, a.index, seasonPhase);
-    const prefB = normaliseTrainingPreference(preferenceMap.get(b.key) || {}, b.team, b.index, seasonPhase);
+    const prefA = normaliseTrainingPreference(preferenceMap.get(a.key) || {}, a.team, a.index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team: a.team, seasonPhase }));
+    const prefB = normaliseTrainingPreference(preferenceMap.get(b.key) || {}, b.team, b.index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team: b.team, seasonPhase }));
     return prefB.priorityWeight - prefA.priorityWeight || finite(a.team.ageOrder, 99) - finite(b.team.ageOrder, 99);
   });
 
   orderedTeams.forEach(({ team, index, key }) => {
-    const preference = normaliseTrainingPreference(preferenceMap.get(key) || {}, team, index, seasonPhase);
+    const policy = resolveTrainingSchedulingPolicy({ policies, team, seasonPhase });
+    const preference = normaliseTrainingPreference(preferenceMap.get(key) || {}, team, index, seasonPhase, policy);
     const teamMode = preference.manualOnly ? "manual" : (preference.allocationMode === "inherit" ? mode : preference.allocationMode);
     const history = primaryHistorical(historyMap.get(key) || []);
     const candidates = seasonPhase === "winter"
@@ -439,8 +465,11 @@ export function buildSmartTrainingAllocationDraft({
       siteSlotId: selected?.siteSlotId || "",
       siteName: selected?.siteName || "",
       resourceLabel: selected?.resourceLabel || "No suitable slot",
-      reasons: selected?.reasons || [],
-      warnings: selected?.warnings || ["No conflict-free candidate matched the current rules"],
+      reasons: selected ? unique([...(selected.reasons || []), `Policy: ${preference.policySource}`]) : [],
+      warnings: selected?.warnings || [`No conflict-free candidate matched the ${preference.policySource || "club"} rules`],
+      policySource: preference.policySource,
+      allowedDays: preference.allowedDays,
+      weekendAllowed: preference.weekendAllowed,
       alternatives: available.slice(1, 4).map((candidate) => ({
         dayOfWeek: candidate.dayOfWeek,
         startTime: candidate.startTime,

@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.7
+**Current implementation release:** Ground Control v3.10.8
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current implementation through v3.10.7
+## 3. Current implementation through v3.10.8
 
 ### Shared calendar
 
@@ -126,7 +126,22 @@ This roadmap defines the integration contract with those areas without replacing
 - Manual-only or unassigned teams block publication rather than being silently omitted.
 - Smart-run activity and allocation scores feed the shared Annual Planner and main Analytics model.
 
-### Remaining limitations after v3.10.7
+### v3.10.8 implementation delivered
+
+- Club administrators can define master training rules separately for pre-season, regular-season and winter planning.
+- Built-in defaults permit Monday to Friday and disable Saturday and Sunday training unless a club explicitly enables weekends.
+- Rules can be targeted at the whole club, a team type or an age group.
+- Master controls cover permitted days, time windows, preferred starts, duration, pitch area, sessions per week, permitted club pitches, permitted winter sites and coach-edit policy.
+- Team profiles inherit the applicable master rule before operator preferences are applied.
+- The smart allocator excludes resources, days and times blocked by the resolved master rule and explains the policy source used.
+- Coach Hub includes a Training preferences workspace for every assigned team.
+- Coaches can rank days and times, record unavailable days, select preferred club pitches or winter sites, choose session duration and area preference, and add operational notes.
+- Coaches cannot enable weekends, prohibited facilities or times outside the club window.
+- Clubs can choose approval-required, immediate-valid-update or club-managed-only coach editing.
+- Approval-required changes enter an Annual Planner review queue; approval updates the team profile and rejection notifies the coach.
+- Policy saves, coach proposals and review decisions are club scoped and audited.
+
+### Remaining limitations after v3.10.8
 
 - The approval dialog supports allocation changes, but the full side-by-side calendar comparison and coach acceptance of an offered alternative still need refinement.
 - Weather reinstatement, completion-after-rearrangement and delivery-status reporting for notifications remain later lifecycle work.
@@ -346,7 +361,41 @@ Both Annual Planner Insights and main Analytics now receive:
 Preferred-slot success, fairness, override rate, cost optimisation and unmet-demand analysis remain next analytical increments.
 ---
 
-## 7. Next implementation phase - v3.10.8 closure impact, notifications and calendar refinement
+## 7. Implementation phase delivered in v3.10.8 - master rules and coach preferences
+
+### Master rule hierarchy
+
+The scheduling hierarchy is now:
+
+`Club master rule -> season rule -> team-type/age-group rule -> team profile -> coach preference proposal`
+
+Club rules remain authoritative. A coach preference can improve the scoring input but cannot bypass a blocked day, restricted time, prohibited pitch/site or club-only control.
+
+### Default behaviour
+
+- New seasonal policies default to Monday-Friday.
+- Weekend training is disabled until explicitly enabled.
+- Winter and regular-season rules remain separate.
+- New team profiles inherit permitted days, time windows, default duration, area requirement and resource restrictions.
+- The allocator leaves a team unassigned rather than placing it on a blocked weekend.
+
+### Coach controls
+
+Coaches can maintain preferences for assigned teams only. Available fields include preferred days, unavailable days, start times, duration, minimum space, club pitches, winter sites and notes. Each submission is validated again in Supabase.
+
+Club administrators choose one policy per rule scope:
+
+- **Approval required:** changes create a pending proposal.
+- **Apply immediately:** valid changes update the team profile and remain auditable.
+- **Club managed only:** coaches can view inherited rules but cannot submit changes.
+
+### Review and explanation
+
+The Annual Planner shows pending coach changes in a review queue. Approved proposals become the team preference used by smart allocation. Rejected proposals retain the decision note and generate a Coach Hub message. Recommendation explanations identify the inherited policy source and state when no permitted allocation exists.
+
+---
+
+## 8. Next implementation phase - v3.10.9 closure impact, notifications and calendar refinement
 
 ### Closure-impact workflow
 
@@ -394,7 +443,7 @@ Initial delivery remains in-app and email. SMS and WhatsApp depend on the Commun
 
 ---
 
-## 8. Later opportunities
+## 9. Later opportunities
 
 - Pitch diagrams with selectable areas.
 - Quarter-pitch, third-pitch and goalkeeper-zone templates.
@@ -410,7 +459,7 @@ Initial delivery remains in-app and email. SMS and WhatsApp depend on the Commun
 
 ---
 
-## 9. Analytics and grant evidence
+## 10. Analytics and grant evidence
 
 ### Annual Planner Insights
 
@@ -460,7 +509,7 @@ Evidence statements must be traceable to underlying booking records.
 
 ---
 
-## 10. Data model and integration requirements
+## 11. Data model and integration requirements
 
 Likely entities or extensions:
 
@@ -489,7 +538,7 @@ Integrations:
 
 ---
 
-## 11. Security, permissions and audit
+## 12. Security, permissions and audit
 
 ### Coach
 
@@ -520,7 +569,7 @@ Integrations:
 
 ---
 
-## 12. UX and accessibility standards
+## 13. UX and accessibility standards
 
 - Coaches should complete a normal request comfortably on mobile.
 - Availability must be explained in plain language, not only a red/green result.
@@ -534,7 +583,7 @@ Integrations:
 
 ---
 
-## 13. Testing and acceptance criteria
+## 14. Testing and acceptance criteria
 
 ### Full-pitch hierarchy
 
@@ -593,7 +642,7 @@ Integrations:
 
 ---
 
-## 14. Packaging and entitlements
+## 15. Packaging and entitlements
 
 The Annual Pitch Booking, Training and Friendlies Planner remains a **bolt-on module**, not standard Core functionality.
 
@@ -616,7 +665,7 @@ Avoid fragmenting the workflow so heavily that a club cannot complete a basic an
 
 ---
 
-## 15. Commercial opportunities
+## 16. Commercial opportunities
 
 - Annual planner add-on subscription.
 - Advanced allocation and optimisation tier.
@@ -630,7 +679,7 @@ Commercial claims must remain grounded in validated operational data and should 
 
 ---
 
-## 16. Decisions and open decisions
+## 17. Decisions and open decisions
 
 ### Confirmed
 
@@ -652,33 +701,27 @@ Commercial claims must remain grounded in validated operational data and should 
 
 ---
 
-## 17. Delivery order
+## 18. Delivery order
 
-1. Commit this roadmap baseline.
-2. v3.10.6: Full Pitch semantics, operator alternatives, weather workflow foundation, winter-site inventory foundation and shared analytics contract.
-3. Validate with HSM using real summer/winter slot examples.
-4. Smart allocation phase: Manual, Assisted and Automatic Draft.
-5. Closure-impact, notifications and calendar refinement.
-6. Grant analytics, evidence statements and facility scenario planning.
-7. Update this roadmap after each completed phase before starting the next module roadmap.
-
----
-
-## 18. Change history
-
-| Release | Change |
-|---|---|
-| v3.10.5.4 | Initial committed module roadmap covering baseline through v3.10.5.3 and agreed next phases. |
-
+1. Maintain this roadmap after every Annual Planner release.
+2. v3.10.8: master scheduling rules, weekday defaults and coach-managed preferences under club control.
+3. Validate master rules and coach proposals with HSM across regular and winter scenarios.
+4. v3.10.9: closure-impact resolution, alternative acceptance, notifications and calendar refinement.
+5. Recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
+6. Grant evidence statements and facility scenario planning.
+7. Start the next module roadmap only after this module phase is validated.
 
 ---
 
-## 13. Release history
+## 19. Change and release history
 
 | Release | Status | Scope |
 |---|---|---|
-| v3.10.5.4 | Complete | Committed module roadmap baseline. |
-| v3.10.6 | Complete | Full Pitch authority, winter-site inventory, weather disruption foundation, operator allocation changes and shared analytics foundation. |
-| v3.10.7 | Next | Manual, Assisted and Automatic Draft summer/winter team allocation with explainable recommendations and locks. |
+| v3.10.5.4 | Complete | Initial committed module roadmap through v3.10.5.3. |
+| v3.10.6 | Complete | Full Pitch authority, winter-site inventory, weather disruption and shared analytics foundation. |
+| v3.10.7 | Complete | Manual, Assisted and Automatic Draft smart summer/winter allocation. |
+| v3.10.7.1 | Complete | Annual Planner workspace navigation refinement. |
+| v3.10.8 | Complete | Club master scheduling rules, weekday defaults and coach-managed preferences with approval controls. |
+| v3.10.9 | Next | Closure impacts, alternatives, notifications and shared-calendar refinement. |
 
 The roadmap must be updated after each implementation release and before the next module roadmap is started.

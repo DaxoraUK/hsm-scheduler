@@ -654,14 +654,20 @@ export const DB = {
 
   async listAnnualPlannerWorkspace(clubId, { startDate = null, endDate = null } = {}) {
     const id = requireClubId(clubId);
-    const result = await supaFetch("POST", "rpc/list_annual_planner_workspace", {
-      target_club_id: id,
-      range_start: startDate || null,
-      range_end: endDate || null,
-    });
-    return result && typeof result === "object"
+    const [result, schedulingContext] = await Promise.all([
+      supaFetch("POST", "rpc/list_annual_planner_workspace", {
+        target_club_id: id,
+        range_start: startDate || null,
+        range_end: endDate || null,
+      }),
+      supaFetch("POST", "rpc/list_annual_planner_scheduling_context", {
+        target_club_id: id,
+      }),
+    ]);
+    const base = result && typeof result === "object"
       ? result
       : { settings: {}, bookings: [], blackouts: [], winter_sites: [], winter_slots: [] };
+    return { ...base, ...(schedulingContext && typeof schedulingContext === "object" ? schedulingContext : {}) };
   },
 
   async saveAnnualPlannerBooking(clubId, booking) {
@@ -789,6 +795,40 @@ export const DB = {
   async saveAnnualPlannerTeamPreference(clubId, preference) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/save_annual_planner_team_preference", {
+      target_club_id: id,
+      preference_data: preference && typeof preference === "object" ? preference : {},
+    });
+  },
+
+  async saveAnnualPlannerSchedulingPolicy(clubId, policy) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_scheduling_policy", {
+      target_club_id: id,
+      policy_data: policy && typeof policy === "object" ? policy : {},
+    });
+  },
+
+  async reviewCoachTrainingPreferenceProposal(clubId, proposalId, decision, note = "") {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/review_coach_training_preference_proposal", {
+      target_club_id: id,
+      target_proposal_id: String(proposalId || "").trim(),
+      decision_value: String(decision || "").trim(),
+      decision_note: String(note || "").trim() || null,
+    });
+  },
+
+  async getMyCoachTrainingPreferences(clubId) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/get_my_coach_training_preferences", {
+      target_club_id: id,
+    });
+    return result && typeof result === "object" ? result : { policies: [], preferences: [], proposals: [] };
+  },
+
+  async submitMyCoachTrainingPreference(clubId, preference) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/submit_my_coach_training_preference", {
       target_club_id: id,
       preference_data: preference && typeof preference === "object" ? preference : {},
     });

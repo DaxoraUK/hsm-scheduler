@@ -16,6 +16,7 @@ import {
   Pencil,
   RefreshCw,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   Users,
   X,
@@ -24,6 +25,7 @@ import { toast } from "sonner";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
 import CoachRequestWizard from "../components/coach/CoachRequestWizard.jsx";
 import CoachSharedCalendar from "../components/coach/CoachSharedCalendar.jsx";
+import CoachTrainingPreferences from "../components/coach/CoachTrainingPreferences.jsx";
 import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorBoundary.jsx";
 import { DB } from "../lib/supabase.js";
 import {
@@ -42,6 +44,7 @@ const TABS = [
   ["requests", "Requests", CalendarPlus],
   ["messages", "Messages", MessageSquareText],
   ["team", "Team", Users],
+  ["training", "Training preferences", SlidersHorizontal],
   ["profile", "Profile", Settings],
 ];
 
@@ -84,7 +87,7 @@ export default function CoachHubPage({
   onClubChange,
   onSignOut,
 }) {
-  const [workspace, setWorkspace] = useState(() => normaliseCoachHubWorkspace({}));
+  const [workspace, setWorkspace] = useState(() => ({ ...normaliseCoachHubWorkspace({}), schedulingPolicies: [], trainingPreferences: [], preferenceProposals: [] }));
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [tab, setTab] = useState("home");
@@ -98,11 +101,19 @@ export default function CoachHubPage({
     setError("");
     try {
       const today = new Date();
-      const payload = await DB.getCoachHubWorkspace(clubId, {
-        startDate: `${today.getFullYear()}-01-01`,
-        endDate: `${today.getFullYear() + 1}-12-31`,
+      const [payload, preferencePayload] = await Promise.all([
+        DB.getCoachHubWorkspace(clubId, {
+          startDate: `${today.getFullYear()}-01-01`,
+          endDate: `${today.getFullYear() + 1}-12-31`,
+        }),
+        DB.getMyCoachTrainingPreferences(clubId),
+      ]);
+      setWorkspace({
+        ...normaliseCoachHubWorkspace(payload),
+        schedulingPolicies: Array.isArray(preferencePayload?.policies) ? preferencePayload.policies : [],
+        trainingPreferences: Array.isArray(preferencePayload?.preferences) ? preferencePayload.preferences : [],
+        preferenceProposals: Array.isArray(preferencePayload?.proposals) ? preferencePayload.proposals : [],
       });
-      setWorkspace(normaliseCoachHubWorkspace(payload));
       setStatus("ready");
     } catch (loadError) {
       setError(loadError?.message || "Coach Hub could not be loaded.");
@@ -182,6 +193,20 @@ export default function CoachHubPage({
     }
   }
 
+  async function submitTrainingPreference(preference) {
+    setBusy(true);
+    try {
+      const result = await DB.submitMyCoachTrainingPreference(clubId, preference);
+      await load({ quiet: true });
+      toast.success(result?.status === "approved" ? "Training preferences updated" : "Training preferences sent for approval");
+    } catch (preferenceError) {
+      toast.error("Training preferences could not be saved", { description: preferenceError?.message });
+      throw preferenceError;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function markMessage(message, acknowledge = false) {
     try {
       await DB.markCoachHubMessage(clubId, message.id, acknowledge);
@@ -237,6 +262,7 @@ export default function CoachHubPage({
             {tab === "requests" ? <RequestsTab requests={workspace.requests} assignments={workspace.assignments} onRequest={openRequest} onEdit={editRequest} onAlternative={respondAlternative} onConversation={setConversationRequest} busy={busy} /> : null}
             {tab === "messages" ? <MessagesTab messages={workspace.messages} onMark={markMessage} /> : null}
             {tab === "team" ? <TeamTab assignments={workspace.assignments} contacts={workspace.teamContacts} /> : null}
+            {tab === "training" ? <CoachTrainingPreferences assignments={workspace.assignments} policies={workspace.schedulingPolicies} preferences={workspace.trainingPreferences} proposals={workspace.preferenceProposals} pitches={workspace.pitches} winterSites={workspace.winterSites} busy={busy} onSubmit={submitTrainingPreference} /> : null}
             {tab === "profile" ? <ProfileTab clubId={clubId} person={workspace.person} authSession={authSession} subscription={subscription} onSaved={() => load({ quiet: true })} onSignOut={onSignOut} /> : null}
           </></DaxoraSectionErrorBoundary> : null}
         </main>

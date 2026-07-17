@@ -66,6 +66,7 @@ import {
 import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHubEngine.js";
 import { buildAnnualPlannerAnalyticsModel } from "../lib/analytics/annualPlannerAnalyticsEngine.js";
 import { allocationItemToPayload, allocationRunToPayload, trainingPreferenceToPayload } from "../lib/planning/smartTrainingAllocationEngine.js";
+import { trainingSchedulingPolicyToPayload } from "../lib/planning/trainingPolicyEngine.js";
 import { calendarEventTone, COACH_CALENDAR_LEGEND, eventOccursOnDate, normaliseCoachPitchClosure } from "../lib/coach/sharedCalendarEngine.js";
 import {
   buildPilotRefinementSnapshot,
@@ -194,7 +195,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [], schedulingPolicies: [], preferenceProposals: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -260,6 +261,8 @@ export default function AnnualPlannerPage({
         allocationPreferences: Array.isArray(result?.allocation_preferences || result?.allocationPreferences) ? (result.allocation_preferences || result.allocationPreferences) : [],
         allocationRuns: Array.isArray(result?.allocation_runs || result?.allocationRuns) ? (result.allocation_runs || result.allocationRuns) : [],
         allocationItems: Array.isArray(result?.allocation_items || result?.allocationItems) ? (result.allocation_items || result.allocationItems) : [],
+        schedulingPolicies: Array.isArray(result?.scheduling_policies || result?.schedulingPolicies) ? (result.scheduling_policies || result.schedulingPolicies) : [],
+        preferenceProposals: Array.isArray(result?.preference_proposals || result?.preferenceProposals) ? (result.preference_proposals || result.preferenceProposals) : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -755,6 +758,43 @@ export default function AnnualPlannerPage({
     }
   }
 
+  async function saveSchedulingPolicy(policy) {
+    setSaving(true);
+    try {
+      const payload = trainingSchedulingPolicyToPayload(policy);
+      if (isSupaConfigured() && clubId) {
+        await DB.saveAnnualPlannerSchedulingPolicy(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const rows = Array.isArray(current.schedulingPolicies) ? current.schedulingPolicies : [];
+        const index = rows.findIndex((row) => String(row.season_phase || row.seasonPhase) === payload.season_phase && String(row.scope_type || row.scopeType) === payload.scope_type && String(row.scope_key || row.scopeKey) === payload.scope_key);
+        const next = index >= 0 ? rows.map((row, rowIndex) => rowIndex === index ? payload : row) : [...rows, payload];
+        writeLocalWorkspace(clubId, { ...current, schedulingPolicies: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Master scheduling rule saved");
+    } catch (policyError) {
+      toast.error("Scheduling rule could not be saved", { description: policyError?.message });
+      throw policyError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reviewCoachPreferenceProposal(proposal, decision) {
+    setSaving(true);
+    try {
+      if (!isSupaConfigured() || !clubId) throw new Error("Coach preference review requires the connected club workspace.");
+      await DB.reviewCoachTrainingPreferenceProposal(clubId, proposal.id, decision, decision === "approve" ? "Approved by club scheduler" : "Rejected by club scheduler");
+      await loadWorkspace({ quiet: true });
+      toast.success(decision === "approve" ? "Coach preferences approved" : "Coach preferences rejected");
+    } catch (proposalError) {
+      toast.error("Coach preference decision could not be saved", { description: proposalError?.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveSmartDraft(draft, { publish = false } = {}) {
     setSaving(true);
     try {
@@ -948,9 +988,13 @@ export default function AnnualPlannerPage({
           assignments={pilotWorkspace.assignments}
           preferences={workspace.allocationPreferences}
           allocationRuns={workspace.allocationRuns}
+          policies={workspace.schedulingPolicies}
+          preferenceProposals={workspace.preferenceProposals}
           canManage={canManage}
           saving={saving}
           onSavePreference={saveSmartPreference}
+          onSavePolicy={saveSchedulingPolicy}
+          onReviewProposal={reviewCoachPreferenceProposal}
           onSaveDraft={(draft) => saveSmartDraft(draft)}
           onPublishDraft={(draft) => saveSmartDraft(draft, { publish: true })}
         />
