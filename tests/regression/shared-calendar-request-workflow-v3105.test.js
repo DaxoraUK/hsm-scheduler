@@ -111,9 +111,9 @@ describe("Ground Control v3.10.5 shared calendar and request workflow", () => {
     expect(migration).toContain("insert into public.annual_planner_closure_impacts");
     expect(migration).toContain("Facility closure affects a team booking");
     expect(migration).toContain("resolve_annual_planner_closure_impact");
-    expect(annualPlanner).toContain("Closures affect");
-    expect(annualPlanner).toContain("Mark relocated");
-    expect(annualPlanner).toContain("Mark cancelled");
+    expect(annualPlanner).toContain("ClosureImpactResolutionDialog");
+    expect(annualPlanner).toContain("Review and resolve");
+    expect(annualPlanner).toContain("awaiting_coach");
   });
 
   it("keeps internal closure notes away from coach calendar RPC responses", () => {

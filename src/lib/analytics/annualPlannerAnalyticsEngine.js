@@ -65,6 +65,7 @@ export function normaliseAnnualPlannerAnalyticsPayload(payload = {}) {
     requests: Array.isArray(payload.requests) ? payload.requests : [],
     allocationRuns: Array.isArray(payload.allocation_runs || payload.allocationRuns) ? (payload.allocation_runs || payload.allocationRuns) : [],
     allocationItems: Array.isArray(payload.allocation_items || payload.allocationItems) ? (payload.allocation_items || payload.allocationItems) : [],
+    closureImpacts: Array.isArray(payload.closure_impacts || payload.closureImpacts) ? (payload.closure_impacts || payload.closureImpacts) : [],
   };
 }
 
@@ -137,12 +138,19 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   const unassignedAllocationItems = allocationItems.filter((row) => text(row.status) === "unassigned");
   const scoredAllocationItems = allocationItems.filter((row) => number(row.score) > 0);
   const averageAllocationScore = scoredAllocationItems.length ? round(scoredAllocationItems.reduce((sum, row) => sum + number(row.score), 0) / scoredAllocationItems.length, 0) : 0;
+  const closureImpacts = data.closureImpacts.filter((row) => String(row.created_at || row.createdAt || row.booking_start_at || row.bookingStartAt || "").startsWith(yearText));
+  const closureResolved = closureImpacts.filter((row) => ["relocated", "postponed", "cancelled", "acknowledged", "resolved"].includes(text(row.status)));
+  const closureAwaitingCoach = closureImpacts.filter((row) => text(row.status) === "awaiting_coach");
+  const closureRelocated = closureImpacts.filter((row) => text(row.status) === "relocated");
+  const closureCancelled = closureImpacts.filter((row) => text(row.status) === "cancelled");
+  const closurePostponed = closureImpacts.filter((row) => text(row.status) === "postponed");
 
   const grantNarratives = [];
   if (weatherLostHours > 0) grantNarratives.push(`${round(weatherLostHours)} scheduled training and friendly hours were lost or postponed because of weather.`);
   if (winterHours > 0) grantNarratives.push(`${round(winterHours)} team-hours were scheduled at winter or external facilities.`);
   if (externalWinterCostPence > 0) grantNarratives.push(`External winter provision currently represents GBP ${(externalWinterCostPence / 100).toFixed(2)} of recorded facility cost.`);
   if (publishedAllocationRuns.length > 0) grantNarratives.push(`${publishedAllocationRuns.length} reviewed smart allocation run${publishedAllocationRuns.length === 1 ? "" : "s"} supported consistent seasonal training access.`);
+  if (closureImpacts.length > 0) grantNarratives.push(`${closureImpacts.length} approved session${closureImpacts.length === 1 ? " was" : "s were"} affected by facility closures; ${closureRelocated.length} were relocated and ${closureCancelled.length} were cancelled.`);
   if (!grantNarratives.length) grantNarratives.push("Record completed sessions, weather disruptions and winter allocations to build grant-ready facility evidence.");
 
   return Object.freeze({
@@ -175,6 +183,13 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
       smartAllocatedTeams: allocationItems.filter((row) => text(row.status) === "published").length,
       unassignedAllocationTeams: unassignedAllocationItems.length,
       averageAllocationScore,
+      closureAffectedBookings: closureImpacts.length,
+      closureResolvedBookings: closureResolved.length,
+      closureAwaitingCoach: closureAwaitingCoach.length,
+      closureRelocatedBookings: closureRelocated.length,
+      closurePostponedBookings: closurePostponed.length,
+      closureCancelledBookings: closureCancelled.length,
+      closureResolutionPct: closureImpacts.length ? Math.round((closureResolved.length / closureImpacts.length) * 100) : 100,
     }),
     pitchRows: [...pitchMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours), weatherLostHours: round(row.weatherLostHours) })).sort((a, b) => b.hours - a.hours),
     teamRows: [...teamMap.values()].map((row) => ({ ...row, hours: round(row.hours), winterHours: round(row.winterHours) })).sort((a, b) => b.hours - a.hours),

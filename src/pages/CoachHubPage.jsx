@@ -34,6 +34,7 @@ import {
   buildCoachHubIcsUrl,
   buildCoachHubMetrics,
   buildRequestPayload,
+  normaliseAnnualPlannerAlternative,
   normaliseCoachHubWorkspace,
   requestStatusLabel,
 } from "../lib/coach/coachHubEngine.js";
@@ -87,7 +88,7 @@ export default function CoachHubPage({
   onClubChange,
   onSignOut,
 }) {
-  const [workspace, setWorkspace] = useState(() => ({ ...normaliseCoachHubWorkspace({}), schedulingPolicies: [], trainingPreferences: [], preferenceProposals: [] }));
+  const [workspace, setWorkspace] = useState(() => ({ ...normaliseCoachHubWorkspace({}), schedulingPolicies: [], trainingPreferences: [], preferenceProposals: [], closureAlternatives: [] }));
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [tab, setTab] = useState("home");
@@ -101,18 +102,20 @@ export default function CoachHubPage({
     setError("");
     try {
       const today = new Date();
-      const [payload, preferencePayload] = await Promise.all([
+      const [payload, preferencePayload, alternativePayload] = await Promise.all([
         DB.getCoachHubWorkspace(clubId, {
           startDate: `${today.getFullYear()}-01-01`,
           endDate: `${today.getFullYear() + 1}-12-31`,
         }),
         DB.getMyCoachTrainingPreferences(clubId),
+        DB.listMyAnnualPlannerAlternatives(clubId),
       ]);
       setWorkspace({
         ...normaliseCoachHubWorkspace(payload),
         schedulingPolicies: Array.isArray(preferencePayload?.policies) ? preferencePayload.policies : [],
         trainingPreferences: Array.isArray(preferencePayload?.preferences) ? preferencePayload.preferences : [],
         preferenceProposals: Array.isArray(preferencePayload?.proposals) ? preferencePayload.proposals : [],
+        closureAlternatives: (Array.isArray(alternativePayload) ? alternativePayload : []).map(normaliseAnnualPlannerAlternative),
       });
       setStatus("ready");
     } catch (loadError) {
@@ -193,6 +196,21 @@ export default function CoachHubPage({
     }
   }
 
+  async function respondClosureAlternative(alternative, response, message = "") {
+    setBusy(true);
+    try {
+      await DB.respondToAnnualPlannerAlternative(clubId, alternative.id, response, message);
+      await load({ quiet: true });
+      toast.success(response === "accept" ? "Replacement slot accepted" : "Alternative declined", {
+        description: response === "accept" ? "The shared calendar has been updated." : "The club scheduler will review another option.",
+      });
+    } catch (responseError) {
+      toast.error("Response could not be saved", { description: responseError?.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitTrainingPreference(preference) {
     setBusy(true);
     try {
@@ -259,7 +277,7 @@ export default function CoachHubPage({
               } catch (feedError) { toast.error("Calendar feed could not be created", { description: feedError?.message }); }
               finally { setBusy(false); }
             }} busy={busy} /> : null}
-            {tab === "requests" ? <RequestsTab requests={workspace.requests} assignments={workspace.assignments} onRequest={openRequest} onEdit={editRequest} onAlternative={respondAlternative} onConversation={setConversationRequest} busy={busy} /> : null}
+            {tab === "requests" ? <RequestsTab requests={workspace.requests} closureAlternatives={workspace.closureAlternatives} assignments={workspace.assignments} onRequest={openRequest} onEdit={editRequest} onAlternative={respondAlternative} onClosureAlternative={respondClosureAlternative} onConversation={setConversationRequest} busy={busy} /> : null}
             {tab === "messages" ? <MessagesTab messages={workspace.messages} onMark={markMessage} /> : null}
             {tab === "team" ? <TeamTab assignments={workspace.assignments} contacts={workspace.teamContacts} /> : null}
             {tab === "training" ? <CoachTrainingPreferences assignments={workspace.assignments} policies={workspace.schedulingPolicies} preferences={workspace.trainingPreferences} proposals={workspace.preferenceProposals} pitches={workspace.pitches} winterSites={workspace.winterSites} busy={busy} onSubmit={submitTrainingPreference} /> : null}
@@ -300,11 +318,19 @@ function BookingCard({ booking }) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black">{booking.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{booking.teamName}</div></div><Badge tone={statusTone(booking.status)}>{booking.status}</Badge></div><div className="mt-4 space-y-1.5 text-xs font-bold text-slate-600"><div className="flex items-center gap-2"><CalendarDays size={14} /> {formatDate(booking.startAt)}</div><div className="flex items-center gap-2"><Clock3 size={14} /> {time(booking.startAt)}–{time(booking.endAt)}</div><div className="flex items-center gap-2"><MapPin size={14} /> {[booking.venueName, booking.pitchName].filter(Boolean).join(" · ") || "Venue TBC"}</div></div></div>;
 }
 
-function RequestsTab({ requests, assignments, onRequest, onEdit, onAlternative, onConversation, busy }) {
+function RequestsTab({ requests, closureAlternatives = [], assignments, onRequest, onEdit, onAlternative, onClosureAlternative, onConversation, busy }) {
   return <>
     <section className="rounded-[30px] bg-gradient-to-br from-emerald-600 to-slate-950 p-6 text-white shadow-xl sm:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Booking requests</div><h1 className="mt-2 text-3xl font-black">Ask once. Track everything.</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-emerald-100/80">Request training, friendlies, changes and cancellations, then keep the conversation attached to the request.</p></div><button type="button" onClick={() => onRequest(assignments[0])} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-5 text-sm font-black text-slate-950"><Plus size={18} /> New request</button></div></section>
+    {closureAlternatives.filter((row) => row.status === "offered").length ? <section className="rounded-[26px] border border-amber-200 bg-amber-50 p-5 shadow-sm sm:p-6"><div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">Closure alternatives</div><h2 className="mt-1 text-xl font-black text-amber-950">The club needs your response</h2><p className="mt-2 text-sm font-semibold text-amber-900/75">Accepting updates the shared calendar immediately. Declining returns the booking to the operator action queue.</p><div className="mt-4 space-y-3">{closureAlternatives.filter((row) => row.status === "offered").map((alternative) => <ClosureAlternativeCard key={alternative.id} alternative={alternative} busy={busy} onRespond={onClosureAlternative} />)}</div></section> : null}
     <div className="space-y-3">{requests.map((row) => <Panel key={row.id} className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{row.title}</h3><Badge tone={statusTone(row.status)}>{requestStatusLabel(row.status)}</Badge></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-slate-500"><span>{row.teamName}</span><span>{formatDate(row.preferredStartAt)} · {time(row.preferredStartAt)}–{time(row.preferredEndAt)}</span><span>{row.preferredPitchName || "Pitch preference not set"}</span></div>{row.exceptionDates?.length ? <div className="mt-3 text-xs font-bold text-violet-700">{row.exceptionDates.length} recurrence exception date{row.exceptionDates.length === 1 ? "" : "s"}</div> : null}{row.coachNotes ? <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{row.coachNotes}</p> : null}{row.conflicts.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">{row.conflicts[0]?.message || "The club will resolve an availability warning before approval."}</div> : null}{row.status === "alternative_offered" ? <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Club alternative</div><div className="mt-2 text-sm font-black text-sky-950">{formatDate(row.proposedStartAt)} · {time(row.proposedStartAt)}–{time(row.proposedEndAt)}</div><div className="mt-1 text-xs font-bold text-sky-700">{row.proposedPitchName || "Pitch TBC"}</div>{row.proposedMessage ? <p className="mt-3 text-xs font-semibold leading-5 text-sky-900">{row.proposedMessage}</p> : null}<div className="mt-4 flex gap-2"><button disabled={busy} type="button" onClick={() => onAlternative(row, "decline")} className="h-10 rounded-xl border border-sky-300 bg-white px-4 text-xs font-black text-sky-900">Decline</button><button disabled={busy} type="button" onClick={() => onAlternative(row, "accept")} className="h-10 rounded-xl bg-sky-700 px-4 text-xs font-black text-white">Accept alternative</button></div></div> : null}<div className="mt-4 flex flex-wrap gap-2">{["submitted", "needs_information"].includes(row.status) ? <button type="button" onClick={() => onEdit(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-black text-emerald-800"><Pencil size={15} /> Edit request</button> : null}<button type="button" onClick={() => onConversation(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-xs font-black text-violet-800"><MessageSquareText size={15} /> Open conversation</button></div></div><div className="shrink-0 text-right text-[11px] font-bold text-slate-400">Sent {row.createdAt ? formatDate(row.createdAt, { day: "numeric", month: "short", year: "numeric" }) : "recently"}</div></div></Panel>)}{!requests.length ? <Empty icon={CalendarPlus} title="No requests yet" body="Request training or a friendly and its progress will stay visible here." /> : null}</div>
   </>;
+}
+
+function ClosureAlternativeCard({ alternative, busy, onRespond }) {
+  const [message, setMessage] = useState("");
+  const currentResource = [alternative.currentVenueName, alternative.currentPitchName, alternative.currentPitchAreaName].filter(Boolean).join(" · ") || "Current facility";
+  const proposedResource = [alternative.proposedVenueName, alternative.proposedPitchName, alternative.proposedPitchAreaName].filter(Boolean).join(" · ") || "Alternative facility";
+  return <div className="rounded-2xl border border-amber-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-black text-slate-950">{alternative.bookingTitle}</h3><Badge tone="bg-amber-100 text-amber-800">Response required</Badge></div><p className="mt-2 text-xs font-bold text-slate-500">{alternative.teamName} · {alternative.closureTitle || "Facility closure"}</p><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Original</div><div className="mt-1 text-sm font-black text-slate-900">{formatDate(alternative.currentStartAt)} · {time(alternative.currentStartAt)}–{time(alternative.currentEndAt)}</div><div className="mt-1 text-xs font-bold text-slate-500">{currentResource}</div></div><div className="rounded-xl bg-sky-50 p-3"><div className="text-[9px] font-black uppercase tracking-wide text-sky-700">Club alternative</div><div className="mt-1 text-sm font-black text-sky-950">{formatDate(alternative.proposedStartAt)} · {time(alternative.proposedStartAt)}–{time(alternative.proposedEndAt)}</div><div className="mt-1 text-xs font-bold text-sky-700">{proposedResource}</div></div></div>{alternative.message ? <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{alternative.message}</p> : null}<label className="mt-4 block text-xs font-black text-slate-700">Optional reply<textarea className="input mt-2 min-h-20 resize-y" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Explain why you need another option." /></label><div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button disabled={busy} type="button" onClick={() => onRespond(alternative, "decline", message)} className="h-10 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-900">Decline</button><button disabled={busy} type="button" onClick={() => onRespond(alternative, "accept", message)} className="h-10 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white">Accept and update calendar</button></div></div>;
 }
 
 function MessagesTab({ messages, onMark }) {

@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.8.1
+**Current implementation release:** Ground Control v3.10.9
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -153,13 +153,26 @@ This roadmap defines the integration contract with those areas without replacing
 - Master-rule saves show saved, unsaved and failure states and are verified after workspace reload.
 - Supabase validates rule scope, half-hour intervals, time-window completion and season mode.
 
-### Remaining limitations after v3.10.8.1
+### v3.10.9 closure recovery and Coach alternatives delivered
 
-- The approval dialog supports allocation changes, but the full side-by-side calendar comparison and coach acceptance of an offered alternative still need refinement.
-- Weather reinstatement, completion-after-rearrangement and delivery-status reporting for notifications remain later lifecycle work.
+- Every closure impact can be reviewed in a dedicated operator resolution dialog.
+- Operators can relocate immediately, offer an alternative, postpone, cancel or acknowledge an affected booking.
+- Proposed alternatives retain the original allocation and do not change the shared calendar until the coach accepts.
+- Coach Hub shows the original and proposed slot side by side with Accept and Decline actions.
+- Acceptance rechecks pitch, area or winter-slot capacity transactionally before updating the booking.
+- Declining returns the impact to the operator action queue instead of losing the workflow.
+- In-app Coach Hub messages and the existing email reminder worker receive closure, alternative, relocation, postponement and cancellation notifications.
+- Public coach messages remain separate from internal operator notes.
+- Closure resolution status, relocation, postponement, cancellation and response rates feed the shared Annual Planner and main Analytics model.
+
+### Remaining limitations after v3.10.9
+
+- Automatic alternative expiry and waiting-list promotion are not yet implemented.
+- Bulk relocation of several affected bookings still requires a dedicated workflow.
+- Weather reinstatement and completed-after-rearrangement reporting need a final lifecycle pass.
 - Winter-site provider contacts, accessibility, travel and cancellation automation require a deeper inventory phase.
-- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling beyond the initial smart-run measures.
-- Closure-impact resolution, coach notifications and bulk relocation need further hardening.
+- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling beyond the current measures.
+- Week/day calendar views and external Google, Apple and Outlook calendar-feed polish remain later UX work.
 
 ---
 
@@ -418,51 +431,54 @@ The Annual Planner shows pending coach changes in a review queue. Approved propo
 
 ---
 
-## 8. Next implementation phase - v3.10.9 closure impact, notifications and calendar refinement
+## 8. v3.10.9 delivery - closure recovery, alternatives and notifications
 
 ### Closure-impact workflow
 
-Creating a blackout or closure must identify affected approved bookings before final confirmation.
+Creating a blackout or closure identifies affected approved bookings. Operators can now:
 
-The operator can:
+- relocate a booking immediately;
+- offer a coach-controlled alternative;
+- postpone while awaiting rearrangement;
+- cancel with a recorded reason;
+- acknowledge that no booking change is currently required.
 
-- relocate a booking;
-- offer an alternative;
-- postpone;
-- cancel;
-- acknowledge that no action is yet available.
+The original booking, closure, decision, public message and private operator note remain auditable. Unresolved, awaiting-coach and postponed impacts stay visible in the action queue.
 
-A closure must never silently delete or hide existing bookings. Affected coaches receive an in-app and enabled-channel notification. Unresolved impacts appear in an action queue.
+### Coach alternatives
+
+- The original and offered allocation are shown side by side.
+- The coach can accept, decline and include a reply.
+- Acceptance rechecks capacity and then updates the shared calendar.
+- Decline returns the booking to operator review.
+- No calendar movement occurs merely because an alternative was offered.
 
 ### Notifications
 
-Events requiring notification:
+The release queues in-app and email-worker notifications for:
 
-- request received;
-- information requested;
 - alternative offered;
 - alternative accepted or declined;
-- request approved or rejected;
-- booking amended or cancelled;
-- weather postponement;
-- replacement slot offered;
-- closure affecting a booking;
-- new conversation message.
+- booking relocated;
+- weather or facility postponement;
+- cancellation caused by closure or weather.
 
-Initial delivery remains in-app and email. SMS and WhatsApp depend on the Communications module roadmap and package decisions.
+Broader request and conversation notification coverage remains connected to the Communications roadmap.
 
-### Calendar UX
+### Shared analytics
 
-- Clear Full Pitch and named-area labels.
-- Month, week, day and mobile agenda views.
-- Capacity indicator for each resource/slot.
-- My Teams filter for coaches.
-- Site, pitch, area, status and season filters.
-- Click-to-request on an available slot.
-- Request and status updates without page jumps.
-- Current-time marker and persistent legend.
-- Accessible patterns/icons alongside colour.
-- Google, Apple and Outlook-compatible private feeds.
+The shared analytics layer now includes affected bookings, resolved impacts, awaiting-coach responses, relocations, postponements, cancellations and resolution percentage. These measures feed both Annual Planner Insights and main club Analytics.
+
+### Next implementation phase - v3.10.10 recurring seasonal operations and resource depth
+
+- Recurring seasonal allocation editing and rollover.
+- Bulk closure relocation and multi-booking alternatives.
+- Waiting lists with optional offer expiry.
+- Equipment, changing rooms and shared-resource reservations.
+- Setup and changeover buffers.
+- Maximum-player and deeper area-capacity rules.
+- Provider cancellation deadlines and winter-site operational contacts.
+- Deeper unmet-demand, fairness and facility-pressure analytics.
 
 ---
 
@@ -730,8 +746,8 @@ Commercial claims must remain grounded in validated operational data and should 
 2. v3.10.8: master scheduling rules, weekday defaults and coach-managed preferences under club control.
 3. v3.10.8.1: functional rule targeting, half-hour time choices and persisted season modes.
 4. Validate master rules and coach proposals with HSM across regular and winter scenarios.
-5. v3.10.9: closure-impact resolution, alternative acceptance, notifications and calendar refinement.
-6. Recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
+5. v3.10.9: closure-impact resolution, coach alternative acceptance, notifications and weather recovery - delivered.
+6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
 7. Grant evidence statements and facility scenario planning.
 8. Start the next module roadmap only after this module phase is validated.
 
@@ -747,6 +763,7 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.7.1 | Complete | Annual Planner workspace navigation refinement. |
 | v3.10.8 | Complete | Club master scheduling rules, weekday defaults and coach-managed preferences with approval controls. |
 | v3.10.8.1 | Complete | Functional Applies to scopes, 30-minute preferred-time selectors and persisted season scheduling modes. |
-| v3.10.9 | Next | Closure impacts, alternatives, notifications and shared-calendar refinement. |
+| v3.10.9 | Complete | Closure impacts, Coach alternatives, notification queues, weather recovery and shared analytics. |
+| v3.10.10 | Next | Recurring seasonal operations, waiting lists, resources and deeper capacity analytics. |
 
 The roadmap must be updated after each implementation release and before the next module roadmap is started.

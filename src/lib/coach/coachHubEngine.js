@@ -193,6 +193,45 @@ export function normaliseCoachRequest(row = {}) {
   };
 }
 
+export function normaliseAnnualPlannerAlternative(row = {}) {
+  const proposedStartAt = row.proposed_start_at || row.proposedStartAt || null;
+  const proposedEndAt = row.proposed_end_at || row.proposedEndAt || null;
+  const currentStartAt = row.current_start_at || row.currentStartAt || null;
+  const currentEndAt = row.current_end_at || row.currentEndAt || null;
+  return {
+    id: text(row.id),
+    clubId: text(row.club_id || row.clubId),
+    impactId: text(row.impact_id || row.impactId),
+    bookingId: text(row.booking_id || row.bookingId),
+    teamKey: text(row.team_key || row.teamKey),
+    teamName: text(row.team_name || row.teamName),
+    bookingTitle: text(row.booking_title || row.bookingTitle || "Affected booking"),
+    bookingType: text(row.booking_type || row.bookingType || "training"),
+    status: text(row.status || "offered"),
+    message: text(row.message),
+    coachResponseMessage: text(row.coach_response_message || row.coachResponseMessage),
+    closureTitle: text(row.closure_title || row.closureTitle),
+    closureReason: text(row.closure_reason || row.closureReason),
+    currentStartAt,
+    currentEndAt,
+    currentVenueName: text(row.current_venue_name || row.currentVenueName),
+    currentPitchName: text(row.current_pitch_name || row.currentPitchName),
+    currentPitchAreaName: text(row.current_pitch_area_name || row.currentPitchAreaName),
+    proposedStartAt,
+    proposedEndAt,
+    proposedVenueId: text(row.proposed_venue_id || row.proposedVenueId),
+    proposedVenueName: text(row.proposed_venue_name || row.proposedVenueName),
+    proposedPitchId: text(row.proposed_pitch_id || row.proposedPitchId),
+    proposedPitchName: text(row.proposed_pitch_name || row.proposedPitchName),
+    proposedPitchAreaId: text(row.proposed_pitch_area_id || row.proposedPitchAreaId),
+    proposedPitchAreaName: text(row.proposed_pitch_area_name || row.proposedPitchAreaName),
+    proposedSiteInventoryId: text(row.proposed_site_inventory_id || row.proposedSiteInventoryId),
+    proposedSiteSlotId: text(row.proposed_site_slot_id || row.proposedSiteSlotId),
+    offeredAt: row.offered_at || row.offeredAt || null,
+    respondedAt: row.responded_at || row.respondedAt || null,
+  };
+}
+
 export function normaliseCoachMessage(row = {}) {
   return {
     id: text(row.id),
@@ -294,6 +333,7 @@ export function normaliseCoachHubWorkspace(payload = {}) {
     blackouts: Array.isArray(payload.blackouts) ? payload.blackouts : [],
     pitchClosures: Array.isArray(payload.pitch_closures || payload.pitchClosures) ? (payload.pitch_closures || payload.pitchClosures) : [],
     closureImpacts: Array.isArray(payload.closure_impacts || payload.closureImpacts) ? (payload.closure_impacts || payload.closureImpacts) : [],
+    closureAlternatives: (Array.isArray(payload.closure_alternatives || payload.closureAlternatives) ? (payload.closure_alternatives || payload.closureAlternatives) : []).map(normaliseAnnualPlannerAlternative),
   };
 }
 
@@ -301,13 +341,14 @@ export function buildCoachHubMetrics(workspace = {}, now = new Date()) {
   const bookings = Array.isArray(workspace.bookings) ? workspace.bookings : [];
   const requests = Array.isArray(workspace.requests) ? workspace.requests : [];
   const messages = Array.isArray(workspace.messages) ? workspace.messages : [];
+  const closureAlternatives = Array.isArray(workspace.closureAlternatives) ? workspace.closureAlternatives : [];
   const nowMs = now.getTime();
   const futureBookings = bookings.filter((row) => new Date(row.endAt || row.startAt).getTime() >= nowMs).sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   return {
     nextBooking: futureBookings[0] || null,
     upcomingCount: futureBookings.length,
-    pendingRequests: requests.filter((row) => ["submitted", "needs_information", "alternative_offered"].includes(row.status)).length,
-    alternatives: requests.filter((row) => row.status === "alternative_offered").length,
+    pendingRequests: requests.filter((row) => ["submitted", "needs_information", "alternative_offered"].includes(row.status)).length + closureAlternatives.filter((row) => row.status === "offered").length,
+    alternatives: requests.filter((row) => row.status === "alternative_offered").length + closureAlternatives.filter((row) => row.status === "offered").length,
     unreadMessages: messages.filter((row) => !row.readAt).length,
     acknowledgements: messages.filter((row) => row.requiresAcknowledgement && !row.acknowledgedAt).length,
   };

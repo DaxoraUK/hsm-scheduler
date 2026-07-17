@@ -40,6 +40,7 @@ import CoachRequestConversation from "../components/coach/CoachRequestConversati
 import WinterSiteWorkspace from "../components/planning/WinterSiteWorkspace.jsx";
 import SmartTrainingAllocationWorkspace from "../components/planning/SmartTrainingAllocationWorkspace.jsx";
 import WeatherDisruptionDialog from "../components/planning/WeatherDisruptionDialog.jsx";
+import ClosureImpactResolutionDialog from "../components/planning/ClosureImpactResolutionDialog.jsx";
 import AnnualPlannerAnalyticsSummary from "../components/analytics/AnnualPlannerAnalyticsSummary.jsx";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import {
@@ -209,6 +210,7 @@ export default function AnnualPlannerPage({
   const [editor, setEditor] = useState(null);
   const [blackoutEditor, setBlackoutEditor] = useState(null);
   const [weatherBooking, setWeatherBooking] = useState(null);
+  const [closureImpactReview, setClosureImpactReview] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -419,7 +421,8 @@ export default function AnnualPlannerPage({
     winterSites: workspace.winterSites,
     winterSlots: workspace.winterSlots,
     requests: coachRequests,
-  }, { year }), [coachRequests, workspace.blackouts, workspace.bookings, workspace.winterSites, workspace.winterSlots, year]);
+    closureImpacts: workspace.closureImpacts,
+  }, { year }), [coachRequests, workspace.blackouts, workspace.bookings, workspace.closureImpacts, workspace.winterSites, workspace.winterSlots, year]);
 
   const openCoachAudience = useCallback(({ reason, bookingIds = [], blackoutIds = [], teamKeys = [] } = {}) => {
     const audience = buildAnnualPlannerCoachAudience({
@@ -629,19 +632,26 @@ export default function AnnualPlannerPage({
     }
   }
 
-  async function resolveClosureImpact(impact, statusValue) {
+  async function resolveClosureImpact(impact, resolution) {
     if (!impact?.id) return;
     setSaving(true);
     try {
-      await DB.resolveAnnualPlannerClosureImpact(clubId, impact.id, {
-        status: statusValue,
-        note: statusValue === "relocated" ? "Booking relocated by a club operator." : statusValue === "cancelled" ? "Affected booking cancelled by a club operator." : "Closure impact reviewed by a club operator.",
-      });
+      await DB.resolveAnnualPlannerClosureImpact(clubId, impact.id, resolution);
+      setClosureImpactReview(null);
       await loadWorkspace({ quiet: true });
       announceUpdate();
-      toast.success(statusValue === "relocated" ? "Closure impact marked as relocated" : statusValue === "cancelled" ? "Closure impact marked as cancelled" : "Closure impact resolved");
+      const action = resolution?.action || "acknowledge";
+      const labels = {
+        offer_alternative: "Alternative sent to the coach",
+        relocate: "Affected booking relocated",
+        postpone: "Affected booking postponed",
+        cancel: "Affected booking cancelled",
+        acknowledge: "Closure impact acknowledged",
+      };
+      toast.success(labels[action] || "Closure impact resolved");
     } catch (impactError) {
       toast.error("Closure impact could not be updated", { description: impactError?.message });
+      throw impactError;
     } finally {
       setSaving(false);
     }
@@ -959,7 +969,7 @@ export default function AnnualPlannerPage({
           onCreate={() => setBlackoutEditor({ title: "Pitch unavailable", closureType: "blackout", visibility: "club", startDate: normaliseDateKey(new Date()), endDate: normaliseDateKey(new Date()), startTime: "08:00", endTime: "22:00", venueId: "", pitchId: "", reason: "", publicNote: "", internalNote: "" })}
           settings={workspace.settings}
           saving={saving}
-          onResolveImpact={resolveClosureImpact}
+          onResolveImpact={(impact) => setClosureImpactReview(impact)}
           onCommunicate={(blackout) => openCoachAudience({ reason: `Facility update: ${blackout.title}`, blackoutIds: [blackout.id] })}
         />
       ) : null}
@@ -1071,6 +1081,16 @@ export default function AnnualPlannerPage({
       {coachReview ? <CoachRequestReviewDialog request={coachReview} pitches={pitchCfg} winterSites={workspace.winterSites} winterSlots={workspace.winterSlots} busy={saving} onClose={() => setCoachReview(null)} onDecision={decideCoachRequest} /> : null}
       {conversationRequest ? <CoachRequestConversation clubId={clubId} request={conversationRequest} role="club" onClose={() => setConversationRequest(null)} /> : null}
       {weatherBooking ? <WeatherDisruptionDialog booking={weatherBooking} pitches={pitchCfg} winterSites={workspace.winterSites} winterSlots={workspace.winterSlots} saving={saving} onClose={() => setWeatherBooking(null)} onSubmit={recordWeatherDisruption} /> : null}
+      {closureImpactReview ? <ClosureImpactResolutionDialog
+        impact={closureImpactReview}
+        booking={workspace.bookings.find((row) => row.id === String(closureImpactReview.booking_id || closureImpactReview.bookingId)) || null}
+        pitches={pitchCfg}
+        winterSites={workspace.winterSites}
+        winterSlots={workspace.winterSlots}
+        busy={saving}
+        onClose={() => setClosureImpactReview(null)}
+        onResolve={(resolution) => resolveClosureImpact(closureImpactReview, resolution)}
+      /> : null}
 
       <DaxoraConfirmDialog
         request={confirmRequest}
@@ -1169,9 +1189,9 @@ function RequestsWorkspace({ bookings, coachRequests = [], canOperate, saving, o
 }
 
 function AvailabilityWorkspace({ blackouts, pitchClosures = [], closureImpacts = [], pitchCfg, canOperate, canManage, onCreate, onCommunicate, onResolveImpact, settings, saving = false }) {
-  const activeImpacts = closureImpacts.filter((impact) => (impact.status || "action_required") === "action_required");
+  const activeImpacts = closureImpacts.filter((impact) => ["action_required", "awaiting_coach", "postponed"].includes(impact.status || "action_required"));
   return <div className="space-y-6">
-    {activeImpacts.length ? <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 shadow-sm sm:p-6"><div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm"><AlertTriangle size={20} /></span><div className="min-w-0 flex-1"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Action required</div><h2 className="mt-1 text-xl font-black text-amber-950">Closures affect {activeImpacts.length} existing booking{activeImpacts.length === 1 ? "" : "s"}</h2><p className="mt-2 text-sm font-semibold text-amber-900/75">Relocate, cancel or acknowledge every affected session. Ground Control will never silently remove an approved booking.</p></div></div><div className="mt-5 grid gap-3 lg:grid-cols-2">{activeImpacts.map((impact) => <div key={impact.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="text-sm font-black text-slate-950">{impact.booking_title || "Affected booking"}</div><div className="mt-1 text-xs font-bold text-slate-600">{impact.team_name || impact.team_key || "Club-wide"} · {impact.pitch_name || "Facility TBC"}</div><div className="mt-1 text-xs font-semibold text-slate-500">{formatDate(impact.booking_start_at || impact.created_at)} · affected by {impact.blackout_title || "facility closure"}</div>{canOperate ? <div className="mt-4 flex flex-wrap gap-2"><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "relocated")} className="h-9 rounded-xl border border-sky-200 bg-sky-50 px-3 text-[11px] font-black text-sky-800">Mark relocated</button><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "cancelled")} className="h-9 rounded-xl border border-rose-200 bg-rose-50 px-3 text-[11px] font-black text-rose-800">Mark cancelled</button><button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact, "resolved")} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-black text-slate-700">Resolve</button></div> : null}</div>)}</div></section> : null}
+    {activeImpacts.length ? <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 shadow-sm sm:p-6"><div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm"><AlertTriangle size={20} /></span><div className="min-w-0 flex-1"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Action required</div><h2 className="mt-1 text-xl font-black text-amber-950">{activeImpacts.length} booking action{activeImpacts.length === 1 ? "" : "s"} need attention</h2><p className="mt-2 text-sm font-semibold text-amber-900/75">Relocate, offer an alternative, postpone, cancel or acknowledge each affected session. Ground Control preserves the original booking and audit trail.</p></div></div><div className="mt-5 grid gap-3 lg:grid-cols-2">{activeImpacts.map((impact) => <div key={impact.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex flex-wrap items-center gap-2"><div className="text-sm font-black text-slate-950">{impact.booking_title || "Affected booking"}</div><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wide ${impact.status === "awaiting_coach" ? "bg-sky-100 text-sky-800" : impact.status === "postponed" ? "bg-violet-100 text-violet-800" : "bg-amber-100 text-amber-800"}`}>{impact.status === "awaiting_coach" ? "Coach response pending" : impact.status === "postponed" ? "Awaiting rearrangement" : "Action required"}</span></div><div className="mt-1 text-xs font-bold text-slate-600">{impact.team_name || impact.team_key || "Club-wide"} · {[impact.pitch_name, impact.pitch_area_name].filter(Boolean).join(" · ") || "Facility TBC"}</div><div className="mt-1 text-xs font-semibold text-slate-500">{formatDate(impact.booking_start_at || impact.created_at)} · affected by {impact.blackout_title || "facility closure"}</div>{impact.alternative?.message ? <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs font-semibold text-sky-900">{impact.alternative.message}</div> : null}{canOperate ? <button disabled={saving} type="button" onClick={() => onResolveImpact?.(impact)} className="mt-4 h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white">Review and resolve</button> : null}</div>)}</div></section> : null}
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Protected availability</div><h2 className="mt-1 text-xl font-black text-slate-950">Blackouts and unavailable periods</h2><p className="mt-2 text-sm font-semibold text-slate-500">Visible closures automatically appear in operator and Coach Hub calendars.</p></div>{canOperate ? <button type="button" onClick={onCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><Plus size={17} /> Add blackout</button> : null}</div>
