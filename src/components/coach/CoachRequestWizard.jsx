@@ -25,6 +25,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
   const [step, setStep] = useState(0);
   const [availability, setAvailability] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const assignment = assignments.find((row) => row.id === draft.assignmentId) || assignments[0] || {};
   const options = requestTypeOptions(assignment);
   const isExistingBookingRequest = ["change", "cancellation"].includes(draft.requestType);
@@ -35,7 +36,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
     && draft.requestType === "training"
     && Boolean(draft.pitchId)
     && selectedAreas.length > 0;
-  const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const set = (key, value) => { setSubmitError(""); setDraft((current) => ({ ...current, [key]: value })); };
 
   const payload = useMemo(() => buildRequestPayload({
     ...draft,
@@ -114,6 +115,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
   };
 
   const submit = async () => {
+    setSubmitError("");
     if (!canContinue()) {
       toast.error(requiresNamedArea && !draft.pitchAreaId ? "Choose a pitch area" : "Complete the required request details", {
         description: requiresNamedArea && !draft.pitchAreaId ? "Select Half A, Half B or another named area so shared-pitch capacity can be checked correctly." : undefined,
@@ -126,8 +128,9 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
     }
     try {
       await onSubmit({ ...draft, allowAdvisorySubmission: Boolean(draft.timeFlexible || draft.acceptablePitchIds?.length) });
-    } catch {
-      // Grounded error is shown by the page and the wizard remains open.
+    } catch (error) {
+      setSubmitError(error?.message || "The request could not be submitted. Review the details and try again.");
+      // The page also shows a toast; keeping the inline message prevents silent failures.
     }
   };
 
@@ -199,7 +202,7 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
           </div> : null}
         </div>
 
-        <footer className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 p-5 backdrop-blur sm:flex-row sm:justify-between"><button type="button" onClick={() => step ? setStep((current) => current - 1) : setDraft(null)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 text-sm font-black"><ChevronLeft size={16} /> {step ? "Back" : "Cancel"}</button>{step < STEPS.length - 1 ? <button disabled={!canContinue()} type="button" onClick={() => setStep((current) => current + 1)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:opacity-40">Continue <ChevronRight size={16} /></button> : <button disabled={busy || checking} type="button" onClick={submit} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:opacity-50"><Send size={16} /> {busy ? (draft.requestId ? "Saving…" : "Sending…") : (draft.requestId ? "Save changes" : "Send request")}</button>}</footer>
+        <footer className="sticky bottom-0 border-t border-slate-200 bg-white/95 p-5 backdrop-blur">{submitError ? <div role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold leading-5 text-rose-800">{submitError}</div> : null}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><button type="button" onClick={() => step ? setStep((current) => current - 1) : setDraft(null)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 text-sm font-black"><ChevronLeft size={16} /> {step ? "Back" : "Cancel"}</button>{step < STEPS.length - 1 ? <button disabled={!canContinue()} type="button" onClick={() => setStep((current) => current + 1)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:opacity-40">Continue <ChevronRight size={16} /></button> : <button disabled={busy || checking} type="button" onClick={submit} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:opacity-50"><Send size={16} /> {busy ? (draft.requestId ? "Saving…" : "Sending…") : (draft.requestId ? "Save changes" : "Send request")}</button>}</div></footer>
       </section>
     </div>
   );

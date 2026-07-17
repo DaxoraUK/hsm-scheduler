@@ -131,8 +131,9 @@ describe("Ground Control v3.10.5.1 pitch-area and calendar refresh repair", () =
     expect(annualPlanner).toContain("window.setInterval(shadowRefresh, 6000)");
     expect(annualPlanner).toContain('window.addEventListener("focus", shadowRefresh)');
     expect(annualPlanner).toContain('document.addEventListener("visibilitychange", handleVisibility)');
+    expect(annualPlanner).toContain("refreshRequestQueueQuietly");
+    expect(annualPlanner).toContain("DB.listCoachHubRequestQueue(clubId)");
     expect(annualPlanner).toContain('loadWorkspace({ quiet: true })');
-    expect(annualPlanner).toContain("Refreshing requests quietly");
     expect(annualPlanner).toContain("Refresh");
   });
 

@@ -205,6 +205,8 @@ export default function AnnualPlannerPage({
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const refreshInFlight = useRef(false);
+  const requestRefreshInFlight = useRef(false);
+  const requestFingerprintRef = useRef("");
   const approvalRequired = Boolean(workspace.settings?.require_approval ?? workspace.settings?.requireApproval);
   const canViewCosts = canManage || (workspace.settings?.show_costs_to_schedulers ?? workspace.settings?.showCostsToSchedulers ?? true) !== false;
 
@@ -278,21 +280,56 @@ export default function AnnualPlannerPage({
     loadWorkspace();
   }, [loadWorkspace]);
 
+  const refreshRequestQueueQuietly = useCallback(async () => {
+    if (!canOperate || !clubId || !isSupaConfigured() || requestRefreshInFlight.current) return;
+    requestRefreshInFlight.current = true;
+    const preservedScrollY = typeof window !== "undefined" ? window.scrollY : 0;
+    try {
+      const coachPayload = await DB.listCoachHubRequestQueue(clubId);
+      const nextRequests = (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
+        .map(normaliseCoachRequest)
+        .filter((request) => ["submitted", "needs_information", "alternative_offered"].includes(request.status));
+      const nextFingerprint = JSON.stringify(nextRequests.map((request) => [
+        request.id, request.status, request.updatedAt, request.preferredStartAt, request.preferredEndAt,
+        request.preferredPitchId, request.preferredPitchAreaId, request.proposedStartAt, request.proposedPitchId,
+      ]));
+      if (nextFingerprint !== requestFingerprintRef.current) {
+        requestFingerprintRef.current = nextFingerprint;
+        setCoachRequests(nextRequests);
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => window.scrollTo({ top: preservedScrollY, left: 0, behavior: "auto" }));
+        });
+      }
+      setLastRefreshedAt(new Date());
+    } catch {
+      // Background refresh failures remain silent; manual Refresh still provides a visible retry path.
+    } finally {
+      requestRefreshInFlight.current = false;
+    }
+  }, [canOperate, clubId]);
+
+  useEffect(() => {
+    requestFingerprintRef.current = JSON.stringify(coachRequests.map((request) => [
+      request.id, request.status, request.updatedAt, request.preferredStartAt, request.preferredEndAt,
+      request.preferredPitchId, request.preferredPitchAreaId, request.proposedStartAt, request.proposedPitchId,
+    ]));
+  }, [coachRequests]);
+
   useEffect(() => {
     const refresh = (event) => {
       const changedClubId = String(event?.detail?.clubId || "");
       if (changedClubId && changedClubId !== String(clubId)) return;
-      loadWorkspace({ quiet: true });
+      if (tab === "requests") refreshRequestQueueQuietly();
+      else loadWorkspace({ quiet: true });
     };
     window.addEventListener("daxora-annual-planner-updated", refresh);
     return () => window.removeEventListener("daxora-annual-planner-updated", refresh);
-  }, [clubId, loadWorkspace]);
-
+  }, [clubId, loadWorkspace, refreshRequestQueueQuietly, tab]);
 
   useEffect(() => {
     if (tab !== "requests" || status !== "ready") return undefined;
     const shadowRefresh = () => {
-      if (document.visibilityState === "visible") loadWorkspace({ quiet: true });
+      if (document.visibilityState === "visible") refreshRequestQueueQuietly();
     };
     const interval = window.setInterval(shadowRefresh, 6000);
     const handleVisibility = () => {
@@ -305,7 +342,7 @@ export default function AnnualPlannerPage({
       window.removeEventListener("focus", shadowRefresh);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [loadWorkspace, status, tab]);
+  }, [refreshRequestQueueQuietly, status, tab]);
 
   const snapshot = useMemo(() => buildAnnualPlannerSnapshot({ bookings: workspace.bookings, blackouts: workspace.blackouts, year }), [workspace, year]);
   const coachRequestCalendarBookings = useMemo(() => coachRequests.map((request) => normaliseAnnualBooking({
@@ -627,7 +664,7 @@ export default function AnnualPlannerPage({
       {error ? <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><AlertTriangle className="mt-0.5 shrink-0" size={18} /><div><div className="font-black">Annual planner needs attention</div><div className="mt-1 text-sm font-semibold">{error}</div></div><button type="button" onClick={() => loadWorkspace()} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black shadow-sm"><RefreshCw size={14} /> Retry</button></div> : null}
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-2 flex items-center justify-end px-2 text-[10px] font-black uppercase tracking-wide text-slate-400">{refreshing ? "Refreshing requests quietly…" : lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
+        <div className="mb-2 flex min-h-4 items-center justify-end px-2 text-[10px] font-black uppercase tracking-wide text-slate-400">{lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {[
             ["calendar", "Calendar", CalendarDays, "Full year and monthly planning"],
