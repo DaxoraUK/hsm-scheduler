@@ -31,6 +31,10 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
   const eligibleBookings = (Array.isArray(bookings) ? bookings : []).filter((row) => row.teamKey === assignment.teamKey && !["cancelled", "rejected"].includes(row.status)).sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   const selectedPitch = pitches.find((row) => String(row.id) === String(draft.pitchId));
   const selectedAreas = selectedPitch?.trainingAreas || [];
+  const requiresNamedArea = !isExistingBookingRequest
+    && draft.requestType === "training"
+    && Boolean(draft.pitchId)
+    && selectedAreas.length > 0;
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
 
   const payload = useMemo(() => buildRequestPayload({
@@ -105,11 +109,17 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
   const canContinue = () => {
     if (step === 0) return Boolean(draft.assignmentId && draft.requestType && draft.title?.trim() && (!isExistingBookingRequest || draft.targetBookingId));
     if (step === 1) return Boolean(draft.date && draft.startTime && draft.endTime && draft.endTime > draft.startTime);
+    if (step === 2) return !requiresNamedArea || Boolean(draft.pitchAreaId);
     return true;
   };
 
   const submit = async () => {
-    if (!canContinue()) { toast.error("Complete the required request details"); return; }
+    if (!canContinue()) {
+      toast.error(requiresNamedArea && !draft.pitchAreaId ? "Choose a pitch area" : "Complete the required request details", {
+        description: requiresNamedArea && !draft.pitchAreaId ? "Select Half A, Half B or another named area so shared-pitch capacity can be checked correctly." : undefined,
+      });
+      return;
+    }
     if (!isExistingBookingRequest && availability && !availability.available && !draft.timeFlexible && !draft.acceptablePitchIds?.length) {
       toast.error("The requested slot is unavailable", { description: "Choose an alternative pitch, allow a flexible time, or select one of the suggested slots." });
       return;
@@ -173,9 +183,10 @@ export default function CoachRequestWizard({ clubId, draft, setDraft, assignment
           </div> : null}
 
           {step === 2 ? <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2"><Field label="Preferred pitch"><select value={draft.pitchId || ""} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label} · {pitch.trainingCapacity} training slot{pitch.trainingCapacity === 1 ? "" : "s"}</option>)}</select></Field><Field label="Pitch area" hint={selectedPitch ? `${selectedPitch.trainingCapacity} team${selectedPitch.trainingCapacity === 1 ? "" : "s"} can train simultaneously.` : "Choose a pitch first."}><select disabled={!selectedAreas.length} value={draft.pitchAreaId || ""} onChange={(event) => selectArea(event.target.value)} className="input disabled:bg-slate-100"><option value="">Whole pitch / any available area</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></Field></div>
+            <div className="grid gap-4 sm:grid-cols-2"><Field label="Preferred pitch"><select value={draft.pitchId || ""} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label} · {pitch.trainingCapacity} training slot{pitch.trainingCapacity === 1 ? "" : "s"}</option>)}</select></Field><Field label="Pitch area" hint={selectedPitch ? `${selectedPitch.trainingCapacity} team${selectedPitch.trainingCapacity === 1 ? "" : "s"} can train simultaneously.` : "Choose a pitch first."}><select disabled={!selectedAreas.length} value={draft.pitchAreaId || ""} onChange={(event) => selectArea(event.target.value)} className="input disabled:bg-slate-100"><option value="">{selectedAreas.length ? "Choose a pitch area…" : "Whole pitch / shared capacity"}</option>{selectedAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></Field></div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Acceptable alternatives</div><p className="mt-1 text-xs font-semibold leading-5 text-sky-900/75">Select pitches the club may approve without sending the request back to you.</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{pitches.filter((pitch) => pitch.id !== draft.pitchId).map((pitch) => <label key={pitch.id} className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-xs font-black text-sky-950"><input type="checkbox" checked={(draft.acceptablePitchIds || []).includes(pitch.id)} onChange={() => toggleAcceptablePitch(pitch.id)} /> {pitch.label}</label>)}</div></div>
             <label className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4"><input type="checkbox" className="mt-1" checked={Boolean(draft.timeFlexible)} onChange={(event) => set("timeFlexible", event.target.checked)} /><span className="min-w-0 flex-1"><span className="block text-sm font-black text-violet-950">My time is flexible</span><span className="mt-1 block text-xs font-semibold leading-5 text-violet-800">Let the club offer a nearby slot automatically.</span>{draft.timeFlexible ? <select value={draft.flexibilityMinutes || 30} onChange={(event) => set("flexibilityMinutes", Number(event.target.value))} className="input mt-3"><option value="30">Within 30 minutes</option><option value="60">Within 1 hour</option><option value="90">Within 90 minutes</option><option value="120">Within 2 hours</option></select> : null}</span></label>
+            {selectedAreas.length ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold leading-5 text-emerald-900">Each named area is checked separately. A team may run a split training session on two different halves when the pitch capacity allows it; the same half cannot be booked twice.</div> : null}
             <Field label="Notes for the club" wide><textarea rows="4" value={draft.notes} onChange={(event) => set("notes", event.target.value)} className="input min-h-[110px] py-3" placeholder="Access needs, preferred areas or anything the scheduler should know." /></Field>
           </div> : null}
 

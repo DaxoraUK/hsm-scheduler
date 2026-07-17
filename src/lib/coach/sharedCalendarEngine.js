@@ -161,17 +161,44 @@ export function buildCoachMonthCalendar(year, month, events = []) {
   });
 }
 
+export const COACH_CALENDAR_LEGEND = Object.freeze([
+  { key: "approved", label: "Approved booking", tone: "border-emerald-200 bg-emerald-50 text-emerald-800", swatch: "bg-emerald-500" },
+  { key: "booked", label: "Booked / provisional", tone: "border-violet-200 bg-violet-50 text-violet-800", swatch: "bg-violet-500" },
+  { key: "pending", label: "Pending request", tone: "border-amber-200 bg-amber-50 text-amber-800", swatch: "bg-amber-500" },
+  { key: "fixture", label: "Fixture / friendly", tone: "border-sky-200 bg-sky-50 text-sky-800", swatch: "bg-sky-500" },
+  { key: "unavailable", label: "Closed / unavailable", tone: "border-rose-200 bg-rose-50 text-rose-800", swatch: "bg-rose-500" },
+]);
+
+export function calendarEventCategory(event = {}) {
+  if (event.kind === "blackout" || event.kind === "pitch_closure" || event.kind === "closure") return "unavailable";
+  if (event.kind === "request" || ["requested", "submitted", "needs_information", "alternative_offered"].includes(String(event.status || "").toLowerCase())) return "pending";
+  if (["friendly", "match", "fixture"].includes(String(event.bookingType || event.booking_type || "").toLowerCase())) return "fixture";
+  if (["confirmed", "approved", "accepted"].includes(String(event.status || event.calendarStatus || "").toLowerCase())) return "approved";
+  return "booked";
+}
+
+export function calendarEventAppearance(event = {}) {
+  const category = calendarEventCategory(event);
+  return COACH_CALENDAR_LEGEND.find((row) => row.key === category) || COACH_CALENDAR_LEGEND[1];
+}
+
+export function calendarEventIdentity(event = {}) {
+  return [
+    event.kind || "event",
+    event.id || event.requestId || "unidentified",
+    event.teamKey || "club",
+    event.pitchId || "no-pitch",
+    event.pitchAreaId || event.pitchAreaName || "no-area",
+    event.startAt || event.startDate || "no-date",
+  ].map((value) => text(value)).join(":");
+}
+
 export function calendarEventTone(event = {}) {
-  if (event.kind === "blackout" || event.kind === "pitch_closure") return "border-rose-200 bg-rose-50 text-rose-800";
-  if (event.kind === "request") return "border-amber-200 bg-amber-50 text-amber-800";
-  if (event.bookingType === "friendly" || event.bookingType === "match") return "border-sky-200 bg-sky-50 text-sky-800";
-  if (["confirmed", "approved"].includes(event.status)) return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  return "border-violet-200 bg-violet-50 text-violet-800";
+  return calendarEventAppearance(event).tone;
 }
 
 export function calendarEventLabel(event = {}) {
   if (event.kind === "pitch_closure") return "Pitch closure";
-  if (event.kind === "blackout") return "Blackout";
-  if (event.kind === "request") return "Pending request";
-  return event.bookingType || "Booking";
+  if (event.kind === "blackout" || event.kind === "closure") return "Blackout";
+  return calendarEventAppearance(event).label;
 }

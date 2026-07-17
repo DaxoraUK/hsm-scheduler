@@ -304,7 +304,15 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
 
   overlapping.forEach((booking) => {
     const sameTeam = normalised.teamKey && booking.teamKey && normalised.teamKey === booking.teamKey;
-    if (sameTeam) {
+    const splitTrainingSession = sameTeam
+      && normalised.bookingType === "training"
+      && booking.bookingType === "training"
+      && normalised.pitchId
+      && booking.pitchId === normalised.pitchId
+      && normalised.pitchAreaId
+      && booking.pitchAreaId
+      && normalised.pitchAreaId !== booking.pitchAreaId;
+    if (sameTeam && !splitTrainingSession) {
       conflicts.push({
         type: "team_double_booking",
         severity: "danger",
