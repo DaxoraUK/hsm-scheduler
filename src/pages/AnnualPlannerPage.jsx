@@ -371,6 +371,7 @@ export default function AnnualPlannerPage({
         bookings: [...workspace.bookings, ...accepted],
         blackouts: workspace.blackouts,
         matchdayBookings,
+        pitches: pitchCfg,
         ignoreId: effectiveDraft.id || "",
       });
       if (conflicts.length) {
@@ -779,7 +780,7 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
   const [localError, setLocalError] = useState("");
   if (!draft) return null;
   const occurrences = expandRecurringBookingDraft(draft);
-  const conflicts = occurrences.flatMap((occurrence) => detectAnnualPlannerConflicts(occurrence, { bookings, blackouts, matchdayBookings, ignoreId: draft.id || "" }));
+  const conflicts = occurrences.flatMap((occurrence) => detectAnnualPlannerConflicts(occurrence, { bookings, blackouts, matchdayBookings, pitches: pitchCfg, ignoreId: draft.id || "" }));
   const suggestions = conflicts.length ? findAnnualPlannerSuggestions(occurrences[0] || draft, { bookings, blackouts, matchdayBookings, pitches: pitchCfg }, { limit: 3 }) : [];
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const selectedPitch = pitchCfg.find((pitch) => String(pitch.id) === String(draft.pitchId));

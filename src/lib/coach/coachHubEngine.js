@@ -165,6 +165,7 @@ export function normaliseCoachRequest(row = {}) {
     resultingBookingId: text(row.resulting_booking_id || row.resultingBookingId),
     reviewedAt: row.reviewed_at || row.reviewedAt || null,
     createdAt: row.created_at || row.createdAt || null,
+    updatedAt: row.updated_at || row.updatedAt || null,
   };
 }
 
@@ -186,6 +187,58 @@ export function normaliseCoachMessage(row = {}) {
   };
 }
 
+
+export function normaliseCoachPitch(row = {}) {
+  const data = row?.data && typeof row.data === "object" ? row.data : row;
+  const capacity = Math.max(1, Math.min(20, number(data.training_capacity ?? data.trainingCapacity ?? data.max_simultaneous_training ?? data.maxSimultaneousTraining ?? 1) || 1));
+  return {
+    id: text(data.id || row.id),
+    label: text(data.label || data.name || data.id || row.id || "Pitch"),
+    siteId: text(data.siteId || data.site_id || data.venueId || data.venue_id),
+    siteName: text(data.siteName || data.site_name || data.siteLabel || data.venueName || data.venue_name),
+    format: text(data.format),
+    surface: text(data.surface || "grass"),
+    trainingCapacity: capacity,
+    independent: bool(data.independent),
+    innerOf: text(data.innerOf || data.inner_of),
+  };
+}
+
+export function buildCoachRequestDraft(request = {}, assignments = []) {
+  const normalised = normaliseCoachRequest(request);
+  const assignment = assignments.find((row) => row.id === normalised.assignmentId)
+    || assignments.find((row) => row.teamKey === normalised.teamKey)
+    || assignments[0]
+    || {};
+  return {
+    requestId: normalised.id,
+    assignmentId: assignment.id || normalised.assignmentId || "",
+    targetBookingId: normalised.targetBookingId || "",
+    requestType: normalised.requestType || "training",
+    title: normalised.title || "Booking request",
+    opponentName: normalised.opponentName || "",
+    format: normalised.format || "",
+    venueId: normalised.preferredVenueId || "",
+    venueName: normalised.preferredVenueName || "",
+    pitchId: normalised.preferredPitchId || "",
+    pitchName: normalised.preferredPitchName || "",
+    date: normalised.preferredDate || dateKey(new Date()),
+    startTime: normalised.preferredStartTime || "18:00",
+    endTime: normalised.preferredEndTime || "19:30",
+    recurrence: normalised.recurrence || "none",
+    recurrenceUntil: dateKey(normalised.recurrenceUntil || normalised.preferredDate || new Date()),
+    exceptionDates: normalised.exceptionDates || [],
+    exceptionDatesText: (normalised.exceptionDates || []).join(", "),
+    holidayPolicy: normalised.holidayPolicy || "include",
+    estimatedAttendance: normalised.estimatedAttendance || "",
+    refereeRequired: normalised.refereeRequired,
+    changingRoomsRequired: normalised.changingRoomsRequired,
+    notes: normalised.coachNotes || "",
+    allowAdvisorySubmission: false,
+    originalStatus: normalised.status,
+  };
+}
+
 export function normaliseCoachHubWorkspace(payload = {}) {
   const assignments = (Array.isArray(payload.assignments) ? payload.assignments : []).map(normaliseCoachAssignment);
   const assignmentKeys = new Set(assignments.map((row) => row.teamKey));
@@ -197,6 +250,7 @@ export function normaliseCoachHubWorkspace(payload = {}) {
     requests: (Array.isArray(payload.requests) ? payload.requests : []).map(normaliseCoachRequest),
     messages: (Array.isArray(payload.messages) ? payload.messages : []).map(normaliseCoachMessage),
     teamContacts: Array.isArray(payload.team_contacts || payload.teamContacts) ? (payload.team_contacts || payload.teamContacts) : [],
+    pitches: (Array.isArray(payload.pitches) ? payload.pitches : []).map(normaliseCoachPitch).filter((row) => row.id),
   };
 }
 
@@ -247,6 +301,7 @@ export function buildRequestPayload(draft = {}) {
 export function buildBlankCoachRequest(assignment = {}, date = new Date()) {
   const dateValue = dateKey(date);
   return {
+    requestId: "",
     assignmentId: assignment.id || "",
     targetBookingId: "",
     requestType: assignment.canRequestTraining ? "training" : "friendly",

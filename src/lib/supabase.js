@@ -783,6 +783,15 @@ export const DB = {
     });
   },
 
+  async updateMyCoachHubRequest(clubId, requestId, request) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/update_my_coach_hub_request", {
+      target_club_id: id,
+      target_request_id: String(requestId || "").trim(),
+      request_data: request && typeof request === "object" ? request : {},
+    });
+  },
+
   async reviewCoachHubRequest(clubId, requestId, decision, data = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/review_coach_hub_request", {

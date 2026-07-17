@@ -37,6 +37,7 @@ const PITCH_COLUMNS = [
   { key: "surface", label: "Surface" },
   { key: "innerOf", label: "Inside Pitch", aliases: ["Inner Of", "Parent Pitch"] },
   { key: "independent", label: "Independent" },
+  { key: "trainingCapacity", label: "Training Capacity", aliases: ["Simultaneous Training Teams", "Training Teams"] },
   { key: "desc", label: "Description", aliases: ["Notes"] },
 ];
 
@@ -67,6 +68,7 @@ function normaliseImportedPitch(row, index, primarySiteId) {
     surface: SURFACES.some(([value]) => value === surface) ? surface : "grass",
     innerOf: String(row.innerOf || "").trim() || null,
     independent: booleanValue(row.independent, false),
+    trainingCapacity: Math.max(1, Math.min(20, Number(row.trainingCapacity || row.training_capacity || 1) || 1)),
     desc: String(row.desc || "").trim(),
   };
 }
@@ -173,6 +175,7 @@ export default function PitchSettingsPanel({
       surface: "grass",
       innerOf: null,
       independent: false,
+      trainingCapacity: 1,
     }]);
     setQuery("");
     setSelectedIndex(nextIndex);
@@ -245,7 +248,7 @@ export default function PitchSettingsPanel({
         <CompactMetric label="Grass" value={surfaces.grass || 0} />
         <CompactMetric label="Artificial" value={(surfaces.astro || 0) + (surfaces["3g"] || 0) + (surfaces["4g"] || 0)} tone="blue" />
         <CompactMetric label="Independent" value={pitchCfg.filter((pitch) => pitch.independent).length} tone="violet" />
-        <CompactMetric label="Sites" value={new Set(assignments.pitches.map((pitch) => pitch.siteId || primarySite?.id)).size} tone="amber" />
+        <CompactMetric label="Training slots" value={pitchCfg.reduce((total, pitch) => total + Math.max(1, Number(pitch.trainingCapacity || 1)), 0)} detail="simultaneous teams" tone="amber" />
       </div>
 
       {assignments.repairedPitches > 0 ? (
@@ -270,7 +273,7 @@ export default function PitchSettingsPanel({
             rows={assignments.pitches}
             columns={PITCH_COLUMNS}
             filename="ground-control-pitches"
-            templateRows={[{ id: "P1", label: "Pitch 1", siteId: primarySite?.id || "main-ground", format: "11v11", surface: "grass", innerOf: "", independent: false, desc: "Full-size grass pitch" }]}
+            templateRows={[{ id: "P1", label: "Pitch 1", siteId: primarySite?.id || "main-ground", format: "11v11", surface: "grass", innerOf: "", independent: false, trainingCapacity: 1, desc: "Full-size grass pitch" }]}
             normaliseRow={(row, index) => normaliseImportedPitch(row, index, primarySite?.id)}
             onImport={importPitches}
           />
@@ -279,7 +282,7 @@ export default function PitchSettingsPanel({
 
       <div className="mt-4 flex items-start gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold leading-5 text-blue-950">
         <Info size={16} className="mt-0.5 shrink-0" />
-        “Inside pitch” marks a smaller layout inside a larger pitch. Independent pitches do not count towards the concurrent-game limit.
+        “Inside pitch” marks a smaller layout inside a larger pitch. Training capacity controls how many teams can use the same pitch at the same time for training only; friendlies and matches still require exclusive use.
       </div>
 
       <div className="@container mt-4">
@@ -330,7 +333,7 @@ export default function PitchSettingsPanel({
                 <Field label="Format"><select className={selectClass} value={selectedPitch.format || ""} onChange={(event) => updatePitch(selectedIndex, "format", event.target.value)}>{FORMATS.map(([value, label]) => <option key={value || "any"} value={value}>{label}</option>)}</select></Field>
                 <Field label="Surface"><select className={selectClass} value={selectedPitch.surface || inferSurface(selectedPitch)} onChange={(event) => updatePitch(selectedIndex, "surface", event.target.value)}>{SURFACES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                 <Field label="Inside pitch" hint="Optional parent layout."><select className={selectClass} value={selectedPitch.innerOf || ""} onChange={(event) => updatePitch(selectedIndex, "innerOf", event.target.value || null)}><option value="">None</option>{pitchCfg.filter((candidate) => candidate.id !== selectedPitch.id && !candidate.innerOf).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label || candidate.id}</option>)}</select></Field>
-                <Field label="Capacity handling"><label className="flex h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700"><input type="checkbox" checked={!!selectedPitch.independent} onChange={(event) => updatePitch(selectedIndex, "independent", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" /> Independent pitch</label></Field>
+                <Field label="Capacity handling"><label className="flex h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700"><input type="checkbox" checked={!!selectedPitch.independent} onChange={(event) => updatePitch(selectedIndex, "independent", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" /> Independent pitch</label></Field><Field label="Simultaneous training teams" hint="Use 2 when two teams can safely share this pitch in one time slot."><input type="number" min="1" max="20" step="1" className={inputClass} value={Math.max(1, Number(selectedPitch.trainingCapacity || 1))} onChange={(event) => updatePitch(selectedIndex, "trainingCapacity", Math.max(1, Math.min(20, Number(event.target.value) || 1)))} /></Field>
                 <Field label="Description" className="col-span-full"><input className={inputClass} value={selectedPitch.desc || ""} onChange={(event) => updatePitch(selectedIndex, "desc", event.target.value)} placeholder="Optional notes" /></Field>
               </div>
             </article>

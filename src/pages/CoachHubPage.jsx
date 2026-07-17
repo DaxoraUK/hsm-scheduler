@@ -14,6 +14,7 @@ import {
   Menu,
   MessageSquareText,
   Plus,
+  Pencil,
   RefreshCw,
   Send,
   Settings,
@@ -23,9 +24,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
+import DaxoraSectionErrorBoundary from "../components/system/DaxoraSectionErrorBoundary.jsx";
 import { DB } from "../lib/supabase.js";
 import {
   buildBlankCoachRequest,
+  buildCoachRequestDraft,
   buildCoachHubIcsUrl,
   buildCoachHubMetrics,
   buildRequestPayload,
@@ -110,6 +113,19 @@ export default function CoachHubPage({
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") load({ quiet: true }); };
+    const timer = window.setInterval(refresh, 30000);
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [load]);
+
   const metrics = useMemo(() => buildCoachHubMetrics(workspace), [workspace]);
   const upcoming = useMemo(() => workspace.bookings.filter((row) => new Date(row.endAt || row.startAt).getTime() >= Date.now()).sort((a, b) => new Date(a.startAt) - new Date(b.startAt)), [workspace.bookings]);
   const unread = metrics.unreadMessages + metrics.acknowledgements;
@@ -123,14 +139,24 @@ export default function CoachHubPage({
     setRequestDraft(buildBlankCoachRequest(assignment));
   };
 
+  const editRequest = (request) => {
+    if (!["submitted", "needs_information"].includes(request?.status)) {
+      toast.error("This request can no longer be edited", { description: "Only submitted requests or requests awaiting information can be changed." });
+      return;
+    }
+    setRequestDraft(buildCoachRequestDraft(request, workspace.assignments));
+  };
+
   async function submitRequest(draft) {
     setBusy(true);
     try {
-      await DB.submitCoachHubRequest(clubId, buildRequestPayload(draft));
+      const payload = buildRequestPayload(draft);
+      if (draft.requestId) await DB.updateMyCoachHubRequest(clubId, draft.requestId, payload);
+      else await DB.submitCoachHubRequest(clubId, payload);
       setRequestDraft(null);
       await load({ quiet: true });
       setTab("requests");
-      toast.success("Request sent to the club scheduler");
+      toast.success(draft.requestId ? "Request updated" : "Request sent to the club scheduler");
     } catch (requestError) {
       toast.error("Request could not be sent", { description: requestError?.message || "Review the booking details and try again." });
       throw requestError;
@@ -185,7 +211,11 @@ export default function CoachHubPage({
         <main id="coach-hub-main" className="min-w-0 space-y-5">
           {status === "loading" ? <CoachHubLoading /> : null}
           {status === "error" ? <Panel className="p-6"><div className="text-lg font-black">Coach Hub needs attention</div><p className="mt-2 text-sm font-semibold text-slate-500">{error}</p><button type="button" onClick={() => load()} className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white"><RefreshCw size={17} /> Try again</button></Panel> : null}
-          {status === "ready" ? <>
+          {status === "ready" ? <DaxoraSectionErrorBoundary
+            resetKey={`${tab}:${workspace.requests.length}:${workspace.bookings.length}`}
+            title="Coach Hub section needs a refresh"
+            description="The rest of Coach Hub is still safe. Retry this section without restarting the whole workspace."
+          ><>
             {tab === "home" ? <HomeTab workspace={workspace} metrics={metrics} upcoming={upcoming} onRequest={openRequest} setTab={setTab} /> : null}
             {tab === "calendar" ? <CalendarTab bookings={upcoming} assignments={workspace.assignments} onCreateFeed={async (assignment = null) => {
               setBusy(true);
@@ -200,19 +230,19 @@ export default function CoachHubPage({
               } catch (feedError) { toast.error("Calendar feed could not be created", { description: feedError?.message }); }
               finally { setBusy(false); }
             }} busy={busy} /> : null}
-            {tab === "requests" ? <RequestsTab requests={workspace.requests} assignments={workspace.assignments} onRequest={openRequest} onAlternative={respondAlternative} onConversation={setConversationRequest} busy={busy} /> : null}
+            {tab === "requests" ? <RequestsTab requests={workspace.requests} assignments={workspace.assignments} onRequest={openRequest} onEdit={editRequest} onAlternative={respondAlternative} onConversation={setConversationRequest} busy={busy} /> : null}
             {tab === "messages" ? <MessagesTab messages={workspace.messages} onMark={markMessage} /> : null}
             {tab === "team" ? <TeamTab assignments={workspace.assignments} contacts={workspace.teamContacts} /> : null}
             {tab === "profile" ? <ProfileTab clubId={clubId} person={workspace.person} authSession={authSession} subscription={subscription} onSaved={() => load({ quiet: true })} onSignOut={onSignOut} /> : null}
-          </> : null}
+          </></DaxoraSectionErrorBoundary> : null}
         </main>
       </div>
 
       <button type="button" onClick={() => openRequest()} className="fixed bottom-5 right-5 z-30 flex h-14 items-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-900/20 lg:hidden"><Plus size={20} /> Request</button>
 
       {mobileNav ? <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileNav(false); }}><aside className="h-full w-[86%] max-w-sm bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Coach Hub</div><div className="mt-1 text-lg font-black">{workspace.person.displayName || authSession?.user?.email}</div></div><button type="button" onClick={() => setMobileNav(false)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="mt-6"><CoachNavigation tab={tab} setTab={(next) => { setTab(next); setMobileNav(false); }} metrics={metrics} /></div><button type="button" onClick={onSignOut} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 text-sm font-black text-white"><LogOut size={17} /> Sign out</button></aside></div> : null}
-      {requestDraft ? <RequestDialog draft={requestDraft} setDraft={setRequestDraft} assignments={workspace.assignments} bookings={workspace.bookings} busy={busy} onSubmit={submitRequest} /> : null}
-      {conversationRequest ? <CoachRequestConversation clubId={clubId} request={conversationRequest} role="coach" onClose={() => setConversationRequest(null)} /> : null}
+      {requestDraft ? <RequestDialog draft={requestDraft} setDraft={setRequestDraft} assignments={workspace.assignments} bookings={workspace.bookings} pitches={workspace.pitches} busy={busy} onSubmit={submitRequest} /> : null}
+      {conversationRequest ? <DaxoraSectionErrorBoundary resetKey={conversationRequest.id} title="Conversation needs a refresh"><CoachRequestConversation clubId={clubId} request={conversationRequest} role="coach" onUpdated={() => load({ quiet: true })} onClose={() => setConversationRequest(null)} /></DaxoraSectionErrorBoundary> : null}
     </div>
   );
 }
@@ -259,10 +289,10 @@ function CalendarTab({ bookings, assignments = [], onCreateFeed, busy }) {
   </>;
 }
 
-function RequestsTab({ requests, assignments, onRequest, onAlternative, onConversation, busy }) {
+function RequestsTab({ requests, assignments, onRequest, onEdit, onAlternative, onConversation, busy }) {
   return <>
     <section className="rounded-[30px] bg-gradient-to-br from-emerald-600 to-slate-950 p-6 text-white shadow-xl sm:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Booking requests</div><h1 className="mt-2 text-3xl font-black">Ask once. Track everything.</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-emerald-100/80">Request training, friendlies, changes and cancellations, then keep the conversation attached to the request.</p></div><button type="button" onClick={() => onRequest(assignments[0])} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-5 text-sm font-black text-slate-950"><Plus size={18} /> New request</button></div></section>
-    <div className="space-y-3">{requests.map((row) => <Panel key={row.id} className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{row.title}</h3><Badge tone={statusTone(row.status)}>{requestStatusLabel(row.status)}</Badge></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-slate-500"><span>{row.teamName}</span><span>{formatDate(row.preferredStartAt)} · {time(row.preferredStartAt)}–{time(row.preferredEndAt)}</span><span>{row.preferredPitchName || "Pitch preference not set"}</span></div>{row.exceptionDates?.length ? <div className="mt-3 text-xs font-bold text-violet-700">{row.exceptionDates.length} recurrence exception date{row.exceptionDates.length === 1 ? "" : "s"}</div> : null}{row.coachNotes ? <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{row.coachNotes}</p> : null}{row.conflicts.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">{row.conflicts[0]?.message || "The club will resolve an availability warning before approval."}</div> : null}{row.status === "alternative_offered" ? <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Club alternative</div><div className="mt-2 text-sm font-black text-sky-950">{formatDate(row.proposedStartAt)} · {time(row.proposedStartAt)}–{time(row.proposedEndAt)}</div><div className="mt-1 text-xs font-bold text-sky-700">{row.proposedPitchName || "Pitch TBC"}</div>{row.proposedMessage ? <p className="mt-3 text-xs font-semibold leading-5 text-sky-900">{row.proposedMessage}</p> : null}<div className="mt-4 flex gap-2"><button disabled={busy} type="button" onClick={() => onAlternative(row, "decline")} className="h-10 rounded-xl border border-sky-300 bg-white px-4 text-xs font-black text-sky-900">Decline</button><button disabled={busy} type="button" onClick={() => onAlternative(row, "accept")} className="h-10 rounded-xl bg-sky-700 px-4 text-xs font-black text-white">Accept alternative</button></div></div> : null}<button type="button" onClick={() => onConversation(row)} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-xs font-black text-violet-800"><MessageSquareText size={15} /> Open conversation</button></div><div className="shrink-0 text-right text-[11px] font-bold text-slate-400">Sent {row.createdAt ? formatDate(row.createdAt, { day: "numeric", month: "short", year: "numeric" }) : "recently"}</div></div></Panel>)}{!requests.length ? <Empty icon={CalendarPlus} title="No requests yet" body="Request training or a friendly and its progress will stay visible here." /> : null}</div>
+    <div className="space-y-3">{requests.map((row) => <Panel key={row.id} className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{row.title}</h3><Badge tone={statusTone(row.status)}>{requestStatusLabel(row.status)}</Badge></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-slate-500"><span>{row.teamName}</span><span>{formatDate(row.preferredStartAt)} · {time(row.preferredStartAt)}–{time(row.preferredEndAt)}</span><span>{row.preferredPitchName || "Pitch preference not set"}</span></div>{row.exceptionDates?.length ? <div className="mt-3 text-xs font-bold text-violet-700">{row.exceptionDates.length} recurrence exception date{row.exceptionDates.length === 1 ? "" : "s"}</div> : null}{row.coachNotes ? <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{row.coachNotes}</p> : null}{row.conflicts.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">{row.conflicts[0]?.message || "The club will resolve an availability warning before approval."}</div> : null}{row.status === "alternative_offered" ? <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-sky-800">Club alternative</div><div className="mt-2 text-sm font-black text-sky-950">{formatDate(row.proposedStartAt)} · {time(row.proposedStartAt)}–{time(row.proposedEndAt)}</div><div className="mt-1 text-xs font-bold text-sky-700">{row.proposedPitchName || "Pitch TBC"}</div>{row.proposedMessage ? <p className="mt-3 text-xs font-semibold leading-5 text-sky-900">{row.proposedMessage}</p> : null}<div className="mt-4 flex gap-2"><button disabled={busy} type="button" onClick={() => onAlternative(row, "decline")} className="h-10 rounded-xl border border-sky-300 bg-white px-4 text-xs font-black text-sky-900">Decline</button><button disabled={busy} type="button" onClick={() => onAlternative(row, "accept")} className="h-10 rounded-xl bg-sky-700 px-4 text-xs font-black text-white">Accept alternative</button></div></div> : null}<div className="mt-4 flex flex-wrap gap-2">{["submitted", "needs_information"].includes(row.status) ? <button type="button" onClick={() => onEdit(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-black text-emerald-800"><Pencil size={15} /> Edit request</button> : null}<button type="button" onClick={() => onConversation(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-xs font-black text-violet-800"><MessageSquareText size={15} /> Open conversation</button></div></div><div className="shrink-0 text-right text-[11px] font-bold text-slate-400">Sent {row.createdAt ? formatDate(row.createdAt, { day: "numeric", month: "short", year: "numeric" }) : "recently"}</div></div></Panel>)}{!requests.length ? <Empty icon={CalendarPlus} title="No requests yet" body="Request training or a friendly and its progress will stay visible here." /> : null}</div>
   </>;
 }
 
@@ -287,7 +317,7 @@ function ProfileTab({ clubId, person, authSession, subscription, onSaved, onSign
   return <><section className="rounded-[30px] bg-slate-950 p-6 text-white shadow-xl sm:p-8"><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">My profile</div><h1 className="mt-2 text-3xl font-black">One contact record across Daxora</h1><p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-300">Changes update Coach Hub and the club communications contact used for your teams.</p></section><Panel className="p-5 sm:p-6"><div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${verified ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}><div><div className={`text-sm font-black ${verified ? "text-emerald-950" : "text-amber-950"}`}>{verified ? "Contact details verified" : "Please confirm your contact details"}</div><div className={`mt-1 text-xs font-semibold ${verified ? "text-emerald-800" : "text-amber-800"}`}>{person.lastVerifiedAt ? `Last checked ${formatDate(person.lastVerifiedAt, { day: "numeric", month: "short", year: "numeric" })}` : "Verification keeps Communications and emergency contact lists reliable."}</div></div><button disabled={busy} type="button" onClick={verify} className="h-10 rounded-xl bg-white px-4 text-xs font-black shadow-sm">{verified ? "Verify again" : "Confirm details"}</button></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} className="input" /></Field><Field label="Mobile"><input value={form.mobile} onChange={(event) => setForm((current) => ({ ...current, mobile: event.target.value }))} className="input" /></Field><Field label="Sign-in email"><input readOnly value={person.email || authSession?.user?.email || ""} className="input bg-slate-50 text-slate-500" /><div className="mt-1 text-[11px] font-semibold text-slate-400">Account email changes require a new secure invitation.</div></Field><Field label="Preferred updates"><select value={form.preferredChannel} onChange={(event) => setForm((current) => ({ ...current, preferredChannel: event.target.value }))} className="input"><option value="email">Email</option><option value="in_app">Coach Hub only</option><option value="sms">SMS when enabled</option><option value="whatsapp">WhatsApp when enabled</option></select></Field></div><div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><div className="text-xs font-semibold text-slate-500"><span className="font-black text-slate-800">{subscription?.planName || "Club plan"}</span> · Coach Hub included with Annual Planner</div><div className="flex gap-2"><button type="button" onClick={onSignOut} className="h-11 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700">Sign out</button><button disabled={busy} type="button" onClick={save} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white">{busy ? "Saving…" : "Save profile"}</button></div></div></Panel></>;
 }
 
-function RequestDialog({ draft, setDraft, assignments, bookings, busy, onSubmit }) {
+function RequestDialog({ draft, setDraft, assignments, bookings, pitches = [], busy, onSubmit }) {
   const assignment = assignments.find((row) => row.id === draft.assignmentId) || assignments[0] || {};
   const options = requestTypeOptions(assignment);
   const isExistingBookingRequest = ["change", "cancellation"].includes(draft.requestType);
@@ -295,6 +325,18 @@ function RequestDialog({ draft, setDraft, assignments, bookings, busy, onSubmit 
     .filter((row) => row.teamKey === assignment.teamKey && !["cancelled", "rejected"].includes(row.status))
     .sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const selectedPitch = pitches.find((row) => String(row.id) === String(draft.pitchId));
+
+  const selectPitch = (pitchId) => {
+    const pitch = pitches.find((row) => String(row.id) === String(pitchId));
+    setDraft((current) => ({
+      ...current,
+      pitchId: pitch?.id || "",
+      pitchName: pitch?.label || "",
+      venueId: pitch?.siteId || "",
+      venueName: pitch?.siteName || current.venueName || "",
+    }));
+  };
 
   const selectBooking = (bookingId) => {
     const booking = eligibleBookings.find((row) => row.id === bookingId);
@@ -354,7 +396,7 @@ function RequestDialog({ draft, setDraft, assignments, bookings, busy, onSubmit 
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Coach request</div>
-            <h2 className="mt-1 text-xl font-black">Request a team booking</h2>
+            <h2 className="mt-1 text-xl font-black">{draft.requestId ? "Edit booking request" : "Request a team booking"}</h2>
           </div>
           <button type="button" onClick={() => setDraft(null)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200" aria-label="Close request"><X size={18} /></button>
         </div>
@@ -403,7 +445,7 @@ function RequestDialog({ draft, setDraft, assignments, bookings, busy, onSubmit 
           <Field label={draft.requestType === "change" ? "Requested date" : "Date"}><input type="date" value={draft.date} onChange={(event) => set("date", event.target.value)} className="input" /></Field>
           <Field label="Starts"><input type="time" step="900" value={draft.startTime} onChange={(event) => set("startTime", event.target.value)} className="input" /></Field>
           <Field label="Finishes"><input type="time" step="900" value={draft.endTime} onChange={(event) => set("endTime", event.target.value)} className="input" /></Field>
-          <Field label="Preferred pitch"><input value={draft.pitchName} onChange={(event) => set("pitchName", event.target.value)} placeholder="Pitch or venue preference" className="input" /></Field>
+          <Field label="Preferred pitch"><select value={draft.pitchId || ""} onChange={(event) => selectPitch(event.target.value)} className="input"><option value="">No pitch preference</option>{pitches.map((pitch) => <option key={pitch.id} value={pitch.id}>{pitch.label}{pitch.trainingCapacity > 1 ? ` · up to ${pitch.trainingCapacity} training teams` : ""}</option>)}</select>{selectedPitch ? <div className="mt-2 text-[11px] font-semibold text-slate-500">Training capacity: {selectedPitch.trainingCapacity} team{selectedPitch.trainingCapacity === 1 ? "" : "s"} in the same slot.</div> : null}</Field>
 
           {!isExistingBookingRequest ? (
             <>
@@ -423,7 +465,7 @@ function RequestDialog({ draft, setDraft, assignments, bookings, busy, onSubmit 
 
         <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
           <button type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-black">Cancel</button>
-          <button disabled={busy || (isExistingBookingRequest && !eligibleBookings.length)} type="button" onClick={submit} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send size={16} /> {busy ? "Sending…" : "Send request"}</button>
+          <button disabled={busy || (isExistingBookingRequest && !eligibleBookings.length)} type="button" onClick={submit} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send size={16} /> {busy ? (draft.requestId ? "Saving…" : "Sending…") : (draft.requestId ? "Save changes" : "Send request")}</button>
         </div>
       </section>
     </div>

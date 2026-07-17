@@ -241,7 +241,7 @@ function bookingInterval(booking = {}) {
   return { start, end };
 }
 
-export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], ignoreId = "" } = {}) {
+export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], ignoreId = "" } = {}) {
   const normalised = normaliseAnnualBooking(candidate);
   const interval = bookingInterval(normalised);
   if (!interval) {
@@ -253,20 +253,34 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
     .map(normaliseAnnualBooking)
     .filter((booking) => booking.id !== ignoreId && activeBooking(booking));
 
-  resources.forEach((booking) => {
+  const overlapping = resources.filter((booking) => {
     const existing = bookingInterval(booking);
-    if (!existing || !intervalsOverlap(interval.start, interval.end, existing.start, existing.end)) return;
-    const samePitch = normalised.pitchId && booking.pitchId && normalised.pitchId === booking.pitchId;
-    const sameTeam = normalised.teamKey && booking.teamKey && normalised.teamKey === booking.teamKey;
-    if (samePitch) {
+    return existing && intervalsOverlap(interval.start, interval.end, existing.start, existing.end);
+  });
+
+  if (normalised.pitchId) {
+    const samePitch = overlapping.filter((booking) => booking.pitchId && booking.pitchId === normalised.pitchId);
+    const pitch = (Array.isArray(pitches) ? pitches : []).find((row) => clean(row.id) === normalised.pitchId) || null;
+    const trainingCapacity = Math.max(1, Math.min(20, finite(pitch?.trainingCapacity ?? pitch?.training_capacity ?? 1, 1)));
+    const trainingOnly = normalised.bookingType === "training" && samePitch.every((booking) => booking.bookingType === "training");
+    const capacityManaged = trainingOnly && !!pitch;
+    const full = trainingOnly ? samePitch.length >= trainingCapacity : samePitch.length > 0;
+    if (full) {
+      const booking = samePitch[0];
       conflicts.push({
-        type: "pitch_double_booking",
+        type: capacityManaged ? "pitch_training_capacity" : "pitch_double_booking",
         severity: "danger",
         booking,
-        title: "Pitch already booked",
-        message: `${booking.title} already uses ${booking.pitchName || booking.pitchId} from ${booking.startTime} to ${booking.endTime}.`,
+        title: capacityManaged ? "Pitch training capacity reached" : "Pitch already booked",
+        message: capacityManaged
+          ? `${normalised.pitchName || normalised.pitchId} already has ${samePitch.length} of ${trainingCapacity} training team${trainingCapacity === 1 ? "" : "s"} in this slot.`
+          : `${booking?.title || "Another booking"} already uses ${booking?.pitchName || booking?.pitchId || normalised.pitchId} at this time.`,
       });
     }
+  }
+
+  overlapping.forEach((booking) => {
+    const sameTeam = normalised.teamKey && booking.teamKey && normalised.teamKey === booking.teamKey;
     if (sameTeam) {
       conflicts.push({
         type: "team_double_booking",

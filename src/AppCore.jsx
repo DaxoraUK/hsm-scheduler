@@ -83,6 +83,7 @@ import {
 
 import LoginScreen from "./components/LoginScreen.jsx";
 import BrandSplash from "./components/BrandSplash.jsx";
+import DaxoraSectionErrorBoundary from "./components/system/DaxoraSectionErrorBoundary.jsx";
 import { toast } from "./lib/notifications/daxoraNotifications.js";
 import {
   clearTenantStorageContext,
@@ -2175,15 +2176,21 @@ function App() {
   if (roleWorkspaceAccess.isCoach) {
     return (
       <Suspense fallback={<BrandSplash message="Opening Coach Hub" />}>
-        <CoachHubPage
-          clubId={activeClubId}
-          activeMembership={activeMembership}
-          memberships={memberships}
-          authSession={authSession}
-          subscription={subscription}
-          onClubChange={handleClubChange}
-          onSignOut={handleSignOut}
-        />
+        <DaxoraSectionErrorBoundary
+          resetKey={`${activeClubId || "coach"}:${authSession?.user?.id || "session"}`}
+          title="Coach Hub needs a refresh"
+          description="Your club data remains safe. Retry this workspace without returning to the full application recovery screen."
+        >
+          <CoachHubPage
+            clubId={activeClubId}
+            activeMembership={activeMembership}
+            memberships={memberships}
+            authSession={authSession}
+            subscription={subscription}
+            onClubChange={handleClubChange}
+            onSignOut={handleSignOut}
+          />
+        </DaxoraSectionErrorBoundary>
       </Suspense>
     );
   }
