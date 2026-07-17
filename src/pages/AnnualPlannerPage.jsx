@@ -843,11 +843,20 @@ export default function AnnualPlannerPage({
 
       {error ? <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900"><AlertTriangle className="mt-0.5 shrink-0" size={18} /><div><div className="font-black">Annual planner needs attention</div><div className="mt-1 text-sm font-semibold">{error}</div></div><button type="button" onClick={() => loadWorkspace()} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black shadow-sm"><RefreshCw size={14} /> Retry</button></div> : null}
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-2 flex min-h-4 items-center justify-end px-2 text-[10px] font-black uppercase tracking-wide text-slate-400">{lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace sections</div>
+            <div className="mt-1 text-sm font-semibold text-slate-500">Move between planning, requests, winter facilities, smart allocation and evidence.</div>
+          </div>
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+            <RefreshCw size={12} className={refreshing ? "animate-spin text-emerald-600" : "text-slate-400"} />
+            {lastRefreshedAt ? `Updated ${lastRefreshedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : "Live workspace"}
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           {[
-            ["calendar", "Calendar", CalendarDays, "Full year and monthly planning"],
+            ["calendar", "Calendar", CalendarDays, "Full-year and monthly planning"],
             ["bookings", "Bookings", ListChecks, "Search and manage every booking"],
             ["requests", "Requests", ShieldCheck, "Approvals and provisional demand"],
             ["availability", "Availability", Ban, "Closures, blackouts and controls"],
@@ -855,9 +864,20 @@ export default function AnnualPlannerPage({
             ["smart", "Smart allocation", Sparkles, "Manual, assisted and automatic drafts"],
             ["insights", "Insights", Activity, "Utilisation, weather and grant evidence"],
           ].map(([key, label, Icon, detail]) => (
-            <button key={key} type="button" onClick={() => setTab(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${tab === key ? "bg-slate-950 text-white shadow-md" : "bg-slate-50 text-slate-700 hover:bg-slate-100"}`}>
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tab === key ? "bg-white/10 text-emerald-300" : "bg-white text-slate-500 shadow-sm"}`}><Icon size={19} /></span>
-              <span><span className="block text-sm font-black">{label}</span><span className={`mt-0.5 block text-[11px] font-semibold ${tab === key ? "text-slate-400" : "text-slate-500"}`}>{detail}</span></span>
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-current={tab === key ? "page" : undefined}
+              className={`group flex min-h-[108px] items-start gap-3 rounded-2xl border px-4 py-4 text-left transition ${tab === key ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-950/10" : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-emerald-200 hover:bg-white hover:shadow-sm"}`}
+            >
+              <span className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${tab === key ? "border-white/10 bg-white/10 text-emerald-300" : "border-slate-200 bg-white text-slate-500 shadow-sm group-hover:border-emerald-200 group-hover:text-emerald-600"}`}>
+                <Icon size={19} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-black leading-5">{label}</span>
+                <span className={`mt-1.5 block text-xs font-semibold leading-5 ${tab === key ? "text-slate-300" : "text-slate-500"}`}>{detail}</span>
+              </span>
             </button>
           ))}
         </div>
