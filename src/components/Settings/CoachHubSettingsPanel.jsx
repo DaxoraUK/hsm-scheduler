@@ -11,8 +11,10 @@ import {
   Trash2,
   UserRoundPlus,
   UsersRound,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 import { alignTeamContacts, getTeamContactKey } from "../../lib/communications/contactModel.js";
 import { Auth, DB } from "../../lib/supabase.js";
 import {
@@ -89,6 +91,7 @@ function blankAssignment(person, assignment = {}) {
     canRequestChanges: assignment.can_request_changes ?? assignment.canRequestChanges ?? true,
     canViewTeamContacts: assignment.can_view_team_contacts ?? assignment.canViewTeamContacts ?? true,
     canViewCosts: assignment.can_view_costs ?? assignment.canViewCosts ?? false,
+    sourceSlot: assignment.source_slot || assignment.sourceSlot || "directory",
   };
 }
 
@@ -110,6 +113,7 @@ export default function CoachHubSettingsPanel({
   const [personEditor, setPersonEditor] = useState(null);
   const [assignmentEditor, setAssignmentEditor] = useState(null);
   const canManage = Boolean(workspaceAccess?.canManageSettings);
+  const daxoraConfirm = useDaxoraConfirm();
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     if (!clubId) return;
@@ -317,6 +321,7 @@ export default function CoachHubSettingsPanel({
         can_request_changes: assignmentEditor.canRequestChanges,
         can_view_team_contacts: assignmentEditor.canViewTeamContacts,
         can_view_costs: assignmentEditor.canViewCosts,
+        source_slot: assignmentEditor.sourceSlot || "directory",
       });
       const person = assignmentEditor.person;
       setAssignmentEditor({ person, ...blankAssignment(person) });
@@ -330,13 +335,26 @@ export default function CoachHubSettingsPanel({
   };
 
   const removeAssignment = async (assignment) => {
+    const teamName = assignment.team_name || assignment.teamName || "this team";
+    const isPrimary = Boolean(assignment.is_primary ?? assignment.isPrimary);
+    const confirmed = await daxoraConfirm({
+      title: `Unassign from ${teamName}?`,
+      description: isPrimary
+        ? `${teamName} may be left without a primary contact. The shared person record and every other team assignment will remain.`
+        : "The shared person record and every other team assignment will remain.",
+      confirmLabel: "Unassign",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusyId(`remove-${assignment.id}`);
     try {
-      await DB.deleteCoachHubTeamAssignment(clubId, assignment.id);
+      await (DB.unassignCoachHubTeamAssignment || DB.deleteCoachHubTeamAssignment)(clubId, assignment.id);
+      const person = assignmentEditor?.person;
       await load({ quiet: true });
-      toast.success("Team role removed");
+      if (person) setAssignmentEditor({ person, ...blankAssignment(person) });
+      toast.success("Team assignment removed", { description: `${teamName} was unassigned without deleting the shared contact.` });
     } catch (error) {
-      toast.error("Team role could not be removed", { description: error?.message });
+      toast.error("Team assignment could not be removed", { description: error?.message });
     } finally {
       setBusyId("");
     }
@@ -438,7 +456,7 @@ export default function CoachHubSettingsPanel({
       {conversation ? <CoachRequestConversation clubId={clubId} request={conversation} role="club" onClose={() => setConversation(null)} /> : null}
       {replacement ? <ReplacementDialog draft={replacement} setDraft={setReplacement} busy={busyId === `replace-${replacement.person.id}`} onSave={saveReplacement} /> : null}
       {personEditor ? <PersonEditorDialog draft={personEditor} setDraft={setPersonEditor} busy={busyId === `person-${personEditor.id || "new"}`} onSave={savePerson} /> : null}
-      {assignmentEditor ? <AssignmentEditorDialog draft={assignmentEditor} setDraft={setAssignmentEditor} assignments={personAssignments(assignmentEditor.person.id, workspace.assignments)} teams={teamCfg} busyId={busyId} onSave={saveAssignment} onRemove={removeAssignment} /> : null}
+      {assignmentEditor ? <AssignmentEditorDialog draft={assignmentEditor} setDraft={setAssignmentEditor} assignments={personAssignments(assignmentEditor.person.id, workspace.assignments)} teams={teamCfg} busyId={busyId} onSave={saveAssignment} onRemove={removeAssignment} onEditPerson={(person) => setPersonEditor(blankPerson(person))} onOpenTeam={() => { setAssignmentEditor(null); setSettingsTab?.("teams"); }} /> : null}
     </div>
   );
 }
@@ -447,16 +465,19 @@ function PersonEditorDialog({ draft, setDraft, busy, onSave }) {
   return <div className="fixed inset-0 z-[260] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:items-center"><section className="w-full max-w-lg rounded-[28px] bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 p-5"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">Coach directory</div><h3 className="mt-1 text-xl font-black">{draft.id ? "Edit coach" : "Add coach"}</h3></div><button type="button" onClick={() => setDraft(null)} className="h-10 w-10 rounded-xl border border-slate-200 text-lg">×</button></div><div className="grid gap-4 p-5 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Name</span><input className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold" value={draft.displayName} onChange={(event) => setDraft((current) => ({ ...current, displayName: event.target.value }))} /></label><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Email</span><input type="email" className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></label><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Mobile</span><input className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold" value={draft.mobile} onChange={(event) => setDraft((current) => ({ ...current, mobile: event.target.value }))} /></label><label className="sm:col-span-2"><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Preferred communication channel</span><select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold" value={draft.preferredChannel} onChange={(event) => setDraft((current) => ({ ...current, preferredChannel: event.target.value }))}><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="in_app">In-app only</option></select></label></div><div className="flex justify-end gap-2 border-t border-slate-200 p-5"><button type="button" onClick={() => setDraft(null)} className="h-11 rounded-xl border border-slate-200 px-4 text-sm font-black">Cancel</button><button disabled={busy} type="button" onClick={onSave} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white">{busy ? "Saving…" : "Save coach"}</button></div></section></div>;
 }
 
-function AssignmentEditorDialog({ draft, setDraft, assignments, teams, busyId, onSave, onRemove }) {
+function AssignmentEditorDialog({ draft, setDraft, assignments, teams, busyId, onSave, onRemove, onEditPerson, onOpenTeam }) {
   const teamOptions = (Array.isArray(teams) ? teams : []).map((team, index) => ({ key: getTeamContactKey(team, index), name: text(team.name || team.teamName || `Team ${index + 1}`) }));
+  const editingSourceManaged = Boolean(draft.id) && ["coach", "assistant"].includes(draft.sourceSlot);
   const selectTeam = (teamKey) => {
     const team = teamOptions.find((row) => row.key === teamKey);
     setDraft((current) => ({ ...current, teamKey, teamName: team?.name || "" }));
   };
   return <div className="fixed inset-0 z-[260] flex items-end justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:items-center"><section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] bg-white shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-5"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">Teams and roles</div><h3 className="mt-1 text-xl font-black">{draft.person.display_name || draft.person.email}</h3></div><button type="button" onClick={() => setDraft(null)} className="h-10 w-10 rounded-xl border border-slate-200 text-lg">×</button></div><div className="space-y-5 p-5"><div><div className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Current assignments</div>{assignments.length ? <div className="space-y-2">{assignments.map((assignment) => {
-  const sourceManaged = ["coach", "assistant"].includes(assignment.source_slot || assignment.sourceSlot);
-  return <div key={assignment.id} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center"><button type="button" className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={sourceManaged} onClick={() => setDraft({ person: draft.person, ...blankAssignment(draft.person, assignment) })}><div className="text-sm font-black text-slate-950">{assignment.team_name || assignment.teamName}</div><div className="text-xs font-semibold text-slate-500">{ROLE_OPTIONS.find(([value]) => value === (assignment.staff_role || assignment.staffRole))?.[1] || assignment.staff_role || "Coach"}{assignment.is_primary || assignment.isPrimary ? " · Primary contact" : ""}{sourceManaged ? " · Managed in Teams" : ""}</div></button>{sourceManaged ? <span className="rounded-xl bg-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-600">Team contact</span> : <button type="button" disabled={busyId === `remove-${assignment.id}`} onClick={() => onRemove(assignment)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700"><Trash2 size={14} /> Remove</button>}</div>;
-})}</div> : <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">This coach is not assigned to a team yet.</div>}</div><div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4"><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Team</span><select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold" value={draft.teamKey} onChange={(event) => selectTeam(event.target.value)}><option value="">Choose team</option>{teamOptions.map((team) => <option key={team.key} value={team.key}>{team.name}</option>)}</select></label><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Role</span><select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold" value={draft.staffRole} onChange={(event) => setDraft((current) => ({ ...current, staffRole: event.target.value }))}>{ROLE_OPTIONS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><PermissionCheck label="Primary team contact" checked={draft.isPrimary} onChange={(value) => setDraft((current) => ({ ...current, isPrimary: value }))} /><PermissionCheck label="Request training" checked={draft.canRequestTraining} onChange={(value) => setDraft((current) => ({ ...current, canRequestTraining: value }))} /><PermissionCheck label="Request friendlies" checked={draft.canRequestFriendlies} onChange={(value) => setDraft((current) => ({ ...current, canRequestFriendlies: value }))} /><PermissionCheck label="Request changes/cancellations" checked={draft.canRequestChanges} onChange={(value) => setDraft((current) => ({ ...current, canRequestChanges: value }))} /><PermissionCheck label="View team contacts" checked={draft.canViewTeamContacts} onChange={(value) => setDraft((current) => ({ ...current, canViewTeamContacts: value }))} /><PermissionCheck label="View booking costs" checked={draft.canViewCosts} onChange={(value) => setDraft((current) => ({ ...current, canViewCosts: value }))} /></div><div className="mt-4 flex justify-end"><button disabled={!draft.teamKey || Boolean(busyId)} type="button" onClick={onSave} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:opacity-40">{busyId?.startsWith("assignment-") ? "Saving…" : draft.id ? "Update role" : "Add team role"}</button></div></div></div></section></div>;
+    const sourceSlot = assignment.source_slot || assignment.sourceSlot || "directory";
+    const sourceManaged = ["coach", "assistant"].includes(sourceSlot);
+    const sourceLabel = sourceManaged ? "Managed from Teams" : "Coach Hub role";
+    return <div key={assignment.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="flex flex-col gap-3 lg:flex-row lg:items-center"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setDraft({ person: draft.person, ...blankAssignment(draft.person, assignment) })}><div className="text-sm font-black text-slate-950">{assignment.team_name || assignment.teamName}</div><div className="mt-1 text-xs font-semibold text-slate-500">{ROLE_OPTIONS.find(([value]) => value === (assignment.staff_role || assignment.staffRole))?.[1] || assignment.staff_role || "Coach"}{assignment.is_primary || assignment.isPrimary ? " · Primary contact" : ""}</div><span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${sourceManaged ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800"}`}>{sourceLabel}</span></button><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditPerson(draft.person)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"><Pencil size={14} /> Edit contact</button><button type="button" onClick={() => setDraft({ person: draft.person, ...blankAssignment(draft.person, assignment) })} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-3 text-xs font-black text-violet-700"><UsersRound size={14} /> Edit role</button>{sourceManaged ? <button type="button" onClick={onOpenTeam} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-3 text-xs font-black text-sky-700"><ExternalLink size={14} /> Open team</button> : null}<button type="button" disabled={busyId === `remove-${assignment.id}`} onClick={() => onRemove(assignment)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-black text-rose-700"><Trash2 size={14} /> Unassign</button></div></div></div>;
+  })}</div> : <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">This coach is not assigned to a team yet.</div>}</div><div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">{editingSourceManaged ? <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold leading-5 text-sky-900">This role originated in Team settings. You can change its role, primary-contact status and permissions here. Use Open team to move the contact to a different team.</div> : null}<div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Team</span><select disabled={editingSourceManaged} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" value={draft.teamKey} onChange={(event) => selectTeam(event.target.value)}><option value="">Choose team</option>{teamOptions.map((team) => <option key={team.key} value={team.key}>{team.name}</option>)}</select></label><label><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">Role</span><select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold" value={draft.staffRole} onChange={(event) => setDraft((current) => ({ ...current, staffRole: event.target.value }))}>{ROLE_OPTIONS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><PermissionCheck label="Primary team contact" checked={draft.isPrimary} onChange={(value) => setDraft((current) => ({ ...current, isPrimary: value }))} /><PermissionCheck label="Request training" checked={draft.canRequestTraining} onChange={(value) => setDraft((current) => ({ ...current, canRequestTraining: value }))} /><PermissionCheck label="Request friendlies" checked={draft.canRequestFriendlies} onChange={(value) => setDraft((current) => ({ ...current, canRequestFriendlies: value }))} /><PermissionCheck label="Request changes/cancellations" checked={draft.canRequestChanges} onChange={(value) => setDraft((current) => ({ ...current, canRequestChanges: value }))} /><PermissionCheck label="View team contacts" checked={draft.canViewTeamContacts} onChange={(value) => setDraft((current) => ({ ...current, canViewTeamContacts: value }))} /><PermissionCheck label="View booking costs" checked={draft.canViewCosts} onChange={(value) => setDraft((current) => ({ ...current, canViewCosts: value }))} /></div><div className="mt-4 flex justify-end"><button disabled={!draft.teamKey || Boolean(busyId)} type="button" onClick={onSave} className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white disabled:opacity-40">{busyId?.startsWith("assignment-") ? "Saving…" : draft.id ? "Update role" : "Add team role"}</button></div></div></div></section></div>;
 }
 
 function PermissionCheck({ label, checked, onChange }) {

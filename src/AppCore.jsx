@@ -2827,6 +2827,7 @@ function App() {
             <Suspense fallback={<LazyPageFallback label="reports" />}>
               <ReportsPage
                 club={club}
+                activeClubId={activeClubId}
                 subscription={subscription}
                 advancedReportsEnabled={advancedReportsEnabled}
                 onOpenSubscription={

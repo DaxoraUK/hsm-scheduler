@@ -7,6 +7,7 @@ import {
   Download,
   FileCheck2,
   FileText,
+  Gauge,
   MapPinned,
   Printer,
   ShieldCheck,
@@ -18,9 +19,12 @@ import PageHeader from "../ui/PageHeader.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import StatusChip from "../ui/StatusChip.jsx";
 import ReportDocument from "../components/reports/ReportDocument.jsx";
+import UnifiedFacilityReportDocument from "../components/reports/UnifiedFacilityReportDocument.jsx";
 import PlanFeatureNotice from "../components/PlanFeatureNotice.jsx";
 import { buildReportsModel, reportFilename, REPORT_SCOPES, REPORT_TYPES } from "../lib/reports/reportingEngine.js";
 import { buildReportCsv, downloadCsv } from "../lib/reports/csvExport.js";
+import { buildUnifiedFacilityAnalyticsModel, buildUnifiedFacilityCsv } from "../lib/analytics/unifiedFacilityAnalyticsEngine.js";
+import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import { buildFundingEvidencePack, downloadFundingApplicationPack, downloadFundingEvidencePack } from "../lib/grants/fundingEvidencePack.js";
 import { loadFundingImpactEvidence } from "../lib/grants/fundingImpactEvidenceService.js";
@@ -36,6 +40,7 @@ import {
 const ADVANCED_REPORT_IDS = new Set(["analytics", "funding"]);
 
 const REPORT_ICONS = {
+  facilities: Gauge,
   operations: ClipboardList,
   fixtures: FileText,
   pitches: MapPinned,
@@ -82,6 +87,7 @@ function SummaryMetric({ label, value, detail, tone = "neutral" }) {
 
 export default function ReportsPage({
   club = {},
+  activeClubId,
   subscription,
   advancedReportsEnabled: authoritativeAdvancedReportsEnabled,
   onOpenSubscription,
@@ -108,7 +114,12 @@ export default function ReportsPage({
   navigationTarget = null,
   clearNavigationTarget,
 }) {
-  const [reportType, setReportType] = useState("operations");
+  const year = new Date().getFullYear();
+  const [reportType, setReportType] = useState("facilities");
+  const [facilityStartDate, setFacilityStartDate] = useState(`${year}-01-01`);
+  const [facilityEndDate, setFacilityEndDate] = useState(`${year}-12-31`);
+  const [plannerData, setPlannerData] = useState({ bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [], scheduling_policies: [] });
+  const [plannerStatus, setPlannerStatus] = useState("idle");
   const [selectedSource, setSelectedSource] = useState("current");
   const [scope, setScope] = useState(midweekEnabled ? "matchweek" : "weekend");
   const [pendingAutoPrint, setPendingAutoPrint] = useState(false);
@@ -172,6 +183,32 @@ export default function ReportsPage({
     current,
   }), [club, current, history, pitchCfg, refs, reportType, scope, selectedSource, teamCfg]);
 
+  const facilityModel = useMemo(() => buildUnifiedFacilityAnalyticsModel({
+    history,
+    plannerData,
+    club,
+    pitchCfg,
+    teamCfg,
+    filters: { startDate: facilityStartDate, endDate: facilityEndDate },
+  }), [club, facilityEndDate, facilityStartDate, history, pitchCfg, plannerData, teamCfg]);
+
+  const activeReportHasData = reportType === "facilities" ? facilityModel.hasData : model.hasData;
+
+  useEffect(() => {
+    let active = true;
+    const clubId = activeClubId || club.id || club.organisationId;
+    if (!clubId || !isSupaConfigured()) {
+      setPlannerData({ bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [], scheduling_policies: [] });
+      setPlannerStatus("ready");
+      return () => { active = false; };
+    }
+    setPlannerStatus("loading");
+    DB.getAnnualPlannerAnalyticsData(clubId, { startDate: facilityStartDate, endDate: facilityEndDate })
+      .then((payload) => { if (active) { setPlannerData(payload || {}); setPlannerStatus("ready"); } })
+      .catch((error) => { if (active) { setPlannerStatus("error"); toast.error("Facility report data could not be loaded", { description: error?.message }); } });
+    return () => { active = false; };
+  }, [activeClubId, club.id, club.organisationId, facilityEndDate, facilityStartDate]);
+
   useEffect(() => {
     let cancelled = false;
     const resolvedClubId = club.id || club.organisationId || String(club.name || "local-club").toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -195,7 +232,7 @@ export default function ReportsPage({
 
   useEffect(() => {
     if (!availableReportTypes.some((item) => item.id === reportType)) {
-      setReportType("operations");
+      setReportType("facilities");
     }
   }, [availableReportTypes, reportType]);
 
@@ -221,11 +258,12 @@ export default function ReportsPage({
       toast.error("CSV export is not included in this plan");
       return;
     }
-    const csv = buildReportCsv(model);
+    const facilitiesReport = reportType === "facilities";
+    const csv = facilitiesReport ? buildUnifiedFacilityCsv(facilityModel) : buildReportCsv(model);
     const filename = reportFilename({
       clubName: club.name,
       reportType,
-      sourceLabel: `${model.sourceLabel}-${scope}`,
+      sourceLabel: facilitiesReport ? `${facilityStartDate}-${facilityEndDate}` : `${model.sourceLabel}-${scope}`,
       extension: "csv",
     });
     downloadCsv(csv, filename);
@@ -332,13 +370,13 @@ export default function ReportsPage({
   }, [availableReportTypes, clearNavigationTarget, midweekEnabled, navigationTarget]);
 
   useEffect(() => {
-    if (!pendingAutoPrint || !model.hasData) return undefined;
+    if (!pendingAutoPrint || !activeReportHasData) return undefined;
     const timer = window.setTimeout(() => {
       printReport();
       setPendingAutoPrint(false);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [model.hasData, pendingAutoPrint]);
+  }, [activeReportHasData, pendingAutoPrint]);
 
   const scopeOptions = midweekEnabled
     ? REPORT_SCOPES
@@ -349,7 +387,7 @@ export default function ReportsPage({
       <PageHeader
         eyebrow="Reports and evidence"
         title="Create traceable operational reports"
-        subtitle="Build club-scoped operational packs from current or historical records, with advanced analytics and a funding evidence draft available on Pro."
+        subtitle="Combine fixtures, training, friendlies, winter provision and downtime into traceable facility, operational and funding reports."
         action={
           <div className="flex flex-wrap gap-2">
             {reportType === "funding" && advancedReportsEnabled ? (
@@ -375,7 +413,7 @@ export default function ReportsPage({
             <button
               type="button"
               onClick={exportCsv}
-              disabled={!model.hasData || !dataExportEnabled}
+              disabled={!activeReportHasData || !dataExportEnabled}
               className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download size={17} /> {dataExportEnabled ? "Export CSV" : "CSV locked"}
@@ -383,7 +421,7 @@ export default function ReportsPage({
             <button
               type="button"
               onClick={printReport}
-              disabled={!model.hasData}
+              disabled={!activeReportHasData}
               className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Printer size={17} /> Print / save PDF
@@ -397,27 +435,34 @@ export default function ReportsPage({
           entitlement={ENTITLEMENTS.REPORTS_ADVANCED}
           subscription={subscription}
           title="Advanced evidence reports are available on Pro"
-          description="Core includes operations, fixture, pitch, parking, officials and exception reports. Analytics snapshots and funding evidence drafts are available from Pro."
+          description="Core includes unified facility usage, operations, fixture, pitch, parking, officials and exception reports. Executive analytics snapshots and funding evidence drafts are available from Pro."
           onOpenSubscription={onOpenSubscription}
           compact
         />
       ) : null}
 
       <section className="np rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className={`grid gap-4 ${reportType === "funding" ? "lg:grid-cols-3" : "lg:grid-cols-[1.2fr_0.8fr]"}`}>
-          <SelectControl label="Report data" value={selectedSource} onChange={setSelectedSource}>
-            {model.sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </SelectControl>
-          <SelectControl label="Matchday scope" value={scope} onChange={setScope}>
-            {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </SelectControl>
-          {reportType === "funding" ? (
-            <SelectControl label="Funding project" value={fundingProjectId} onChange={setFundingProjectId}>
-              <option value="">Select a saved funding project</option>
-              {fundingProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+        {reportType === "facilities" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block min-w-0"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">From</span><input type="date" value={facilityStartDate} onChange={(event) => setFacilityStartDate(event.target.value)} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></label>
+            <label className="block min-w-0"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">To</span><input type="date" value={facilityEndDate} onChange={(event) => setFacilityEndDate(event.target.value)} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" /></label>
+          </div>
+        ) : (
+          <div className={`grid gap-4 ${reportType === "funding" ? "lg:grid-cols-3" : "lg:grid-cols-[1.2fr_0.8fr]"}`}>
+            <SelectControl label="Report data" value={selectedSource} onChange={setSelectedSource}>
+              {model.sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </SelectControl>
-          ) : null}
-        </div>
+            <SelectControl label="Matchday scope" value={scope} onChange={setScope}>
+              {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </SelectControl>
+            {reportType === "funding" ? (
+              <SelectControl label="Funding project" value={fundingProjectId} onChange={setFundingProjectId}>
+                <option value="">Select a saved funding project</option>
+                {fundingProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+              </SelectControl>
+            ) : null}
+          </div>
+        )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Report types">
           {availableReportTypes.map((item) => {
@@ -451,33 +496,49 @@ export default function ReportsPage({
         </div>
       </section>
 
-      <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryMetric label="Recorded" value={model.evidence.summary.total} detail="Outcome fixtures" />
-        <SummaryMetric label="Unresolved" value={model.evidence.summary.unresolved} detail="Need allocation" tone={model.evidence.summary.unresolved ? "danger" : "success"} />
-        <SummaryMetric label="Officials" value={`${model.evidence.summary.officialCoverage}%`} detail={`${model.evidence.summary.officialOutstanding} outstanding`} tone={model.evidence.summary.officialCoverage >= 90 ? "success" : "warning"} />
-        <SummaryMetric label="Parking peak" value={model.evidence.summary.peakParking} detail={`${model.evidence.summary.parkingOverCapacity} pressure days`} tone={model.evidence.summary.parkingOverCapacity ? "danger" : "success"} />
-        <SummaryMetric label="Evidence confidence" value={`${model.quality.score}%`} detail={model.quality.label} tone={model.quality.tone} />
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Report readiness</div>
-          <div className="mt-3"><StatusChip status={model.readiness.status}>{model.readiness.label}</StatusChip></div>
-          <div className="mt-2 text-xs font-semibold text-slate-500">{model.readiness.detail}</div>
-        </div>
-      </section>
-
-      {model.hasData ? (
-        <section className="np rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
-          <strong>Evidence basis:</strong> {model.quality.period.label} · {model.quality.fixtures} fixture record{model.quality.fixtures === 1 ? "" : "s"}. {model.quality.methodology}
-        </section>
-      ) : null}
-
-      {!model.hasData ? (
-        <EmptyState
-          icon={FileText}
-          title="No report data for this selection"
-          description={model.sourceKind === "current" ? "Build a current schedule or select a saved matchday from Report data." : "This saved matchday does not contain fixtures in the selected scope."}
-        />
+      {reportType === "facilities" ? (
+        <>
+          <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <SummaryMetric label="Total use" value={`${facilityModel.metrics.utilisationPct}%`} detail={`${facilityModel.metrics.facilityHours}h pitch-equivalent`} tone={facilityModel.metrics.utilisationPct >= 85 ? "danger" : facilityModel.metrics.utilisationPct >= 65 ? "warning" : "success"} />
+            <SummaryMetric label="Team-hours" value={`${facilityModel.metrics.teamHours}h`} detail={`${facilityModel.metrics.records} combined records`} />
+            <SummaryMetric label="Delivered" value={`${facilityModel.metrics.deliveredHours}h`} detail={`${facilityModel.metrics.scheduledHours}h scheduled`} tone="success" />
+            <SummaryMetric label="Downtime" value={`${facilityModel.metrics.closureHours}h`} detail="Weather, closure and maintenance" tone={facilityModel.metrics.closureHours ? "danger" : "success"} />
+            <SummaryMetric label="Unused" value={`${facilityModel.metrics.unusedHours}h`} detail="Configured usable capacity" tone={facilityModel.metrics.unusedHours ? "warning" : "success"} />
+            <SummaryMetric label="Waiting demand" value={facilityModel.metrics.waitingTeams} detail={`${facilityModel.metrics.teams} teams · £${Number(facilityModel.metrics.totalCost || 0).toFixed(2)} cost`} tone={facilityModel.metrics.waitingTeams ? "warning" : "success"} />
+          </section>
+          {plannerStatus === "loading" ? <div className="h-64 animate-pulse rounded-[28px] bg-slate-200" /> : plannerStatus === "error" ? <EmptyState icon={TriangleAlert} title="Facility report data could not be loaded" description="Matchday evidence remains available, but Annual Planner bookings could not be combined for this report." /> : !facilityModel.hasData ? <EmptyState icon={MapPinned} title="No combined facility data for this period" description="Record fixtures or Annual Planner bookings, or widen the report date range." /> : <UnifiedFacilityReportDocument model={facilityModel} club={club} />}
+        </>
       ) : (
-        <ReportDocument model={model} club={club} />
+        <>
+          <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <SummaryMetric label="Recorded" value={model.evidence.summary.total} detail="Outcome fixtures" />
+            <SummaryMetric label="Unresolved" value={model.evidence.summary.unresolved} detail="Need allocation" tone={model.evidence.summary.unresolved ? "danger" : "success"} />
+            <SummaryMetric label="Officials" value={`${model.evidence.summary.officialCoverage}%`} detail={`${model.evidence.summary.officialOutstanding} outstanding`} tone={model.evidence.summary.officialCoverage >= 90 ? "success" : "warning"} />
+            <SummaryMetric label="Parking peak" value={model.evidence.summary.peakParking} detail={`${model.evidence.summary.parkingOverCapacity} pressure days`} tone={model.evidence.summary.parkingOverCapacity ? "danger" : "success"} />
+            <SummaryMetric label="Evidence confidence" value={`${model.quality.score}%`} detail={model.quality.label} tone={model.quality.tone} />
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Report readiness</div>
+              <div className="mt-3"><StatusChip status={model.readiness.status}>{model.readiness.label}</StatusChip></div>
+              <div className="mt-2 text-xs font-semibold text-slate-500">{model.readiness.detail}</div>
+            </div>
+          </section>
+
+          {model.hasData ? (
+            <section className="np rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
+              <strong>Evidence basis:</strong> {model.quality.period.label} · {model.quality.fixtures} fixture record{model.quality.fixtures === 1 ? "" : "s"}. {model.quality.methodology}
+            </section>
+          ) : null}
+
+          {!model.hasData ? (
+            <EmptyState
+              icon={FileText}
+              title="No report data for this selection"
+              description={model.sourceKind === "current" ? "Build a current schedule or select a saved matchday from Report data." : "This saved matchday does not contain fixtures in the selected scope."}
+            />
+          ) : (
+            <ReportDocument model={model} club={club} />
+          )}
+        </>
       )}
     </PageContainer>
   );

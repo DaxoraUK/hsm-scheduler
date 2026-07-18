@@ -796,7 +796,8 @@ Commercial claims must remain grounded in validated operational data and should 
 6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper capacity - delivered.
 7. v3.10.11: smart-allocation refinement, coach preference review, calendar polish and fairness analytics - delivered.
 8. v3.10.12: waiting-list offers and coach acceptance, audited bulk commands, revocable calendar feeds, grant-evidence completion and module acceptance - delivered.
-9. Validate v3.10.12 through the controlled HSM pilot, record any minor operational refinements, then start the next module roadmap.
+9. v3.10.13: hand Annual Planner booking, closure, cost and capacity evidence into the unified Analytics and Reports module - delivered.
+10. Validate the complete Annual Planner workflow through the controlled HSM pilot and record only focused maintenance defects here.
 
 ---
 
@@ -814,5 +815,6 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.10 | Complete | Seasonal rollover, waiting lists, shared resources, buffers, participant limits, analytics and Smart Allocation header refinement. |
 | v3.10.11 | Complete | Locked allocations, fairness, historic comparison, coach review, calendar polish and shared refinement analytics. |
 | v3.10.12 | Complete | Waiting-list offers and coach acceptance, audited bulk commands, revocable calendar feeds, grant-evidence export and module acceptance checks. |
+| v3.10.13 | Complete | Unified Main Analytics and Reports consume Annual Planner bookings, closures, winter use, costs and waiting demand alongside fixture evidence. |
 
-The Annual Planner implementation baseline is now complete through v3.10.12. The controlled HSM pilot must validate the complete workflow before commercial acceptance. Any pilot defects should be recorded as focused maintenance releases, while new strategic scope belongs in the next roadmap revision.
+The Annual Planner implementation baseline is complete through v3.10.12, with its unified analytics handoff delivered in v3.10.13. The controlled HSM pilot must validate the complete workflow before commercial acceptance. Any pilot defects should be recorded as focused maintenance releases, while new strategic scope belongs in the next roadmap revision.

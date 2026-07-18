@@ -8,6 +8,7 @@ import { buildGrantEvidenceFramework } from "../grants/grantEvidenceFramework.js
 import { buildGrantFundingModel } from "../grants/grantMatchingEngine.js";
 
 export const REPORT_TYPES = [
+  { id: "facilities", label: "Unified facility usage", description: "Fixtures, training, friendlies, winter provision, closures and unused capacity." },
   { id: "operations", label: "Operations pack", description: "Complete matchday schedule, risks and readiness." },
   { id: "fixtures", label: "Fixture allocations", description: "Kick-offs, teams, pitches, formats and outcomes." },
   { id: "pitches", label: "Pitch usage", description: "Fixture load, hours and postponement pressure by pitch." },

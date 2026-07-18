@@ -25,7 +25,8 @@ Each module roadmap must record:
 
 | Module | Roadmap | Status |
 |---|---|---|
-| Annual Planner, Shared Calendar and Coach Requests | `ANNUAL_PLANNER_SHARED_CALENDAR_COACH_REQUESTS_ROADMAP.md` | Active baseline committed in v3.10.5.4 |
+| Annual Planner, Shared Calendar and Coach Requests | `ANNUAL_PLANNER_SHARED_CALENDAR_COACH_REQUESTS_ROADMAP.md` | Implementation baseline complete through v3.10.12; HSM pilot active |
+| Analytics and Reports | `ANALYTICS_REPORTS_ROADMAP.md` | Active baseline committed in v3.10.13 |
 
 Other module roadmaps will be added individually after their relevant implementation phase is reviewed. They should not be generated in bulk.
 

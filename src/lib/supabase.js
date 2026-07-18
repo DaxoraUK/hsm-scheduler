@@ -887,7 +887,7 @@ export const DB = {
     });
     return result && typeof result === "object"
       ? result
-      : { bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [], closure_impacts: [] };
+      : { bookings: [], blackouts: [], winter_sites: [], winter_slots: [], requests: [], closure_impacts: [], scheduling_policies: [] };
   },
 
   async saveAnnualPlannerTeamPreference(clubId, preference) {
@@ -1152,12 +1152,16 @@ export const DB = {
     });
   },
 
-  async deleteCoachHubTeamAssignment(clubId, assignmentId) {
+  async unassignCoachHubTeamAssignment(clubId, assignmentId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/delete_coach_hub_team_assignment", {
       target_club_id: id,
       target_assignment_id: String(assignmentId || "").trim(),
     });
+  },
+
+  async deleteCoachHubTeamAssignment(clubId, assignmentId) {
+    return this.unassignCoachHubTeamAssignment(clubId, assignmentId);
   },
 
   async listCoachHubPilotMetrics(clubId, { startDate = null, endDate = null } = {}) {
