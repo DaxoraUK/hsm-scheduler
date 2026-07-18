@@ -807,6 +807,34 @@ export default function AnnualPlannerPage({
     }
   }
 
+
+  async function saveSchedulingPolicies(policies) {
+    const rows = Array.isArray(policies) ? policies : [];
+    if (!rows.length) return;
+    setSaving(true);
+    try {
+      const payloads = rows.map(trainingSchedulingPolicyToPayload);
+      if (isSupaConfigured() && clubId) {
+        for (const payload of payloads) await DB.saveAnnualPlannerSchedulingPolicy(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        let next = Array.isArray(current.schedulingPolicies) ? [...current.schedulingPolicies] : [];
+        payloads.forEach((payload) => {
+          const index = next.findIndex((row) => String(row.season_phase || row.seasonPhase) === payload.season_phase && String(row.scope_type || row.scopeType) === payload.scope_type && String(row.scope_key || row.scopeKey) === payload.scope_key);
+          next = index >= 0 ? next.map((row, rowIndex) => rowIndex === index ? payload : row) : [...next, payload];
+        });
+        writeLocalWorkspace(clubId, { ...current, schedulingPolicies: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success(`${payloads.length} scheduling rule${payloads.length === 1 ? "" : "s"} saved`);
+    } catch (policyError) {
+      toast.error("Scheduling rules could not be saved", { description: policyError?.message });
+      throw policyError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function savePlannerResource(resource) {
     setSaving(true);
     try {
@@ -1105,6 +1133,7 @@ export default function AnnualPlannerPage({
           assignments={pilotWorkspace.assignments}
           preferences={workspace.allocationPreferences}
           allocationRuns={workspace.allocationRuns}
+          allocationItems={workspace.allocationItems}
           policies={workspace.schedulingPolicies}
           preferenceProposals={workspace.preferenceProposals}
           waitlist={workspace.waitlist}
@@ -1112,6 +1141,7 @@ export default function AnnualPlannerPage({
           saving={saving}
           onSavePreference={saveSmartPreference}
           onSavePolicy={saveSchedulingPolicy}
+          onBulkSavePolicies={saveSchedulingPolicies}
           onReviewProposal={reviewCoachPreferenceProposal}
           onSaveDraft={(draft) => saveSmartDraft(draft)}
           onPublishDraft={(draft) => saveSmartDraft(draft, { publish: true })}
@@ -1242,35 +1272,64 @@ function Metric({ icon: Icon, label, value, detail, tone = "neutral" }) {
 }
 
 function CalendarWorkspace({ year, month, setYear, setMonth, cells, selectedDate, setSelectedDate, selectedDayBookings, selectedDayClosures = [], onSelectBooking, onCreate, matchdayBookings }) {
+  const [calendarView, setCalendarView] = useState("month");
+  const [calendarQuery, setCalendarQuery] = useState("");
+  const [facilityFilter, setFacilityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [showClosures, setShowClosures] = useState(true);
   const moveMonth = (delta) => {
     const next = new Date(year, month + delta, 1);
     setYear(next.getFullYear());
     setMonth(next.getMonth());
   };
-  return <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Shared calendar · year {year}</div><h2 className="mt-1 text-xl font-black text-slate-950">{MONTHS[month]}</h2><p className="mt-1 text-xs font-semibold text-slate-500">Bookings, coach requests, blackouts and pitch closures share one calendar.</p></div>
-        <div className="flex items-center gap-2"><button type="button" onClick={() => moveMonth(-1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Previous month"><ChevronLeft size={18} /></button><button type="button" onClick={() => { const now = new Date(); setYear(now.getFullYear()); setMonth(now.getMonth()); setSelectedDate(normaliseDateKey(now)); }} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50">Today</button><button type="button" onClick={() => moveMonth(1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Next month"><ChevronRight size={18} /></button></div>
+  const allMonthBookings = useMemo(() => {
+    const map = new Map();
+    cells.flatMap((cell) => cell.bookings || []).forEach((booking) => map.set(String(booking.id), booking));
+    return [...map.values()];
+  }, [cells]);
+  const facilityOptions = useMemo(() => {
+    const map = new Map();
+    allMonthBookings.forEach((booking) => {
+      const value = String(booking.pitchId || booking.siteSlotId || booking.venueName || "");
+      if (!value) return;
+      map.set(value, [booking.venueName, booking.pitchName].filter(Boolean).join(" · ") || value);
+    });
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [allMonthBookings]);
+  const statusOptions = useMemo(() => [...new Set(allMonthBookings.map((booking) => String(booking.status || "")).filter(Boolean))].sort(), [allMonthBookings]);
+  const matchesBooking = useCallback((booking) => {
+    const haystack = [booking.title, booking.teamName, booking.pitchName, booking.pitchAreaName, booking.venueName].join(" ").toLowerCase();
+    if (calendarQuery && !haystack.includes(calendarQuery.toLowerCase())) return false;
+    if (facilityFilter !== "all" && String(booking.pitchId || booking.siteSlotId || booking.venueName || "") !== facilityFilter) return false;
+    if (statusFilter !== "all" && String(booking.status || "") !== statusFilter) return false;
+    return true;
+  }, [calendarQuery, facilityFilter, statusFilter]);
+  const visibleCells = useMemo(() => cells.map((cell) => ({
+    ...cell,
+    bookings: (cell.bookings || []).filter(matchesBooking),
+    closures: showClosures ? (cell.closures || []) : [],
+  })), [cells, matchesBooking, showClosures]);
+  const agendaBookings = useMemo(() => allMonthBookings.filter(matchesBooking).sort((a, b) => String(a.startAt || a.startDate || "").localeCompare(String(b.startAt || b.startDate || ""))), [allMonthBookings, matchesBooking]);
+  const visibleSelectedBookings = selectedDayBookings.filter(matchesBooking);
+  const visibleSelectedClosures = showClosures ? selectedDayClosures : [];
+
+  return <div className="space-y-4">
+    <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setCalendarView("month")} className={`h-10 rounded-xl px-4 text-xs font-black ${calendarView === "month" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>Month</button><button type="button" onClick={() => setCalendarView("agenda")} className={`h-10 rounded-xl px-4 text-xs font-black ${calendarView === "agenda" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>Agenda</button></div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap"><label className="relative"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={calendarQuery} onChange={(event) => setCalendarQuery(event.target.value)} className="h-10 min-w-[190px] rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-bold" placeholder="Team, pitch or area" /></label><select value={facilityFilter} onChange={(event) => setFacilityFilter(event.target.value)} className="h-10 min-w-[170px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black"><option value="all">All facilities</option>{facilityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 min-w-[150px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black"><option value="all">All statuses</option>{statusOptions.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select><label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-600"><input type="checkbox" checked={showClosures} onChange={(event) => setShowClosures(event.target.checked)} /> Closures</label></div>
       </div>
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 px-5 py-3 text-[10px] font-black uppercase tracking-wide">{COACH_CALENDAR_LEGEND.map((item) => <span key={item.key} className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 ${item.tone}`}><span className={`h-2 w-2 rounded-full ${item.swatch}`} />{item.label}</span>)}</div>
-      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">{WEEKDAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">{day}</div>)}</div>
-      <div className="grid grid-cols-7">{cells.map((cell) => {
-        const closures = Array.isArray(cell.closures) ? cell.closures : [];
-        const totalItems = closures.length + cell.bookings.length;
-        const visibleItems = [
-          ...closures.slice(0, 2).map((closure) => ({ id: `closure-${closure.kind}-${closure.id}-${cell.dateKey}`, kind: "closure", label: closure.pitchName || closure.title || "Unavailable" })),
-          ...cell.bookings.slice(0, Math.max(0, 3 - Math.min(2, closures.length))).map((booking) => ({ id: `booking-${booking.id}`, kind: "booking", booking })),
-        ].slice(0, 3);
-        return <button type="button" key={cell.dateKey} onClick={() => setSelectedDate(cell.dateKey)} className={`min-h-[118px] border-b border-r border-slate-100 p-2 text-left align-top transition hover:bg-slate-50 ${!cell.inMonth ? "bg-slate-50/60 text-slate-400" : "bg-white"} ${selectedDate === cell.dateKey ? "ring-2 ring-inset ring-emerald-400" : ""}`}><div className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${cell.today ? "bg-emerald-500 text-white" : "text-slate-700"}`}>{cell.date.getDate()}</span>{totalItems > 3 ? <span className="text-[10px] font-black text-slate-400">+{totalItems - 3}</span> : null}</div><div className="mt-2 space-y-1">{visibleItems.map((item) => item.kind === "closure" ? <span key={item.id} className="block truncate rounded-md border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-black text-rose-800">Closed · {item.label}</span> : <span key={item.id} className={`block truncate rounded-md border px-1.5 py-1 text-[10px] font-black ${calendarEventTone(item.booking)}`}>{item.booking.startTime} {item.booking.teamName || item.booking.title}{item.booking.pitchAreaName ? ` · ${item.booking.pitchAreaName}` : ""}</span>)}</div></button>;
-      })}</div>
     </section>
-    <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Selected day</div><h3 className="mt-1 text-lg font-black text-slate-950">{formatDate(`${selectedDate}T12:00:00`, { weekday: "long", day: "numeric", month: "long" })}</h3></div>{onCreate ? <button type="button" onClick={() => onCreate(selectedDate)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white"><Plus size={18} /></button> : null}</div>
-      {selectedDayClosures.length ? <div className="mt-5 space-y-2">{selectedDayClosures.map((closure) => <div key={`${closure.kind}-${closure.id}`} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><Ban className="mt-0.5 shrink-0 text-rose-600" size={17} /><div><div className="text-xs font-black uppercase tracking-wide text-rose-700">{closure.kind === "pitch_closure" ? "Pitch closure" : "Unavailable period"}</div><div className="mt-1 text-sm font-black text-rose-950">{closure.title}</div><div className="mt-1 text-xs font-semibold text-rose-900/75">{closure.pitchName || "All relevant facilities"}{closure.startTime && closure.endTime ? ` · ${closure.startTime}–${closure.endTime}` : ""}</div>{closure.publicNote || closure.reason ? <p className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{closure.publicNote || closure.reason}</p> : null}</div></div></div>)}</div> : null}
-      <div className="mt-5 space-y-3">{selectedDayBookings.length ? selectedDayBookings.map((booking) => <BookingMiniCard key={booking.id} booking={booking} onClick={() => booking.sourceType === "matchday" ? null : onSelectBooking(booking)} readOnly={booking.sourceType === "matchday"} />) : !selectedDayClosures.length ? <Empty icon={CalendarDays} title="No facility use planned" description="Add training, a friendly or another booking for this day." /> : null}</div>
-      {matchdayBookings.length ? <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-5 text-emerald-900"><ShieldCheck className="mb-2" size={18} />Ground Control fixtures are shown as protected facility bookings and are included in every conflict check.</div> : null}
-    </aside>
+
+    {calendarView === "month" ? <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Shared calendar · year {year}</div><h2 className="mt-1 text-xl font-black text-slate-950">{MONTHS[month]}</h2><p className="mt-1 text-xs font-semibold text-slate-500">Bookings, coach requests, blackouts and pitch closures share one calendar. Full Pitch, named areas and alternatives remain filterable.</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => moveMonth(-1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Previous month"><ChevronLeft size={18} /></button><button type="button" onClick={() => { const now = new Date(); setYear(now.getFullYear()); setMonth(now.getMonth()); setSelectedDate(normaliseDateKey(now)); }} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50">Today</button><button type="button" onClick={() => moveMonth(1)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Next month"><ChevronRight size={18} /></button></div></div>
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 px-5 py-3 text-[10px] font-black uppercase tracking-wide">{COACH_CALENDAR_LEGEND.map((item) => <span key={item.key} className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 ${item.tone}`}><span className={`h-2 w-2 rounded-full ${item.swatch}`} />{item.label}</span>)}</div>
+        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">{WEEKDAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">{day}</div>)}</div>
+        <div className="grid grid-cols-7">{visibleCells.map((cell) => { const closures = Array.isArray(cell.closures) ? cell.closures : []; const totalItems = closures.length + cell.bookings.length; const visibleItems = [...closures.slice(0, 1).map((closure) => ({ id: `closure-${closure.kind}-${closure.id}-${cell.dateKey}`, kind: "closure", label: closure.pitchName || closure.title || "Unavailable" })), ...cell.bookings.slice(0, Math.max(0, 4 - Math.min(1, closures.length))).map((booking) => ({ id: `booking-${booking.id}`, kind: "booking", booking }))].slice(0, 4); return <button type="button" key={cell.dateKey} onClick={() => setSelectedDate(cell.dateKey)} className={`min-h-[132px] border-b border-r border-slate-100 p-2 text-left align-top transition hover:bg-slate-50 ${!cell.inMonth ? "bg-slate-50/60 text-slate-400" : "bg-white"} ${selectedDate === cell.dateKey ? "ring-2 ring-inset ring-emerald-400" : ""}`}><div className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${cell.today ? "bg-emerald-500 text-white" : "text-slate-700"}`}>{cell.date.getDate()}</span>{totalItems > 4 ? <span className="text-[10px] font-black text-slate-400">+{totalItems - 4}</span> : null}</div><div className="mt-2 space-y-1">{visibleItems.map((item) => item.kind === "closure" ? <span key={item.id} className="block truncate rounded-md border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-black text-rose-800">Closed · {item.label}</span> : <span key={item.id} className={`block rounded-md border px-1.5 py-1 text-[9px] font-black leading-4 ${calendarEventTone(item.booking)}`}><span className="block truncate">{item.booking.startTime} · {item.booking.pitchAreaName || item.booking.pitchName || "Facility TBC"}</span><span className="block truncate opacity-75">{item.booking.teamName || item.booking.title}{item.booking.pitchAreaName ? ` · ${item.booking.pitchAreaName}` : ""}</span></span>)}</div></button>; })}</div>
+      </section>
+      <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Selected day</div><h3 className="mt-1 text-lg font-black text-slate-950">{formatDate(`${selectedDate}T12:00:00`, { weekday: "long", day: "numeric", month: "long" })}</h3></div>{onCreate ? <button type="button" onClick={() => onCreate(selectedDate)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white"><Plus size={18} /></button> : null}</div>{visibleSelectedClosures.length ? <div className="mt-5 space-y-2">{visibleSelectedClosures.map((closure) => <div key={`${closure.kind}-${closure.id}`} className="rounded-2xl border border-rose-200 bg-rose-50 p-4"><div className="flex items-start gap-3"><Ban className="mt-0.5 shrink-0 text-rose-600" size={17} /><div><div className="text-xs font-black uppercase tracking-wide text-rose-700">{closure.kind === "pitch_closure" ? "Pitch closure" : "Unavailable period"}</div><div className="mt-1 text-sm font-black text-rose-950">{closure.title}</div><div className="mt-1 text-xs font-semibold text-rose-900/75">{closure.pitchName || "All relevant facilities"}{closure.startTime && closure.endTime ? ` · ${closure.startTime}–${closure.endTime}` : ""}</div>{closure.publicNote || closure.reason ? <p className="mt-2 text-xs font-semibold leading-5 text-rose-900/80">{closure.publicNote || closure.reason}</p> : null}</div></div></div>)}</div> : null}<div className="mt-5 space-y-3">{visibleSelectedBookings.length ? visibleSelectedBookings.map((booking) => <BookingMiniCard key={booking.id} booking={booking} onClick={() => booking.sourceType === "matchday" ? null : onSelectBooking(booking)} readOnly={booking.sourceType === "matchday"} />) : !visibleSelectedClosures.length ? <Empty icon={CalendarDays} title="No visible facility use" description="Adjust the filters or add a booking for this day." /> : null}</div>{matchdayBookings.length ? <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-5 text-emerald-900"><ShieldCheck className="mb-2" size={18} />Ground Control fixtures are shown as protected facility bookings and are included in every conflict check.</div> : null}</aside>
+    </div> : <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Filtered agenda</div><h2 className="mt-1 text-xl font-black text-slate-950">{MONTHS[month]} {year}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{agendaBookings.length} bookings</span></div><div className="mt-5 space-y-3">{agendaBookings.length ? agendaBookings.map((booking) => <button key={booking.id} type="button" onClick={() => booking.sourceType === "matchday" ? null : onSelectBooking(booking)} className="grid w-full gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left sm:grid-cols-[120px_minmax(0,1fr)_auto]"><div><div className="text-sm font-black text-slate-950">{formatDate(booking.startAt || `${booking.startDate}T12:00:00`, { day: "numeric", month: "short" })}</div><div className="mt-1 text-xs font-bold text-slate-500">{booking.startTime}–{booking.endTime}</div></div><div><div className="text-sm font-black text-slate-950">{booking.teamName || booking.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{[booking.venueName, booking.pitchName, booking.pitchAreaName].filter(Boolean).join(" · ") || "Facility TBC"}</div></div><StatusBadge status={booking.status} /></button>) : <Empty icon={CalendarDays} title="No bookings match" description="Change the calendar filters to widen the agenda." />}</div></section>}
   </div>;
 }
 

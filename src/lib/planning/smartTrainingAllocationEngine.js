@@ -277,7 +277,7 @@ function regularCandidates({ preference, pitches, startTimes }) {
   const allowedDays = preference.allowedDays?.length ? preference.allowedDays : [1, 2, 3, 4, 5];
   const preferred = preference.preferredDays.filter((day) => allowedDays.includes(day));
   const days = preferred.length ? preferred : allowedDays;
-  const rawTimes = preference.preferredStartTimes.length ? preference.preferredStartTimes : startTimes;
+  const rawTimes = unique([...(preference.preferredStartTimes || []), ...(startTimes || [])]);
   const times = rawTimes.filter((startTime) => {
     const start = timeToMinutes(startTime);
     const end = start + preference.requiredDurationMinutes;
@@ -389,6 +389,73 @@ function confidenceFor(score, gap) {
   return "low";
 }
 
+function allocationSlotKey(candidate = {}) {
+  return [candidate.dayOfWeek, candidate.startTime].join("|");
+}
+
+function candidateFromAllocationItem(item = {}) {
+  return {
+    dayOfWeek: item.dayOfWeek ?? item.day_of_week ?? null,
+    startTime: clean(item.startTime || item.start_time),
+    endTime: clean(item.endTime || item.end_time),
+    pitchId: clean(item.pitchId || item.pitch_id),
+    pitchName: clean(item.pitchName || item.pitch_name),
+    pitchAreaId: clean(item.pitchAreaId || item.pitch_area_id),
+    pitchAreaName: clean(item.pitchAreaName || item.pitch_area_name),
+    siteInventoryId: clean(item.siteInventoryId || item.site_inventory_id),
+    siteSlotId: clean(item.siteSlotId || item.site_slot_id),
+    siteName: clean(item.siteName || item.site_name),
+    resourceLabel: clean(item.resourceLabel || item.resource_label) || "Pinned allocation",
+  };
+}
+
+function sameAllocation(first = {}, second = {}) {
+  if (!first || !second) return false;
+  return Number(first.dayOfWeek) === Number(second.dayOfWeek)
+    && clean(first.startTime) === clean(second.startTime)
+    && clean(first.pitchId) === clean(second.pitchId)
+    && clean(first.pitchAreaId) === clean(second.pitchAreaId)
+    && clean(first.siteSlotId) === clean(second.siteSlotId);
+}
+
+function preferenceMatch(candidate, preference, seasonPhase) {
+  if (!candidate) return false;
+  const dayMatched = !preference.preferredDays.length || preference.preferredDays.includes(candidate.dayOfWeek);
+  const timeMatched = !preference.preferredStartTimes.length || preference.preferredStartTimes.includes(candidate.startTime);
+  const resourceMatched = seasonPhase === "winter"
+    ? !preference.preferredWinterSiteIds.length || preference.preferredWinterSiteIds.includes(candidate.siteInventoryId)
+    : !preference.preferredPitchIds.length || preference.preferredPitchIds.includes(candidate.pitchId);
+  return dayMatched && timeMatched && resourceMatched;
+}
+
+function unassignedDiagnostics(candidates = [], ranked = []) {
+  if (!candidates.length) {
+    return ["No eligible facility falls inside the permitted club days, times and space rules"];
+  }
+  const resourceBusy = ranked.filter((candidate) => candidate.warnings.includes("Resource is already allocated")).length;
+  const coachBusy = ranked.filter((candidate) => candidate.warnings.includes("Coach is already allocated to another team")).length;
+  const teamBusy = ranked.filter((candidate) => candidate.warnings.includes("Team already has an overlapping training allocation")).length;
+  const diagnostics = [];
+  if (resourceBusy) diagnostics.push(`${resourceBusy} candidate slot${resourceBusy === 1 ? " was" : "s were"} blocked by facility capacity`);
+  if (coachBusy) diagnostics.push(`${coachBusy} candidate slot${coachBusy === 1 ? " was" : "s were"} blocked by a shared-coach clash`);
+  if (teamBusy) diagnostics.push(`${teamBusy} candidate slot${teamBusy === 1 ? " was" : "s were"} overlapped an existing team allocation`);
+  return diagnostics.length ? diagnostics : ["No conflict-free candidate matched the current master rules and team preferences"];
+}
+
+function fairnessScore(items = []) {
+  const counts = new Map();
+  items.filter((item) => item.status !== "unassigned").forEach((item) => {
+    const key = allocationSlotKey(item);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const values = [...counts.values()];
+  if (!values.length) return 100;
+  if (values.length === 1) return values[0] <= 1 ? 100 : Math.max(0, 100 - ((values[0] - 1) * 25));
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  return Math.max(0, Math.round(100 - ((max - min) / Math.max(1, max)) * 100));
+}
+
 export function buildSmartTrainingAllocationDraft({
   teams = [],
   pitches = [],
@@ -403,12 +470,19 @@ export function buildSmartTrainingAllocationDraft({
   startDate,
   endDate,
   defaultStartTimes = ["17:00", "18:00", "19:00", "20:00"],
+  lockedItems = [],
+  baselineItems = [],
+  fairnessEnabled = true,
+  compareHistory = true,
 } = {}) {
   const preferenceMap = new Map(array(preferences).filter((row) => clean(row.season_phase || row.seasonPhase || seasonPhase) === seasonPhase).map((row) => [clean(row.team_key || row.teamKey).toLowerCase(), row]));
   const historyMap = historicalAllocations(bookings, seasonPhase);
   const coachByTeam = coachMap(assignments);
   const existing = existingWeeklyResources(bookings, seasonPhase, startDate, endDate);
+  const lockedMap = new Map(array(lockedItems).filter((item) => item?.locked && clean(item.teamKey || item.team_key)).map((item) => [clean(item.teamKey || item.team_key).toLowerCase(), item]));
+  const baselineMap = new Map(array(baselineItems).filter((item) => clean(item.teamKey || item.team_key)).map((item) => [clean(item.teamKey || item.team_key).toLowerCase(), candidateFromAllocationItem(item)]));
   const allocated = [];
+  const slotLoads = new Map();
   const results = [];
   const orderedTeams = array(teams).map((team, index) => ({ team, index, key: teamKey(team, index) })).sort((a, b) => {
     const prefA = normaliseTrainingPreference(preferenceMap.get(a.key) || {}, a.team, a.index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team: a.team, seasonPhase }));
@@ -420,22 +494,53 @@ export function buildSmartTrainingAllocationDraft({
     const policy = resolveTrainingSchedulingPolicy({ policies, team, seasonPhase });
     const preference = normaliseTrainingPreference(preferenceMap.get(key) || {}, team, index, seasonPhase, policy);
     const teamMode = preference.manualOnly ? "manual" : (preference.allocationMode === "inherit" ? mode : preference.allocationMode);
-    const history = primaryHistorical(historyMap.get(key) || []);
+    const history = primaryHistorical(historyMap.get(key) || []) || baselineMap.get(key) || null;
+    const coachIds = coachByTeam.get(key) || new Set();
+    const pinned = lockedMap.get(key);
+
+    if (pinned && teamMode !== "manual") {
+      const candidate = candidateFromAllocationItem(pinned);
+      const changed = compareHistory && history ? !sameAllocation(candidate, history) : false;
+      const item = {
+        ...pinned,
+        teamKey: key,
+        teamName: teamName(team, index),
+        seasonPhase,
+        mode: teamMode,
+        status: teamMode === "automatic" ? "proposed" : "suggested",
+        locked: true,
+        confidence: clean(pinned.confidence) || "high",
+        reasons: unique([...(pinned.reasons || []), "Pinned by the operator and preserved during rebuild", `Policy: ${preference.policySource}`]),
+        warnings: array(pinned.warnings),
+        policySource: preference.policySource,
+        preferenceMatched: preferenceMatch(candidate, preference, seasonPhase),
+        changedFromHistoric: changed,
+        historicAllocation: history,
+        alternatives: array(pinned.alternatives),
+        preference,
+      };
+      results.push(item);
+      allocated.push({ ...candidate, teamKey: key, coachIds });
+      slotLoads.set(allocationSlotKey(candidate), (slotLoads.get(allocationSlotKey(candidate)) || 0) + 1);
+      return;
+    }
+
     const candidates = seasonPhase === "winter"
       ? winterCandidates({ preference, winterSites, winterSlots })
       : regularCandidates({ preference, pitches, startTimes: unique(defaultStartTimes).map((time) => normaliseTime(time)) });
-    const coachIds = coachByTeam.get(key) || new Set();
     const ranked = candidates.map((candidate) => {
       const score = scoreCandidate({ candidate, team, preference, history, seasonPhase });
       const resourceBusy = resourceAtCapacity(candidate, [...existing, ...allocated]);
       const coachBusy = coachIds.size > 0 && allocated.some((other) => coachSetsOverlap(other.coachIds, coachIds) && other.dayOfWeek === candidate.dayOfWeek && timeOverlap(other.startTime, other.endTime, candidate.startTime, candidate.endTime));
       const sameTeamExisting = existing.some((other) => other.teamKey === key && other.dayOfWeek === candidate.dayOfWeek && timeOverlap(other.startTime, other.endTime, candidate.startTime, candidate.endTime));
       const blocked = resourceBusy || coachBusy || sameTeamExisting;
+      const load = slotLoads.get(allocationSlotKey(candidate)) || 0;
+      const fairnessPenalty = fairnessEnabled ? load * 28 : 0;
       return {
         ...candidate,
-        score: score.score - (blocked ? 500 : 0),
-        rawScore: score.score,
-        reasons: score.reasons,
+        score: score.score - fairnessPenalty - (blocked ? 500 : 0),
+        rawScore: score.score - fairnessPenalty,
+        reasons: unique([...(score.reasons || []), ...(fairnessPenalty > 0 ? ["Balances demand across heavily used start times"] : [])]),
         warnings: [...score.warnings, ...(resourceBusy ? ["Resource is already allocated"] : []), ...(coachBusy ? ["Coach is already allocated to another team"] : []), ...(sameTeamExisting ? ["Team already has an overlapping training allocation"] : [])],
         available: !blocked,
       };
@@ -444,6 +549,7 @@ export function buildSmartTrainingAllocationDraft({
     const selected = available[0] || null;
     const next = available[1] || null;
     const status = !selected ? "unassigned" : teamMode === "manual" ? "recommendation" : teamMode === "automatic" ? "proposed" : "suggested";
+    const changed = compareHistory && selected && history ? !sameAllocation(selected, history) : false;
     const item = {
       id: "",
       teamKey: key,
@@ -466,10 +572,14 @@ export function buildSmartTrainingAllocationDraft({
       siteName: selected?.siteName || "",
       resourceLabel: selected?.resourceLabel || "No suitable slot",
       reasons: selected ? unique([...(selected.reasons || []), `Policy: ${preference.policySource}`]) : [],
-      warnings: selected?.warnings || [`No conflict-free candidate matched the ${preference.policySource || "club"} rules`],
+      warnings: selected?.warnings || unassignedDiagnostics(candidates, ranked),
       policySource: preference.policySource,
       allowedDays: preference.allowedDays,
       weekendAllowed: preference.weekendAllowed,
+      preferenceMatched: preferenceMatch(selected, preference, seasonPhase),
+      changedFromHistoric: changed,
+      historicAllocation: history,
+      manualOverride: false,
       alternatives: available.slice(1, 4).map((candidate) => ({
         dayOfWeek: candidate.dayOfWeek,
         startTime: candidate.startTime,
@@ -488,18 +598,25 @@ export function buildSmartTrainingAllocationDraft({
       preference,
     };
     results.push(item);
-    if (selected && teamMode !== "manual") allocated.push({ ...selected, teamKey: key, coachIds });
+    if (selected && teamMode !== "manual") {
+      allocated.push({ ...selected, teamKey: key, coachIds });
+      slotLoads.set(allocationSlotKey(selected), (slotLoads.get(allocationSlotKey(selected)) || 0) + 1);
+    }
   });
 
   const assigned = results.filter((item) => item.status !== "unassigned").length;
   const unassigned = results.length - assigned;
   const confidenceValues = results.filter((item) => item.score > 0).map((item) => item.score);
   const averageScore = confidenceValues.length ? Math.round(confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length) : 0;
+  const preferenceMatches = results.filter((item) => item.status !== "unassigned" && item.preferenceMatched).length;
+  const comparable = results.filter((item) => item.status !== "unassigned" && item.historicAllocation);
   return Object.freeze({
     mode,
     seasonPhase,
     startDate: normaliseDateKey(startDate),
     endDate: normaliseDateKey(endDate),
+    fairnessEnabled,
+    compareHistory,
     items: results,
     summary: {
       teams: results.length,
@@ -510,6 +627,11 @@ export function buildSmartTrainingAllocationDraft({
       mediumConfidence: results.filter((item) => item.confidence === "medium").length,
       lowConfidence: results.filter((item) => item.confidence === "low").length,
       averageScore,
+      preferenceSuccessPct: assigned ? Math.round((preferenceMatches / assigned) * 100) : 0,
+      changedFromHistoric: comparable.filter((item) => item.changedFromHistoric).length,
+      comparableHistoricTeams: comparable.length,
+      primeSlotFairnessPct: fairnessScore(results),
+      manualOverrides: results.filter((item) => item.manualOverride).length,
       publishable: results.length > 0 && unassigned === 0 && mode !== "manual" && results.every((item) => ["suggested", "proposed"].includes(item.status)),
     },
   });

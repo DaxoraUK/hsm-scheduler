@@ -3,12 +3,14 @@ import {
   AlertTriangle,
   CalendarCheck2,
   CheckCircle2,
+  Copy,
   Clock3,
   Lock,
   MapPin,
   RefreshCw,
   Save,
   Sparkles,
+  Target,
   Unlock,
   Users,
   WandSparkles,
@@ -125,6 +127,12 @@ function AllocationCard({ item, onToggleLock, onUseAlternative }) {
       <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-black text-slate-950">{item.teamName}</h4><span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${confidenceTone(item.confidence)}`}>{item.confidence === "none" ? "Unassigned" : `${item.confidence} confidence`}</span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">{modeLabel(item.mode)}</span></div>{item.status !== "unassigned" ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-600"><span className="inline-flex items-center gap-1.5"><CalendarCheck2 size={14} /> {allocationDayLabel(item.dayOfWeek)}</span><span className="inline-flex items-center gap-1.5"><Clock3 size={14} /> {item.startTime}–{item.endTime}</span><span className="inline-flex items-center gap-1.5"><MapPin size={14} /> {item.resourceLabel}</span></div> : <p className="mt-2 text-sm font-bold text-rose-800">No conflict-free slot matched this team's current rules.</p>}</div>
       {item.status !== "unassigned" ? <button type="button" onClick={() => onToggleLock(item.teamKey)} className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-xs font-black ${item.locked ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600"}`}>{item.locked ? <Lock size={14} /> : <Unlock size={14} />}{item.locked ? "Locked" : "Lock"}</button> : null}
     </div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {item.preferenceMatched ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800">Coach/team preference matched</span> : item.status !== "unassigned" ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-800">Best permitted compromise</span> : null}
+      {item.changedFromHistoric ? <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-800">Changed from usual allocation</span> : item.historicAllocation && item.status !== "unassigned" ? <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-black text-sky-800">Keeps usual allocation</span> : null}
+      {item.manualOverride ? <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-700">Operator override</span> : null}
+    </div>
+    {item.changedFromHistoric && item.historicAllocation ? <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold text-violet-900">Usual allocation: {allocationDayLabel(item.historicAllocation.dayOfWeek)} {item.historicAllocation.startTime || "time TBC"}{item.historicAllocation.pitchId || item.historicAllocation.siteSlotId ? ` · ${item.historicAllocation.pitchAreaId || item.historicAllocation.pitchId || item.historicAllocation.siteSlotId}` : ""}</div> : null}
     {item.reasons.length ? <div className="mt-3 flex flex-wrap gap-2">{item.reasons.slice(0, 5).map((reason) => <span key={reason} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800">{reason}</span>)}</div> : null}
     {item.warnings.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900"><AlertTriangle className="mr-2 inline" size={14} />{item.warnings.join(" · ")}</div> : null}
     {item.alternatives.length ? <details className="mt-3"><summary className="cursor-pointer text-xs font-black text-sky-700">View {item.alternatives.length} alternatives</summary><div className="mt-2 space-y-2">{item.alternatives.map((alternative) => <button key={`${alternative.resourceLabel}-${alternative.dayOfWeek}-${alternative.startTime}`} type="button" onClick={() => onUseAlternative(item.teamKey, alternative)} className="flex w-full flex-col rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs font-bold text-slate-700 hover:border-sky-300"><span className="font-black text-slate-950">{allocationDayLabel(alternative.dayOfWeek)} {alternative.startTime}–{alternative.endTime}</span><span className="mt-1">{alternative.resourceLabel} · score {alternative.score}</span></button>)}</div></details> : null}
@@ -140,6 +148,7 @@ export default function SmartTrainingAllocationWorkspace({
   assignments = [],
   preferences = [],
   allocationRuns = [],
+  allocationItems = [],
   policies = [],
   preferenceProposals = [],
   waitlist = [],
@@ -147,6 +156,7 @@ export default function SmartTrainingAllocationWorkspace({
   saving = false,
   onSavePreference,
   onSavePolicy,
+  onBulkSavePolicies,
   onReviewProposal,
   onSaveDraft,
   onPublishDraft,
@@ -159,6 +169,9 @@ export default function SmartTrainingAllocationWorkspace({
   const [selectedTeamKey, setSelectedTeamKey] = useState(() => teamKey(teams[0] || {}, 0));
   const [editablePreferences, setEditablePreferences] = useState(() => normalisePreferences(teams, preferences, "regular", policies, waitlist));
   const [draft, setDraft] = useState(null);
+  const [fairnessEnabled, setFairnessEnabled] = useState(true);
+  const [compareHistory, setCompareHistory] = useState(true);
+  const [preserveLocks, setPreserveLocks] = useState(true);
 
   const savedSeasonPolicy = useMemo(() => seasonClubPolicy(policies, seasonPhase), [policies, seasonPhase]);
 
@@ -173,11 +186,32 @@ export default function SmartTrainingAllocationWorkspace({
 
   const selectedPreference = editablePreferences.find((preference) => preference.teamKey === selectedTeamKey) || editablePreferences[0] || null;
   const latestRun = useMemo(() => (Array.isArray(allocationRuns) ? allocationRuns : []).filter((run) => String(run.season_phase || run.seasonPhase) === seasonPhase).sort((a, b) => String(b.created_at || b.createdAt || "").localeCompare(String(a.created_at || a.createdAt || "")))[0] || null, [allocationRuns, seasonPhase]);
+  const latestPublishedRun = useMemo(() => (Array.isArray(allocationRuns) ? allocationRuns : []).filter((run) => String(run.season_phase || run.seasonPhase) === seasonPhase && String(run.status || "") === "published").sort((a, b) => String(b.created_at || b.createdAt || "").localeCompare(String(a.created_at || a.createdAt || "")))[0] || null, [allocationRuns, seasonPhase]);
+  const baselineItems = useMemo(() => latestPublishedRun ? (Array.isArray(allocationItems) ? allocationItems : []).filter((item) => String(item.run_id || item.runId || "") === String(latestPublishedRun.id || "")) : [], [allocationItems, latestPublishedRun]);
 
   const updatePreference = (next) => setEditablePreferences((current) => current.map((preference) => preference.teamKey === next.teamKey ? next : preference));
-  const buildDraft = () => setDraft(buildSmartTrainingAllocationDraft({ teams, pitches, winterSites, winterSlots, bookings, assignments, preferences: editablePreferences, policies, seasonPhase, mode, startDate: range.startDate, endDate: range.endDate, defaultStartTimes }));
+  const buildDraft = () => setDraft((current) => buildSmartTrainingAllocationDraft({
+    teams,
+    pitches,
+    winterSites,
+    winterSlots,
+    bookings,
+    assignments,
+    preferences: editablePreferences,
+    policies,
+    seasonPhase,
+    mode,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    defaultStartTimes,
+    lockedItems: preserveLocks ? current?.items?.filter((item) => item.locked) : [],
+    baselineItems,
+    fairnessEnabled,
+    compareHistory,
+  }));
   const toggleLock = (key) => setDraft((current) => current ? { ...current, items: current.items.map((item) => item.teamKey === key ? { ...item, locked: !item.locked } : item) } : current);
-  const useAlternative = (key, alternative) => setDraft((current) => current ? { ...current, items: current.items.map((item) => item.teamKey === key ? { ...item, ...alternative, resourceLabel: alternative.resourceLabel, score: alternative.score, confidence: alternative.score >= 100 ? "high" : alternative.score >= 80 ? "medium" : "low", reasons: alternative.reasons || [], warnings: [], status: mode === "automatic" ? "proposed" : "suggested" } : item) } : current);
+  const setAllLocks = (locked) => setDraft((current) => current ? { ...current, items: current.items.map((item) => item.status === "unassigned" ? item : { ...item, locked }) } : current);
+  const useAlternative = (key, alternative) => setDraft((current) => current ? { ...current, items: current.items.map((item) => item.teamKey === key ? { ...item, ...alternative, resourceLabel: alternative.resourceLabel, score: alternative.score, confidence: alternative.score >= 100 ? "high" : alternative.score >= 80 ? "medium" : "low", reasons: alternative.reasons || [], warnings: [], status: mode === "automatic" ? "proposed" : "suggested", manualOverride: true, locked: true } : item) } : current);
 
   return <div className="space-y-6">
     <section className="overflow-hidden rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-950 via-slate-950 to-slate-900 p-6 text-white shadow-lg">
@@ -205,10 +239,24 @@ export default function SmartTrainingAllocationWorkspace({
       {seasonPhase === "winter" && !winterSlots.length ? <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 p-3 text-xs font-bold text-amber-100">Add fixed winter-site slots before running winter allocation.</div> : null}
     </section>
 
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-violet-700"><Target size={15} /> Draft refinement</div><h3 className="mt-1 text-lg font-black text-slate-950">Control fairness, historic comparison and protected allocations</h3><p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Rebuilds can preserve operator locks while spreading demand and explaining unusual changes.</p></div>
+        {draft ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setAllLocks(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-xs font-black text-violet-800"><Lock size={14} /> Lock assigned</button><button type="button" onClick={() => setAllLocks(false)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"><Unlock size={14} /> Clear locks</button></div> : null}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"><input type="checkbox" checked={fairnessEnabled} onChange={(event) => setFairnessEnabled(event.target.checked)} /><span><span className="block text-sm font-black text-slate-900">Balance popular slots</span><span className="mt-1 block text-xs font-semibold text-slate-500">Reduce avoidable concentration on the same prime start times.</span></span></label>
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"><input type="checkbox" checked={compareHistory} onChange={(event) => setCompareHistory(event.target.checked)} /><span><span className="block text-sm font-black text-slate-900">Compare usual allocations</span><span className="mt-1 block text-xs font-semibold text-slate-500">Flag meaningful changes from historic or last-published slots.</span></span></label>
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"><input type="checkbox" checked={preserveLocks} onChange={(event) => setPreserveLocks(event.target.checked)} /><span><span className="block text-sm font-black text-slate-900">Preserve locks on rebuild</span><span className="mt-1 block text-xs font-semibold text-slate-500">Pinned teams stay in place while the remaining draft is recalculated.</span></span></label>
+      </div>
+      {latestPublishedRun ? <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Copy size={14} /> Comparing with {baselineItems.length} team allocation{baselineItems.length === 1 ? "" : "s"} from the latest published run</div> : null}
+    </section>
+
     {canManage ? <TrainingSchedulingPolicyPanel
       seasonPhase={seasonPhase}
       teams={teams}
       policies={policies}
+      preferences={preferences}
       proposals={preferenceProposals}
       pitches={pitches}
       winterSites={winterSites}
@@ -216,6 +264,7 @@ export default function SmartTrainingAllocationWorkspace({
       onAllocationModeChange={setMode}
       saving={saving}
       onSavePolicy={onSavePolicy}
+      onBulkSavePolicies={onBulkSavePolicies}
       onReviewProposal={onReviewProposal}
     /> : null}
 
@@ -226,7 +275,7 @@ export default function SmartTrainingAllocationWorkspace({
 
     {draft ? <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-sm">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Explainable draft</div><h3 className="mt-1 text-xl font-black text-slate-950">{SEASON_PHASE_OPTIONS.find((option) => option.value === seasonPhase)?.label} allocation</h3><p className="mt-1 text-xs font-semibold text-slate-500">Review compromises, alternatives and confidence before saving or publishing.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={buildDraft} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"><RefreshCw size={15} /> Rebuild</button>{canManage ? <button type="button" onClick={() => onSaveDraft?.({ ...draft, defaultStartTimes, status: "draft" })} disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-xs font-black text-sky-800"><Save size={15} /> Save draft</button> : null}{canManage && draft.summary.publishable ? <button type="button" onClick={() => onPublishDraft?.({ ...draft, defaultStartTimes, status: "draft" })} disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white"><CheckCircle2 size={15} /> Publish recurring allocations</button> : null}</div></div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Metric icon={Users} label="Teams" value={draft.summary.teams} detail={`${draft.summary.assigned} assigned`} /><Metric icon={CheckCircle2} label="High confidence" value={draft.summary.highConfidence} detail={`${draft.summary.mediumConfidence} medium`} /><Metric icon={AlertTriangle} label="Unassigned" value={draft.summary.unassigned} detail="Require operator action" warning={draft.summary.unassigned > 0} /><Metric icon={Lock} label="Locked" value={draft.items.filter((item) => item.locked).length} detail="Protected in this draft" /><Metric icon={Sparkles} label="Average score" value={draft.summary.averageScore} detail={modeLabel(mode)} /></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7"><Metric icon={Users} label="Teams" value={draft.summary.teams} detail={`${draft.summary.assigned} assigned`} /><Metric icon={CheckCircle2} label="High confidence" value={draft.summary.highConfidence} detail={`${draft.summary.mediumConfidence} medium`} /><Metric icon={AlertTriangle} label="Unassigned" value={draft.summary.unassigned} detail="Require operator action" warning={draft.summary.unassigned > 0} /><Metric icon={Lock} label="Locked" value={draft.items.filter((item) => item.locked).length} detail="Protected in this draft" /><Metric icon={Sparkles} label="Preference success" value={`${draft.summary.preferenceSuccessPct || 0}%`} detail="Preferred day, time and site" /><Metric icon={Target} label="Slot fairness" value={`${draft.summary.primeSlotFairnessPct ?? 100}%`} detail="Spread across start times" /><Metric icon={RefreshCw} label="Changed from usual" value={draft.summary.changedFromHistoric || 0} detail={`${draft.summary.comparableHistoricTeams || 0} comparable teams`} /></div>
       {mode === "manual" ? <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold text-sky-900">Manual mode shows recommendations only. Switch to Assisted or Automatic Draft to create publishable allocations.</div> : null}
       <div className="mt-5 grid gap-3 xl:grid-cols-2">{draft.items.map((item) => <AllocationCard key={item.teamKey} item={item} onToggleLock={toggleLock} onUseAlternative={useAlternative} />)}</div>
     </section> : null}

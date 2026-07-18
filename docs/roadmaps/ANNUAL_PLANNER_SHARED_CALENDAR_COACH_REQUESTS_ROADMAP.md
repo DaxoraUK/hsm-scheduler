@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.10
+**Current implementation release:** Ground Control v3.10.11
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current implementation through v3.10.10
+## 3. Current implementation through v3.10.11
 
 ### Shared calendar
 
@@ -181,14 +181,29 @@ This roadmap defines the integration contract with those areas without replacing
 - Waiting demand, resource reservations, buffered bookings and seasonal rollover activity feed the shared Annual Planner/main Analytics model.
 - The Smart Allocation setup header now uses grouped responsive panels rather than a single cramped inline row.
 
-### Remaining limitations after v3.10.10
+### v3.10.11 smart refinement and calendar polish delivered
 
-- Automatic waiting-list offer expiry and coach acceptance are not yet implemented.
-- Bulk closure relocation and bulk seasonal editing require a dedicated command workflow.
-- Resource availability currently models quantity; asset-level serial tracking and maintenance remain later work.
+- Operators can lock or pin individual draft allocations and rebuild the remaining schedule without moving protected teams.
+- The allocator can compare proposals with the latest published allocation and flags unusual changes from a team's normal slot.
+- Preferred-slot success, prime-slot fairness, historic changes, manual overrides and protected allocations are included in each run summary.
+- Fairness scoring spreads avoidable demand across suitable start times rather than overloading the same prime slot.
+- Unassigned teams now receive explicit reasons and next actions instead of a generic failure state.
+- Allocation cards show whether a preference was matched, the historic allocation used for comparison and any operator override.
+- Master rules can be copied between seasons and age-group defaults can be created in bulk.
+- Coach preference review displays the current approved profile and proposed coach changes side by side.
+- Annual Planner calendar navigation includes a filtered agenda with search, facility, status and closure controls.
+- Coach Hub shared calendars include month, week and agenda views with facility/status filters and clearer Full Pitch or named-area labels.
+- Simultaneous area bookings stack as separate readable entries rather than being visually merged.
+- Preference success, slot fairness, changed-from-usual teams and protected allocations feed both Annual Planner Insights and main Analytics.
+
+### Remaining limitations after v3.10.11
+
+- Automatic waiting-list offer expiry, coach acceptance and promotion are not yet implemented.
+- Bulk closure relocation, bulk seasonal editing and multi-booking command workflows remain outstanding.
+- External Google, Apple and Outlook calendar-feed polish and subscription guidance remain outstanding.
+- Resource availability models quantity; asset-level serial tracking, maintenance and inspection remain later work.
 - Provider cancellation deadlines, accessibility, travel and winter-site contact automation require a deeper provider phase.
-- Week/day calendar views and external Google, Apple and Outlook calendar-feed polish remain later UX work.
-- Advanced fairness, preferred-slot success and scenario modelling need a final smart-allocation and analytics refinement phase.
+- Final grant-evidence reconciliation, scenario modelling and controlled HSM module acceptance remain outstanding.
 
 ---
 
@@ -493,14 +508,24 @@ The shared analytics layer now includes affected bookings, resolved impacts, awa
 - Rollover, waiting demand and resource usage are included in module and club-wide analytics.
 - The Smart Allocation header is grouped into planning setup, date range and a separate primary action area.
 
-### Next implementation phase - v3.10.11 smart refinement and calendar completion
+### v3.10.11 delivery - smart refinement and calendar polish
 
-- Automatic waitlist offers, expiry, coach acceptance and promotion.
-- Bulk seasonal editing, bulk relocation and multi-booking alternative workflows.
-- Stronger fairness, historic-change detection and unresolved-team explanations.
-- Week/day calendar views, mobile agenda polish and external calendar-feed refinement.
-- Equipment asset maintenance, provider deadlines, accessibility and travel constraints.
-- Final grant analytics, scenario planning and HSM module acceptance.
+- Locked allocations survive rebuilds while unlocked teams are reconsidered.
+- Fairness, preference success, historic changes and manual overrides are visible and measurable.
+- Unassigned teams receive explainable diagnostics and next actions.
+- Rule copy and bulk age-group defaults reduce repetitive setup.
+- Coach preference review compares approved and proposed values side by side.
+- Annual Planner and Coach Hub calendars provide clearer filtering, week/agenda navigation and named-area display.
+- The same refinement metrics feed module Insights and main Analytics.
+
+### Next implementation phase - v3.10.12 module completion and pilot acceptance
+
+- Automatic waiting-list offers, expiry, coach acceptance and promotion.
+- Bulk seasonal editing, bulk closure relocation and multi-booking command workflows.
+- External Google, Apple and Outlook calendar-feed completion and user guidance.
+- Final grant analytics, scenario planning and evidence reconciliation across Insights, Analytics, Reports and Funding.
+- Controlled HSM acceptance covering summer, winter, weather, closures, resources, coach preferences and smart allocation.
+- Entitlement, onboarding, help content and commercial-readiness acceptance for the planner add-on.
 
 ---
 
@@ -769,8 +794,8 @@ Commercial claims must remain grounded in validated operational data and should 
 4. Validate master rules and coach proposals with HSM across regular and winter scenarios.
 5. v3.10.9: closure-impact resolution, coach alternative acceptance, notifications and weather recovery - delivered.
 6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper capacity - delivered.
-7. v3.10.11: waitlist automation, bulk operations, calendar completion and final smart/analytics refinement.
-8. Complete HSM module acceptance and grant-evidence reconciliation.
+7. v3.10.11: smart-allocation refinement, coach preference review, calendar polish and fairness analytics - delivered.
+8. v3.10.12: waiting-list automation, bulk commands, calendar feeds, grant-evidence completion and HSM module acceptance.
 9. Start the next module roadmap only after this module phase is validated.
 
 ---
@@ -787,6 +812,7 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.8.1 | Complete | Functional Applies to scopes, 30-minute preferred-time selectors and persisted season scheduling modes. |
 | v3.10.9 | Complete | Closure impacts, Coach alternatives, notification queues, weather recovery and shared analytics. |
 | v3.10.10 | Complete | Seasonal rollover, waiting lists, shared resources, buffers, participant limits, analytics and Smart Allocation header refinement. |
-| v3.10.11 | Next | Waitlist automation, bulk operations, calendar completion, final smart refinement and module acceptance. |
+| v3.10.11 | Complete | Locked allocations, fairness, historic comparison, coach review, calendar polish and shared refinement analytics. |
+| v3.10.12 | Next | Waiting-list automation, bulk commands, calendar feeds, grant analytics completion and HSM module acceptance. |
 
 The roadmap must be updated after each implementation release and before the next module roadmap is started.

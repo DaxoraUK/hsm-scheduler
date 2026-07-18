@@ -141,6 +141,13 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   const unassignedAllocationItems = allocationItems.filter((row) => text(row.status) === "unassigned");
   const scoredAllocationItems = allocationItems.filter((row) => number(row.score) > 0);
   const averageAllocationScore = scoredAllocationItems.length ? round(scoredAllocationItems.reduce((sum, row) => sum + number(row.score), 0) / scoredAllocationItems.length, 0) : 0;
+  const allocationSummaries = allocationRuns.map((row) => row.summary || row.summary_json || row.summaryJson || {}).filter((row) => row && typeof row === "object");
+  const averageSummaryMetric = (key, fallback = 0) => allocationSummaries.length ? round(allocationSummaries.reduce((sum, row) => sum + number(row[key], fallback), 0) / allocationSummaries.length, 0) : fallback;
+  const preferenceSuccessPct = averageSummaryMetric("preferenceSuccessPct", 0);
+  const primeSlotFairnessPct = averageSummaryMetric("primeSlotFairnessPct", 100);
+  const changedFromHistoric = allocationSummaries.reduce((sum, row) => sum + number(row.changedFromHistoric), 0);
+  const manualAllocationOverrides = allocationSummaries.reduce((sum, row) => sum + number(row.manualOverrides), 0);
+  const protectedAllocationLocks = allocationItems.filter((row) => Boolean(row.locked)).length;
   const closureImpacts = data.closureImpacts.filter((row) => String(row.created_at || row.createdAt || row.booking_start_at || row.bookingStartAt || "").startsWith(yearText));
   const closureResolved = closureImpacts.filter((row) => ["relocated", "postponed", "cancelled", "acknowledged", "resolved"].includes(text(row.status)));
   const closureAwaitingCoach = closureImpacts.filter((row) => text(row.status) === "awaiting_coach");
@@ -160,6 +167,7 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   if (winterHours > 0) grantNarratives.push(`${round(winterHours)} team-hours were scheduled at winter or external facilities.`);
   if (externalWinterCostPence > 0) grantNarratives.push(`External winter provision currently represents GBP ${(externalWinterCostPence / 100).toFixed(2)} of recorded facility cost.`);
   if (publishedAllocationRuns.length > 0) grantNarratives.push(`${publishedAllocationRuns.length} reviewed smart allocation run${publishedAllocationRuns.length === 1 ? "" : "s"} supported consistent seasonal training access.`);
+  if (allocationRuns.length > 0) grantNarratives.push(`${preferenceSuccessPct}% of smart allocations matched recorded team and coach preferences, with a ${primeSlotFairnessPct}% slot-fairness score.`);
   if (closureImpacts.length > 0) grantNarratives.push(`${closureImpacts.length} approved session${closureImpacts.length === 1 ? " was" : "s were"} affected by facility closures; ${closureRelocated.length} were relocated and ${closureCancelled.length} were cancelled.`);
   if (waitingRows.length > 0) grantNarratives.push(`${waitingRows.length} team${waitingRows.length === 1 ? " remains" : "s remain"} on the training waitlist because suitable facility capacity is not yet available.`);
   if (allocatedWaitlistRows.length > 0) grantNarratives.push(`${allocatedWaitlistRows.length} waitlisted team${allocatedWaitlistRows.length === 1 ? " has" : "s have"} since been allocated a training slot.`);
@@ -196,6 +204,11 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
       smartAllocatedTeams: allocationItems.filter((row) => text(row.status) === "published").length,
       unassignedAllocationTeams: unassignedAllocationItems.length,
       averageAllocationScore,
+      preferenceSuccessPct,
+      primeSlotFairnessPct,
+      changedFromHistoric,
+      manualAllocationOverrides,
+      protectedAllocationLocks,
       activeResources: activeResources.length,
       waitingTeams: waitingRows.length,
       offeredWaitlistTeams: offeredWaitlistRows.length,
