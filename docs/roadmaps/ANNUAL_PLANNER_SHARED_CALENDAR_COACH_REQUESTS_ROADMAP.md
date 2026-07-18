@@ -795,8 +795,8 @@ Commercial claims must remain grounded in validated operational data and should 
 5. v3.10.9: closure-impact resolution, coach alternative acceptance, notifications and weather recovery - delivered.
 6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper capacity - delivered.
 7. v3.10.11: smart-allocation refinement, coach preference review, calendar polish and fairness analytics - delivered.
-8. v3.10.12: waiting-list automation, bulk commands, calendar feeds, grant-evidence completion and HSM module acceptance.
-9. Start the next module roadmap only after this module phase is validated.
+8. v3.10.12: waiting-list offers and coach acceptance, audited bulk commands, revocable calendar feeds, grant-evidence completion and module acceptance - delivered.
+9. Validate v3.10.12 through the controlled HSM pilot, record any minor operational refinements, then start the next module roadmap.
 
 ---
 
@@ -813,6 +813,6 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.9 | Complete | Closure impacts, Coach alternatives, notification queues, weather recovery and shared analytics. |
 | v3.10.10 | Complete | Seasonal rollover, waiting lists, shared resources, buffers, participant limits, analytics and Smart Allocation header refinement. |
 | v3.10.11 | Complete | Locked allocations, fairness, historic comparison, coach review, calendar polish and shared refinement analytics. |
-| v3.10.12 | Next | Waiting-list automation, bulk commands, calendar feeds, grant analytics completion and HSM module acceptance. |
+| v3.10.12 | Complete | Waiting-list offers and coach acceptance, audited bulk commands, revocable calendar feeds, grant-evidence export and module acceptance checks. |
 
-The roadmap must be updated after each implementation release and before the next module roadmap is started.
+The Annual Planner implementation baseline is now complete through v3.10.12. The controlled HSM pilot must validate the complete workflow before commercial acceptance. Any pilot defects should be recorded as focused maintenance releases, while new strategic scope belongs in the next roadmap revision.

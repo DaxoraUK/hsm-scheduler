@@ -69,6 +69,8 @@ export function normaliseAnnualPlannerAnalyticsPayload(payload = {}) {
     resources: Array.isArray(payload.resources || payload.planner_resources || payload.plannerResources) ? (payload.resources || payload.planner_resources || payload.plannerResources) : [],
     waitlist: Array.isArray(payload.waitlist || payload.waitlist_entries || payload.waitlistEntries) ? (payload.waitlist || payload.waitlist_entries || payload.waitlistEntries) : [],
     seasonRollovers: Array.isArray(payload.season_rollovers || payload.seasonRollovers) ? (payload.season_rollovers || payload.seasonRollovers) : [],
+    waitlistOffers: Array.isArray(payload.waitlist_offers || payload.waitlistOffers) ? (payload.waitlist_offers || payload.waitlistOffers) : [],
+    bulkCommands: Array.isArray(payload.bulk_commands || payload.bulkCommands) ? (payload.bulk_commands || payload.bulkCommands) : [],
   };
 }
 
@@ -161,6 +163,23 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   const rolloverRows = data.seasonRollovers.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
   const bufferedBookings = active.filter((booking) => booking.setupBufferMinutes > 0 || booking.clearDownBufferMinutes > 0);
   const resourceReservations = active.reduce((sum, booking) => sum + (Array.isArray(booking.resourceRequirements) ? booking.resourceRequirements.length : 0), 0);
+  const waitlistOfferRows = data.waitlistOffers.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
+  const acceptedWaitlistOffers = waitlistOfferRows.filter((row) => text(row.status) === "accepted");
+  const declinedWaitlistOffers = waitlistOfferRows.filter((row) => text(row.status) === "declined");
+  const pendingWaitlistOffers = waitlistOfferRows.filter((row) => text(row.status) === "offered");
+  const bulkCommandRows = data.bulkCommands.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
+  const bulkBookingsChanged = bulkCommandRows.reduce((sum, row) => sum + number(row.affected_count ?? row.affectedCount), 0);
+  const requestedHours = requestRows.reduce((sum, row) => {
+    const start = new Date(row.preferred_start_at || row.preferredStartAt || row.start_at || row.startAt || 0);
+    const end = new Date(row.preferred_end_at || row.preferredEndAt || row.end_at || row.endAt || 0);
+    return sum + (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? 0 : Math.max(0, end - start) / 3600000);
+  }, 0);
+  const approvedRequestHours = requestRows.filter((row) => ["approved", "accepted"].includes(text(row.status))).reduce((sum, row) => {
+    const start = new Date(row.proposed_start_at || row.proposedStartAt || row.preferred_start_at || row.preferredStartAt || 0);
+    const end = new Date(row.proposed_end_at || row.proposedEndAt || row.preferred_end_at || row.preferredEndAt || 0);
+    return sum + (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? 0 : Math.max(0, end - start) / 3600000);
+  }, 0);
+  const costPerDeliveredTeamHourPence = deliveredHours > 0 ? Math.round(externalWinterCostPence / deliveredHours) : 0;
 
   const grantNarratives = [];
   if (weatherLostHours > 0) grantNarratives.push(`${round(weatherLostHours)} scheduled training and friendly hours were lost or postponed because of weather.`);
@@ -171,12 +190,16 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   if (closureImpacts.length > 0) grantNarratives.push(`${closureImpacts.length} approved session${closureImpacts.length === 1 ? " was" : "s were"} affected by facility closures; ${closureRelocated.length} were relocated and ${closureCancelled.length} were cancelled.`);
   if (waitingRows.length > 0) grantNarratives.push(`${waitingRows.length} team${waitingRows.length === 1 ? " remains" : "s remain"} on the training waitlist because suitable facility capacity is not yet available.`);
   if (allocatedWaitlistRows.length > 0) grantNarratives.push(`${allocatedWaitlistRows.length} waitlisted team${allocatedWaitlistRows.length === 1 ? " has" : "s have"} since been allocated a training slot.`);
+  if (acceptedWaitlistOffers.length > 0) grantNarratives.push(`${acceptedWaitlistOffers.length} waiting-list offer${acceptedWaitlistOffers.length === 1 ? " was" : "s were"} accepted by coaches, converting unmet demand into confirmed delivery.`);
+  if (declinedWaitlistOffers.length > 0) grantNarratives.push(`${declinedWaitlistOffers.length} offered slot${declinedWaitlistOffers.length === 1 ? " was" : "s were"} declined, evidencing a remaining suitability or timing gap.`);
+  if (requestedHours > approvedRequestHours) grantNarratives.push(`${round(requestedHours - approvedRequestHours)} requested team-hours were not yet converted into approved provision.`);
+  if (costPerDeliveredTeamHourPence > 0) grantNarratives.push(`Recorded external winter cost equates to GBP ${(costPerDeliveredTeamHourPence / 100).toFixed(2)} per delivered team-hour.`);
   if (resourceReservations > 0) grantNarratives.push(`${resourceReservations} shared-resource reservation${resourceReservations === 1 ? " was" : "s were"} recorded across annual facility bookings.`);
   if (!grantNarratives.length) grantNarratives.push("Record completed sessions, weather disruptions and winter allocations to build grant-ready facility evidence.");
 
   return Object.freeze({
     year: Number(year),
-    hasData: bookings.length > 0 || data.winterSites.length > 0 || requestRows.length > 0 || data.waitlist.length > 0 || data.resources.length > 0,
+    hasData: bookings.length > 0 || data.winterSites.length > 0 || requestRows.length > 0 || data.waitlist.length > 0 || data.resources.length > 0 || data.waitlistOffers.length > 0 || data.bulkCommands.length > 0,
     bookings,
     winterSites: data.winterSites,
     winterSlots: data.winterSlots,
@@ -216,6 +239,15 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
       seasonRollovers: rolloverRows.length,
       bufferedBookings: bufferedBookings.length,
       resourceReservations,
+      requestedHours: round(requestedHours),
+      approvedRequestHours: round(approvedRequestHours),
+      unmetRequestHours: round(Math.max(0, requestedHours - approvedRequestHours)),
+      acceptedWaitlistOffers: acceptedWaitlistOffers.length,
+      declinedWaitlistOffers: declinedWaitlistOffers.length,
+      pendingWaitlistOffers: pendingWaitlistOffers.length,
+      bulkCommands: bulkCommandRows.length,
+      bulkBookingsChanged,
+      costPerDeliveredTeamHourPence,
       closureAffectedBookings: closureImpacts.length,
       closureResolvedBookings: closureResolved.length,
       closureAwaitingCoach: closureAwaitingCoach.length,

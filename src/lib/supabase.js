@@ -811,6 +811,55 @@ export const DB = {
     });
   },
 
+  async offerAnnualPlannerWaitlistSlot(clubId, offer) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/offer_annual_planner_waitlist_slot", {
+      target_club_id: id,
+      offer_data: offer && typeof offer === "object" ? offer : {},
+    });
+  },
+
+  async listMyAnnualPlannerWaitlistOffers(clubId) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_my_annual_planner_waitlist_offers", {
+      target_club_id: id,
+    }));
+  },
+
+  async respondToAnnualPlannerWaitlistOffer(clubId, offerId, response, message = "") {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/respond_to_annual_planner_waitlist_offer", {
+      target_club_id: id,
+      target_offer_id: offerId,
+      response_value: String(response || "").trim(),
+      coach_message: String(message || "").trim() || null,
+    });
+  },
+
+  async applyAnnualPlannerBulkCommand(clubId, command) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/apply_annual_planner_bulk_command", {
+      target_club_id: id,
+      command_data: command && typeof command === "object" ? command : {},
+    });
+  },
+
+  async createAnnualPlannerCalendarFeed(clubId, feed) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_annual_planner_calendar_feed", {
+      target_club_id: id,
+      feed_data: feed && typeof feed === "object" ? feed : {},
+    });
+  },
+
+  async revokeAnnualPlannerCalendarFeed(clubId, feedId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/revoke_annual_planner_calendar_feed", {
+      target_club_id: id,
+      target_feed_id: feedId,
+    });
+  },
+
   async createAnnualPlannerSeasonRollover(clubId, rollover) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/create_annual_planner_season_rollover", {

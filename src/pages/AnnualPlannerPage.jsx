@@ -22,6 +22,7 @@ import {
   Plus,
   PoundSterling,
   Receipt,
+  RadioTower,
   RefreshCw,
   Search,
   Settings2,
@@ -41,6 +42,7 @@ import CoachRequestConversation from "../components/coach/CoachRequestConversati
 import WinterSiteWorkspace from "../components/planning/WinterSiteWorkspace.jsx";
 import SmartTrainingAllocationWorkspace from "../components/planning/SmartTrainingAllocationWorkspace.jsx";
 import SeasonalResourceWorkspace from "../components/planning/SeasonalResourceWorkspace.jsx";
+import AnnualPlannerCompletionWorkspace from "../components/planning/AnnualPlannerCompletionWorkspace.jsx";
 import WeatherDisruptionDialog from "../components/planning/WeatherDisruptionDialog.jsx";
 import ClosureImpactResolutionDialog from "../components/planning/ClosureImpactResolutionDialog.jsx";
 import AnnualPlannerAnalyticsSummary from "../components/analytics/AnnualPlannerAnalyticsSummary.jsx";
@@ -203,7 +205,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [], schedulingPolicies: [], preferenceProposals: [], resources: [], waitlist: [], seasonRollovers: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [], schedulingPolicies: [], preferenceProposals: [], resources: [], waitlist: [], seasonRollovers: [], waitlistOffers: [], bulkCommands: [], calendarFeeds: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -275,6 +277,9 @@ export default function AnnualPlannerPage({
         resources: Array.isArray(result?.resources || result?.planner_resources || result?.plannerResources) ? (result.resources || result.planner_resources || result.plannerResources) : [],
         waitlist: Array.isArray(result?.waitlist || result?.waitlist_entries || result?.waitlistEntries) ? (result.waitlist || result.waitlist_entries || result.waitlistEntries) : [],
         seasonRollovers: Array.isArray(result?.season_rollovers || result?.seasonRollovers) ? (result.season_rollovers || result.seasonRollovers) : [],
+        waitlistOffers: Array.isArray(result?.waitlist_offers || result?.waitlistOffers) ? (result.waitlist_offers || result.waitlistOffers) : [],
+        bulkCommands: Array.isArray(result?.bulk_commands || result?.bulkCommands) ? (result.bulk_commands || result.bulkCommands) : [],
+        calendarFeeds: Array.isArray(result?.calendar_feeds || result?.calendarFeeds) ? (result.calendar_feeds || result.calendarFeeds) : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -437,7 +442,9 @@ export default function AnnualPlannerPage({
     resources: workspace.resources,
     waitlist: workspace.waitlist,
     seasonRollovers: workspace.seasonRollovers,
-  }, { year }), [coachRequests, workspace.allocationItems, workspace.allocationRuns, workspace.blackouts, workspace.bookings, workspace.closureImpacts, workspace.resources, workspace.seasonRollovers, workspace.waitlist, workspace.winterSites, workspace.winterSlots, year]);
+    waitlistOffers: workspace.waitlistOffers,
+    bulkCommands: workspace.bulkCommands,
+  }, { year }), [coachRequests, workspace.allocationItems, workspace.allocationRuns, workspace.blackouts, workspace.bookings, workspace.bulkCommands, workspace.closureImpacts, workspace.resources, workspace.seasonRollovers, workspace.waitlist, workspace.waitlistOffers, workspace.winterSites, workspace.winterSlots, year]);
 
   const openCoachAudience = useCallback(({ reason, bookingIds = [], blackoutIds = [], teamKeys = [] } = {}) => {
     const audience = buildAnnualPlannerCoachAudience({
@@ -903,6 +910,97 @@ export default function AnnualPlannerPage({
     }
   }
 
+  async function createWaitlistOffer(offer) {
+    setSaving(true);
+    try {
+      if (isSupaConfigured() && clubId) {
+        await DB.offerAnnualPlannerWaitlistSlot(clubId, offer);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const entry = (current.waitlist || []).find((row) => String(row.id) === String(offer.waitlist_entry_id));
+        const record = { ...offer, id: crypto.randomUUID(), team_key: entry?.team_key || entry?.teamKey || "", team_name: entry?.team_name || entry?.teamName || "Team", status: "offered", created_at: new Date().toISOString() };
+        writeLocalWorkspace(clubId, { ...current, waitlistOffers: [record, ...(current.waitlistOffers || [])], waitlist: (current.waitlist || []).map((row) => String(row.id) === String(offer.waitlist_entry_id) ? { ...row, status: "offered" } : row) });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Training slot offered to the coach");
+    } catch (offerError) {
+      toast.error("Waitlist offer could not be sent", { description: offerError?.message });
+      throw offerError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyBulkCommand(command) {
+    setSaving(true);
+    try {
+      if (isSupaConfigured() && clubId) {
+        await DB.applyAnnualPlannerBulkCommand(clubId, command);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const ids = new Set(command.booking_ids || []);
+        const next = (current.bookings || []).map((booking) => {
+          if (!ids.has(String(booking.id))) return booking;
+          if (command.command_type === "change_status") return { ...booking, status: command.status };
+          if (command.command_type === "move_pitch") return { ...booking, pitch_id: command.pitch_id, pitch_name: command.pitch_name, pitch_area_id: command.pitch_area_id, pitch_area_name: command.pitch_area_name };
+          if (command.command_type === "shift_dates") {
+            const shift = Number(command.shift_days || 0) * 86400000;
+            return { ...booking, start_at: new Date(new Date(booking.start_at || booking.startAt).getTime() + shift).toISOString(), end_at: new Date(new Date(booking.end_at || booking.endAt).getTime() + shift).toISOString() };
+          }
+          return booking;
+        });
+        writeLocalWorkspace(clubId, { ...current, bookings: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Bulk planner command completed");
+    } catch (commandError) {
+      toast.error("Bulk command could not be completed", { description: commandError?.message });
+      throw commandError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createPlannerCalendarFeed(feed) {
+    setSaving(true);
+    try {
+      let result;
+      if (isSupaConfigured() && clubId) {
+        result = await DB.createAnnualPlannerCalendarFeed(clubId, feed);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        result = { ...feed, id: crypto.randomUUID(), token: crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", ""), created_at: new Date().toISOString() };
+        writeLocalWorkspace(clubId, { ...current, calendarFeeds: [result, ...(current.calendarFeeds || [])] });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Private calendar feed created", { description: "Copy the new subscription link from Delivery & feeds." });
+      return result;
+    } catch (feedError) {
+      toast.error("Calendar feed could not be created", { description: feedError?.message });
+      throw feedError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function revokePlannerCalendarFeed(feedId) {
+    setSaving(true);
+    try {
+      if (isSupaConfigured() && clubId) {
+        await DB.revokeAnnualPlannerCalendarFeed(clubId, feedId);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        writeLocalWorkspace(clubId, { ...current, calendarFeeds: (current.calendarFeeds || []).map((row) => String(row.id) === String(feedId) ? { ...row, revoked_at: new Date().toISOString() } : row) });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Calendar feed revoked");
+    } catch (feedError) {
+      toast.error("Calendar feed could not be revoked", { description: feedError?.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function createSeasonRollover(rollover) {
     setSaving(true);
     try {
@@ -1047,6 +1145,7 @@ export default function AnnualPlannerPage({
             ["winter", "Winter sites", Snowflake, "Fixed external and seasonal slots"],
             ["smart", "Smart allocation", Sparkles, "Manual, assisted and automatic drafts"],
             ["seasonal", "Resources & rollover", Boxes, "Season transitions, waitlists and shared equipment"],
+            ["delivery", "Delivery & feeds", RadioTower, "Offers, bulk commands, calendars and acceptance"],
             ["insights", "Insights", Activity, "Utilisation, weather and grant evidence"],
           ].map(([key, label, Icon, detail]) => (
             <button
@@ -1166,6 +1265,25 @@ export default function AnnualPlannerPage({
           onSaveWaitlist={saveWaitlistEntry}
           onUpdateWaitlist={saveWaitlistEntry}
           onCreateRollover={createSeasonRollover}
+        />
+      ) : null}
+
+      {tab === "delivery" ? (
+        <AnnualPlannerCompletionWorkspace
+          bookings={workspace.bookings}
+          teams={teamCfg}
+          pitches={pitchCfg}
+          winterSites={workspace.winterSites}
+          waitlist={workspace.waitlist}
+          waitlistOffers={workspace.waitlistOffers}
+          calendarFeeds={workspace.calendarFeeds}
+          analytics={annualAnalytics}
+          canManage={canManage}
+          saving={saving}
+          onCreateWaitlistOffer={createWaitlistOffer}
+          onApplyBulkCommand={applyBulkCommand}
+          onCreateCalendarFeed={createPlannerCalendarFeed}
+          onRevokeCalendarFeed={revokePlannerCalendarFeed}
         />
       ) : null}
 
