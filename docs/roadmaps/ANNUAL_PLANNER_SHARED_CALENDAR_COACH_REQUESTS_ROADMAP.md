@@ -1,7 +1,7 @@
 # Annual Planner, Shared Calendar and Coach Requests roadmap
 
 **Roadmap status:** Active
-**Current implementation release:** Ground Control v3.10.9
+**Current implementation release:** Ground Control v3.10.10
 **Roadmap baseline release:** v3.10.5.4
 **Primary product area:** Annual Pitch Booking, Training and Friendlies Planner
 **Related areas:** Coach Hub, Settings > Pitches, club-wide Analytics, Reports, Communications and calendar feeds
@@ -54,7 +54,7 @@ This roadmap defines the integration contract with those areas without replacing
 
 ---
 
-## 3. Current implementation through v3.10.8.1
+## 3. Current implementation through v3.10.10
 
 ### Shared calendar
 
@@ -165,14 +165,30 @@ This roadmap defines the integration contract with those areas without replacing
 - Public coach messages remain separate from internal operator notes.
 - Closure resolution status, relocation, postponement, cancellation and response rates feed the shared Annual Planner and main Analytics model.
 
-### Remaining limitations after v3.10.9
+### v3.10.10 recurring seasonal operations and resource capacity delivered
 
-- Automatic alternative expiry and waiting-list promotion are not yet implemented.
-- Bulk relocation of several affected bookings still requires a dedicated workflow.
-- Weather reinstatement and completed-after-rearrangement reporting need a final lifecycle pass.
-- Winter-site provider contacts, accessibility, travel and cancellation automation require a deeper inventory phase.
-- Capacity utilisation, unmet demand, preferred-slot success and cost-per-delivered-hour need further analytical modelling beyond the current measures.
+- A dedicated Resources and rollover workspace manages seasonal transitions, waiting demand and shared operational resources.
+- Operators can preview and create a target-season draft from the latest published allocation without changing existing bookings.
+- Team preferences can be copied into the target season while preserving summer, regular-season and winter inventory separation.
+- Changing inventory type keeps useful day/time context but deliberately leaves resource allocation unresolved for review.
+- A club-scoped waiting list records team, season, preferred days, half-hour times, participant demand, duration, priority and required resources.
+- Waiting demand can influence a later smart-allocation draft without bypassing master rules or capacity checks.
+- Shared resources such as portable goals, lighting, keys, changing rooms and equipment sets have quantity and operational notes.
+- Bookings can reserve shared resources and declare expected participant numbers.
+- Setup and clear-down buffers protect pitch/area and shared-resource capacity around the actual session.
+- Maximum-player limits can be defined for Full Pitch or named areas and are checked before final booking save.
+- Database booking v4 functions recheck buffered facility and shared-resource capacity transactionally.
+- Waiting demand, resource reservations, buffered bookings and seasonal rollover activity feed the shared Annual Planner/main Analytics model.
+- The Smart Allocation setup header now uses grouped responsive panels rather than a single cramped inline row.
+
+### Remaining limitations after v3.10.10
+
+- Automatic waiting-list offer expiry and coach acceptance are not yet implemented.
+- Bulk closure relocation and bulk seasonal editing require a dedicated command workflow.
+- Resource availability currently models quantity; asset-level serial tracking and maintenance remain later work.
+- Provider cancellation deadlines, accessibility, travel and winter-site contact automation require a deeper provider phase.
 - Week/day calendar views and external Google, Apple and Outlook calendar-feed polish remain later UX work.
+- Advanced fairness, preferred-slot success and scenario modelling need a final smart-allocation and analytics refinement phase.
 
 ---
 
@@ -469,16 +485,22 @@ Broader request and conversation notification coverage remains connected to the 
 
 The shared analytics layer now includes affected bookings, resolved impacts, awaiting-coach responses, relocations, postponements, cancellations and resolution percentage. These measures feed both Annual Planner Insights and main club Analytics.
 
-### Next implementation phase - v3.10.10 recurring seasonal operations and resource depth
+### v3.10.10 delivery - recurring seasonal operations and resource depth
 
-- Recurring seasonal allocation editing and rollover.
-- Bulk closure relocation and multi-booking alternatives.
-- Waiting lists with optional offer expiry.
-- Equipment, changing rooms and shared-resource reservations.
-- Setup and changeover buffers.
-- Maximum-player and deeper area-capacity rules.
-- Provider cancellation deadlines and winter-site operational contacts.
-- Deeper unmet-demand, fairness and facility-pressure analytics.
+- Seasonal rollover creates a reviewable target draft instead of copying live bookings blindly.
+- Waiting lists capture unresolved team demand and feed later allocation runs.
+- Shared resources, participant limits and setup/clear-down buffers are enforced in browser and database capacity checks.
+- Rollover, waiting demand and resource usage are included in module and club-wide analytics.
+- The Smart Allocation header is grouped into planning setup, date range and a separate primary action area.
+
+### Next implementation phase - v3.10.11 smart refinement and calendar completion
+
+- Automatic waitlist offers, expiry, coach acceptance and promotion.
+- Bulk seasonal editing, bulk relocation and multi-booking alternative workflows.
+- Stronger fairness, historic-change detection and unresolved-team explanations.
+- Week/day calendar views, mobile agenda polish and external calendar-feed refinement.
+- Equipment asset maintenance, provider deadlines, accessibility and travel constraints.
+- Final grant analytics, scenario planning and HSM module acceptance.
 
 ---
 
@@ -486,9 +508,8 @@ The shared analytics layer now includes affected bookings, resolved impacts, awa
 
 - Pitch diagrams with selectable areas.
 - Quarter-pitch, third-pitch and goalkeeper-zone templates.
-- Equipment and shared-resource reservations.
-- Setup and changeover buffers.
-- Waiting lists and automatic offer expiry.
+- Automatic waitlist offers, coach acceptance and expiry.
+- Asset-level equipment maintenance and inspection records.
 - Provider contract and invoice reconciliation for winter sites.
 - Weather forecast risk indicators without automatic cancellation.
 - Drainage, surface-condition and maintenance histories.
@@ -747,9 +768,10 @@ Commercial claims must remain grounded in validated operational data and should 
 3. v3.10.8.1: functional rule targeting, half-hour time choices and persisted season modes.
 4. Validate master rules and coach proposals with HSM across regular and winter scenarios.
 5. v3.10.9: closure-impact resolution, coach alternative acceptance, notifications and weather recovery - delivered.
-6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper facility-demand analytics.
-7. Grant evidence statements and facility scenario planning.
-8. Start the next module roadmap only after this module phase is validated.
+6. v3.10.10: recurring seasonal allocations, waiting lists, equipment/resources and deeper capacity - delivered.
+7. v3.10.11: waitlist automation, bulk operations, calendar completion and final smart/analytics refinement.
+8. Complete HSM module acceptance and grant-evidence reconciliation.
+9. Start the next module roadmap only after this module phase is validated.
 
 ---
 
@@ -764,6 +786,7 @@ Commercial claims must remain grounded in validated operational data and should 
 | v3.10.8 | Complete | Club master scheduling rules, weekday defaults and coach-managed preferences with approval controls. |
 | v3.10.8.1 | Complete | Functional Applies to scopes, 30-minute preferred-time selectors and persisted season scheduling modes. |
 | v3.10.9 | Complete | Closure impacts, Coach alternatives, notification queues, weather recovery and shared analytics. |
-| v3.10.10 | Next | Recurring seasonal operations, waiting lists, resources and deeper capacity analytics. |
+| v3.10.10 | Complete | Seasonal rollover, waiting lists, shared resources, buffers, participant limits, analytics and Smart Allocation header refinement. |
+| v3.10.11 | Next | Waitlist automation, bulk operations, calendar completion, final smart refinement and module acceptance. |
 
 The roadmap must be updated after each implementation release and before the next module roadmap is started.

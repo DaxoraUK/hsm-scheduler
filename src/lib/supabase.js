@@ -672,7 +672,7 @@ export const DB = {
 
   async saveAnnualPlannerBooking(clubId, booking) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/save_annual_planner_booking", {
+    return supaFetch("POST", "rpc/save_annual_planner_booking_v4", {
       target_club_id: id,
       booking_data: booking && typeof booking === "object" ? booking : {},
     });
@@ -680,7 +680,7 @@ export const DB = {
 
   async saveAnnualPlannerBookingSeries(clubId, bookings = []) {
     const id = requireClubId(clubId);
-    return asArray(await supaFetch("POST", "rpc/save_annual_planner_booking_series", {
+    return asArray(await supaFetch("POST", "rpc/save_annual_planner_booking_series_v4", {
       target_club_id: id,
       booking_rows: Array.isArray(bookings) ? bookings : [],
     }));
@@ -784,6 +784,38 @@ export const DB = {
     return supaFetch("POST", "rpc/delete_annual_planner_winter_slot", {
       target_club_id: id,
       target_slot_id: slotId,
+    });
+  },
+
+  async saveAnnualPlannerResource(clubId, resource) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_resource", {
+      target_club_id: id,
+      resource_data: resource && typeof resource === "object" ? resource : {},
+    });
+  },
+
+  async deleteAnnualPlannerResource(clubId, resourceId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/delete_annual_planner_resource", {
+      target_club_id: id,
+      target_resource_id: String(resourceId || "").trim(),
+    });
+  },
+
+  async saveAnnualPlannerWaitlistEntry(clubId, entry) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_annual_planner_waitlist_entry", {
+      target_club_id: id,
+      waitlist_data: entry && typeof entry === "object" ? entry : {},
+    });
+  },
+
+  async createAnnualPlannerSeasonRollover(clubId, rollover) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/create_annual_planner_season_rollover", {
+      target_club_id: id,
+      rollover_data: rollover && typeof rollover === "object" ? rollover : {},
     });
   },
 

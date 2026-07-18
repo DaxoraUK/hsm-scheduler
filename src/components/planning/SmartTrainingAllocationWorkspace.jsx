@@ -52,9 +52,32 @@ function modeLabel(value) {
   return SMART_ALLOCATION_MODES.find((mode) => mode.value === value)?.label || "Assisted";
 }
 
-function normalisePreferences(teams, rows, seasonPhase, policies = []) {
+function normalisePreferences(teams, rows, seasonPhase, policies = [], waitlist = []) {
   const map = new Map((Array.isArray(rows) ? rows : []).filter((row) => String(row.season_phase || row.seasonPhase || "regular") === seasonPhase).map((row) => [String(row.team_key || row.teamKey || "").toLowerCase(), row]));
-  return teams.map((team, index) => normaliseTrainingPreference(map.get(teamKey(team, index)) || {}, team, index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team, seasonPhase })));
+  const waitlistMap = new Map((Array.isArray(waitlist) ? waitlist : [])
+    .filter((row) => String(row.season_phase || row.seasonPhase || "regular") === seasonPhase && ["waiting", "offered"].includes(String(row.status || "waiting")))
+    .map((row) => [String(row.team_key || row.teamKey || "").toLowerCase(), row]));
+  return teams.map((team, index) => {
+    const key = teamKey(team, index);
+    const preference = normaliseTrainingPreference(map.get(key) || {}, team, index, seasonPhase, resolveTrainingSchedulingPolicy({ policies, team, seasonPhase }));
+    const waiting = waitlistMap.get(key);
+    if (!waiting) return preference;
+    const preferredDays = Array.isArray(waiting.preferred_days || waiting.preferredDays) && (waiting.preferred_days || waiting.preferredDays).length
+      ? (waiting.preferred_days || waiting.preferredDays).map(Number)
+      : preference.preferredDays;
+    const preferredStartTimes = Array.isArray(waiting.preferred_start_times || waiting.preferredStartTimes) && (waiting.preferred_start_times || waiting.preferredStartTimes).length
+      ? (waiting.preferred_start_times || waiting.preferredStartTimes).map((value) => String(value).slice(0, 5))
+      : preference.preferredStartTimes;
+    return {
+      ...preference,
+      preferredDays,
+      preferredStartTimes,
+      requiredDurationMinutes: Number(waiting.required_duration_minutes ?? waiting.requiredDurationMinutes ?? preference.requiredDurationMinutes),
+      priorityWeight: Math.max(preference.priorityWeight, Number(waiting.priority || 50)),
+      notes: [preference.notes, waiting.notes, "Included from the active training waitlist"].filter(Boolean).join("\n"),
+      waitlistEntryId: String(waiting.id || ""),
+    };
+  });
 }
 
 function seasonClubPolicy(policies, seasonPhase) {
@@ -119,6 +142,7 @@ export default function SmartTrainingAllocationWorkspace({
   allocationRuns = [],
   policies = [],
   preferenceProposals = [],
+  waitlist = [],
   canManage = false,
   saving = false,
   onSavePreference,
@@ -133,7 +157,7 @@ export default function SmartTrainingAllocationWorkspace({
   const [range, setRange] = useState(() => dateDefaults("regular"));
   const [defaultStartTimes, setDefaultStartTimes] = useState(initialClubPolicy.preferredStartTimes);
   const [selectedTeamKey, setSelectedTeamKey] = useState(() => teamKey(teams[0] || {}, 0));
-  const [editablePreferences, setEditablePreferences] = useState(() => normalisePreferences(teams, preferences, "regular", policies));
+  const [editablePreferences, setEditablePreferences] = useState(() => normalisePreferences(teams, preferences, "regular", policies, waitlist));
   const [draft, setDraft] = useState(null);
 
   const savedSeasonPolicy = useMemo(() => seasonClubPolicy(policies, seasonPhase), [policies, seasonPhase]);
@@ -142,10 +166,10 @@ export default function SmartTrainingAllocationWorkspace({
     setRange(dateDefaults(seasonPhase));
     setMode(savedSeasonPolicy.allocationMode);
     setDefaultStartTimes(savedSeasonPolicy.preferredStartTimes);
-    setEditablePreferences(normalisePreferences(teams, preferences, seasonPhase, policies));
+    setEditablePreferences(normalisePreferences(teams, preferences, seasonPhase, policies, waitlist));
     setSelectedTeamKey((current) => current && teams.some((team, index) => teamKey(team, index) === current) ? current : teamKey(teams[0] || {}, 0));
     setDraft(null);
-  }, [policies, preferences, savedSeasonPolicy, seasonPhase, teams]);
+  }, [policies, preferences, savedSeasonPolicy, seasonPhase, teams, waitlist]);
 
   const selectedPreference = editablePreferences.find((preference) => preference.teamKey === selectedTeamKey) || editablePreferences[0] || null;
   const latestRun = useMemo(() => (Array.isArray(allocationRuns) ? allocationRuns : []).filter((run) => String(run.season_phase || run.seasonPhase) === seasonPhase).sort((a, b) => String(b.created_at || b.createdAt || "").localeCompare(String(a.created_at || a.createdAt || "")))[0] || null, [allocationRuns, seasonPhase]);
@@ -158,12 +182,25 @@ export default function SmartTrainingAllocationWorkspace({
   return <div className="space-y-6">
     <section className="overflow-hidden rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-950 via-slate-950 to-slate-900 p-6 text-white shadow-lg">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-violet-300"><WandSparkles size={15} /> Smart training allocation</div><h2 className="mt-2 text-2xl font-black">Build an explainable summer or winter draft</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-300">Ground Control respects usual slots, age groups, pitch suitability, winter inventory, coach clashes and locked allocations. Nothing is published until an operator approves it.</p></div>{latestRun ? <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs font-bold text-slate-300"><div className="text-[10px] font-black uppercase tracking-wide text-violet-300">Latest saved run</div><div className="mt-1 text-sm font-black text-white">{modeLabel(latestRun.mode)} · {String(latestRun.status || "draft")}</div></div> : null}</div>
-      <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Season</span><select value={seasonPhase} onChange={(event) => setSeasonPhase(event.target.value)} className="input">{SEASON_PHASE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Scheduling mode</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="input">{SMART_ALLOCATION_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><span className={`block text-[10px] font-bold ${mode === savedSeasonPolicy.allocationMode ? "text-emerald-300" : "text-amber-300"}`}>{mode === savedSeasonPolicy.allocationMode ? "Saved season default" : "Unsaved - save the Club default master rule"}</span></label>
-        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">From</span><input type="date" value={range.startDate} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} className="input" /></label>
-        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">To</span><input type="date" value={range.endDate} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} className="input" /></label>
-        <button type="button" onClick={buildDraft} disabled={!teams.length || (seasonPhase === "winter" && !winterSlots.length)} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-400 px-4 text-sm font-black text-slate-950 disabled:opacity-50"><Sparkles size={17} /> Build draft</button>
+      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">Planning setup</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Season</span><select value={seasonPhase} onChange={(event) => setSeasonPhase(event.target.value)} className="input">{SEASON_PHASE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Scheduling mode</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="input">{SMART_ALLOCATION_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><span className={`block text-[10px] font-bold ${mode === savedSeasonPolicy.allocationMode ? "text-emerald-300" : "text-amber-300"}`}>{mode === savedSeasonPolicy.allocationMode ? "Saved season default" : "Unsaved - save the Club default master rule"}</span></label>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">Draft date range</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">From</span><input type="date" value={range.startDate} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} className="input" /></label>
+            <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wide text-slate-400">To</span><input type="date" value={range.endDate} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} className="input" /></label>
+          </div>
+        </div>
+        <div className="flex flex-col justify-between rounded-2xl border border-violet-300/30 bg-violet-400/10 p-4">
+          <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-200">Draft action</div><p className="mt-2 text-xs font-semibold leading-5 text-slate-300">Build a reviewable proposal. Nothing is published automatically.</p></div>
+          <button type="button" onClick={buildDraft} disabled={!teams.length || (seasonPhase === "winter" && !winterSlots.length)} className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-400 px-4 text-sm font-black text-slate-950 disabled:opacity-50"><Sparkles size={17} /> Build draft</button>
+        </div>
       </div>
       {seasonPhase === "winter" && !winterSlots.length ? <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 p-3 text-xs font-bold text-amber-100">Add fixed winter-site slots before running winter allocation.</div> : null}
     </section>

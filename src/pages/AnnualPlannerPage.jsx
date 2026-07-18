@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Ban,
+  Boxes,
   CalendarDays,
   CalendarRange,
   CloudRain,
@@ -39,6 +40,7 @@ import CoachRequestReviewDialog from "../components/coach/CoachRequestReviewDial
 import CoachRequestConversation from "../components/coach/CoachRequestConversation.jsx";
 import WinterSiteWorkspace from "../components/planning/WinterSiteWorkspace.jsx";
 import SmartTrainingAllocationWorkspace from "../components/planning/SmartTrainingAllocationWorkspace.jsx";
+import SeasonalResourceWorkspace from "../components/planning/SeasonalResourceWorkspace.jsx";
 import WeatherDisruptionDialog from "../components/planning/WeatherDisruptionDialog.jsx";
 import ClosureImpactResolutionDialog from "../components/planning/ClosureImpactResolutionDialog.jsx";
 import AnnualPlannerAnalyticsSummary from "../components/analytics/AnnualPlannerAnalyticsSummary.jsx";
@@ -68,6 +70,7 @@ import { normaliseCoachRequest, requestStatusLabel } from "../lib/coach/coachHub
 import { buildAnnualPlannerAnalyticsModel } from "../lib/analytics/annualPlannerAnalyticsEngine.js";
 import { allocationItemToPayload, allocationRunToPayload, trainingPreferenceToPayload } from "../lib/planning/smartTrainingAllocationEngine.js";
 import { trainingSchedulingPolicyToPayload } from "../lib/planning/trainingPolicyEngine.js";
+import { plannerResourceToPayload, seasonRolloverToPayload, waitlistEntryToPayload } from "../lib/planning/seasonalResourceEngine.js";
 import { calendarEventTone, COACH_CALENDAR_LEGEND, eventOccursOnDate, normaliseCoachPitchClosure } from "../lib/coach/sharedCalendarEngine.js";
 import {
   buildPilotRefinementSnapshot,
@@ -156,6 +159,10 @@ function blankBooking({ year, month, pitchCfg, settings, canManage = false } = {
     seasonPhase: "regular",
     siteInventoryId: "",
     siteSlotId: "",
+    participantCount: 0,
+    setupBufferMinutes: 0,
+    clearDownBufferMinutes: 0,
+    resourceRequirements: [],
     startDate: date,
     startTime: "18:00",
     endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
@@ -196,7 +203,7 @@ export default function AnnualPlannerPage({
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [tab, setTab] = useState("calendar");
-  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [], schedulingPolicies: [], preferenceProposals: [] });
+  const [workspace, setWorkspace] = useState({ settings: {}, bookings: [], blackouts: [], pitchClosures: [], closureImpacts: [], winterSites: [], winterSlots: [], allocationPreferences: [], allocationRuns: [], allocationItems: [], schedulingPolicies: [], preferenceProposals: [], resources: [], waitlist: [], seasonRollovers: [] });
   const [coachRequests, setCoachRequests] = useState([]);
   const [pilotWorkspace, setPilotWorkspace] = useState({ people: [], assignments: [], invitations: [], requests: [], messages: [], reminders: [], bookings: [], unavailable: false });
   const [coachReview, setCoachReview] = useState(null);
@@ -265,6 +272,9 @@ export default function AnnualPlannerPage({
         allocationItems: Array.isArray(result?.allocation_items || result?.allocationItems) ? (result.allocation_items || result.allocationItems) : [],
         schedulingPolicies: Array.isArray(result?.scheduling_policies || result?.schedulingPolicies) ? (result.scheduling_policies || result.schedulingPolicies) : [],
         preferenceProposals: Array.isArray(result?.preference_proposals || result?.preferenceProposals) ? (result.preference_proposals || result.preferenceProposals) : [],
+        resources: Array.isArray(result?.resources || result?.planner_resources || result?.plannerResources) ? (result.resources || result.planner_resources || result.plannerResources) : [],
+        waitlist: Array.isArray(result?.waitlist || result?.waitlist_entries || result?.waitlistEntries) ? (result.waitlist || result.waitlist_entries || result.waitlistEntries) : [],
+        seasonRollovers: Array.isArray(result?.season_rollovers || result?.seasonRollovers) ? (result.season_rollovers || result.seasonRollovers) : [],
       });
       setCoachRequests(
         (Array.isArray(coachPayload?.requests) ? coachPayload.requests : [])
@@ -421,8 +431,13 @@ export default function AnnualPlannerPage({
     winterSites: workspace.winterSites,
     winterSlots: workspace.winterSlots,
     requests: coachRequests,
+    allocationRuns: workspace.allocationRuns,
+    allocationItems: workspace.allocationItems,
     closureImpacts: workspace.closureImpacts,
-  }, { year }), [coachRequests, workspace.blackouts, workspace.bookings, workspace.closureImpacts, workspace.winterSites, workspace.winterSlots, year]);
+    resources: workspace.resources,
+    waitlist: workspace.waitlist,
+    seasonRollovers: workspace.seasonRollovers,
+  }, { year }), [coachRequests, workspace.allocationItems, workspace.allocationRuns, workspace.blackouts, workspace.bookings, workspace.closureImpacts, workspace.resources, workspace.seasonRollovers, workspace.waitlist, workspace.winterSites, workspace.winterSlots, year]);
 
   const openCoachAudience = useCallback(({ reason, bookingIds = [], blackoutIds = [], teamKeys = [] } = {}) => {
     const audience = buildAnnualPlannerCoachAudience({
@@ -521,6 +536,7 @@ export default function AnnualPlannerPage({
         blackouts: workspace.blackouts,
         matchdayBookings,
         pitches: pitchCfg,
+        resources: workspace.resources,
         ignoreId: effectiveDraft.id || "",
       });
       if (conflicts.length) {
@@ -791,6 +807,96 @@ export default function AnnualPlannerPage({
     }
   }
 
+  async function savePlannerResource(resource) {
+    setSaving(true);
+    try {
+      const payload = plannerResourceToPayload(resource);
+      if (isSupaConfigured() && clubId) {
+        await DB.saveAnnualPlannerResource(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const rows = Array.isArray(current.resources) ? current.resources : [];
+        const id = payload.id || crypto.randomUUID();
+        const next = rows.some((row) => String(row.id) === String(id))
+          ? rows.map((row) => String(row.id) === String(id) ? { ...payload, id } : row)
+          : [...rows, { ...payload, id }];
+        writeLocalWorkspace(clubId, { ...current, resources: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success(resource.id ? "Shared resource updated" : "Shared resource added");
+    } catch (resourceError) {
+      toast.error("Shared resource could not be saved", { description: resourceError?.message });
+      throw resourceError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deletePlannerResource(resourceId) {
+    setSaving(true);
+    try {
+      if (isSupaConfigured() && clubId) {
+        await DB.deleteAnnualPlannerResource(clubId, resourceId);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        writeLocalWorkspace(clubId, { ...current, resources: (current.resources || []).filter((row) => String(row.id) !== String(resourceId)) });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success("Shared resource removed");
+    } catch (resourceError) {
+      toast.error("Shared resource could not be removed", { description: resourceError?.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveWaitlistEntry(entry) {
+    setSaving(true);
+    try {
+      const payload = waitlistEntryToPayload(entry);
+      if (isSupaConfigured() && clubId) {
+        await DB.saveAnnualPlannerWaitlistEntry(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const rows = Array.isArray(current.waitlist) ? current.waitlist : [];
+        const id = payload.id || crypto.randomUUID();
+        const next = rows.some((row) => String(row.id) === String(id))
+          ? rows.map((row) => String(row.id) === String(id) ? { ...payload, id } : row)
+          : [...rows, { ...payload, id }];
+        writeLocalWorkspace(clubId, { ...current, waitlist: next });
+      }
+      await loadWorkspace({ quiet: true });
+      toast.success(entry.id ? "Waitlist entry updated" : "Team added to the training waitlist");
+    } catch (waitlistError) {
+      toast.error("Waitlist entry could not be saved", { description: waitlistError?.message });
+      throw waitlistError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createSeasonRollover(rollover) {
+    setSaving(true);
+    try {
+      const payload = seasonRolloverToPayload(rollover);
+      if (isSupaConfigured() && clubId) {
+        await DB.createAnnualPlannerSeasonRollover(clubId, payload);
+      } else {
+        const current = readLocalWorkspace(clubId);
+        const record = { ...payload, id: crypto.randomUUID(), status: "draft", created_at: new Date().toISOString() };
+        writeLocalWorkspace(clubId, { ...current, seasonRollovers: [record, ...(current.seasonRollovers || [])] });
+      }
+      await loadWorkspace({ quiet: true });
+      setTab("smart");
+      toast.success("Season rollover draft created", { description: "Review the copied team profiles and allocations before publishing." });
+    } catch (rolloverError) {
+      toast.error("Season rollover could not be created", { description: rolloverError?.message });
+      throw rolloverError;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function reviewCoachPreferenceProposal(proposal, decision) {
     setSaving(true);
     try {
@@ -912,6 +1018,7 @@ export default function AnnualPlannerPage({
             ["availability", "Availability", Ban, "Closures, blackouts and controls"],
             ["winter", "Winter sites", Snowflake, "Fixed external and seasonal slots"],
             ["smart", "Smart allocation", Sparkles, "Manual, assisted and automatic drafts"],
+            ["seasonal", "Resources & rollover", Boxes, "Season transitions, waitlists and shared equipment"],
             ["insights", "Insights", Activity, "Utilisation, weather and grant evidence"],
           ].map(([key, label, Icon, detail]) => (
             <button
@@ -1000,6 +1107,7 @@ export default function AnnualPlannerPage({
           allocationRuns={workspace.allocationRuns}
           policies={workspace.schedulingPolicies}
           preferenceProposals={workspace.preferenceProposals}
+          waitlist={workspace.waitlist}
           canManage={canManage}
           saving={saving}
           onSavePreference={saveSmartPreference}
@@ -1007,6 +1115,27 @@ export default function AnnualPlannerPage({
           onReviewProposal={reviewCoachPreferenceProposal}
           onSaveDraft={(draft) => saveSmartDraft(draft)}
           onPublishDraft={(draft) => saveSmartDraft(draft, { publish: true })}
+        />
+      ) : null}
+
+      {tab === "seasonal" ? (
+        <SeasonalResourceWorkspace
+          teams={teamCfg}
+          pitches={pitchCfg}
+          winterSites={workspace.winterSites}
+          preferences={workspace.allocationPreferences}
+          allocationRuns={workspace.allocationRuns}
+          allocationItems={workspace.allocationItems}
+          resources={workspace.resources}
+          waitlist={workspace.waitlist}
+          rollovers={workspace.seasonRollovers}
+          canManage={canManage}
+          saving={saving}
+          onSaveResource={savePlannerResource}
+          onDeleteResource={deletePlannerResource}
+          onSaveWaitlist={saveWaitlistEntry}
+          onUpdateWaitlist={saveWaitlistEntry}
+          onCreateRollover={createSeasonRollover}
         />
       ) : null}
 
@@ -1073,6 +1202,7 @@ export default function AnnualPlannerPage({
         canManage={canManage}
         winterSites={workspace.winterSites}
         winterSlots={workspace.winterSlots}
+        resources={workspace.resources}
         onSave={saveBooking}
       />
 
@@ -1237,6 +1367,8 @@ function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, 
         <div className={`rounded-2xl border p-4 ${TYPE_TONES[booking.bookingType] || TYPE_TONES.meeting}`}><div className="flex items-center justify-between"><span className="text-xs font-black uppercase tracking-wide">{ANNUAL_BOOKING_TYPES.find((type) => type.value === booking.bookingType)?.label || booking.bookingType}</span><StatusBadge status={booking.status} /></div><div className="mt-4 text-lg font-black">{formatDate(booking.startAt, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><div className="mt-1 text-sm font-bold">{booking.startTime}–{booking.endTime}</div></div>
         <Detail icon={Users} label="Team" value={booking.teamName || "Club-wide booking"} />
         <Detail icon={MapPin} label="Facility" value={[booking.venueName, booking.pitchName, booking.pitchAreaName].filter(Boolean).join(" · ") || "To be allocated"} />
+        {booking.participantCount ? <Detail icon={Users} label="Participants" value={`${booking.participantCount} expected`} /> : null}
+        {(booking.setupBufferMinutes || booking.clearDownBufferMinutes) ? <Detail icon={Clock3} label="Operational buffer" value={`${booking.setupBufferMinutes || 0} min setup · ${booking.clearDownBufferMinutes || 0} min clear-down`} /> : null}
         {booking.opponentName ? <Detail icon={Sparkles} label="Opponent" value={booking.opponentName} /> : null}
         {canViewCosts ? <Detail icon={PoundSterling} label="Planned cost" value={`${money(booking.costPence)} · ${financeStatus.replaceAll("_", " ")}`} /> : null}
         {booking.contactName || booking.contactEmail ? <Detail icon={Users} label="Booking contact" value={[booking.contactName, booking.contactEmail].filter(Boolean).join(" · ")} /> : null}
@@ -1248,7 +1380,7 @@ function BookingDrawer({ booking, canOperate, canApprove, canViewCosts, saving, 
   </div>;
 }
 
-function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, blackouts, matchdayBookings, canViewCosts, approvalRequired, canManage, winterSites = [], winterSlots = [], onSave }) {
+function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, blackouts, matchdayBookings, canViewCosts, approvalRequired, canManage, winterSites = [], winterSlots = [], resources = [], onSave }) {
   const [localError, setLocalError] = useState("");
   if (!draft) return null;
 
@@ -1262,12 +1394,18 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
     blackouts,
     matchdayBookings,
     pitches: pitchCfg,
+    resources,
     ignoreId: draft.id || "",
   }));
   const suggestions = conflicts.length
-    ? findAnnualPlannerSuggestions(occurrences[0] || draft, { bookings, blackouts, matchdayBookings, pitches: pitchCfg }, { limit: 3 })
+    ? findAnnualPlannerSuggestions(occurrences[0] || draft, { bookings, blackouts, matchdayBookings, pitches: pitchCfg, resources }, { limit: 3 })
     : [];
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const toggleBookingResource = (resourceId) => setDraft((current) => {
+    const requirements = Array.isArray(current.resourceRequirements) ? current.resourceRequirements : [];
+    const existing = requirements.find((item) => item.resourceId === resourceId);
+    return { ...current, resourceRequirements: existing ? requirements.filter((item) => item.resourceId !== resourceId) : [...requirements, { resourceId, quantity: 1 }] };
+  });
 
   const choosePitch = (pitchId) => {
     const pitch = pitchCfg.find((row) => String(row.id) === String(pitchId));
@@ -1354,6 +1492,10 @@ function BookingEditor({ draft, setDraft, saving, pitchCfg, teamCfg, bookings, b
             <Field label="Date"><input type="date" value={draft.startDate || ""} onChange={(event) => set("startDate", event.target.value)} className="input" /></Field>
             <Field label="Starts"><input type="time" step="900" value={normaliseTime(draft.startTime)} onChange={(event) => set("startTime", event.target.value)} className="input" /></Field>
             <Field label="Finishes"><input type="time" step="900" value={normaliseTime(draft.endTime, "19:30")} onChange={(event) => set("endTime", event.target.value)} className="input" /></Field>
+            <Field label="Expected participants"><input type="number" min="0" max="999" value={Number(draft.participantCount || 0)} onChange={(event) => set("participantCount", Number(event.target.value))} className="input" /></Field>
+            <Field label="Setup buffer"><select value={Number(draft.setupBufferMinutes || 0)} onChange={(event) => set("setupBufferMinutes", Number(event.target.value))} className="input">{[0,15,30,45,60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></Field>
+            <Field label="Clear-down buffer"><select value={Number(draft.clearDownBufferMinutes || 0)} onChange={(event) => set("clearDownBufferMinutes", Number(event.target.value))} className="input">{[0,15,30,45,60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></Field>
+            {resources.filter((resource) => resource.active !== false).length ? <div className="sm:col-span-2"><div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Shared resources</div><div className="mt-2 grid gap-2 sm:grid-cols-2">{resources.filter((resource) => resource.active !== false).map((resource) => { const selected = (draft.resourceRequirements || []).some((item) => String(item.resourceId || item.resource_id) === String(resource.id)); return <button key={resource.id} type="button" onClick={() => toggleBookingResource(String(resource.id))} className={`rounded-xl border p-3 text-left text-xs font-black ${selected ? "border-sky-300 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-700"}`}>{resource.name} <span className="block pt-1 text-[10px] font-semibold opacity-70">{resource.quantity} available</span></button>; })}</div><span className="mt-1 block text-[11px] font-semibold text-slate-500">Selected resources are capacity-checked across setup and clear-down buffers.</span></div> : null}
 
             {!draft.id ? <>
               <Field label="Repeats"><select value={draft.recurrence || "none"} onChange={(event) => set("recurrence", event.target.value)} className="input">{RECURRENCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>

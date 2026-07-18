@@ -10,12 +10,21 @@ export function isFullPitchArea(value) {
 export function pitchAreaOptions(pitch = {}, { includeFullPitch = true } = {}) {
   const safePitch = pitch && typeof pitch === "object" ? pitch : {};
   const raw = Array.isArray(safePitch.trainingAreas || safePitch.training_areas) ? (safePitch.trainingAreas || safePitch.training_areas) : [];
-  const areas = raw.map((area, index) => ({
-    id: clean(area?.id || `area-${index + 1}`),
-    label: clean(area?.label || area?.name || `Area ${index + 1}`),
-  })).filter((area) => area.id && area.label && !isFullPitchArea(area.id));
+  const areas = raw.map((area, index) => {
+    const maxParticipants = Math.max(0, Math.round(finite(area?.maxParticipants ?? area?.max_participants, 0)));
+    return {
+      id: clean(area?.id || `area-${index + 1}`),
+      label: clean(area?.label || area?.name || `Area ${index + 1}`),
+      ...(maxParticipants > 0 ? { maxParticipants } : {}),
+    };
+  }).filter((area) => area.id && area.label && !isFullPitchArea(area.id));
+  const fullPitchMaxParticipants = Math.max(0, Math.round(finite(safePitch.maxParticipants ?? safePitch.max_participants, 0)));
   return includeFullPitch && areas.length
-    ? [{ id: FULL_PITCH_AREA_ID, label: FULL_PITCH_AREA_LABEL }, ...areas]
+    ? [{
+      id: FULL_PITCH_AREA_ID,
+      label: FULL_PITCH_AREA_LABEL,
+      ...(fullPitchMaxParticipants > 0 ? { maxParticipants: fullPitchMaxParticipants } : {}),
+    }, ...areas]
     : areas;
 }
 
@@ -98,6 +107,14 @@ export function bookingDurationMinutes(booking = {}) {
   return Math.max(15, endMinutes - startMinutes);
 }
 
+function normaliseResourceRequirements(value) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.map((item) => ({
+    resourceId: clean(item?.resource_id || item?.resourceId),
+    quantity: Math.max(1, Math.round(finite(item?.quantity, 1))),
+  })).filter((item) => item.resourceId);
+}
+
 export function normaliseAnnualBooking(row = {}) {
   const startAt = row.start_at || row.startAt || null;
   const endAt = row.end_at || row.endAt || null;
@@ -123,6 +140,10 @@ export function normaliseAnnualBooking(row = {}) {
     seasonPhase: clean(row.season_phase || row.seasonPhase || "regular").toLowerCase(),
     siteInventoryId: clean(row.site_inventory_id || row.siteInventoryId),
     siteSlotId: clean(row.site_slot_id || row.siteSlotId),
+    participantCount: Math.max(0, Math.round(finite(row.participant_count ?? row.participantCount, 0))),
+    setupBufferMinutes: Math.max(0, Math.min(240, Math.round(finite(row.setup_buffer_minutes ?? row.setupBufferMinutes, 0)))),
+    clearDownBufferMinutes: Math.max(0, Math.min(240, Math.round(finite(row.clear_down_buffer_minutes ?? row.clearDownBufferMinutes, 0)))),
+    resourceRequirements: normaliseResourceRequirements(row.resource_requirements || row.resourceRequirements),
     disruptionStatus: clean(row.disruption_status || row.disruptionStatus || "none").toLowerCase(),
     disruptionReason: clean(row.disruption_reason || row.disruptionReason),
     disruptionNotes: clean(row.disruption_notes || row.disruptionNotes),
@@ -201,6 +222,10 @@ export function annualBookingToPayload(booking = {}) {
     season_phase: normalised.seasonPhase || "regular",
     site_inventory_id: normalised.siteInventoryId || null,
     site_slot_id: normalised.siteSlotId || null,
+    participant_count: normalised.participantCount,
+    setup_buffer_minutes: normalised.setupBufferMinutes,
+    clear_down_buffer_minutes: normalised.clearDownBufferMinutes,
+    resource_requirements: normalised.resourceRequirements.map((item) => ({ resource_id: item.resourceId, quantity: item.quantity })),
     start_at: normalised.startAt,
     end_at: normalised.endAt,
     series_id: normalised.seriesId || null,
@@ -286,26 +311,35 @@ function intervalsOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
-function bookingInterval(booking = {}) {
+function bookingInterval(booking = {}, { buffered = false } = {}) {
   const start = new Date(booking.startAt || booking.start_at || 0);
   const end = new Date(booking.endAt || booking.end_at || 0);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
+  if (buffered) {
+    start.setMinutes(start.getMinutes() - Math.max(0, Number(booking.setupBufferMinutes ?? booking.setup_buffer_minutes ?? 0) || 0));
+    end.setMinutes(end.getMinutes() + Math.max(0, Number(booking.clearDownBufferMinutes ?? booking.clear_down_buffer_minutes ?? 0) || 0));
+  }
   return { start, end };
 }
 
-export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], ignoreId = "" } = {}) {
+export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], resources = [], ignoreId = "" } = {}) {
   const normalised = normaliseAnnualBooking(candidate);
   const interval = bookingInterval(normalised);
+  const facilityInterval = bookingInterval(normalised, { buffered: true });
   if (!interval) {
     return [{ type: "invalid_time", severity: "danger", title: "Invalid booking time", message: "Choose a valid start and finish time." }];
   }
 
   const conflicts = [];
-  const resources = [...bookings, ...matchdayBookings]
+  const activeBookings = [...bookings, ...matchdayBookings]
     .map(normaliseAnnualBooking)
     .filter((booking) => booking.id !== ignoreId && activeBooking(booking));
 
-  const overlapping = resources.filter((booking) => {
+  const overlapping = activeBookings.filter((booking) => {
+    const existing = bookingInterval(booking, { buffered: true });
+    return existing && facilityInterval && intervalsOverlap(facilityInterval.start, facilityInterval.end, existing.start, existing.end);
+  });
+  const teamOverlapping = activeBookings.filter((booking) => {
     const existing = bookingInterval(booking);
     return existing && intervalsOverlap(interval.start, interval.end, existing.start, existing.end);
   });
@@ -351,7 +385,7 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
     }
   }
 
-  overlapping.forEach((booking) => {
+  teamOverlapping.forEach((booking) => {
     const sameTeam = normalised.teamKey && booking.teamKey && normalised.teamKey === booking.teamKey;
     const splitTrainingSession = sameTeam
       && normalised.bookingType === "training"
@@ -370,6 +404,46 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
         booking,
         title: "Team already committed",
         message: `${booking.teamName || "This team"} already has ${booking.title} at this time.`,
+      });
+    }
+  });
+
+  if (normalised.participantCount > 0 && normalised.pitchId) {
+    const pitch = (Array.isArray(pitches) ? pitches : []).find((row) => clean(row.id) === normalised.pitchId) || null;
+    const area = pitchAreaOptions(pitch, { includeFullPitch: true }).find((row) => row.id === normalised.pitchAreaId) || null;
+    const participantLimit = Math.max(0, finite(area?.maxParticipants || pitch?.maxParticipants || pitch?.max_participants, 0));
+    if (participantLimit > 0 && normalised.participantCount > participantLimit) {
+      conflicts.push({
+        type: "participant_capacity",
+        severity: "danger",
+        title: "Participant capacity exceeded",
+        message: `${normalised.pitchAreaName || normalised.pitchName || "This space"} supports up to ${participantLimit} participants, but ${normalised.participantCount} were entered.`,
+      });
+    }
+  }
+
+  const resourceRows = (Array.isArray(resources) ? resources : []).map((resource) => ({
+    id: clean(resource.id),
+    name: clean(resource.name) || "Shared resource",
+    quantity: Math.max(1, finite(resource.quantity, 1)),
+    active: resource.active !== false,
+  }));
+  normalised.resourceRequirements.forEach((requirement) => {
+    const resource = resourceRows.find((row) => row.id === requirement.resourceId && row.active);
+    if (!resource) {
+      conflicts.push({ type: "resource_missing", severity: "danger", title: "Resource unavailable", message: "A selected shared resource is no longer active." });
+      return;
+    }
+    const used = overlapping.reduce((sum, booking) => {
+      const match = booking.resourceRequirements.find((item) => item.resourceId === requirement.resourceId);
+      return sum + (match?.quantity || 0);
+    }, 0);
+    if (used + requirement.quantity > resource.quantity) {
+      conflicts.push({
+        type: "resource_capacity",
+        severity: "danger",
+        title: `${resource.name} capacity reached`,
+        message: `${used} of ${resource.quantity} are already reserved during the buffered booking window.`,
       });
     }
   });

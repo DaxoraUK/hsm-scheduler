@@ -66,6 +66,9 @@ export function normaliseAnnualPlannerAnalyticsPayload(payload = {}) {
     allocationRuns: Array.isArray(payload.allocation_runs || payload.allocationRuns) ? (payload.allocation_runs || payload.allocationRuns) : [],
     allocationItems: Array.isArray(payload.allocation_items || payload.allocationItems) ? (payload.allocation_items || payload.allocationItems) : [],
     closureImpacts: Array.isArray(payload.closure_impacts || payload.closureImpacts) ? (payload.closure_impacts || payload.closureImpacts) : [],
+    resources: Array.isArray(payload.resources || payload.planner_resources || payload.plannerResources) ? (payload.resources || payload.planner_resources || payload.plannerResources) : [],
+    waitlist: Array.isArray(payload.waitlist || payload.waitlist_entries || payload.waitlistEntries) ? (payload.waitlist || payload.waitlist_entries || payload.waitlistEntries) : [],
+    seasonRollovers: Array.isArray(payload.season_rollovers || payload.seasonRollovers) ? (payload.season_rollovers || payload.seasonRollovers) : [],
   };
 }
 
@@ -144,6 +147,13 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   const closureRelocated = closureImpacts.filter((row) => text(row.status) === "relocated");
   const closureCancelled = closureImpacts.filter((row) => text(row.status) === "cancelled");
   const closurePostponed = closureImpacts.filter((row) => text(row.status) === "postponed");
+  const activeResources = data.resources.filter((row) => row.active !== false);
+  const waitingRows = data.waitlist.filter((row) => text(row.status || "waiting") === "waiting");
+  const offeredWaitlistRows = data.waitlist.filter((row) => text(row.status) === "offered");
+  const allocatedWaitlistRows = data.waitlist.filter((row) => text(row.status) === "allocated");
+  const rolloverRows = data.seasonRollovers.filter((row) => String(row.created_at || row.createdAt || "").startsWith(yearText));
+  const bufferedBookings = active.filter((booking) => booking.setupBufferMinutes > 0 || booking.clearDownBufferMinutes > 0);
+  const resourceReservations = active.reduce((sum, booking) => sum + (Array.isArray(booking.resourceRequirements) ? booking.resourceRequirements.length : 0), 0);
 
   const grantNarratives = [];
   if (weatherLostHours > 0) grantNarratives.push(`${round(weatherLostHours)} scheduled training and friendly hours were lost or postponed because of weather.`);
@@ -151,11 +161,14 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
   if (externalWinterCostPence > 0) grantNarratives.push(`External winter provision currently represents GBP ${(externalWinterCostPence / 100).toFixed(2)} of recorded facility cost.`);
   if (publishedAllocationRuns.length > 0) grantNarratives.push(`${publishedAllocationRuns.length} reviewed smart allocation run${publishedAllocationRuns.length === 1 ? "" : "s"} supported consistent seasonal training access.`);
   if (closureImpacts.length > 0) grantNarratives.push(`${closureImpacts.length} approved session${closureImpacts.length === 1 ? " was" : "s were"} affected by facility closures; ${closureRelocated.length} were relocated and ${closureCancelled.length} were cancelled.`);
+  if (waitingRows.length > 0) grantNarratives.push(`${waitingRows.length} team${waitingRows.length === 1 ? " remains" : "s remain"} on the training waitlist because suitable facility capacity is not yet available.`);
+  if (allocatedWaitlistRows.length > 0) grantNarratives.push(`${allocatedWaitlistRows.length} waitlisted team${allocatedWaitlistRows.length === 1 ? " has" : "s have"} since been allocated a training slot.`);
+  if (resourceReservations > 0) grantNarratives.push(`${resourceReservations} shared-resource reservation${resourceReservations === 1 ? " was" : "s were"} recorded across annual facility bookings.`);
   if (!grantNarratives.length) grantNarratives.push("Record completed sessions, weather disruptions and winter allocations to build grant-ready facility evidence.");
 
   return Object.freeze({
     year: Number(year),
-    hasData: bookings.length > 0 || data.winterSites.length > 0 || requestRows.length > 0,
+    hasData: bookings.length > 0 || data.winterSites.length > 0 || requestRows.length > 0 || data.waitlist.length > 0 || data.resources.length > 0,
     bookings,
     winterSites: data.winterSites,
     winterSlots: data.winterSlots,
@@ -183,6 +196,13 @@ export function buildAnnualPlannerAnalyticsModel(payload = {}, { year = new Date
       smartAllocatedTeams: allocationItems.filter((row) => text(row.status) === "published").length,
       unassignedAllocationTeams: unassignedAllocationItems.length,
       averageAllocationScore,
+      activeResources: activeResources.length,
+      waitingTeams: waitingRows.length,
+      offeredWaitlistTeams: offeredWaitlistRows.length,
+      allocatedWaitlistTeams: allocatedWaitlistRows.length,
+      seasonRollovers: rolloverRows.length,
+      bufferedBookings: bufferedBookings.length,
+      resourceReservations,
       closureAffectedBookings: closureImpacts.length,
       closureResolvedBookings: closureResolved.length,
       closureAwaitingCoach: closureAwaitingCoach.length,
