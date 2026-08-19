@@ -8,6 +8,10 @@ export const LANCASHIRE_AMATEUR_FIXTURE_FEEDS = Object.freeze([
   { id: "632766284", name: "Lancashire Amateur League - Division Four" },
 ]);
 
+export const BBDFL_FIXTURE_FEEDS = Object.freeze([
+  { id: "167398131", name: "BBDFL - Horwich St. Mary's club fixtures" },
+]);
+
 export function normaliseFullTimeFeedId(value) {
   const text = String(value || "").trim();
   if (FEED_ID_PATTERN.test(text)) return text;

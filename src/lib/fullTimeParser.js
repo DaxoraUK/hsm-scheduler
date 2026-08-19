@@ -10,14 +10,18 @@ function normalise(value) {
   return clean(value).toLowerCase().replace(/[.'’]/g, "");
 }
 
+function normaliseProviderName(value) {
+  return clean(value).toLowerCase().replace(/\\+['’]?/g, "").replace(/[.'’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function aliases(values = DEFAULT_CLUB_ALIASES) {
   const source = Array.isArray(values) ? values : String(values || "").split(",");
-  const cleaned = source.map(normalise).filter(Boolean);
+  const cleaned = source.map(normaliseProviderName).filter(Boolean);
   return cleaned.length ? cleaned : [...DEFAULT_CLUB_ALIASES];
 }
 
 export function isHSMHome(teamName, clubAliases = DEFAULT_CLUB_ALIASES) {
-  const candidate = normalise(teamName);
+  const candidate = normaliseProviderName(teamName);
   return aliases(clubAliases).some((keyword) => candidate.includes(keyword));
 }
 

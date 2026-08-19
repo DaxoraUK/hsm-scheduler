@@ -5,6 +5,7 @@ import { getConfiguredFixtureSources } from "../../src/hooks/useFixtureFetcher.j
 import { parseFullTimeDate, parseFullTimeHtml } from "../../src/lib/fullTimeParser.js";
 import {
   buildFullTimeFeedDocument,
+  BBDFL_FIXTURE_FEEDS,
   LANCASHIRE_AMATEUR_FIXTURE_FEEDS,
   normaliseFullTimeFeedId,
 } from "../../src/lib/fullTimeFeed.js";
@@ -27,6 +28,10 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     expect(LANCASHIRE_AMATEUR_FIXTURE_FEEDS.map((feed) => feed.id)).toEqual([
       "329570196", "694052039", "853774480", "17848835", "632766284",
     ]);
+  });
+
+  test("includes the verified BBDFL club fixture feed", () => {
+    expect(BBDFL_FIXTURE_FEEDS).toEqual([{ id: "167398131", name: "BBDFL - Horwich St. Mary's club fixtures" }]);
   });
 
   test("normalises feed sources without requiring a legacy page URL", () => {

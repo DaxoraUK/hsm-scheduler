@@ -10,6 +10,7 @@ import {
 describe("FA Full-Time fixture parsing", () => {
   test("recognises supported club-name variants", () => {
     expect(isHSMHome("Horwich St. Mary's U14 Spartans")).toBe(true);
+    expect(isHSMHome("Horwich St. Mary\\'s", ["Horwich St. Mary's"])).toBe(true);
     expect(isHSMHome("HSM Reserves")).toBe(true);
     expect(isHSMHome("Another Club")).toBe(false);
   });
