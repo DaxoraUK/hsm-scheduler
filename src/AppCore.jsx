@@ -1673,15 +1673,25 @@ function App() {
       return;
     }
 
-    setSatHasRun(false);
-    setSatFetchStatus([]);
-    setSatScheduled([]);
-    setSatUnresolved([]);
-
-    const { statuses, fixtures } = await fetchSaturdayFixtures(satDate);
-
-    setSatFetchStatus(statuses);
-    runSat(fixtures);
+    try {
+      const { statuses, fixtures, skipped, partial } = await fetchSaturdayFixtures(satDate);
+      if (skipped) {
+        toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
+        return false;
+      }
+      setSatFetchStatus(statuses);
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      setSatHasRun(false);
+      setSatScheduled([]);
+      setSatUnresolved([]);
+      runSat(fixtures);
+      if (!fixtures.length) toast.info("No Saturday home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
+      return true;
+    } catch (error) {
+      if (error?.statuses) setSatFetchStatus(error.statuses);
+      toast.error("Full-Time import failed", { description: error?.message || "The existing Saturday schedule was left unchanged." });
+      return false;
+    }
   };
 
   const runSun = useCallback(
@@ -1734,9 +1744,20 @@ function App() {
       return;
     }
 
-    const fixtures = await fetchSundayFixtures(sunDate);
-
-    runSun(fixtures);
+    try {
+      const { fixtures, skipped, partial } = await fetchSundayFixtures(sunDate);
+      if (skipped) {
+        toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
+        return false;
+      }
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
+      runSun(fixtures);
+      if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
+      return true;
+    } catch (error) {
+      toast.error("Full-Time import failed", { description: error?.message || "The existing Sunday schedule was left unchanged." });
+      return false;
+    }
   };
 
   const runMidweek = useCallback(
@@ -1801,14 +1822,25 @@ function App() {
       return;
     }
 
-    setMidweekHasRun(false);
-    setMidweekFetchStatus([]);
-    setMidweekScheduled([]);
-    setMidweekUnresolved([]);
-
-    const { statuses, fixtures } = await fetchMidweekFixtures(midweekDate);
-    setMidweekFetchStatus(statuses);
-    runMidweek(fixtures);
+    try {
+      const { statuses, fixtures, skipped, partial } = await fetchMidweekFixtures(midweekDate);
+      if (skipped) {
+        toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
+        return false;
+      }
+      setMidweekFetchStatus(statuses);
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      setMidweekHasRun(false);
+      setMidweekScheduled([]);
+      setMidweekUnresolved([]);
+      runMidweek(fixtures);
+      if (!fixtures.length) toast.info("No midweek home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
+      return true;
+    } catch (error) {
+      if (error?.statuses) setMidweekFetchStatus(error.statuses);
+      toast.error("Full-Time import failed", { description: error?.message || "The existing midweek schedule was left unchanged." });
+      return false;
+    }
   };
 
   const satOv = (i, k, v) =>
@@ -1963,7 +1995,7 @@ function App() {
   });
 
   const { fetchSaturdayFixtures, fetchSundayFixtures, fetchMidweekFixtures } =
-    useFixtureFetcher();
+    useFixtureFetcher(club.integrations?.fullTimeFa || {});
 
   const { resetAll } = useOperationsActions({
     setSatScheduled,

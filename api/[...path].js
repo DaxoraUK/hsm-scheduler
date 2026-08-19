@@ -6,6 +6,7 @@ import * as communicationsDispatch from "../server-api/communications/dispatch.j
 import * as resendWebhook from "../server-api/communications/webhooks/resend.js";
 import * as twilioWebhook from "../server-api/communications/webhooks/twilio.js";
 import * as health from "../server-api/health.js";
+import * as fullTime from "../server-api/full-time.js";
 import * as leagueCalendar from "../server-api/league/calendar.js";
 import * as leagueFinanceDelivery from "../server-api/league/finance-delivery.js";
 import * as leagueGeocodeVenues from "../server-api/league/geocode-venues.js";
@@ -24,6 +25,7 @@ const ROUTES = new Map([
   ["/api/communications/webhooks/resend", resendWebhook],
   ["/api/communications/webhooks/twilio", twilioWebhook],
   ["/api/health", health],
+  ["/api/full-time", fullTime],
   ["/api/league/calendar", leagueCalendar],
   ["/api/league/finance-delivery", leagueFinanceDelivery],
   ["/api/league/geocode-venues", leagueGeocodeVenues],

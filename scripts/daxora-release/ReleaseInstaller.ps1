@@ -16,10 +16,10 @@ function Invoke-Git([string[]]$Args) {
 
 function Backup-File([string]$Repo, [string]$BackupRoot, [string]$Relative) {
   $target = Join-Path $Repo $Relative.Replace("/", "\")
-  if (!(Test-Path $target -PathType Leaf)) { return }
+  if (!(Test-Path -LiteralPath $target -PathType Leaf)) { return }
   $backup = Join-Path $BackupRoot ("files\" + $Relative.Replace("/", "\"))
   New-Item -ItemType Directory -Force -Path (Split-Path $backup) | Out-Null
-  Copy-Item $target $backup -Force
+  Copy-Item -LiteralPath $target -Destination $backup -Force
 }
 
 function Test-CleanTrackedFile([string]$Repo, [string]$Relative) {
@@ -38,14 +38,14 @@ function Rollback-Files([string]$Repo, [string]$BackupRoot, [string[]]$Changed, 
   foreach ($relative in $Changed) {
     $backup = Join-Path $BackupRoot ("files\" + $relative.Replace("/", "\"))
     $target = Join-Path $Repo $relative.Replace("/", "\")
-    if (Test-Path $backup -PathType Leaf) {
+    if (Test-Path -LiteralPath $backup -PathType Leaf) {
       New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-      Copy-Item $backup $target -Force
+      Copy-Item -LiteralPath $backup -Destination $target -Force
     }
   }
   foreach ($relative in $Created) {
     $target = Join-Path $Repo $relative.Replace("/", "\")
-    if (Test-Path $target -PathType Leaf) { Remove-Item $target -Force }
+    if (Test-Path -LiteralPath $target -PathType Leaf) { Remove-Item -LiteralPath $target -Force }
   }
 }
 
@@ -69,8 +69,8 @@ function Install-DaxoraRelease {
 
   try {
     Write-Host "==> Release infrastructure engine: $Release"
-    if (!(Test-Path (Join-Path $Repo ".git") -PathType Container)) { throw "Git repository not found: $Repo" }
-    if (!(Test-Path $Manifest -PathType Leaf)) { throw "Payload manifest missing: $Manifest" }
+    if (!(Test-Path -LiteralPath (Join-Path $Repo ".git") -PathType Container)) { throw "Git repository not found: $Repo" }
+    if (!(Test-Path -LiteralPath $Manifest -PathType Leaf)) { throw "Payload manifest missing: $Manifest" }
 
     $lines = Get-Content $Manifest | Where-Object { $_.Trim() }
     $entries = @()
@@ -83,7 +83,7 @@ function Install-DaxoraRelease {
     Write-Host "==> Verifying every payload SHA-256 hash"
     foreach ($entry in $entries) {
       $source = Join-Path $PayloadRoot $entry.Path.Replace("/", "\")
-      if (!(Test-Path $source -PathType Leaf)) { throw "Payload file missing: $($entry.Path)" }
+      if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Payload file missing: $($entry.Path)" }
       if ((Get-Sha256 $source) -ne $entry.Hash) { throw "Payload hash mismatch: $($entry.Path)" }
     }
 
@@ -91,7 +91,7 @@ function Install-DaxoraRelease {
     foreach ($entry in $entries) {
       $relative = $entry.Path
       $target = Join-Path $Repo $relative.Replace("/", "\")
-      if (!(Test-Path $target -PathType Leaf)) { continue }
+      if (!(Test-Path -LiteralPath $target -PathType Leaf)) { continue }
       $workingHash = Get-Sha256 $target
       if ($workingHash -eq $entry.Hash) { continue }
       if ($ReleaseOwnedPaths -contains $relative) {
@@ -115,12 +115,12 @@ function Install-DaxoraRelease {
     foreach ($entry in $entries) {
       $relative = $entry.Path
       $target = Join-Path $Repo $relative.Replace("/", "\")
-      if (Test-Path $target -PathType Leaf) { Backup-File $Repo $backupRoot $relative; $changed.Add($relative) } else { $created.Add($relative) }
+      if (Test-Path -LiteralPath $target -PathType Leaf) { Backup-File $Repo $backupRoot $relative; $changed.Add($relative) } else { $created.Add($relative) }
     }
 
     foreach ($relative in $DeletePaths) {
       $target = Join-Path $Repo $relative.Replace("/", "\")
-      if (Test-Path $target -PathType Leaf) {
+      if (Test-Path -LiteralPath $target -PathType Leaf) {
         Push-Location $Repo
         try {
           & git ls-files --error-unmatch -- $relative 1>$null 2>$null
@@ -128,7 +128,7 @@ function Install-DaxoraRelease {
         } finally { Pop-Location }
         if ($tracked -and (Test-CleanTrackedFile $Repo $relative)) {
           Backup-File $Repo $backupRoot $relative
-          Remove-Item $target -Force
+          Remove-Item -LiteralPath $target -Force
           $changed.Add($relative)
         } else { throw "Genuine or untracked working-tree change blocks deletion: $relative" }
       }
@@ -139,12 +139,12 @@ function Install-DaxoraRelease {
       $source = Join-Path $PayloadRoot $entry.Path.Replace("/", "\")
       $target = Join-Path $Repo $entry.Path.Replace("/", "\")
       New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-      Copy-Item $source $target -Force
+      Copy-Item -LiteralPath $source -Destination $target -Force
     }
 
     Write-Host "==> Running release-engine self-test"
     $testPath = Join-Path $Repo "scripts\daxora-release\ReleaseInstaller.ps1"
-    if (!(Test-Path $testPath -PathType Leaf)) { throw "Installed release engine missing." }
+    if (!(Test-Path -LiteralPath $testPath -PathType Leaf)) { throw "Installed release engine missing." }
     $null = [System.Management.Automation.Language.Parser]::ParseFile($testPath, [ref]$null, [ref]$null)
 
     Write-Host "==> Staging only release infrastructure files"
@@ -165,7 +165,7 @@ function Install-DaxoraRelease {
   }
   catch {
     Write-Host "ERROR - $($_.Exception.Message)" -ForegroundColor Red
-    if (Test-Path $backupRoot) { Rollback-Files $Repo $backupRoot $changed $created }
+    if (Test-Path -LiteralPath $backupRoot) { Rollback-Files $Repo $backupRoot $changed $created }
     Write-Host "Validation and backup logs: $backupRoot"
     throw
   }

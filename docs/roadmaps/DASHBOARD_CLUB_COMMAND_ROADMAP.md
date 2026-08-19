@@ -22,12 +22,11 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 
 ## Known defects / decisions
 
-1. Full-Time FA fixture integration is not considered production reliable.
-2. Multiple Full-Time sources are required rather than a single source configuration.
-3. Mission Control and Club Command must retain distinct operational and leadership purposes.
-4. The product currently exposes more operational concepts than a typical grassroots user needs at once.
-5. Role visibility must be derived from multiple assigned roles, scope and subscription rather than one membership role.
-6. Shared operational metrics must remain sourced from shared operational data rather than duplicate calculations.
+1. Full-Time live imports require a configured public team or fixture page and must be checked against the club's fixture list before use.
+2. Mission Control and Club Command must retain distinct operational and leadership purposes.
+3. The product currently exposes more operational concepts than a typical grassroots user needs at once.
+4. Role visibility must be derived from multiple assigned roles, scope and subscription rather than one membership role.
+5. Shared operational metrics must remain sourced from shared operational data rather than duplicate calculations.
 
 ## Active phase
 
@@ -42,7 +41,7 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 - Club Command is labelled consistently and is hidden from support, operational-only and read-only users without governance permission.
 - Eligible leaders can move from Mission Control to Club Command through one explicit handoff rather than duplicated executive cards.
 - No existing Ground Control functionality is silently removed during consolidation.
-- Full-Time FA is tracked as a separate reliability phase.
+- Full-Time FA reliability and multiple-source support are delivered by v3.10.43 without changing Mission Control ownership.
 
 ## Cross-module dependency: access architecture
 
@@ -50,7 +49,7 @@ Dashboard visibility and Club Command exposure consume the v3.10.41 effective pe
 
 ## Dependencies
 
-- Full-Time FA source model and reliable import implementation.
+- Full-Time source availability remains an external operational dependency with manual fixture entry as the fallback.
 - Subscription/entitlement authority.
 - Shared operational data and scope model.
 - Coach Hub team/contact authority.
@@ -58,4 +57,4 @@ Dashboard visibility and Club Command exposure consume the v3.10.41 effective pe
 
 ## Pilot status
 
-The consolidated codebase is a technical baseline, not a declaration that every surfaced module is commercially ready. Paid pilot readiness will follow product simplification and Full-Time reliability work.
+The consolidated codebase is ready for controlled Full-Time pilot imports. A successful import from each club's real configured sources remains required before paid-pilot acceptance.

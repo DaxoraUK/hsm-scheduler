@@ -20,11 +20,10 @@
 
 ## Full-Time and fixture-source expansion
 
-- Replace fragile single-page scraping assumptions with a source abstraction.
-- Support multiple FA Full-Time league/competition sources per club.
-- Add source health, last successful sync, import counts and actionable errors.
-- Add duplicate protection and normalized fixture ingestion.
-- Preserve manual fallback when an external source is unavailable.
+- Persist source-health history and last-successful-sync evidence on the server rather than only reporting the current import.
+- Add reviewed reconciliation when Full-Time changes a fixture already held in Daxora.
+- Evaluate an agreed official provider/API route if The FA makes one available for the required club workflow.
+- Preserve manual fallback whenever an external source is unavailable.
 
 ## Commercial value
 

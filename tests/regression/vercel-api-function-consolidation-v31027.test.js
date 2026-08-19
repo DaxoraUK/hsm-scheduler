@@ -31,6 +31,7 @@ describe("Vercel API function consolidation v3.10.29", () => {
       "/api/communications/dispatch",
       "/api/communications/webhooks/resend",
       "/api/communications/webhooks/twilio",
+      "/api/full-time",
       "/api/health",
       "/api/league/calendar",
       "/api/league/finance-delivery",
@@ -53,7 +54,7 @@ describe("Vercel API function consolidation v3.10.29", () => {
   it("moves handler source out of the Vercel function discovery directory", () => {
     const sourceFiles = allFiles(serverApiRoot).filter((file) => file.endsWith(".js"));
     const normalizedSourceFiles = sourceFiles.map((file) => file.replaceAll("\\", "/"));
-    expect(sourceFiles.length).toBe(16);
+    expect(sourceFiles.length).toBe(17);
     expect(normalizedSourceFiles.some((file) => file.includes("communications/webhooks/resend.js"))).toBe(true);
     expect(normalizedSourceFiles.some((file) => file.includes("communications/webhooks/twilio.js"))).toBe(true);
   });
