@@ -19,6 +19,10 @@ describe("v3.10.45 external team mapping and local updater", () => {
     expect(findCfg("Horwich St. Mary\\'s", [team])).toBe(team);
   });
 
+  test("maps the provider's short Horwich name to HSM 1st Team even before the visible alias migration is saved", () => {
+    expect(findCfg("Horwich", [{ ...team, externalAliases: "Horwich St. Mary's, Horwich St Mary's" }])?.name).toBe("HSM 1st Team");
+  });
+
   test("retains the official name while scheduling under the internal team identity", () => {
     const result = scheduleSat(
       [{ homeTeam: "Horwich St. Mary's", awayTeam: "Rossendale", status: "active", kickOff: "14:30" }],

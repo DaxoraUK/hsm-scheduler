@@ -1,4 +1,19 @@
-# Daxora Ground Control v3.10.49 - Existing BBDFL U14 Source Upgrade
+# Daxora Ground Control v3.10.50 - HSM First-Team Horwich Alias Migration
+
+## Delivered
+
+- Visibly appends `Horwich` to the existing HSM 1st Team external fixture names.
+- Applies the same exact first-team fallback inside scheduling before the migrated field is manually saved.
+- Restricts the implicit fallback to the internal team named `HSM 1st Team`.
+- Keeps the BBDFL U14 source migration and all v3.10.48 retention protections.
+
+## Verification
+
+- 16 focused Full-Time and external-team mapping tests pass.
+- Production build passes.
+- No database migration or Full-Time write-back is introduced.
+
+## Previous release: v3.10.49
 
 ## Delivered
 

@@ -37,9 +37,10 @@ export function findCfg(name, cfgList) {
   const normalise = (value) => String(value || "").toLowerCase().replace(/\\+['’]?/g, "").replace(/[.'’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const n = normalise(name);
   return cfgList.find((team) => {
+    const implicitNames = normalise(team.name) === "hsm 1st team" ? ["Horwich"] : [];
     const configuredNames = [team.name, ...(Array.isArray(team.externalAliases)
       ? team.externalAliases
-      : String(team.externalAliases || "").split(","))]
+      : String(team.externalAliases || "").split(",")), ...implicitNames]
       .map(normalise)
       .filter(Boolean);
     return configuredNames.some((candidate) => n === candidate || n.includes(candidate) || candidate.includes(n));

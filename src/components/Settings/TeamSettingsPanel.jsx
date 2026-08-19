@@ -49,6 +49,13 @@ const TEAM_TYPES = [
 ];
 const DAYS = ["Saturday", "Sunday", "Midweek"];
 
+function ensureFirstTeamHorwichAlias(team = {}) {
+  if (String(team.name || "").trim().toLowerCase() !== "hsm 1st team") return team;
+  const aliases = Array.isArray(team.externalAliases) ? team.externalAliases.join(", ") : String(team.externalAliases || "");
+  if (aliases.split(",").some((alias) => alias.trim().toLowerCase() === "horwich")) return team;
+  return { ...team, externalAliases: [aliases, "Horwich"].filter(Boolean).join(", ") };
+}
+
 const TEAM_COLUMNS = [
   { key: "name", label: "Name", aliases: ["Team", "Team name"] },
   { key: "externalAliases", label: "External Team Names", aliases: ["Full-Time names", "External aliases"] },
@@ -83,7 +90,7 @@ function normaliseImportedTeam(row, index, primarySiteId) {
   const teamType = String(row.teamType || "youth").trim().toLowerCase().replace(/\s+/g, "_");
   const format = FORMATS.includes(row.format) ? row.format : "11v11-youth";
   const day = DAYS.includes(row.day) ? row.day : "Saturday";
-  return {
+  return ensureFirstTeamHorwichAlias({
     name,
     externalAliases: String(row.externalAliases || "").trim(),
     teamType: TEAM_TYPES.some(([value]) => value === teamType) ? teamType : "youth",
@@ -94,7 +101,7 @@ function normaliseImportedTeam(row, index, primarySiteId) {
     day,
     gameMins: Math.max(20, numberValue(row.gameMins, 70)),
     ageOrder: numberValue(row.ageOrder, index + 1),
-  };
+  });
 }
 
 function CompactMetric({ label, value, detail, tone = "slate" }) {
@@ -185,6 +192,12 @@ export default function TeamSettingsPanel({
   setSettingsTab,
   activeClubId,
 }) {
+  useEffect(() => {
+    setTeamCfg((current) => {
+      const upgraded = current.map(ensureFirstTeamHorwichAlias);
+      return upgraded.some((team, index) => team !== current[index]) ? upgraded : current;
+    });
+  }, [setTeamCfg]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [limitMessage, setLimitMessage] = useState("");
