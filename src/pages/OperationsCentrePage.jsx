@@ -28,6 +28,8 @@ import {
 import { buildOperationsCentreSnapshot } from "../lib/engines/operationsCentreEngine.js";
 import { decorateFixtureDay, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { getCurrentMatchWeekend } from "../lib/date/weekendCalendar.js";
+import useLiveWeather from "../hooks/useLiveWeather.js";
+import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 
 const DEFAULT_SITE_CHECKS = [
   { id: "access", label: "Ground access and gates open", icon: DoorOpen, critical: true },
@@ -258,7 +260,9 @@ export default function OperationsCentrePage({
 }) {
   const key = storageKey(club);
   const stored = loadStoredState(key);
-  const [scope, setScope] = useState(MATCHDAY_SCOPES.WEEKEND);
+  const [scope, setScope] = useState(() =>
+    midweekEnabled ? MATCHDAY_SCOPES.MATCHWEEK : MATCHDAY_SCOPES.WEEKEND
+  );
   const [now, setNow] = useState(() => new Date());
   const [checks, setChecks] = useState(() => {
     const completed = stored?.checks || {};
@@ -334,6 +338,48 @@ export default function OperationsCentrePage({
   const isCurrentWeekend =
     satDate === currentWeekend.saturday && sunDate === currentWeekend.sunday;
 
+  const weatherSelection = useMemo(() => {
+    const candidates = [];
+    const add = (label, date, rows, enabled) => {
+      if (!enabled || !date) return;
+      candidates.push({
+        label,
+        date,
+        fixtures: (rows || []).filter((fixture) => fixture?.status !== "postponed"),
+      });
+    };
+
+    if (scope === MATCHDAY_SCOPES.SATURDAY) add("Saturday", satDate, satFinal, satHasRun);
+    else if (scope === MATCHDAY_SCOPES.SUNDAY) add("Sunday", sunDate, sunFinal, sunHasRun);
+    else if (scope === MATCHDAY_SCOPES.MIDWEEK) add("Midweek", midweekDate, midweekFinal, midweekHasRun);
+    else {
+      if (scope === MATCHDAY_SCOPES.MATCHWEEK) add("Midweek", midweekDate, midweekFinal, midweekHasRun);
+      add("Saturday", satDate, satFinal, satHasRun);
+      add("Sunday", sunDate, sunFinal, sunHasRun);
+    }
+
+    candidates.sort((left, right) => String(left.date).localeCompare(String(right.date)));
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+    return candidates.find((candidate) => candidate.date >= today)
+      || candidates.at(-1)
+      || { label: "Matchday", date: satDate || sunDate || midweekDate, fixtures };
+  }, [fixtures, midweekDate, midweekFinal, midweekHasRun, satDate, satFinal, satHasRun, scope, sunDate, sunFinal, sunHasRun]);
+
+  const liveWeather = useLiveWeather({
+    club,
+    date: weatherSelection.date,
+    fixtures: weatherSelection.fixtures,
+  });
+
+  const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
+    club,
+    fixtures: weatherSelection.fixtures,
+    dateLabel: `${weatherSelection.label}${weatherSelection.date ? ` · ${weatherSelection.date}` : ""}`,
+    forecastSource: liveWeather.data,
+    connectionStatus: liveWeather.status,
+    connectionError: liveWeather.error,
+  }), [club, liveWeather.data, liveWeather.error, liveWeather.status, weatherSelection]);
+
   const snapshot = useMemo(
     () =>
       buildOperationsCentreSnapshot({
@@ -349,8 +395,9 @@ export default function OperationsCentrePage({
         incidents,
         scope,
         dateLabel,
+        weatherSnapshot: weatherIntelligence,
       }),
-    [fixtures, club, pitchCfg, closedPitches, refs, scheduleBuilt, unresolvedCount, conflictCount, checks, incidents, scope, dateLabel]
+    [fixtures, club, pitchCfg, closedPitches, refs, scheduleBuilt, unresolvedCount, conflictCount, checks, incidents, scope, dateLabel, weatherIntelligence]
   );
 
   const toggleCheck = (id) => {
@@ -457,7 +504,7 @@ export default function OperationsCentrePage({
                   {snapshot.label}
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
-                  Operations Centre
+                  Operations overview
                 </span>
               </div>
 
@@ -532,9 +579,6 @@ export default function OperationsCentrePage({
             {[
               ...(midweekEnabled ? [[MATCHDAY_SCOPES.MATCHWEEK, "Matchweek"]] : []),
               [MATCHDAY_SCOPES.WEEKEND, "Weekend"],
-              ...(midweekEnabled ? [[MATCHDAY_SCOPES.MIDWEEK, "Midweek"]] : []),
-              [MATCHDAY_SCOPES.SATURDAY, "Saturday"],
-              [MATCHDAY_SCOPES.SUNDAY, "Sunday"],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -561,23 +605,14 @@ export default function OperationsCentrePage({
               />
             )}
 
-            {scope === MATCHDAY_SCOPES.MIDWEEK ? (
-              <MidweekCalendarControl
-                midweekDate={midweekDate}
-                midweekDateLabel={midweekDateLabel}
-                onMidweekChange={onMidweekChange}
-                onUseCurrentMidweekDate={onUseCurrentMidweekDate}
-              />
-            ) : (
-              <WeekendCalendarControl
-                satDate={satDate}
-                satDateLabel={satDateLabel}
-                sunDateLabel={sunDateLabel}
-                isCurrentWeekend={isCurrentWeekend}
-                onWeekendChange={onWeekendChange}
-                onUseCurrentWeekend={onUseCurrentWeekend}
-              />
-            )}
+            <WeekendCalendarControl
+              satDate={satDate}
+              satDateLabel={satDateLabel}
+              sunDateLabel={sunDateLabel}
+              isCurrentWeekend={isCurrentWeekend}
+              onWeekendChange={onWeekendChange}
+              onUseCurrentWeekend={onUseCurrentWeekend}
+            />
           </div>
         </div>
       </section>

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -8,7 +14,6 @@ import {
   ClipboardList,
   Filter,
   Layers3,
-  Mail,
   MapPinned,
   Megaphone,
   MessageSquareText,
@@ -29,26 +34,35 @@ import MatchdayManualFixtures from "../components/Operations/shared/MatchdayManu
 import MatchdaySummaryBar from "../components/Operations/shared/MatchdaySummaryBar.jsx";
 import MatchdayUnresolvedCard from "../components/Operations/shared/MatchdayUnresolvedCard.jsx";
 import MatchdayScheduleCard from "../components/Operations/shared/MatchdayScheduleCard.jsx";
-import OperationsHealthCard from "../components/Operations/shared/OperationsHealthCard.jsx";
 import CompetitionRulesCard from "../components/Operations/shared/CompetitionRulesCard.jsx";
 import DayOptimiserCard from "../components/Operations/shared/DayOptimiserCard.jsx";
 import WeatherIntelligenceCard from "../components/Operations/shared/WeatherIntelligenceCard.jsx";
 import MatchdayGuidanceCard from "../components/Operations/shared/MatchdayGuidanceCard.jsx";
 import OfficialsIntelligenceCard from "../components/Operations/shared/OfficialsIntelligenceCard.jsx";
 import CollapsibleCard from "../ui/CollapsibleCard.jsx";
-import StatusChip from "../ui/StatusChip.jsx";
 import ConfirmDialog from "../ui/ConfirmDialog.jsx";
-import { calculateOperationsHealth } from "../lib/engines/operationsHealthEngine.js";
 import { calculateCompetitionRules } from "../lib/engines/competitionRulesEngine.js";
 import { calculateDayOptimisation } from "../lib/engines/dayOptimiserEngine.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { buildRecommendationCentre } from "../lib/engines/recommendationCentreEngine.js";
 import { calculateOperationsIntelligence } from "../lib/engines/operationsIntelligenceEngine.js";
-import { calculateOfficialsReadiness, findOfficialConflicts } from "../lib/engines/officialsEngine.js";
-import { analyseParkingPressure } from "../lib/intelligence/parking/parkingService.js";
+import {
+  calculateOfficialsReadiness,
+  findOfficialConflicts,
+} from "../lib/engines/officialsEngine.js";
 import useLiveWeather from "../hooks/useLiveWeather.js";
-import { readMatchdayLock, writeMatchdayLock } from "../lib/operations/matchdayLock.js";
-import { toast } from "sonner";
+import {
+  readMatchdayLock,
+  writeMatchdayLock,
+} from "../lib/operations/matchdayLock.js";
+import { getParkingStats } from "../lib/dashboardStats.js";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
+import { getTimelineCandidateSummary } from "../lib/engines/timelineDragEngine.js";
+import {
+  buildPlannerChangeRecord,
+  getPlannerFixtureIdentity,
+} from "../lib/engines/matchdayPlannerEngine.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 
 const WORKSPACES = [
   {
@@ -67,13 +81,15 @@ const WORKSPACES = [
     id: "intelligence",
     label: "Intelligence",
     icon: Sparkles,
-    description: "Start with Matchday Guidance, then open specialist detail only when it is needed.",
+    description:
+      "Review parking, officials, weather and validated operational guidance.",
   },
   {
     id: "communications",
     label: "Communications",
     icon: Megaphone,
-    description: "Prepare coach messages and publish matchday updates.",
+    description:
+      "Prepare fixture messages for managers, coaches and team contacts.",
   },
 ];
 
@@ -97,17 +113,31 @@ const INTELLIGENCE_TARGETS = Object.freeze({
   pitchAssignments: { workspace: "resources", section: "pitchAssignments" },
   resources: { workspace: "resources", section: "pitchAssignments" },
   parking: { workspace: "intelligence", section: "parkingIntelligence" },
-  parkingIntelligence: { workspace: "intelligence", section: "parkingIntelligence" },
+  parkingIntelligence: {
+    workspace: "intelligence",
+    section: "parkingIntelligence",
+  },
   officials: { workspace: "intelligence", section: "officialsIntelligence" },
-  officialsIntelligence: { workspace: "intelligence", section: "officialsIntelligence" },
-  operationsHealth: { workspace: "intelligence", section: "operationsHealth" },
+  officialsIntelligence: {
+    workspace: "intelligence",
+    section: "officialsIntelligence",
+  },
   weather: { workspace: "intelligence", section: "weatherIntelligence" },
-  weatherIntelligence: { workspace: "intelligence", section: "weatherIntelligence" },
+  weatherIntelligence: {
+    workspace: "intelligence",
+    section: "weatherIntelligence",
+  },
   optimiser: { workspace: "intelligence", section: "dayOptimiser" },
   dayOptimiser: { workspace: "intelligence", section: "dayOptimiser" },
   matchdayGuidance: { workspace: "intelligence", section: "matchdayGuidance" },
-  operationsIntelligence: { workspace: "intelligence", section: "matchdayGuidance" },
-  recommendationCentre: { workspace: "intelligence", section: "matchdayGuidance" },
+  operationsIntelligence: {
+    workspace: "intelligence",
+    section: "matchdayGuidance",
+  },
+  recommendationCentre: {
+    workspace: "intelligence",
+    section: "matchdayGuidance",
+  },
   communications: { workspace: "communications", section: "coachMessages" },
   coachMessages: { workspace: "communications", section: "coachMessages" },
 });
@@ -126,16 +156,21 @@ function getIntelligenceTarget(target, item = {}) {
     const section = target.section || target.card;
     if (section) {
       return {
-        workspace: target.workspace || INTELLIGENCE_TARGETS[section]?.workspace || "intelligence",
+        workspace:
+          target.workspace ||
+          INTELLIGENCE_TARGETS[section]?.workspace ||
+          "intelligence",
         section: INTELLIGENCE_TARGETS[section]?.section || section,
       };
     }
   }
 
-  return INTELLIGENCE_TARGETS[target] || {
-    workspace: "intelligence",
-    section: "matchdayGuidance",
-  };
+  return (
+    INTELLIGENCE_TARGETS[target] || {
+      workspace: "intelligence",
+      section: "matchdayGuidance",
+    }
+  );
 }
 
 function getFixtureLabel(fixture = {}) {
@@ -154,86 +189,17 @@ function getFixtureLabel(fixture = {}) {
     .toLowerCase();
 }
 
-function getSectionStatus({ danger = false, warning = false, ready = true } = {}) {
-  if (danger) return { status: "danger", label: "Needs action", filter: "issues" };
-  if (warning) return { status: "warning", label: "Review", filter: "warnings" };
+function getSectionStatus({
+  danger = false,
+  warning = false,
+  ready = true,
+} = {}) {
+  if (danger)
+    return { status: "danger", label: "Needs action", filter: "issues" };
+  if (warning)
+    return { status: "warning", label: "Review", filter: "warnings" };
   if (ready) return { status: "success", label: "Ready", filter: "ready" };
   return { status: "neutral", label: "Pending", filter: "all" };
-}
-
-function normaliseCapacity(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-
-function getParkingCapacityValue(club = {}) {
-  return normaliseCapacity(club.carParkSpaces || club.parkingSpaces || club.capacity);
-}
-
-function getParkingCapacitySummary(games = [], club = {}, pitchCfg = []) {
-  const capacity = getParkingCapacityValue(club);
-  const analysis = analyseParkingPressure({
-    fixtures: games,
-    club: { ...club, carParkSpaces: capacity || club.carParkSpaces },
-    pitchCfg,
-  });
-
-  const peak = analysis?.peakSlot || null;
-  const estimatedLoad = peak?.estimatedCars || 0;
-  const utilisation = capacity ? Math.round((estimatedLoad / capacity) * 100) : 0;
-
-  return {
-    capacity,
-    analysis,
-    peak,
-    estimatedLoad,
-    utilisation,
-  };
-}
-
-function estimateParkingLoad(games = [], club = {}, pitchCfg = []) {
-  return getParkingCapacitySummary(games, club, pitchCfg).estimatedLoad;
-}
-
-function ParkingCapacityCard({ active = [], club = {}, pitchCfg = [] }) {
-  const { capacity, peak, estimatedLoad, utilisation } = getParkingCapacitySummary(active, club, pitchCfg);
-  const concurrentLimit = Number(club.maxConcurrent || 0);
-  const variant = utilisation >= 100 ? "danger" : utilisation >= 85 ? "warning" : "success";
-
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">
-            Parking Capacity
-          </div>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
-            {capacity || "Not set"} spaces
-          </h3>
-          <p className="mt-2 max-w-2xl text-sm font-bold leading-6 text-slate-500">
-            Resource view only. Detailed pressure, peaks and fixture-move recommendations are kept in Intelligence.
-          </p>
-        </div>
-        <StatusChip variant={variant}>{capacity ? `${utilisation}% peak` : "Set capacity"}</StatusChip>
-      </div>
-
-      <div className="mt-6 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Peak cars</div>
-          <div className="mt-2 text-3xl font-black text-slate-950">{estimatedLoad}</div>
-          <div className="mt-1 text-xs font-bold text-slate-500">{peak?.label ? `at ${peak.label}` : "After schedule build"}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Active fixtures</div>
-          <div className="mt-2 text-3xl font-black text-slate-950">{active.length}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Concurrent limit</div>
-          <div className="mt-2 text-3xl font-black text-slate-950">{concurrentLimit || "—"}</div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function EmptyWorkspace({ query, filter }) {
@@ -242,9 +208,13 @@ function EmptyWorkspace({ query, filter }) {
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
         <Search size={22} strokeWidth={2.5} />
       </div>
-      <h3 className="mt-4 text-lg font-black text-slate-950">No sections match</h3>
+      <h3 className="mt-4 text-lg font-black text-slate-950">
+        No sections match
+      </h3>
       <p className="mt-2 text-sm font-bold text-slate-500">
-        {query ? `Nothing matched “${query}”.` : `No sections match the ${filter} filter.`}
+        {query
+          ? `Nothing matched “${query}”.`
+          : `No sections match the ${filter} filter.`}
       </p>
     </div>
   );
@@ -257,24 +227,25 @@ function WorkspaceTab({ workspace, active, count, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`group flex min-h-[74px] items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition ${
+      className={`group flex min-h-[60px] items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition ${
         active
           ? "bg-slate-950 text-white shadow-md"
           : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-white hover:text-slate-950 hover:shadow-sm"
       }`}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-white/10 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>
-          <Icon size={20} strokeWidth={2.5} />
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${active ? "bg-white/10 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+        >
+          <Icon size={19} strokeWidth={2.5} />
         </div>
-        <div className="min-w-0">
-          <div className={`text-[11px] font-black uppercase tracking-[0.2em] ${active ? "text-emerald-300" : "text-slate-400"}`}>
-            Workspace
-          </div>
-          <div className="mt-1 truncate text-base font-black">{workspace.label}</div>
+        <div className="min-w-0 truncate text-sm font-black">
+          {workspace.label}
         </div>
       </div>
-      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${active ? "bg-white/15 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>
+      <span
+        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${active ? "bg-white/15 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+      >
         {count}
       </span>
     </button>
@@ -317,48 +288,74 @@ export default function MatchdayPage({
   const targetAppliedRef = useRef(null);
 
   const isSunday = day === "Sunday";
-  const matchdayDate = fixtureDay?.date || (
-    day === "Sunday"
+  const matchdayDate =
+    fixtureDay?.date ||
+    (day === "Sunday"
       ? props.sunDate
       : day === "Midweek"
         ? props.midweekDate
-        : props.satDate
-  );
+        : props.satDate);
 
-  const lockIdentity = useMemo(() => ({
-    clubId: props.club?.id || props.club?.name || "club",
-    day: day.toLowerCase(),
-    date: matchdayDate || dateLabel || "undated",
-  }), [dateLabel, day, matchdayDate, props.club?.id, props.club?.name]);
+  const lockIdentity = useMemo(
+    () => ({
+      clubId: props.club?.id || props.club?.name || "club",
+      day: day.toLowerCase(),
+      date: matchdayDate || dateLabel || "undated",
+    }),
+    [dateLabel, day, matchdayDate, props.club?.id, props.club?.name],
+  );
   const [isLocked, setIsLocked] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  const [timelineDirty, setTimelineDirty] = useState(false);
+  const [timelineSaving, setTimelineSaving] = useState(false);
+  const [timelineHistory, setTimelineHistory] = useState([]);
+  const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
 
   useEffect(() => {
     setIsLocked(readMatchdayLock(lockIdentity));
   }, [lockIdentity]);
 
-  const clubWithTiming = useMemo(() => ({
-    ...(props.club || {}),
-    fixtureDayKey: fixtureDay?.key || day.toLowerCase(),
-    fixtureDayRules: fixtureDay?.rules || {},
-    startHour: props.startHour,
-    startMin: props.startMin,
-    endHour: props.endHour,
-    endMin: props.endMin,
-    startTime: `${String(props.startHour ?? 8).padStart(2, "0")}:${String(props.startMin ?? 30).padStart(2, "0")}`,
-    endTime: `${String(props.endHour ?? 11).padStart(2, "0")}:${String(props.endMin ?? 30).padStart(2, "0")}`,
-    bufferYouth: props.bufferYouth,
-    bufferAdult: props.bufferAdult,
-  }), [day, fixtureDay, props.club, props.startHour, props.startMin, props.endHour, props.endMin, props.bufferYouth, props.bufferAdult]);
+  useEffect(() => {
+    setTimelineDirty(false);
+    setTimelineHistory([]);
+    setTimelineRedoHistory([]);
+  }, [day, matchdayDate]);
+
+  const clubWithTiming = useMemo(
+    () => ({
+      ...(props.club || {}),
+      fixtureDayKey: fixtureDay?.key || day.toLowerCase(),
+      fixtureDayRules: fixtureDay?.rules || {},
+      startHour: props.startHour,
+      startMin: props.startMin,
+      endHour: props.endHour,
+      endMin: props.endMin,
+      startTime: `${String(props.startHour ?? 8).padStart(2, "0")}:${String(props.startMin ?? 30).padStart(2, "0")}`,
+      endTime: `${String(props.endHour ?? 11).padStart(2, "0")}:${String(props.endMin ?? 30).padStart(2, "0")}`,
+      bufferYouth: props.bufferYouth,
+      bufferAdult: props.bufferAdult,
+    }),
+    [
+      day,
+      fixtureDay,
+      props.club,
+      props.startHour,
+      props.startMin,
+      props.endHour,
+      props.endMin,
+      props.bufferYouth,
+      props.bufferAdult,
+    ],
+  );
 
   const active = useMemo(
     () => final.filter((fixture) => fixture.status !== "postponed"),
-    [final]
+    [final],
   );
 
   const postponed = useMemo(
     () => final.filter((fixture) => fixture.status === "postponed"),
-    [final]
+    [final],
   );
 
   const liveWeather = useLiveWeather({
@@ -367,40 +364,65 @@ export default function MatchdayPage({
     fixtures: active,
   });
 
-  const unresolved = suppliedUnresolved ?? (isSunday ? props.sunUnresolved || [] : props.satUnresolved || []);
-  const scheduled = suppliedScheduled ?? (isSunday ? props.sunScheduled || [] : props.satScheduled || []);
-  const setScheduled = suppliedSetScheduled || (isSunday ? props.setSunScheduled : props.setSatScheduled);
-  const setUnresolved = suppliedSetUnresolved || (isSunday ? props.setSunUnresolved : props.setSatUnresolved);
-  const manualFixtures = suppliedManualFixtures ?? (isSunday ? props.sunManual || [] : props.satManual || []);
-  const setManualFixtures = suppliedSetManualFixtures || (isSunday ? props.setSunManual : props.setSatManual);
-  const showManual = suppliedShowManual ?? (isSunday ? props.showSunManual : props.showManual);
-  const setShowManual = suppliedSetShowManual || (isSunday ? props.setShowSunManual : props.setShowManual);
-  const conflicts = suppliedConflicts ?? (isSunday ? props.sunConflicts || [] : props.satConflicts || []);
+  const unresolved =
+    suppliedUnresolved ??
+    (isSunday ? props.sunUnresolved || [] : props.satUnresolved || []);
+  const scheduled =
+    suppliedScheduled ??
+    (isSunday ? props.sunScheduled || [] : props.satScheduled || []);
+  const setScheduled =
+    suppliedSetScheduled ||
+    (isSunday ? props.setSunScheduled : props.setSatScheduled);
+  const setUnresolved =
+    suppliedSetUnresolved ||
+    (isSunday ? props.setSunUnresolved : props.setSatUnresolved);
+  const manualFixtures =
+    suppliedManualFixtures ??
+    (isSunday ? props.sunManual || [] : props.satManual || []);
+  const setManualFixtures =
+    suppliedSetManualFixtures ||
+    (isSunday ? props.setSunManual : props.setSatManual);
+  const showManual =
+    suppliedShowManual ?? (isSunday ? props.showSunManual : props.showManual);
+  const setShowManual =
+    suppliedSetShowManual ||
+    (isSunday ? props.setShowSunManual : props.setShowManual);
+  const conflicts =
+    suppliedConflicts ??
+    (isSunday ? props.sunConflicts || [] : props.satConflicts || []);
 
   const refWarnings = useMemo(
     () =>
       final.filter(
         (fixture) =>
           fixture.status !== "postponed" &&
-          String(fixture.refStatus || "").toLowerCase() !== "confirmed"
+          String(fixture.refStatus || "").toLowerCase() !== "confirmed",
       ).length,
-    [final]
+    [final],
   );
 
-  const officialConflicts = useMemo(() => findOfficialConflicts(final, props.refs || []), [final, props.refs]);
+  const officialConflicts = useMemo(
+    () => findOfficialConflicts(final, props.refs || []),
+    [final, props.refs],
+  );
 
-  const officialsIntelligence = useMemo(() => calculateOfficialsReadiness({
-    fixtures: final,
-    active,
-    officialConflicts,
-    refWarnings,
-    refs: props.refs || [],
-  }), [active, final, officialConflicts, props.refs, refWarnings]);
+  const officialsIntelligence = useMemo(
+    () =>
+      calculateOfficialsReadiness({
+        fixtures: final,
+        active,
+        officialConflicts,
+        refWarnings,
+        refs: props.refs || [],
+      }),
+    [active, final, officialConflicts, props.refs, refWarnings],
+  );
 
   const fixtureSearchResults = useMemo(() => {
     const query = sectionQuery.trim().toLowerCase();
     if (!query) return final.length;
-    return final.filter((fixture) => getFixtureLabel(fixture).includes(query)).length;
+    return final.filter((fixture) => getFixtureLabel(fixture).includes(query))
+      .length;
   }, [final, sectionQuery]);
 
   const openIntelligenceTarget = useCallback((target, item = {}) => {
@@ -423,38 +445,40 @@ export default function MatchdayPage({
     }
   }, []);
 
-  const operationsHealth = useMemo(() => calculateOperationsHealth({
-    fixtures: final,
-    active,
-    postponed,
-    unresolved,
-    conflicts,
-    officialConflicts,
-    refWarnings,
-    closedPitches: props.closedPitches || [],
-    pitchCfg: props.pitchCfg || [],
-    club: clubWithTiming,
-    hasRun,
-  }), [active, clubWithTiming, conflicts, final, hasRun, officialConflicts, postponed, props.closedPitches, props.pitchCfg, refWarnings, unresolved]);
+  const competitionRules = useMemo(
+    () =>
+      calculateCompetitionRules({
+        fixtures: final,
+        active,
+        pitchCfg: props.pitchCfg || [],
+        teamCfg: props.teamCfg || [],
+        closedPitches: props.closedPitches || [],
+        club: clubWithTiming,
+        allowArtificial: props.useAstro,
+      }),
+    [
+      active,
+      clubWithTiming,
+      final,
+      props.closedPitches,
+      props.pitchCfg,
+      props.teamCfg,
+      props.useAstro,
+    ],
+  );
 
-  const competitionRules = useMemo(() => calculateCompetitionRules({
-    fixtures: final,
-    active,
-    pitchCfg: props.pitchCfg || [],
-    teamCfg: props.teamCfg || [],
-    closedPitches: props.closedPitches || [],
-    club: clubWithTiming,
-    allowArtificial: props.useAstro,
-  }), [active, clubWithTiming, final, props.closedPitches, props.pitchCfg, props.teamCfg, props.useAstro]);
-
-  const dayOptimisation = useMemo(() => calculateDayOptimisation({
-    fixtures: final,
-    pitchCfg: props.pitchCfg || [],
-    closedPitches: props.closedPitches || [],
-    club: clubWithTiming,
-    start: clubWithTiming.startTime,
-    end: clubWithTiming.endTime,
-  }), [clubWithTiming, final, props.closedPitches, props.pitchCfg]);
+  const dayOptimisation = useMemo(
+    () =>
+      calculateDayOptimisation({
+        fixtures: final,
+        pitchCfg: props.pitchCfg || [],
+        closedPitches: props.closedPitches || [],
+        club: clubWithTiming,
+        start: clubWithTiming.startTime,
+        end: clubWithTiming.endTime,
+      }),
+    [clubWithTiming, final, props.closedPitches, props.pitchCfg],
+  );
 
   const editableOverride = isLocked ? undefined : onOverride;
 
@@ -463,7 +487,8 @@ export default function MatchdayPage({
     setIsLocked(true);
     setPendingConfirmation(null);
     toast.success(`${day} schedule locked`, {
-      description: "The current fixture plan is now protected from schedule changes.",
+      description:
+        "The current fixture plan is now protected from schedule changes.",
     });
   }, [day, lockIdentity]);
 
@@ -472,7 +497,8 @@ export default function MatchdayPage({
       writeMatchdayLock(lockIdentity, false);
       setIsLocked(false);
       toast.success(`${day} schedule unlocked`, {
-        description: "Fixture changes and validated optimiser moves are available again.",
+        description:
+          "Fixture changes and validated optimiser moves are available again.",
       });
       return;
     }
@@ -483,10 +509,22 @@ export default function MatchdayPage({
     }
 
     const issues = [];
-    if (unresolved.length) issues.push(`${unresolved.length} unresolved fixture${unresolved.length === 1 ? "" : "s"}`);
-    if (conflicts.length) issues.push(`${conflicts.length} pitch conflict${conflicts.length === 1 ? "" : "s"}`);
-    if (officialConflicts.length) issues.push(`${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"}`);
-    if (refWarnings) issues.push(`${refWarnings} official confirmation${refWarnings === 1 ? "" : "s"} outstanding`);
+    if (unresolved.length)
+      issues.push(
+        `${unresolved.length} unresolved fixture${unresolved.length === 1 ? "" : "s"}`,
+      );
+    if (conflicts.length)
+      issues.push(
+        `${conflicts.length} pitch conflict${conflicts.length === 1 ? "" : "s"}`,
+      );
+    if (officialConflicts.length)
+      issues.push(
+        `${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"}`,
+      );
+    if (refWarnings)
+      issues.push(
+        `${refWarnings} official confirmation${refWarnings === 1 ? "" : "s"} outstanding`,
+      );
 
     if (issues.length) {
       setPendingConfirmation({ type: "lock", issues });
@@ -494,22 +532,41 @@ export default function MatchdayPage({
     }
 
     lockSchedule();
-  }, [conflicts.length, day, final.length, hasRun, isLocked, lockIdentity, lockSchedule, officialConflicts.length, refWarnings, unresolved.length]);
+  }, [
+    conflicts.length,
+    day,
+    final.length,
+    hasRun,
+    isLocked,
+    lockIdentity,
+    lockSchedule,
+    officialConflicts.length,
+    refWarnings,
+    unresolved.length,
+  ]);
 
-  const applyOptimisationMove = useCallback((move) => {
-    if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
-    Object.entries(move.patch).forEach(([field, value]) => onOverride(move.fixtureIndex, field, value));
-    toast.success("Validated fixture move applied", {
-      description: move.summary || move.fixtureTitle || "The schedule has been updated.",
-    });
-  }, [isLocked, onOverride]);
+  const applyOptimisationMove = useCallback(
+    (move) => {
+      if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
+      Object.entries(move.patch).forEach(([field, value]) =>
+        onOverride(move.fixtureIndex, field, value),
+      );
+      toast.success("Validated fixture move applied", {
+        description:
+          move.summary || move.fixtureTitle || "The schedule has been updated.",
+      });
+    },
+    [isLocked, onOverride],
+  );
 
   const applyAllValidatedMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
     if (!moves.length || isLocked || typeof onOverride !== "function") return;
 
     moves.forEach((move) => {
-      Object.entries(move.patch || {}).forEach(([field, value]) => onOverride(move.fixtureIndex, field, value));
+      Object.entries(move.patch || {}).forEach(([field, value]) =>
+        onOverride(move.fixtureIndex, field, value),
+      );
     });
 
     setPendingConfirmation(null);
@@ -531,51 +588,243 @@ export default function MatchdayPage({
     setOpenSections((current) => ({ ...current, dayOptimiser: true }));
     setHighlightedSection("dayOptimiser");
     window.setTimeout(() => {
-      document.getElementById("matchday-section-dayOptimiser")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById("matchday-section-dayOptimiser")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
     window.setTimeout(() => setHighlightedSection(null), 2200);
   }, []);
 
-  const weatherIntelligence = useMemo(() => calculateWeatherIntelligence({
-    club: clubWithTiming,
-    fixtures: final,
-    dateLabel,
-    forecastSource: liveWeather.data,
-    connectionStatus: liveWeather.status,
-    connectionError: liveWeather.error,
-  }), [clubWithTiming, dateLabel, final, liveWeather.data, liveWeather.error, liveWeather.status]);
+  const getTimelineRecordIndex = useCallback(
+    (record) => {
+      const matchedIndex = final.findIndex(
+        (fixture, fixtureIndex) =>
+          getPlannerFixtureIdentity(fixture, fixtureIndex) === record?.fixtureId,
+      );
+      return matchedIndex >= 0 ? matchedIndex : record?.fixtureIndex;
+    },
+    [final],
+  );
 
-  const recommendationCentre = useMemo(() => buildRecommendationCentre({
-    fixtures: final,
-    active,
-    unresolved,
-    conflicts,
-    officialConflicts,
-    refWarnings,
-    hasRun,
-    club: clubWithTiming,
-    pitchCfg: props.pitchCfg || [],
-    closedPitches: props.closedPitches || [],
-    competitionRules,
-    weatherIntelligence,
-    dayOptimisation,
-  }), [active, clubWithTiming, competitionRules, conflicts, dayOptimisation, final, hasRun, officialConflicts, props.closedPitches, props.pitchCfg, refWarnings, unresolved, weatherIntelligence]);
+  const applyTimelineRecordPatch = useCallback(
+    (record, patch) => {
+      if (typeof onOverride !== "function" || !record || !patch) return;
+      const fixtureIndex = getTimelineRecordIndex(record);
+      if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
+      Object.entries(patch).forEach(([field, value]) =>
+        onOverride(fixtureIndex, field, value),
+      );
+    },
+    [getTimelineRecordIndex, onOverride],
+  );
 
-  const operationsIntelligence = useMemo(() => calculateOperationsIntelligence({
-    fixtures: final,
-    active,
-    unresolved,
-    conflicts,
-    officialConflicts,
-    refWarnings,
-    hasRun,
-    club: clubWithTiming,
-    pitchCfg: props.pitchCfg || [],
-    closedPitches: props.closedPitches || [],
-    competitionRules,
-    weatherIntelligence,
-    dayOptimisation,
-  }), [active, clubWithTiming, competitionRules, conflicts, dayOptimisation, final, hasRun, officialConflicts, props.closedPitches, props.pitchCfg, refWarnings, unresolved, weatherIntelligence]);
+  const undoTimelineMove = useCallback(() => {
+    const record = timelineHistory.at(-1);
+    if (!record || isLocked) return;
+    applyTimelineRecordPatch(record, record.previousPatch);
+    setTimelineHistory((current) => current.slice(0, -1));
+    setTimelineRedoHistory((current) => [...current, record]);
+    setTimelineDirty(timelineHistory.length > 1);
+    toast.info("Planner change undone", {
+      description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+
+  const redoTimelineMove = useCallback(() => {
+    const record = timelineRedoHistory.at(-1);
+    if (!record || isLocked) return;
+    applyTimelineRecordPatch(record, record.patch);
+    setTimelineRedoHistory((current) => current.slice(0, -1));
+    setTimelineHistory((current) => [...current, record]);
+    setTimelineDirty(true);
+    toast.success("Planner change reapplied", {
+      description: record.summary || "The fixture move has been reapplied.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineRedoHistory]);
+
+  const discardTimelineChanges = useCallback(() => {
+    if (!timelineHistory.length || isLocked) return;
+    [...timelineHistory].reverse().forEach((record) =>
+      applyTimelineRecordPatch(record, record.previousPatch),
+    );
+    setTimelineHistory([]);
+    setTimelineRedoHistory([]);
+    setTimelineDirty(false);
+    toast.info("Planner changes discarded", {
+      description: "The matchday schedule has returned to its last saved state.",
+    });
+  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+
+  const requestDiscardTimelineChanges = useCallback(() => {
+    if (!timelineHistory.length || isLocked) return;
+    setPendingConfirmation({ type: "timeline-discard", count: timelineHistory.length });
+  }, [isLocked, timelineHistory.length]);
+
+  const applyTimelineMove = useCallback(
+    (candidate) => {
+      if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
+
+      Object.entries(candidate.patch).forEach(([field, value]) =>
+        onOverride(candidate.fixtureIndex, field, value),
+      );
+      const record = buildPlannerChangeRecord(candidate);
+      if (record) setTimelineHistory((current) => [...current, record]);
+      setTimelineRedoHistory([]);
+      setTimelineDirty(true);
+      setPendingConfirmation(null);
+
+      toast.success("Fixture moved in Matchday Planner", {
+        description: getTimelineCandidateSummary(candidate),
+      });
+    },
+    [isLocked, onOverride],
+  );
+
+  const requestTimelineMove = useCallback(
+    (candidate) => {
+      if (!candidate) return;
+      if (candidate.noChange) {
+        toast.info(candidate.title || "Fixture already here", {
+          description: candidate.message,
+        });
+        return;
+      }
+      if (candidate.blocked) {
+        toast.error(candidate.title || "Timeline move blocked", {
+          description: candidate.message || "Choose a suitable pitch or a different kick-off time.",
+        });
+        return;
+      }
+      if (candidate.advisory) {
+        setPendingConfirmation({ type: "timeline-warning", candidate });
+        return;
+      }
+      applyTimelineMove(candidate);
+    },
+    [applyTimelineMove],
+  );
+
+  const saveTimelineChanges = useCallback(async () => {
+    if (typeof props.saveWeek !== "function" || timelineSaving) return;
+    setTimelineSaving(true);
+    try {
+      const saved = await props.saveWeek();
+      if (saved !== false) {
+        setTimelineDirty(false);
+        setTimelineHistory([]);
+        setTimelineRedoHistory([]);
+      }
+    } finally {
+      setTimelineSaving(false);
+    }
+  }, [props.saveWeek, timelineSaving]);
+
+  const weatherIntelligence = useMemo(
+    () =>
+      calculateWeatherIntelligence({
+        club: clubWithTiming,
+        fixtures: final,
+        dateLabel,
+        forecastSource: liveWeather.data,
+        connectionStatus: liveWeather.status,
+        connectionError: liveWeather.error,
+      }),
+    [
+      clubWithTiming,
+      dateLabel,
+      final,
+      liveWeather.data,
+      liveWeather.error,
+      liveWeather.status,
+    ],
+  );
+
+  const parkingStats = useMemo(
+    () =>
+      getParkingStats({
+        fixtures: active,
+        club: clubWithTiming,
+        pitchCfg: props.pitchCfg || [],
+        startMins: (props.startHour ?? 8) * 60 + (props.startMin ?? 30),
+        scope: day.toLowerCase(),
+      }),
+    [
+      active,
+      clubWithTiming,
+      day,
+      props.pitchCfg,
+      props.startHour,
+      props.startMin,
+    ],
+  );
+
+  const recommendationCentre = useMemo(
+    () =>
+      buildRecommendationCentre({
+        fixtures: final,
+        active,
+        unresolved,
+        conflicts,
+        officialConflicts,
+        refWarnings,
+        hasRun,
+        club: clubWithTiming,
+        pitchCfg: props.pitchCfg || [],
+        closedPitches: props.closedPitches || [],
+        competitionRules,
+        weatherIntelligence,
+        dayOptimisation,
+      }),
+    [
+      active,
+      clubWithTiming,
+      competitionRules,
+      conflicts,
+      dayOptimisation,
+      final,
+      hasRun,
+      officialConflicts,
+      props.closedPitches,
+      props.pitchCfg,
+      refWarnings,
+      unresolved,
+      weatherIntelligence,
+    ],
+  );
+
+  const operationsIntelligence = useMemo(
+    () =>
+      calculateOperationsIntelligence({
+        fixtures: final,
+        active,
+        unresolved,
+        conflicts,
+        officialConflicts,
+        refWarnings,
+        hasRun,
+        club: clubWithTiming,
+        pitchCfg: props.pitchCfg || [],
+        closedPitches: props.closedPitches || [],
+        competitionRules,
+        weatherIntelligence,
+        dayOptimisation,
+      }),
+    [
+      active,
+      clubWithTiming,
+      competitionRules,
+      conflicts,
+      dayOptimisation,
+      final,
+      hasRun,
+      officialConflicts,
+      props.closedPitches,
+      props.pitchCfg,
+      refWarnings,
+      unresolved,
+      weatherIntelligence,
+    ],
+  );
 
   const matchdayProps = {
     ...props,
@@ -627,14 +876,28 @@ export default function MatchdayPage({
   }
 
   const sections = useMemo(() => {
-    const unresolvedState = getSectionStatus({ danger: unresolved.length > 0, ready: unresolved.length === 0 });
+    const unresolvedState = getSectionStatus({
+      danger: unresolved.length > 0,
+      ready: unresolved.length === 0,
+    });
     const scheduleState = getSectionStatus({
       danger: conflicts.length > 0,
-      warning: conflicts.length === 0 && (refWarnings > 0 || officialConflicts.length > 0),
-      ready: conflicts.length === 0 && refWarnings === 0 && officialConflicts.length === 0,
+      warning:
+        conflicts.length === 0 &&
+        (refWarnings > 0 || officialConflicts.length > 0),
+      ready:
+        conflicts.length === 0 &&
+        refWarnings === 0 &&
+        officialConflicts.length === 0,
     });
-    const conflictState = getSectionStatus({ danger: conflicts.length > 0, ready: conflicts.length === 0 });
-    const closureState = getSectionStatus({ warning: (props.closedPitches || []).length > 0, ready: !(props.closedPitches || []).length });
+    const conflictState = getSectionStatus({
+      danger: conflicts.length > 0,
+      ready: conflicts.length === 0,
+    });
+    const closureState = getSectionStatus({
+      warning: (props.closedPitches || []).length > 0,
+      ready: !(props.closedPitches || []).length,
+    });
     const runState = getSectionStatus({ warning: !hasRun, ready: hasRun });
 
     return [
@@ -644,7 +907,9 @@ export default function MatchdayPage({
         title: "Manual Fixtures",
         subtitle: "Create, edit and manage fixtures that were not imported.",
         icon: ClipboardList,
-        badge: manualFixtures.length ? `${manualFixtures.length} manual` : "Manual",
+        badge: manualFixtures.length
+          ? `${manualFixtures.length} manual`
+          : "Manual",
         ...runState,
         render: () => <ManualFixtures {...matchdayProps} />,
       },
@@ -662,7 +927,8 @@ export default function MatchdayPage({
         id: "unresolved",
         workspace: "fixtures",
         title: "Unresolved Fixtures",
-        subtitle: "Fixtures that need manual attention before the day can be locked.",
+        subtitle:
+          "Fixtures that need manual attention before the day can be locked.",
         icon: ShieldAlert,
         badge: unresolved.length ? `${unresolved.length} unresolved` : "Clear",
         ...unresolvedState,
@@ -672,7 +938,8 @@ export default function MatchdayPage({
         id: "schedule",
         workspace: "fixtures",
         title: "Schedule",
-        subtitle: "Review the fixture list, kick-off times and pitch allocation.",
+        subtitle:
+          "Review the fixture list, kick-off times and pitch allocation.",
         icon: CalendarDays,
         badge: refWarnings
           ? `${refWarnings} refs to chase`
@@ -696,8 +963,22 @@ export default function MatchdayPage({
             subtitle={`Pitch usage and kick-off flow for ${day.toLowerCase()} fixtures.`}
             games={final}
             pitchCfg={props.pitchCfg}
+            closedPitches={props.closedPitches}
             club={clubWithTiming}
+            readOnly={isLocked}
+            dirty={timelineDirty}
+            saving={timelineSaving}
+            changeHistory={timelineHistory}
+            canUndo={timelineHistory.length > 0}
+            canRedo={timelineRedoHistory.length > 0}
+            onUndo={undoTimelineMove}
+            onRedo={redoTimelineMove}
+            onDiscard={requestDiscardTimelineChanges}
+            onSave={props.saveWeek ? saveTimelineChanges : undefined}
+            onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
+            matchDate={matchdayDate}
+            annualPlannerEnabled={hasEntitlement(props.subscription, ENTITLEMENTS.ANNUAL_PLANNER)}
           />
         ),
       },
@@ -705,7 +986,8 @@ export default function MatchdayPage({
         id: "competitionRules",
         workspace: "fixtures",
         title: "Competition Rules",
-        subtitle: "Validate timing windows, pitch formats and competition rule readiness.",
+        subtitle:
+          "Validate timing windows, pitch formats and competition rule readiness.",
         icon: ShieldAlert,
         badge: competitionRules.metrics?.danger
           ? `${competitionRules.metrics.danger} rule issues`
@@ -714,16 +996,24 @@ export default function MatchdayPage({
             : "Compliant",
         status: competitionRules.status,
         label: competitionRules.label,
-        filter: competitionRules.status === "danger" ? "issues" : competitionRules.status === "warning" ? "warnings" : "ready",
+        filter:
+          competitionRules.status === "danger"
+            ? "issues"
+            : competitionRules.status === "warning"
+              ? "warnings"
+              : "ready",
         render: () => <CompetitionRulesCard rules={competitionRules} />,
       },
       {
         id: "pitchClosures",
         workspace: "resources",
         title: "Pitch Closures",
-        subtitle: "Close pitches, reopen pitches and protect unavailable surfaces.",
+        subtitle:
+          "Close pitches, reopen pitches and protect unavailable surfaces.",
         icon: MapPinned,
-        badge: (props.closedPitches || []).length ? `${(props.closedPitches || []).length} closed` : "All open",
+        badge: (props.closedPitches || []).length
+          ? `${(props.closedPitches || []).length} closed`
+          : "All open",
         ...closureState,
         render: () => (
           <PitchClosuresCard
@@ -746,7 +1036,9 @@ export default function MatchdayPage({
         title: "Pitch Assignments",
         subtitle: "Check pitch allocations, formats and matchday pitch usage.",
         icon: Layers3,
-        badge: props.pitchCfg?.length ? `${props.pitchCfg.length} pitches` : "Pitches",
+        badge: props.pitchCfg?.length
+          ? `${props.pitchCfg.length} pitches`
+          : "Pitches",
         ...conflictState,
         render: () => (
           <MatchdayPitchAssignmentsCard
@@ -759,65 +1051,90 @@ export default function MatchdayPage({
           />
         ),
       },
-      {
-        id: "parkingCapacity",
-        workspace: "resources",
-        title: "Parking Capacity",
-        subtitle: "Resource view of available spaces, expected demand and capacity settings.",
-        icon: Car,
-        badge: `${normaliseCapacity(clubWithTiming.carParkSpaces || clubWithTiming.parkingSpaces || clubWithTiming.capacity) || "—"} spaces`,
-        ...getSectionStatus({ warning: estimateParkingLoad(active, clubWithTiming, props.pitchCfg) > normaliseCapacity(clubWithTiming.carParkSpaces || clubWithTiming.parkingSpaces || clubWithTiming.capacity), ready: true }),
-        render: () => <ParkingCapacityCard active={active} club={clubWithTiming} pitchCfg={props.pitchCfg} />,
-      },
-      {
-        id: "matchdayGuidance",
-        workspace: "intelligence",
-        title: "Matchday Guidance",
-        subtitle: "One clear operating status, one next best action and one prioritised queue.",
-        icon: Sparkles,
-        badge: operationsIntelligence.metrics?.total
-          ? `${operationsIntelligence.metrics.total} guidance items`
-          : "Guidance",
-        status: operationsIntelligence.status,
-        label: operationsIntelligence.label,
-        filter: operationsIntelligence.status === "danger" ? "issues" : operationsIntelligence.status === "warning" ? "warnings" : "ready",
-        render: () => (
-          <MatchdayGuidanceCard
-            intelligence={operationsIntelligence}
-            recommendations={recommendationCentre}
-            onNavigate={openIntelligenceTarget}
-          />
-        ),
-      },
-      {
-        id: "dayOptimiser",
-        workspace: "intelligence",
-        title: "Schedule Improvements",
-        subtitle: "Optional validated fixture moves that can improve the overall matchday flow.",
-        icon: CalendarDays,
-        badge: dayOptimisation.metrics?.validatedMoves
-          ? `${dayOptimisation.metrics.validatedMoves} moves`
-          : "Optimised",
-        status: dayOptimisation.status,
-        label: dayOptimisation.label,
-        filter: dayOptimisation.status === "danger" ? "issues" : dayOptimisation.status === "warning" ? "warnings" : "ready",
-        render: () => (
-          <DayOptimiserCard
-            optimisation={dayOptimisation}
-            readOnly={isLocked}
-            onApplyMove={applyOptimisationMove}
-            onApplyAll={applyAllOptimisationMoves}
-          />
-        ),
-      },
+      props.advancedOperationsEnabled
+        ? {
+            id: "matchdayGuidance",
+            workspace: "intelligence",
+            title: "Matchday Guidance",
+            subtitle:
+              "One clear operating status, one next best action and one prioritised queue.",
+            icon: Sparkles,
+            badge: operationsIntelligence.metrics?.total
+              ? `${operationsIntelligence.metrics.total} guidance items`
+              : "Guidance",
+            status: operationsIntelligence.status,
+            label: operationsIntelligence.label,
+            filter:
+              operationsIntelligence.status === "danger"
+                ? "issues"
+                : operationsIntelligence.status === "warning"
+                  ? "warnings"
+                  : "ready",
+            render: () => (
+              <MatchdayGuidanceCard
+                intelligence={operationsIntelligence}
+                recommendations={recommendationCentre}
+                onNavigate={openIntelligenceTarget}
+              />
+            ),
+          }
+        : null,
+      props.advancedOperationsEnabled
+        ? {
+            id: "dayOptimiser",
+            workspace: "intelligence",
+            title: "Schedule Improvements",
+            subtitle:
+              "Optional validated fixture moves that can improve the overall matchday flow.",
+            icon: CalendarDays,
+            badge: dayOptimisation.metrics?.validatedMoves
+              ? `${dayOptimisation.metrics.validatedMoves} moves`
+              : "Optimised",
+            status: dayOptimisation.status,
+            label: dayOptimisation.label,
+            filter:
+              dayOptimisation.status === "danger"
+                ? "issues"
+                : dayOptimisation.status === "warning"
+                  ? "warnings"
+                  : "ready",
+            render: () => (
+              <DayOptimiserCard
+                optimisation={dayOptimisation}
+                readOnly={isLocked}
+                onApplyMove={applyOptimisationMove}
+                onApplyAll={applyAllOptimisationMoves}
+              />
+            ),
+          }
+        : null,
       {
         id: "parkingIntelligence",
         workspace: "intelligence",
-        title: "Parking & Arrivals",
-        subtitle: "Arrival waves, peak parking demand and practical mitigation actions.",
+        title: "Parking Capacity & Arrivals",
+        subtitle:
+          "Available spaces, arrival waves, peak demand and practical mitigation actions.",
         icon: Car,
-        badge: "Engine",
-        ...getSectionStatus({ warning: active.length > 0, ready: active.length === 0 }),
+        badge: !hasRun
+          ? "Awaiting schedule"
+          : !parkingStats.configured
+            ? "Configure parking"
+            : `${parkingStats.pct}% peak`,
+        ...getSectionStatus({
+          danger: hasRun && parkingStats.overCapacity,
+          warning:
+            hasRun &&
+            !parkingStats.overCapacity &&
+            (!parkingStats.configured ||
+              parkingStats.isHighPressure ||
+              parkingStats.isOverConcurrentLimit),
+          ready:
+            hasRun &&
+            parkingStats.configured &&
+            !parkingStats.overCapacity &&
+            !parkingStats.isHighPressure &&
+            !parkingStats.isOverConcurrentLimit,
+        }),
         render: () => (
           <MatchdayCarParkCard
             {...props}
@@ -833,43 +1150,45 @@ export default function MatchdayPage({
         id: "officialsIntelligence",
         workspace: "intelligence",
         title: "Officials Coverage",
-        subtitle: "Confirmation gaps, peak demand, clashes and official workload.",
+        subtitle:
+          "Confirmation gaps, peak demand, clashes and official workload.",
         icon: UsersRound,
         badge: officialsIntelligence.metrics?.fixtures
           ? `${officialsIntelligence.metrics.confirmed}/${officialsIntelligence.metrics.fixtures} confirmed`
           : "Officials",
         status: officialsIntelligence.status,
         label: officialsIntelligence.label,
-        filter: officialsIntelligence.status === "danger" ? "issues" : officialsIntelligence.status === "warning" ? "warnings" : "ready",
+        filter:
+          officialsIntelligence.status === "danger"
+            ? "issues"
+            : officialsIntelligence.status === "warning"
+              ? "warnings"
+              : "ready",
         render: () => (
           <OfficialsIntelligenceCard
             intelligence={officialsIntelligence}
             onFixtureClick={openFixture}
+            matchDate={matchdayDate}
+            annualPlannerEnabled={hasEntitlement(props.subscription, ENTITLEMENTS.ANNUAL_PLANNER)}
           />
         ),
-      },
-      {
-        id: "operationsHealth",
-        workspace: "intelligence",
-        title: "Readiness Score",
-        subtitle: "One supporting score across fixtures, pitches, officials, parking and communications.",
-        icon: ShieldAlert,
-        badge: `${operationsHealth.score}%`,
-        status: operationsHealth.status,
-        label: operationsHealth.label,
-        filter: operationsHealth.status === "danger" ? "issues" : operationsHealth.status === "warning" ? "warnings" : "ready",
-        render: () => <OperationsHealthCard health={operationsHealth} />,
       },
       {
         id: "weatherIntelligence",
         workspace: "intelligence",
         title: "Weather & Surface Risk",
-        subtitle: "Forecast readiness, pitch exposure and postponement risk for the selected venue.",
+        subtitle:
+          "Forecast readiness, pitch exposure and postponement risk for the selected venue.",
         icon: CloudSun,
         badge: weatherIntelligence?.location || "Weather",
         status: weatherIntelligence.status,
         label: weatherIntelligence.label,
-        filter: weatherIntelligence.status === "danger" ? "issues" : weatherIntelligence.status === "warning" ? "warnings" : "ready",
+        filter:
+          weatherIntelligence.status === "danger"
+            ? "issues"
+            : weatherIntelligence.status === "warning"
+              ? "warnings"
+              : "ready",
         render: () => (
           <WeatherIntelligenceCard
             weather={weatherIntelligence}
@@ -882,7 +1201,8 @@ export default function MatchdayPage({
         id: "coachMessages",
         workspace: "communications",
         title: "Coach Messages",
-        subtitle: "Copy fixture messages for managers, coaches and team contacts.",
+        subtitle:
+          "Copy fixture messages for managers, coaches and team contacts.",
         icon: MessageSquareText,
         badge: hasRun ? `${active.length} messages` : "Build first",
         ...runState,
@@ -896,35 +1216,50 @@ export default function MatchdayPage({
           />
         ),
       },
-      {
-        id: "publishing",
-        workspace: "communications",
-        title: "Publishing Queue",
-        subtitle: "Placeholder for future WhatsApp, email, TeamFeePay, Pitchero and Spond publishing.",
-        icon: Mail,
-        badge: "Coming soon",
-        status: "info",
-        label: "Planned",
-        filter: "ready",
-        render: () => (
-          <div className="rounded-3xl border border-sky-200 bg-sky-50 p-6 text-sky-900">
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-sky-700 ring-1 ring-sky-200">
-                <Mail size={22} strokeWidth={2.5} />
-              </div>
-              <div>
-                <h3 className="text-xl font-black">Integration publishing is next</h3>
-                <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-sky-800">
-                  This area is reserved for future outbound communications through TeamFeePay, Pitchero, Spond, FA integrations, email and calendar sync. Coach Messages remain live above.
-                </p>
-              </div>
-            </div>
-          </div>
-        ),
-      },
-    ];
-  }, [ManualFixtures, ScheduleCard, SummaryBar, UnresolvedCard, active, applyAllOptimisationMoves, applyOptimisationMove, clubWithTiming, competitionRules, conflicts, dateLabel, day, dayOptimisation, final, hasRun, isLocked, liveWeather.isLoading, liveWeather.refresh, manualFixtures.length, matchdayDate, matchdayProps, officialConflicts.length, officialsIntelligence, openIntelligenceTarget, operationsHealth, overrides, postponed.length, props, operationsIntelligence, recommendationCentre, refWarnings, unresolved.length, weatherIntelligence]);
-
+    ].filter(Boolean);
+  }, [
+    ManualFixtures,
+    ScheduleCard,
+    SummaryBar,
+    UnresolvedCard,
+    active,
+    applyAllOptimisationMoves,
+    applyOptimisationMove,
+    clubWithTiming,
+    competitionRules,
+    conflicts,
+    dateLabel,
+    day,
+    dayOptimisation,
+    final,
+    hasRun,
+    isLocked,
+    liveWeather.isLoading,
+    liveWeather.refresh,
+    manualFixtures.length,
+    matchdayDate,
+    matchdayProps,
+    officialConflicts.length,
+    officialsIntelligence,
+    openIntelligenceTarget,
+    overrides,
+    postponed.length,
+    props,
+    operationsIntelligence,
+    recommendationCentre,
+    refWarnings,
+    requestDiscardTimelineChanges,
+    requestTimelineMove,
+    saveTimelineChanges,
+    timelineDirty,
+    timelineHistory,
+    timelineRedoHistory.length,
+    timelineSaving,
+    undoTimelineMove,
+    redoTimelineMove,
+    unresolved.length,
+    weatherIntelligence,
+  ]);
 
   const navigationSection = useMemo(() => {
     if (!navigationTarget) return null;
@@ -934,7 +1269,7 @@ export default function MatchdayPage({
     const requestedCard = navigationTarget.card;
     const aliases = {
       parking: "parkingIntelligence",
-      parkingCapacity: "parkingCapacity",
+      parkingCapacity: "parkingIntelligence",
       parkingIntelligence: "parkingIntelligence",
       weather: "weatherIntelligence",
       weatherIntelligence: "weatherIntelligence",
@@ -954,7 +1289,7 @@ export default function MatchdayPage({
       referees: "officialsIntelligence",
       referee: "officialsIntelligence",
       officialsIntelligence: "officialsIntelligence",
-      operationsHealth: "operationsHealth",
+      operationsHealth: "matchdayGuidance",
       fixtures: "schedule",
       schedule: "schedule",
       resources: "pitchClosures",
@@ -966,14 +1301,23 @@ export default function MatchdayPage({
 
     const sectionId = aliases[requestedCard] || requestedCard;
     if (sectionId === "actionBar") {
-      return { id: "actionBar", workspace: navigationTarget.workspace || "fixtures" };
+      return {
+        id: "actionBar",
+        workspace: navigationTarget.workspace || "fixtures",
+      };
     }
 
-    const byCard = sectionId ? sections.find((section) => section.id === sectionId) : null;
+    const byCard = sectionId
+      ? sections.find((section) => section.id === sectionId)
+      : null;
     if (byCard) return byCard;
 
     if (navigationTarget.workspace) {
-      return sections.find((section) => section.workspace === navigationTarget.workspace) || null;
+      return (
+        sections.find(
+          (section) => section.workspace === navigationTarget.workspace,
+        ) || null
+      );
     }
 
     return null;
@@ -989,11 +1333,16 @@ export default function MatchdayPage({
     setSectionQuery("");
     setSectionFilter("all");
     setActiveWorkspace(navigationSection.workspace);
-    setOpenSections((current) => ({ ...current, [navigationSection.id]: true }));
+    setOpenSections((current) => ({
+      ...current,
+      [navigationSection.id]: true,
+    }));
     setHighlightedSection(navigationSection.id);
 
     window.setTimeout(() => {
-      const element = document.getElementById(`matchday-section-${navigationSection.id}`);
+      const element = document.getElementById(
+        `matchday-section-${navigationSection.id}`,
+      );
       if (element && navigationTarget.scroll !== false) {
         element.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -1009,7 +1358,9 @@ export default function MatchdayPage({
 
   const workspaceCounts = useMemo(() => {
     return WORKSPACES.reduce((acc, workspace) => {
-      acc[workspace.id] = sections.filter((section) => section.workspace === workspace.id).length;
+      acc[workspace.id] = sections.filter(
+        (section) => section.workspace === workspace.id,
+      ).length;
       return acc;
     }, {});
   }, [sections]);
@@ -1019,26 +1370,38 @@ export default function MatchdayPage({
 
     return sections.filter((section) => {
       if (section.workspace !== activeWorkspace) return false;
-      if (sectionFilter !== "all" && section.filter !== sectionFilter) return false;
+      if (sectionFilter !== "all" && section.filter !== sectionFilter)
+        return false;
       if (!query) return true;
 
-      const haystack = [section.title, section.subtitle, section.badge, section.label]
+      const haystack = [
+        section.title,
+        section.subtitle,
+        section.badge,
+        section.label,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
       return haystack.includes(query) || fixtureSearchResults > 0;
     });
-  }, [activeWorkspace, fixtureSearchResults, sectionFilter, sectionQuery, sections]);
+  }, [
+    activeWorkspace,
+    fixtureSearchResults,
+    sectionFilter,
+    sectionQuery,
+    sections,
+  ]);
 
-  const activeWorkspaceMeta = WORKSPACES.find((workspace) => workspace.id === activeWorkspace) || WORKSPACES[0];
+  const activeWorkspaceMeta =
+    WORKSPACES.find((workspace) => workspace.id === activeWorkspace) ||
+    WORKSPACES[0];
   const workspaceSectionIds = sections
     .filter((section) => section.workspace === activeWorkspace)
     .map((section) => section.id);
-  function shouldAutoExpandSection(section) {
-    if (section?.id === "matchdayGuidance") return true;
-    if (section?.workspace === "intelligence") return false;
-    return section?.status === "danger" || section?.status === "warning";
+  function shouldAutoExpandSection() {
+    return false;
   }
 
   function isSectionOpen(section) {
@@ -1049,9 +1412,11 @@ export default function MatchdayPage({
     return shouldAutoExpandSection(section);
   }
 
-  const allOpen = workspaceSectionIds.length > 0 && sections
-    .filter((section) => section.workspace === activeWorkspace)
-    .every((section) => isSectionOpen(section));
+  const allOpen =
+    workspaceSectionIds.length > 0 &&
+    sections
+      .filter((section) => section.workspace === activeWorkspace)
+      .every((section) => isSectionOpen(section));
 
   function toggleSection(id) {
     setOpenSections((current) => ({
@@ -1100,14 +1465,23 @@ export default function MatchdayPage({
         <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-black">Approved schedule locked</div>
-            <div className="mt-1 text-xs font-bold text-emerald-800">Fixtures remain viewable and printable, but schedule edits and optimiser moves are disabled until you unlock the day.</div>
+            <div className="mt-1 text-xs font-bold text-emerald-800">
+              Fixtures remain viewable and printable, but schedule edits and
+              optimiser moves are disabled until you unlock the day.
+            </div>
           </div>
-          <button type="button" onClick={toggleScheduleLock} className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 transition hover:bg-emerald-100">Unlock schedule</button>
+          <button
+            type="button"
+            onClick={toggleScheduleLock}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
+          >
+            Unlock schedule
+          </button>
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-4">
+      <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {WORKSPACES.map((workspace) => (
             <WorkspaceTab
               key={workspace.id}
@@ -1115,7 +1489,8 @@ export default function MatchdayPage({
               active={workspace.id === activeWorkspace}
               count={workspaceCounts[workspace.id] || 0}
               onClick={() => {
-                if (typeof clearNavigationTarget === "function") clearNavigationTarget();
+                if (typeof clearNavigationTarget === "function")
+                  clearNavigationTarget();
                 setActiveWorkspace(workspace.id);
               }}
             />
@@ -1127,12 +1502,18 @@ export default function MatchdayPage({
             <div className="text-xs font-black uppercase tracking-[0.26em] text-emerald-700">
               {activeWorkspaceMeta.label} Workspace
             </div>
-            <p className="mt-1 text-sm font-bold text-slate-500">{activeWorkspaceMeta.description}</p>
+            <p className="mt-1 text-sm font-bold text-slate-500">
+              {activeWorkspaceMeta.description}
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
             <div className="relative min-w-0 lg:w-80">
-              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} strokeWidth={2.5} />
+              <Search
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
+                strokeWidth={2.5}
+              />
               <input
                 value={sectionQuery}
                 onChange={(event) => setSectionQuery(event.target.value)}
@@ -1147,7 +1528,11 @@ export default function MatchdayPage({
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
               {allOpen ? "Collapse all" : "Expand all"}
-              <ChevronRight size={16} strokeWidth={2.5} className={`transition ${allOpen ? "rotate-90" : ""}`} />
+              <ChevronRight
+                size={16}
+                strokeWidth={2.5}
+                className={`transition ${allOpen ? "rotate-90" : ""}`}
+              />
             </button>
           </div>
         </div>
@@ -1222,7 +1607,9 @@ export default function MatchdayPage({
         onConfirm={lockSchedule}
       >
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Outstanding checks</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+            Outstanding checks
+          </div>
           <ul className="mt-2 space-y-1.5 text-sm font-bold text-amber-950">
             {(pendingConfirmation?.issues || []).map((issue) => (
               <li key={issue} className="flex items-start gap-2">
@@ -1233,6 +1620,48 @@ export default function MatchdayPage({
           </ul>
         </div>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "timeline-warning"}
+        eyebrow="Operational warning"
+        title="Apply this timeline move?"
+        description={pendingConfirmation?.candidate?.message || "The move is possible, but it creates an operational warning that must be reviewed before publication."}
+        confirmLabel="Apply move"
+        cancelLabel="Choose another slot"
+        tone="warning"
+        initialFocus="cancel"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={() => applyTimelineMove(pendingConfirmation?.candidate)}
+      >
+        {pendingConfirmation?.candidate ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Proposed move</div>
+            <div className="mt-2 text-sm font-black text-amber-950">
+              {getTimelineCandidateSummary(pendingConfirmation.candidate)}
+            </div>
+            <div className="mt-2 text-xs font-bold leading-5 text-amber-800">
+              The fixture can be moved, but Ground Control will keep the warning visible until the operating plan is resolved.
+            </div>
+          </div>
+        ) : null}
+      </ConfirmDialog>
+
+
+      <ConfirmDialog
+        open={pendingConfirmation?.type === "timeline-discard"}
+        eyebrow="Discard draft changes"
+        title={`Discard ${pendingConfirmation?.count || 0} planner change${pendingConfirmation?.count === 1 ? "" : "s"}?`}
+        description="Ground Control will restore every affected fixture to the last saved pitch and kick-off time. This action cannot be redone after the draft is cleared."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        tone="danger"
+        initialFocus="cancel"
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={() => {
+          discardTimelineChanges();
+          setPendingConfirmation(null);
+        }}
+      />
 
       <ConfirmDialog
         open={pendingConfirmation?.type === "optimise"}

@@ -1,0 +1,274 @@
+openapi: 3.1.0
+info:
+  title: Daxora Partner API - TeamFeePay Acquisition Sandbox
+  version: 2026-07-21
+  description: |
+    Versioned Daxora integration contract demonstrated with synthetic TeamFeePay-shaped data.
+    This is not TeamFeePay's API and does not imply access, endorsement or partnership.
+    Production authentication, provider field mappings and webhook signatures must be agreed with TeamFeePay.
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local synthetic acquisition sandbox
+security:
+  - DemoKey: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Sandbox health
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /v1/partner/capabilities:
+    get:
+      summary: Read supported partner capabilities
+      responses:
+        '200':
+          description: Capability document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, entities, operations]
+                properties:
+                  version: { type: string }
+                  entities:
+                    type: array
+                    items: { type: string, enum: [club, team, person, event] }
+                  operations:
+                    type: array
+                    items: { type: string }
+                  disclaimer: { type: string }
+  /v1/partner/clubs/{clubId}:
+    get:
+      summary: Read a synthetic partner club snapshot
+      parameters:
+        - $ref: '#/components/parameters/ClubId'
+      responses:
+        '200':
+          description: Club and team snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [club, teams]
+                properties:
+                  club: { $ref: '#/components/schemas/PartnerClub' }
+                  teams:
+                    type: array
+                    items: { $ref: '#/components/schemas/PartnerTeam' }
+  /v1/partner/sync/preview:
+    post:
+      summary: Validate and preview a partner synchronisation batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncBatch'
+      responses:
+        '200':
+          description: Dry-run result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+  /v1/partner/sync/commit:
+    post:
+      summary: Commit an authorised and approved partner batch
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 8 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncBatch'
+      responses:
+        '202':
+          description: Batch accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitResult'
+        '200':
+          description: Duplicate batch safely ignored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitResult'
+  /v1/partner/clubs/{clubId}/operations:
+    get:
+      summary: Read enriched club operations
+      parameters:
+        - $ref: '#/components/parameters/ClubId'
+      responses:
+        '200':
+          description: Current operational summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSummary'
+  /v1/partner/clubs/{clubId}/analytics:
+    get:
+      summary: Read unified facility and operational analytics
+      parameters:
+        - $ref: '#/components/parameters/ClubId'
+      responses:
+        '200':
+          description: Facility analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSummary'
+  /v1/partner/webhooks/teamfeepay:
+    post:
+      summary: Reserved endpoint for authorised TeamFeePay webhooks
+      description: |
+        The production implementation remains disabled until TeamFeePay supplies its
+        authorised event catalogue, signing scheme, replay policy and permitted data scopes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerEnvelope'
+      responses:
+        '202': { description: Event accepted }
+        '401': { description: Signature or credential rejected }
+components:
+  securitySchemes:
+    DemoKey:
+      type: apiKey
+      in: header
+      name: X-Daxora-Demo-Key
+      description: Local sandbox key only; not a production security design.
+  parameters:
+    ClubId:
+      name: clubId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Health:
+      type: object
+      required: [ok, service, mode, productionConnection, timestamp]
+      properties:
+        ok: { type: boolean }
+        service: { type: string }
+        mode: { type: string, const: synthetic }
+        productionConnection: { type: boolean, const: false }
+        timestamp: { type: string, format: date-time }
+    PartnerClub:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sport: { type: string }
+        postcode: { type: string }
+        synthetic: { type: boolean }
+    PartnerTeam:
+      type: object
+      required: [id, club_id, name]
+      properties:
+        id: { type: string }
+        club_id: { type: string }
+        name: { type: string }
+        age_group: { type: string }
+        format: { type: string }
+        active: { type: boolean }
+    PartnerPerson:
+      type: object
+      required: [id, display_name]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        email: { type: string, format: email }
+        mobile: { type: string }
+        role: { type: string }
+        safeguarding_status: { type: string }
+    PartnerEvent:
+      type: object
+      required: [id, title, starts_at]
+      properties:
+        id: { type: string }
+        club_id: { type: string }
+        team_id: { type: string }
+        title: { type: string }
+        event_type: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        venue: { type: string }
+        status: { type: string }
+    SyncBatch:
+      type: object
+      required: [entityType, records]
+      properties:
+        entityType: { type: string, enum: [club, team, person, event] }
+        records:
+          type: array
+          items: { type: object, additionalProperties: true }
+        source: { type: string, default: teamfeepay }
+        sourceId: { type: string }
+        idempotencyKey: { type: string }
+    SyncResult:
+      type: object
+      required: [dryRun, entityType, received, accepted, rejected]
+      properties:
+        dryRun: { type: boolean }
+        entityType: { type: string }
+        received: { type: integer }
+        accepted: { type: integer }
+        rejected: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+    CommitResult:
+      type: object
+      required: [duplicate, written, idempotencyKey]
+      properties:
+        duplicate: { type: boolean }
+        written: { type: integer }
+        idempotencyKey: { type: string }
+        auditId: { type: string }
+    PartnerEnvelope:
+      type: object
+      required: [specVersion, eventType, source, occurredAt, idempotencyKey, data]
+      properties:
+        specVersion: { type: string }
+        eventType: { type: string }
+        source: { type: string }
+        sourceId: { type: string }
+        occurredAt: { type: string, format: date-time }
+        idempotencyKey: { type: string }
+        data: { type: object, additionalProperties: true }
+    OperationsSummary:
+      type: object
+      properties:
+        clubId: { type: string }
+        readinessPct: { type: number }
+        fixtures: { type: integer }
+        trainingSessions: { type: integer }
+        closures: { type: integer }
+        recoveredEvents: { type: integer }
+        actionsRequired: { type: integer }
+    AnalyticsSummary:
+      type: object
+      properties:
+        clubId: { type: string }
+        period: { type: string }
+        utilisationPct: { type: number }
+        matchesHours: { type: number }
+        trainingHours: { type: number }
+        friendliesAndEventsHours: { type: number }
+        winterExternalHours: { type: number }
+        closuresDowntimeHours: { type: number }
+        unusedCapacityHours: { type: number }

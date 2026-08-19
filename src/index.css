@@ -25,3 +25,117 @@
 .gc-sidebar-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* Daxora interaction system ------------------------------------------------ */
+[data-sonner-toaster].daxora-toaster,
+[data-sonner-toaster] {
+  --normal-bg: #ffffff;
+  --normal-border: #dbe4ee;
+  --normal-text: #07121f;
+  --success-bg: #ffffff;
+  --success-border: #a7f3d0;
+  --success-text: #065f46;
+  --info-bg: #ffffff;
+  --info-border: #bae6fd;
+  --info-text: #075985;
+  --warning-bg: #ffffff;
+  --warning-border: #fde68a;
+  --warning-text: #854d0e;
+  --error-bg: #ffffff;
+  --error-border: #fecdd3;
+  --error-text: #be123c;
+}
+
+[data-sonner-toast].daxora-toast {
+  min-width: min(390px, calc(100vw - 24px));
+  border-width: 1px !important;
+  border-radius: 22px !important;
+  padding: 15px 16px !important;
+  box-shadow: 0 22px 60px rgb(15 23 42 / 0.22) !important;
+  font-family: inherit !important;
+}
+
+[data-sonner-toast].daxora-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 22px 0 0 22px;
+  background: #0f172a;
+}
+
+[data-sonner-toast][data-type="success"].daxora-toast::before { background: #10b981; }
+[data-sonner-toast][data-type="info"].daxora-toast::before { background: #0ea5e9; }
+[data-sonner-toast][data-type="warning"].daxora-toast::before { background: #f59e0b; }
+[data-sonner-toast][data-type="error"].daxora-toast::before { background: #e11d48; }
+
+[data-sonner-toast] .daxora-toast-title {
+  color: #07121f !important;
+  font-size: 0.875rem !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.01em;
+}
+
+[data-sonner-toast] .daxora-toast-description {
+  margin-top: 3px !important;
+  color: #64748b !important;
+  font-size: 0.75rem !important;
+  font-weight: 650 !important;
+  line-height: 1.45 !important;
+}
+
+[data-sonner-toast] .daxora-toast-icon {
+  display: flex !important;
+  height: 32px !important;
+  width: 32px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 11px !important;
+  background: #f1f5f9 !important;
+}
+
+[data-sonner-toast][data-type="success"] .daxora-toast-icon { background: #ecfdf5 !important; color: #059669 !important; }
+[data-sonner-toast][data-type="info"] .daxora-toast-icon { background: #f0f9ff !important; color: #0284c7 !important; }
+[data-sonner-toast][data-type="warning"] .daxora-toast-icon { background: #fffbeb !important; color: #d97706 !important; }
+[data-sonner-toast][data-type="error"] .daxora-toast-icon { background: #fff1f2 !important; color: #e11d48 !important; }
+
+[data-sonner-toast] .daxora-toast-action {
+  border-radius: 10px !important;
+  background: #07121f !important;
+  color: white !important;
+  font-size: 0.7rem !important;
+  font-weight: 900 !important;
+}
+
+[data-sonner-toast] .daxora-toast-close {
+  top: -7px !important;
+  right: -7px !important;
+  left: auto !important;
+  height: 24px !important;
+  width: 24px !important;
+  border-color: #dbe4ee !important;
+  background: white !important;
+  color: #475569 !important;
+}
+
+@layer components {
+  .planner-action-button {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+}
+
+/* Daxora v3.9.2 accessibility hardening */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline-offset: 3px;
+}

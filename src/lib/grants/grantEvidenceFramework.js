@@ -23,7 +23,7 @@ export function buildGrantEvidenceFramework({
 } = {}) {
   const summary = evidence.summary || {};
   const entries = asArray(evidence.entries);
-  const delivered = Number(metrics.deliveredFixtures ?? summary.delivered ?? 0);
+  const scheduled = Number(metrics.scheduledFixtures ?? metrics.deliveredFixtures ?? summary.scheduled ?? summary.delivered ?? 0);
   const postponed = Number(metrics.postponedFixtures ?? summary.postponed ?? 0);
   const facilityHours = Number(metrics.facilityHours ?? summary.facilityHours ?? 0);
   const youthFixtures = Number(metrics.youthFixtures ?? 0);
@@ -31,13 +31,13 @@ export function buildGrantEvidenceFramework({
   const parkingPressure = Number(metrics.parkingPressureWeeks ?? summary.parkingOverCapacity ?? 0);
   const officialCoverage = Number(metrics.officialCoverage ?? summary.officialCoverage ?? 0);
   const identityScore = club?.name ? (club?.venue || club?.postcode || asArray(club?.sites).length ? 100 : 60) : 0;
-  const demandScore = Math.min(100, entries.length * 12.5 + Math.min(50, delivered * 2));
+  const demandScore = Math.min(100, entries.length * 12.5 + Math.min(50, scheduled * 2));
   const facilityScore = asArray(pitchCfg).length && facilityHours ? 100 : asArray(pitchCfg).length || facilityHours ? 55 : 0;
   const resilienceScore = entries.length && (postponed > 0 || summary.deliveryRate != null) ? 100 : entries.length ? 55 : 0;
-  const participationScore = delivered ? (asArray(teamCfg).length ? 75 : 50) : 0;
+  const participationScore = scheduled ? (asArray(teamCfg).length ? 60 : 40) : 0;
   const inclusionScore = youthFixtures || femaleFixtures ? 45 : 0;
   const accessScore = summary.parkingConfigured || parkingPressure ? 75 : 0;
-  const workforceScore = delivered ? officialCoverage : asArray(refs).length ? 40 : 0;
+  const workforceScore = scheduled ? officialCoverage : asArray(refs).length ? 40 : 0;
   const monitoringScore = entries.length >= 8 ? 100 : entries.length >= 4 ? 65 : entries.length ? 35 : 0;
 
   const requirements = [
@@ -55,11 +55,11 @@ export function buildGrantEvidenceFramework({
     requirement({
       id: "sustained-demand",
       category: "Need and demand",
-      title: "Sustained operational demand",
+      title: "Sustained scheduled demand",
       status: statusFor(demandScore),
       source: "recorded",
-      evidence: `${delivered} delivered fixture${delivered === 1 ? "" : "s"} across ${entries.length} selected matchday${entries.length === 1 ? "" : "s"}.`,
-      nextAction: demandScore >= 80 ? "Use the source appendix to evidence the trend." : "Save more completed matchdays before presenting demand as a sustained pattern.",
+      evidence: `${scheduled} fixture${scheduled === 1 ? "" : "s"} recorded as scheduled to proceed across ${entries.length} selected matchday${entries.length === 1 ? "" : "s"}.`,
+      nextAction: demandScore >= 80 ? "Use the source appendix as evidence of scheduled demand, then add attendance or membership records where the funder asks for beneficiaries." : "Save more matchweeks before presenting scheduled demand as a sustained pattern.",
     }),
     requirement({
       id: "facility-use",
@@ -76,17 +76,17 @@ export function buildGrantEvidenceFramework({
       title: "Reliability and surface resilience",
       status: statusFor(resilienceScore),
       source: "recorded",
-      evidence: `${postponed} postponement${postponed === 1 ? "" : "s"}; ${summary.deliveryRate || 0}% recorded delivery rate.`,
+      evidence: `${postponed} postponement${postponed === 1 ? "" : "s"}; ${summary.scheduleCompletionRate ?? summary.deliveryRate ?? 0}% of recorded fixtures remained scheduled rather than postponed or cancelled.`,
       nextAction: "Record postponement reasons and maintenance closures so the cause of lost activity can be demonstrated.",
     }),
     requirement({
       id: "participation-opportunity",
       category: "Participation",
-      title: "Participation opportunities",
+      title: "Team fixture opportunities",
       status: statusFor(participationScore),
       source: "calculated",
-      evidence: `${delivered * 2} team participation opportunities inferred from ${delivered} delivered fixtures.`,
-      nextAction: "Add registered-player and attendance figures before making claims about individual beneficiaries.",
+      evidence: `${scheduled * 2} team fixture opportunities calculated from ${scheduled} fixtures scheduled to proceed. This is not a player or attendance count.`,
+      nextAction: "Add registered-player, demographic and attendance records before making claims about individual beneficiaries or completed participation.",
     }),
     requirement({
       id: "inclusion-reach",
@@ -109,10 +109,10 @@ export function buildGrantEvidenceFramework({
     requirement({
       id: "workforce",
       category: "Workforce",
-      title: "Officials and volunteer delivery capacity",
+      title: "Officials and volunteer scheduling capacity",
       status: statusFor(workforceScore, 85, 35),
       source: "recorded",
-      evidence: `${officialCoverage}% confirmed-official coverage across delivered fixtures.`,
+      evidence: `${officialCoverage}% confirmed-official coverage across fixtures scheduled to proceed.`,
       nextAction: "Add volunteer numbers, qualifications, training needs and retention evidence for workforce funding.",
     }),
     requirement({
@@ -168,7 +168,7 @@ export function buildGrantEvidenceFramework({
     tone: score >= 80 ? "success" : score >= 55 ? "warning" : "danger",
     counts,
     requirements,
-    disclaimer: "This matrix organises evidence commonly requested in funding applications. It is not a funder-specific eligibility assessment. Scheme requirements must be checked against the current guidance before an application is submitted.",
+    disclaimer: "This matrix organises operational evidence commonly requested in funding applications. Scheduled fixtures, estimated parking and inferred team categories do not prove attendance, beneficiaries or completed activity. It is not a funder-specific eligibility assessment, and every scheme requirement must be checked against current official guidance before submission.",
   };
 }
 

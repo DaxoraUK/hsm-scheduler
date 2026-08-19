@@ -13,7 +13,6 @@ import {
   ClipboardList,
   Building2,
   Radio,
-  History,
   Sparkles,
 } from "lucide-react";
 import { cleanName } from "../../../lib/scheduler.js";
@@ -27,6 +26,16 @@ import {
 import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.js";
 import StatusChip from "@/ui/StatusChip.jsx";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
+import { toast } from "../../../lib/notifications/daxoraNotifications.js";
+
+const PARKING_ADVISORY_TYPES = new Set([
+  "parking_capacity",
+  "parking_concurrency",
+]);
+
+function isParkingAdvisory(impact) {
+  return PARKING_ADVISORY_TYPES.has(String(impact?.type || ""));
+}
 
 export default function FixtureDrawer({
   fixture,
@@ -60,7 +69,8 @@ export default function FixtureDrawer({
   const format =
     fixture.cfg?.format || fixture.manualFormat || fixture.format || "Fixture";
 
-  const fixtureIndex = typeof fixture.__index === "number" ? fixture.__index : 0;
+  const fixtureIndex =
+    typeof fixture.__index === "number" ? fixture.__index : 0;
   const canEdit = !readOnly && typeof onOverride === "function";
 
   const closeDrawer = () => {
@@ -119,8 +129,12 @@ export default function FixtureDrawer({
     });
 
     if (!impact.ok) {
+      const canOverride = isParkingAdvisory(impact);
+
       setBlockedMove({
         ...impact,
+        severity: canOverride ? "warning" : impact.severity,
+        canOverride,
         pendingPatch: patch,
       });
       return;
@@ -156,6 +170,22 @@ export default function FixtureDrawer({
     });
   };
 
+  const applyPendingOverride = () => {
+    const patch = blockedMove?.pendingPatch;
+    if (!patch || !blockedMove?.canOverride) return;
+
+    applyFixturePatch(patch);
+    setBlockedMove(null);
+    toast.warning("Fixture change applied with a parking warning", {
+      description:
+        "The schedule has been updated. Review the parking plan before publishing the matchday.",
+    });
+  };
+
+  const discardPendingChange = () => {
+    setBlockedMove(null);
+  };
+
   const fixtureHealth = getFixtureHealth(displayFixture);
   const recommendations = getFixtureRecommendations(displayFixture);
 
@@ -163,8 +193,8 @@ export default function FixtureDrawer({
     fixtureHealth.variant === "success"
       ? "text-emerald-700"
       : fixtureHealth.variant === "warning"
-      ? "text-amber-700"
-      : "text-red-700";
+        ? "text-amber-700"
+        : "text-red-700";
 
   const managerMessage = `Hi! ${teamName} are home.
 
@@ -203,7 +233,6 @@ Good luck!`;
     ["overview", "Overview", ClipboardList],
     ["operations", "Operations", Building2],
     ["messages", "Messages", MessageSquareText],
-    ["history", "History", History],
   ];
 
   return (
@@ -350,14 +379,14 @@ Good luck!`;
                               fixture.__day ||
                                 fixture.day ||
                                 fixture.cfg?.day ||
-                                ""
+                                "",
                             )
                               .toLowerCase()
                               .includes("sunday")
                               ? "sunday"
                               : "saturday",
                           },
-                        })
+                        }),
                       );
                     }}
                     className="mb-5 w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
@@ -378,6 +407,8 @@ Good luck!`;
                     applySuggestedPitch={applySuggestedPitch}
                     applySuggestedTime={applySuggestedTime}
                     applyValidatedRecommendation={applyValidatedRecommendation}
+                    applyPendingOverride={applyPendingOverride}
+                    discardPendingChange={discardPendingChange}
                   />
                 )}
 
@@ -386,7 +417,9 @@ Good luck!`;
                     {canEdit ? (
                       <select
                         value={displayFixture.status || "active"}
-                        onChange={(e) => updateFixture("status", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("status", e.target.value)
+                        }
                         className="control-input"
                       >
                         <option value="active">Active</option>
@@ -394,7 +427,9 @@ Good luck!`;
                         <option value="cancelled">Cancelled</option>
                       </select>
                     ) : (
-                      <ReadOnlyValue value={displayFixture.status || "active"} />
+                      <ReadOnlyValue
+                        value={displayFixture.status || "active"}
+                      />
                     )}
                   </ControlRow>
 
@@ -403,7 +438,9 @@ Good luck!`;
                       <input
                         type="time"
                         value={displayFixture.koTime || ""}
-                        onChange={(e) => updateFixture("koTime", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("koTime", e.target.value)
+                        }
                         className="control-input"
                       />
                     ) : (
@@ -415,7 +452,9 @@ Good luck!`;
                     {canEdit ? (
                       <select
                         value={displayFixture.pitchId || ""}
-                        onChange={(e) => updateFixture("pitchId", e.target.value)}
+                        onChange={(e) =>
+                          updateFixture("pitchId", e.target.value)
+                        }
                         className="control-input"
                       >
                         <option value="">Select pitch...</option>
@@ -428,7 +467,8 @@ Good luck!`;
                               value={pitch.id}
                               disabled={isClosed}
                             >
-                              {pitch.label}{isClosed ? " (Closed)" : ""}
+                              {pitch.label}
+                              {isClosed ? " (Closed)" : ""}
                             </option>
                           );
                         })}
@@ -453,8 +493,14 @@ Good luck!`;
                         value={
                           refs.find(
                             (ref) =>
-                              String(ref.name || "").replace(/\./g, "").trim().toLowerCase() ===
-                              String(displayFixture.referee || "").replace(/\./g, "").trim().toLowerCase()
+                              String(ref.name || "")
+                                .replace(/\./g, "")
+                                .trim()
+                                .toLowerCase() ===
+                              String(displayFixture.referee || "")
+                                .replace(/\./g, "")
+                                .trim()
+                                .toLowerCase(),
                           )?.name ||
                           displayFixture.referee ||
                           ""
@@ -465,7 +511,7 @@ Good luck!`;
                           const selectedRef = refs.find(
                             (ref) =>
                               String(ref.name || "").trim() ===
-                              String(value || "").trim()
+                              String(value || "").trim(),
                           );
 
                           updateFixturePatch({
@@ -508,7 +554,9 @@ Good luck!`;
                         <option value="Confirmed">Confirmed</option>
                       </select>
                     ) : (
-                      <ReadOnlyValue value={displayFixture.refStatus || "TBC"} />
+                      <ReadOnlyValue
+                        value={displayFixture.refStatus || "TBC"}
+                      />
                     )}
                   </ControlRow>
 
@@ -636,20 +684,6 @@ Good luck!`;
               </div>
             </DrawerSection>
           )}
-
-          {activeTab === "history" && (
-            <DrawerSection
-              icon={History}
-              eyebrow="History"
-              title="Fixture History"
-              description="Audit trail placeholder. This will connect to Supabase history later."
-            >
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
-                History tracking will appear here once fixture-level audit events
-                are wired into Ground Control.
-              </div>
-            </DrawerSection>
-          )}
         </div>
       </aside>
     </div>
@@ -661,27 +695,46 @@ function BlockedMoveCard({
   applySuggestedPitch,
   applySuggestedTime,
   applyValidatedRecommendation,
+  applyPendingOverride,
+  discardPendingChange,
 }) {
+  const advisory = blockedMove.canOverride === true;
   const validatedRecommendations = blockedMove.validatedRecommendations || [];
   const hasValidatedRecommendations = validatedRecommendations.length > 0;
   const hasPitchSuggestions = blockedMove.pitchSuggestions?.length > 0;
   const hasTimeSuggestions = blockedMove.timeSuggestions?.length > 0;
 
   return (
-    <div className="mb-5 overflow-hidden rounded-3xl border border-red-200 bg-white shadow-sm">
-      <div className="border-b border-red-200 bg-red-50 px-5 py-4">
+    <div
+      className={`mb-5 overflow-hidden rounded-3xl border bg-white shadow-sm ${
+        advisory ? "border-amber-200" : "border-red-200"
+      }`}
+    >
+      <div
+        className={`border-b px-5 py-4 ${
+          advisory ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"
+        }`}
+      >
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100">
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+              advisory ? "bg-amber-100" : "bg-red-100"
+            }`}
+          >
             <AlertTriangle
-              className="text-red-700"
+              className={advisory ? "text-amber-700" : "text-red-700"}
               size={20}
               strokeWidth={2.5}
             />
           </div>
 
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.22em] text-red-700">
-              Operations Impact
+            <div
+              className={`text-xs font-black uppercase tracking-[0.22em] ${
+                advisory ? "text-amber-700" : "text-red-700"
+              }`}
+            >
+              {advisory ? "Operational warning" : "Operations impact"}
             </div>
 
             <div className="mt-1 text-lg font-black text-slate-900">
@@ -694,6 +747,18 @@ function BlockedMoveCard({
       <div className="space-y-5 p-5">
         <div className="text-sm font-medium leading-6 text-slate-600">
           {blockedMove.message}
+        </div>
+
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+            advisory
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-red-200 bg-red-50 text-red-900"
+          }`}
+        >
+          {advisory
+            ? "This change has not been applied yet. You can accept the parking risk and apply it manually."
+            : "This change has not been applied."}
         </div>
 
         {blockedMove.action && (
@@ -738,7 +803,6 @@ function BlockedMoveCard({
           </div>
         )}
 
-
         {hasValidatedRecommendations && (
           <div>
             <div className="mb-3 text-xs font-black uppercase tracking-wide text-emerald-700">
@@ -750,7 +814,9 @@ function BlockedMoveCard({
                 <button
                   type="button"
                   key={recommendation.id}
-                  onClick={() => applyValidatedRecommendation(recommendation.patch)}
+                  onClick={() =>
+                    applyValidatedRecommendation(recommendation.patch)
+                  }
                   className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left transition hover:bg-emerald-100"
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -818,12 +884,34 @@ function BlockedMoveCard({
           </div>
         )}
 
-        {!hasValidatedRecommendations && !hasPitchSuggestions && !hasTimeSuggestions && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-            No automatic alternatives found. Try a later kick-off or assign a
-            different official.
-          </div>
-        )}
+        {!hasValidatedRecommendations &&
+          !hasPitchSuggestions &&
+          !hasTimeSuggestions && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+              No automatic alternatives found. Try a later kick-off or assign a
+              different official.
+            </div>
+          )}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={discardPendingChange}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+          >
+            Cancel change
+          </button>
+
+          {advisory && (
+            <button
+              type="button"
+              onClick={applyPendingOverride}
+              className="rounded-2xl bg-amber-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400"
+            >
+              Apply anyway
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

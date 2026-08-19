@@ -14,10 +14,25 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
-import { isMidweekEnabled, isParkingEnabled } from "../../lib/settings/workspaceSettings.js";
-import { ENTITLEMENTS, hasEntitlement } from "../../lib/subscriptions/entitlements.js";
+import {
+  isMidweekEnabled,
+  isParkingEnabled,
+} from "../../lib/settings/workspaceSettings.js";
+import {
+  ENTITLEMENTS,
+  hasEntitlement,
+} from "../../lib/subscriptions/entitlements.js";
 
-function SetupCard({ icon: Icon, eyebrow, title, description, status, tone = "ready", metrics = [], onClick }) {
+function SetupCard({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  status,
+  tone = "ready",
+  metrics = [],
+  onClick,
+}) {
   const toneClasses = {
     ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
     attention: "border-amber-200 bg-amber-50 text-amber-800",
@@ -35,23 +50,37 @@ function SetupCard({ icon: Icon, eyebrow, title, description, status, tone = "re
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-emerald-300">
             <Icon size={21} strokeWidth={2.4} />
           </span>
-          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${toneClasses[tone] || toneClasses.neutral}`}>
+          <span
+            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${toneClasses[tone] || toneClasses.neutral}`}
+          >
             {status}
           </span>
         </div>
-        <div className="mt-5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</div>
-        <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{title}</h3>
-        <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+        <div className="mt-5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          {eyebrow}
+        </div>
+        <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+          {description}
+        </p>
       </div>
       <div className="mt-5 flex items-end justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           {metrics.map((metric) => (
-            <span key={`${metric.label}-${metric.value}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+            <span
+              key={`${metric.label}-${metric.value}`}
+              className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600"
+            >
               {metric.label}: {metric.value}
             </span>
           ))}
         </div>
-        <ArrowRight size={18} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600" />
+        <ArrowRight
+          size={18}
+          className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600"
+        />
       </div>
     </button>
   );
@@ -73,17 +102,40 @@ export default function SettingsOverviewPanel({
   onOpenOnboarding,
   subscription,
 }) {
-  const sites = Array.isArray(club.sites) && club.sites.length ? club.sites : club.venue ? [{ venue: club.venue, postcode: club.postcode }] : [];
+  const sites =
+    Array.isArray(club.sites) && club.sites.length
+      ? club.sites
+      : club.venue
+        ? [{ venue: club.venue, postcode: club.postcode }]
+        : [];
   const primarySite = sites.find((site) => site.isPrimary) || sites[0];
-  const integrations = Object.values(club.integrations || {}).filter((integration) => integration?.enabled).length;
-  const matchdayEnabled = hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING);
-  const midweekEnabled = hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING) && isMidweekEnabled(club);
-  const parkingIncluded = hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE);
+  const integrations = Object.values(club.integrations || {}).filter(
+    (integration) => integration?.enabled,
+  ).length;
+  const matchdayEnabled = hasEntitlement(
+    subscription,
+    ENTITLEMENTS.MATCHDAY_SCHEDULING,
+  );
+  const midweekEnabled =
+    hasEntitlement(subscription, ENTITLEMENTS.MIDWEEK_SCHEDULING) &&
+    isMidweekEnabled(club);
+  const parkingIncluded = hasEntitlement(
+    subscription,
+    ENTITLEMENTS.PARKING_INTELLIGENCE,
+  );
   const parkingEnabled = parkingIncluded && isParkingEnabled(club);
-  const officialsEnabled = hasEntitlement(subscription, ENTITLEMENTS.OFFICIALS_MANAGEMENT);
-  const hasVenue = Boolean(primarySite?.venue || primarySite?.name || club.venue);
-  const hasPostcode = Boolean(primarySite?.postcode || club.postcode || club.weatherPostcode);
-  const hasScheduling = Number.isFinite(Number(startHour)) && Number.isFinite(Number(endHour));
+  const officialsEnabled = hasEntitlement(
+    subscription,
+    ENTITLEMENTS.OFFICIALS_MANAGEMENT,
+  );
+  const hasVenue = Boolean(
+    primarySite?.venue || primarySite?.name || club.venue,
+  );
+  const hasPostcode = Boolean(
+    primarySite?.postcode || club.postcode || club.weatherPostcode,
+  );
+  const hasScheduling =
+    Number.isFinite(Number(startHour)) && Number.isFinite(Number(endHour));
 
   const checks = [
     Boolean(club.name && club.sport),
@@ -107,24 +159,39 @@ export default function SettingsOverviewPanel({
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
               <Gauge size={14} /> Configuration centre
             </div>
-            <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight sm:text-4xl">Set the club up once. Let every workspace use the same truth.</h2>
+            <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight sm:text-4xl">
+              Set the club up once. Let every workspace use the same truth.
+            </h2>
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300 sm:text-base">
-              Ground Control now separates club setup, matchday resources, operating rules and data controls. Reporting and pitch closures live in their operational workspaces, not here.
+              Ground Control now separates club setup, matchday resources,
+              operating rules and data controls. Reporting and pitch closures
+              live in their operational workspaces, not here.
             </p>
           </div>
 
           <div className="rounded-[24px] border border-white/10 bg-white/[0.07] p-5 backdrop-blur">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Launch readiness</div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  Launch readiness
+                </div>
                 <div className="mt-2 text-4xl font-black">{readiness}%</div>
               </div>
-              {ready ? <CheckCircle2 size={30} className="text-emerald-300" /> : <CircleAlert size={30} className="text-amber-300" />}
+              {ready ? (
+                <CheckCircle2 size={30} className="text-emerald-300" />
+              ) : (
+                <CircleAlert size={30} className="text-amber-300" />
+              )}
             </div>
             <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/10">
-              <div className={`h-full rounded-full ${ready ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${readiness}%` }} />
+              <div
+                className={`h-full rounded-full ${ready ? "bg-emerald-400" : "bg-amber-400"}`}
+                style={{ width: `${readiness}%` }}
+              />
             </div>
-            <div className="mt-3 text-sm font-bold text-slate-300">{completed} of {checks.length} launch checks complete</div>
+            <div className="mt-3 text-sm font-bold text-slate-300">
+              {completed} of {checks.length} launch checks complete
+            </div>
           </div>
         </div>
       </section>
@@ -135,9 +202,23 @@ export default function SettingsOverviewPanel({
           eyebrow="Guided setup"
           title="Customer onboarding"
           description="Review or re-run the secure setup wizard that creates the club's operational baseline."
-          status={onboarding.status === "complete" ? "Complete" : onboarding.status === "in_progress" ? "In progress" : "Needs setup"}
+          status={
+            onboarding.status === "complete"
+              ? "Complete"
+              : onboarding.status === "in_progress"
+                ? "In progress"
+                : "Needs setup"
+          }
           tone={onboarding.status === "complete" ? "ready" : "attention"}
-          metrics={[{ label: "Progress", value: onboarding.status === "complete" ? "8/8" : `${onboarding.completedSteps?.length || 0}/8` }]}
+          metrics={[
+            {
+              label: "Progress",
+              value:
+                onboarding.status === "complete"
+                  ? "8/8"
+                  : `${onboarding.completedSteps?.length || 0}/8`,
+            },
+          ]}
           onClick={() => onOpenOnboarding?.()}
         />
 
@@ -155,7 +236,9 @@ export default function SettingsOverviewPanel({
             ...(hasEntitlement(subscription, ENTITLEMENTS.PARKING_INTELLIGENCE)
               ? [{ label: "Parking", value: parkingEnabled ? "On" : "Off" }]
               : []),
-            ...(!matchdayEnabled ? [{ label: "Operations", value: "Not in plan" }] : []),
+            ...(!matchdayEnabled
+              ? [{ label: "Operations", value: "Not in plan" }]
+              : []),
           ]}
           onClick={() => setSettingsTab("workspace")}
         />
@@ -175,9 +258,11 @@ export default function SettingsOverviewPanel({
           icon={MapPinned}
           eyebrow="Locations"
           title={parkingIncluded ? "Venues & parking" : "Venues & sites"}
-          description={parkingIncluded
-            ? "Manage every site, postcode, parking capacity and weather location from one dedicated view."
-            : "Manage the club site and postcode used by fixture imports, resources and club records."}
+          description={
+            parkingIncluded
+              ? "Manage every site, postcode, parking capacity and weather location from one dedicated view."
+              : "Manage the club site and postcode used by fixture imports, resources and club records."
+          }
           status={hasVenue && hasPostcode ? "Configured" : "Needs setup"}
           tone={hasVenue && hasPostcode ? "ready" : "attention"}
           metrics={[
@@ -191,14 +276,18 @@ export default function SettingsOverviewPanel({
           icon={UsersRound}
           eyebrow="People"
           title={officialsEnabled ? "Teams & officials" : "Teams"}
-          description={officialsEnabled
-            ? "Maintain the operational people and teams used by scheduling, communications and intelligence."
-            : "Maintain the team records used by fixture imports, communications and club resources."}
+          description={
+            officialsEnabled
+              ? "Maintain the operational people and teams used by scheduling, communications and intelligence."
+              : "Maintain the team records used by fixture imports, communications and club resources."
+          }
           status={teamCfg.length ? "Configured" : "Needs setup"}
           tone={teamCfg.length ? "ready" : "attention"}
           metrics={[
             { label: "Teams", value: teamCfg.length },
-            ...(officialsEnabled ? [{ label: "Officials", value: refs.length }] : []),
+            ...(officialsEnabled
+              ? [{ label: "Officials", value: refs.length }]
+              : []),
           ]}
           onClick={() => setSettingsTab("teams")}
         />
@@ -212,7 +301,9 @@ export default function SettingsOverviewPanel({
           tone={pitchCfg.length ? "ready" : "attention"}
           metrics={[
             { label: "Pitches", value: pitchCfg.length },
-            ...(matchdayEnabled ? [{ label: "Max games", value: club.maxConcurrent || "Unset" }] : []),
+            ...(matchdayEnabled
+              ? [{ label: "Max games", value: club.maxConcurrent || "Unset" }]
+              : []),
           ]}
           onClick={() => setSettingsTab("pitches")}
         />
@@ -225,7 +316,12 @@ export default function SettingsOverviewPanel({
             description="Review the weekend operating window, changeover buffers and concurrent-game limit."
             status={hasScheduling ? "Configured" : "Needs setup"}
             tone={hasScheduling ? "ready" : "attention"}
-            metrics={[{ label: "Window", value: `${String(startHour ?? 8).padStart(2, "0")}:${String(startMin ?? 30).padStart(2, "0")}–${String(endHour ?? 11).padStart(2, "0")}:${String(endMin ?? 30).padStart(2, "0")}` }]}
+            metrics={[
+              {
+                label: "Window",
+                value: `${String(startHour ?? 8).padStart(2, "0")}:${String(startMin ?? 30).padStart(2, "0")}–${String(endHour ?? 11).padStart(2, "0")}:${String(endMin ?? 30).padStart(2, "0")}`,
+              },
+            ]}
             onClick={() => setSettingsTab("timing")}
           />
         ) : null}
@@ -234,7 +330,7 @@ export default function SettingsOverviewPanel({
           icon={PlugZap}
           eyebrow="Connections"
           title="Fixture sources"
-          description="Configure live fixture sources only. Planned integrations stay visible without pretending to be available."
+          description="Configure the Full-Time FA fixture source or continue with manual fixture entry."
           status={integrations ? `${integrations} enabled` : "Not configured"}
           tone={integrations ? "ready" : "neutral"}
           metrics={[{ label: "Active", value: integrations }]}
@@ -248,18 +344,30 @@ export default function SettingsOverviewPanel({
           description="Check cloud status and export a portable club configuration backup before launch."
           status={dbStatus === "connected" ? "Connected" : "Needs attention"}
           tone={dbStatus === "connected" ? "ready" : "attention"}
-          metrics={[{ label: "Storage", value: dbStatus === "connected" ? "Cloud" : "Local" }]}
+          metrics={[
+            {
+              label: "Storage",
+              value: dbStatus === "connected" ? "Cloud" : "Local",
+            },
+          ]}
           onClick={() => setSettingsTab("data")}
         />
       </section>
 
       <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700"><ShieldCheck size={21} /></span>
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+            <ShieldCheck size={21} />
+          </span>
           <div>
-            <h3 className="text-lg font-black text-slate-950">What no longer belongs in Settings</h3>
+            <h3 className="text-lg font-black text-slate-950">
+              What no longer belongs in Settings
+            </h3>
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-              Analytics and statistics stay in Analytics. Pitch closures stay in Operations, where matchday decisions are made. Product colours and club-logo uploads are removed so Ground Control keeps one consistent interface.
+              Analytics and statistics stay in Analytics. Pitch closures stay in
+              Operations, where matchday decisions are made. Product colours and
+              club-logo uploads are removed so Ground Control keeps one
+              consistent interface.
             </p>
           </div>
         </div>

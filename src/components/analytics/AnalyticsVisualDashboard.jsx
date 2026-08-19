@@ -9,12 +9,10 @@ import {
   Database,
   MapPinned,
   ShieldCheck,
-  Sparkles,
   Trophy,
   UsersRound,
   Shapes,
   CloudRain,
-  TriangleAlert,
   FileSearch,
   Info,
 } from "lucide-react";
@@ -72,10 +70,16 @@ function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
           <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
             {label}
           </div>
-          <div className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</div>
-          <div className="mt-2 text-sm font-semibold leading-6 text-slate-500">{detail}</div>
+          <div className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+            {value}
+          </div>
+          <div className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+            {detail}
+          </div>
         </div>
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${styles[tone]}`}>
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${styles[tone]}`}
+        >
           <Icon size={21} strokeWidth={2.5} />
         </div>
       </div>
@@ -84,7 +88,12 @@ function MetricCard({ icon: Icon, label, value, detail, tone = "neutral" }) {
 }
 
 function InsightPanel({ model }) {
-  const tone = model.summary.deliveryRate >= 90 ? "success" : model.summary.deliveryRate >= 75 ? "warning" : "danger";
+  const tone =
+    model.summary.deliveryRate >= 90
+      ? "success"
+      : model.summary.deliveryRate >= 75
+        ? "warning"
+        : "danger";
 
   return (
     <section className="overflow-hidden rounded-[34px] bg-gradient-to-br from-slate-950 via-[#0b1c2b] to-emerald-950 text-white shadow-2xl shadow-slate-900/15">
@@ -93,13 +102,14 @@ function InsightPanel({ model }) {
           <div className="flex flex-wrap items-center gap-3">
             <StatusChip status={tone}>
               {model.summary.deliveryRate >= 90
-                ? "Strong delivery"
+                ? "Strong schedule completion"
                 : model.summary.deliveryRate >= 75
-                  ? "Performance watch"
+                  ? "Schedule watch"
                   : "Action required"}
             </StatusChip>
             <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">
-              {model.selectedMatchdays} selected matchday{model.selectedMatchdays === 1 ? "" : "s"}
+              {model.selectedMatchdays} selected matchday
+              {model.selectedMatchdays === 1 ? "" : "s"}
             </span>
           </div>
 
@@ -112,16 +122,28 @@ function InsightPanel({ model }) {
 
           <div className="mt-7 flex flex-wrap gap-3">
             <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/10">
-              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Average load</div>
-              <div className="mt-1 text-xl font-black">{model.summary.avgFixtures} fixtures</div>
+              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Average load
+              </div>
+              <div className="mt-1 text-xl font-black">
+                {model.summary.avgFixtures} fixtures
+              </div>
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/10">
-              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Activity delivered</div>
-              <div className="mt-1 text-xl font-black">{model.summary.facilityHours} hours</div>
+              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Scheduled pitch time
+              </div>
+              <div className="mt-1 text-xl font-black">
+                {model.summary.facilityHours} hours
+              </div>
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/10">
-              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Peak parking</div>
-              <div className="mt-1 text-xl font-black">{model.summary.peakParking} vehicles</div>
+              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Peak parking
+              </div>
+              <div className="mt-1 text-xl font-black">
+                {model.summary.peakParking} vehicles
+              </div>
             </div>
           </div>
         </div>
@@ -131,20 +153,26 @@ function InsightPanel({ model }) {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/20">
               <Database size={24} strokeWidth={2.5} />
             </div>
-            <div className="text-4xl font-black text-emerald-300">{model.quality.score}%</div>
+            <div className="text-4xl font-black text-emerald-300">
+              {model.quality.score}%
+            </div>
           </div>
           <div className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
             Analytics evidence depth
           </div>
-          <div className="mt-2 text-2xl font-black">
-            {model.quality.label}
-          </div>
+          <div className="mt-2 text-2xl font-black">{model.quality.label}</div>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">
             {model.quality.methodology}
           </p>
           <ProgressBar
             value={model.quality.score}
-            tone={model.quality.score >= 85 ? "success" : model.quality.score >= 65 ? "warning" : "danger"}
+            tone={
+              model.quality.score >= 85
+                ? "success"
+                : model.quality.score >= 65
+                  ? "warning"
+                  : "danger"
+            }
             className="mt-6"
           />
         </div>
@@ -153,7 +181,16 @@ function InsightPanel({ model }) {
   );
 }
 
-function Panel({ id, icon: Icon, title, subtitle, badge, open, onToggle, children }) {
+function Panel({
+  id,
+  icon: Icon,
+  title,
+  subtitle,
+  badge,
+  open,
+  onToggle,
+  children,
+}) {
   return (
     <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
       <button
@@ -168,7 +205,9 @@ function Panel({ id, icon: Icon, title, subtitle, badge, open, onToggle, childre
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">{title}</h2>
+              <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">
+                {title}
+              </h2>
               {badge ? (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
                   {badge}
@@ -184,64 +223,100 @@ function Panel({ id, icon: Icon, title, subtitle, badge, open, onToggle, childre
           className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open ? <div className="border-t border-slate-200 p-5 sm:p-6">{children}</div> : null}
+      {open ? (
+        <div className="border-t border-slate-200 p-5 sm:p-6">{children}</div>
+      ) : null}
     </section>
   );
 }
 
-
 function QualityMeasureRow({ item, contextual = false }) {
-  const tone = item.value >= 85 ? "success" : item.value >= 55 ? "warning" : "danger";
+  const tone =
+    item.value >= 85 ? "success" : item.value >= 55 ? "warning" : "danger";
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-black text-slate-900">{item.label}</div>
+            <div className="text-sm font-black text-slate-900">
+              {item.label}
+            </div>
             {contextual ? (
               <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 ring-1 ring-slate-200">
                 Project-specific
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{item.detail}</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+            {item.detail}
+          </p>
         </div>
-        <div className="shrink-0 text-xl font-black text-slate-950">{item.value}%</div>
+        <div className="shrink-0 text-xl font-black text-slate-950">
+          {item.value}%
+        </div>
       </div>
       <ProgressBar value={item.value} tone={tone} className="mt-3" />
     </div>
   );
 }
 
-function EvidenceQualityPanel({ quality }) {
-  const coreMeasures = quality.coreMeasures || quality.measures.filter((item) => item.relevance !== "contextual");
-  const contextualMeasures = quality.contextualMeasures || quality.measures.filter((item) => item.relevance === "contextual");
-  const coreGaps = quality.gaps.filter((gap) => coreMeasures.some((item) => item.id === gap.id));
+function EvidenceQualityPanel({ quality, embedded = false }) {
+  const coreMeasures =
+    quality.coreMeasures ||
+    quality.measures.filter((item) => item.relevance !== "contextual");
+  const contextualMeasures =
+    quality.contextualMeasures ||
+    quality.measures.filter((item) => item.relevance === "contextual");
+  const coreGaps = quality.gaps.filter((gap) =>
+    coreMeasures.some((item) => item.id === gap.id),
+  );
 
   return (
-    <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+    <section
+      className={`overflow-hidden rounded-[30px] border border-slate-200 bg-white ${embedded ? "" : "shadow-sm"}`}
+    >
       <div className="grid gap-0 xl:grid-cols-[0.72fr_1.28fr]">
         <div className="border-b border-slate-200 bg-slate-50 p-6 xl:border-b-0 xl:border-r sm:p-7">
           <div className="flex flex-wrap items-center gap-3">
             <StatusChip status={quality.tone}>{quality.label}</StatusChip>
-            <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{quality.period.label}</span>
+            <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              {quality.period.label}
+            </span>
           </div>
 
           <div className="mt-6 flex items-end gap-3">
-            <div className="text-6xl font-black tracking-[-0.06em] text-slate-950">{quality.score}%</div>
-            <div className="pb-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">Core record confidence</div>
+            <div className="text-6xl font-black tracking-[-0.06em] text-slate-950">
+              {quality.score}%
+            </div>
+            <div className="pb-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+              Core record confidence
+            </div>
           </div>
-          <ProgressBar value={quality.score} tone={quality.tone} className="mt-5" />
-          <p className="mt-5 text-sm font-semibold leading-6 text-slate-600">{quality.methodology}</p>
+          <ProgressBar
+            value={quality.score}
+            tone={quality.tone}
+            className="mt-5"
+          />
+          <p className="mt-5 text-sm font-semibold leading-6 text-slate-600">
+            {quality.methodology}
+          </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Matchdays</div>
-              <div className="mt-2 text-2xl font-black text-slate-950">{quality.matchdays}</div>
+              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Matchdays
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-950">
+                {quality.matchdays}
+              </div>
             </div>
             <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Fixture records</div>
-              <div className="mt-2 text-2xl font-black text-slate-950">{quality.fixtures}</div>
+              <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Fixture records
+              </div>
+              <div className="mt-2 text-2xl font-black text-slate-950">
+                {quality.fixtures}
+              </div>
             </div>
           </div>
         </div>
@@ -249,24 +324,38 @@ function EvidenceQualityPanel({ quality }) {
         <div className="p-6 sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Core evidence measures</div>
-              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">What makes the selected analytics reliable</h3>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Core evidence measures
+              </div>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">
+                What makes the selected analytics reliable
+              </h3>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{coreMeasures.length} core checks</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+              {coreMeasures.length} core checks
+            </span>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {coreMeasures.map((item) => <QualityMeasureRow key={item.id} item={item} />)}
+            {coreMeasures.map((item) => (
+              <QualityMeasureRow key={item.id} item={item} />
+            ))}
           </div>
 
           {contextualMeasures.length ? (
             <div className="mt-6 border-t border-slate-200 pt-6">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Contextual evidence</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                Contextual evidence
+              </div>
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
-                These fields do not reduce the general confidence score. They become important when a selected report or funding project needs them.
+                These fields do not reduce the general confidence score. They
+                become important when a selected report or funding project needs
+                them.
               </p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {contextualMeasures.map((item) => <QualityMeasureRow key={item.id} item={item} contextual />)}
+                {contextualMeasures.map((item) => (
+                  <QualityMeasureRow key={item.id} item={item} contextual />
+                ))}
               </div>
             </div>
           ) : null}
@@ -277,7 +366,12 @@ function EvidenceQualityPanel({ quality }) {
         <div className="border-t border-amber-200 bg-amber-50 px-6 py-4 sm:px-7">
           <div className="flex items-start gap-3 text-sm font-semibold leading-6 text-amber-950">
             <Info size={18} className="mt-0.5 shrink-0 text-amber-700" />
-            <span><strong>Priority core gap: {coreGaps[0].label} at {coreGaps[0].value}%.</strong> {coreGaps[0].action}</span>
+            <span>
+              <strong>
+                Priority core gap: {coreGaps[0].label} at {coreGaps[0].value}%.
+              </strong>{" "}
+              {coreGaps[0].action}
+            </span>
           </div>
         </div>
       ) : null}
@@ -305,15 +399,52 @@ function SourceRecords({ rows }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="align-top">
-              <td className="border-b border-slate-100 px-3 py-4 text-xs font-bold text-slate-500">{row.entryLabel}</td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-bold text-slate-700">{row.dayLabel}<div className="mt-1 text-xs text-slate-400">{row.dateLabel}</div></td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-800">{row.koTime}</td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-950">{row.fixtureLabel}</td>
-              <td className="border-b border-slate-100 px-3 py-4"><StatusChip status={row.status === "delivered" ? "success" : row.status === "postponed" ? "warning" : row.status === "cancelled" ? "danger" : "review"} size="sm">{row.statusLabel}</StatusChip></td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.pitchLabel}</td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.format}</td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">{row.referee}<div className="mt-1 text-xs text-slate-400">{row.officialStatus}</div></td>
-              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold capitalize text-slate-600">{row.weatherRisk}</td>
+              <td className="border-b border-slate-100 px-3 py-4 text-xs font-bold text-slate-500">
+                {row.entryLabel}
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-bold text-slate-700">
+                {row.dayLabel}
+                <div className="mt-1 text-xs text-slate-400">
+                  {row.dateLabel}
+                </div>
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-800">
+                {row.koTime}
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-black text-slate-950">
+                {row.fixtureLabel}
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4">
+                <StatusChip
+                  status={
+                    row.status === "delivered"
+                      ? "success"
+                      : row.status === "postponed"
+                        ? "warning"
+                        : row.status === "cancelled"
+                          ? "danger"
+                          : "review"
+                  }
+                  size="sm"
+                >
+                  {row.statusLabel}
+                </StatusChip>
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">
+                {row.pitchLabel}
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">
+                {row.format}
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold text-slate-600">
+                {row.referee}
+                <div className="mt-1 text-xs text-slate-400">
+                  {row.officialStatus}
+                </div>
+              </td>
+              <td className="border-b border-slate-100 px-3 py-4 text-sm font-semibold capitalize text-slate-600">
+                {row.weatherRisk}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -340,31 +471,63 @@ function OutcomeTrend({ weekly }) {
       <div className="flex min-h-[260px] items-end gap-3 overflow-x-auto pb-2">
         {weekly.map((week) => {
           const height = Math.max(18, Math.round((week.total / max) * 210));
-          const deliveredHeight = week.total ? Math.round((week.delivered / week.total) * height) : 0;
-          const postponedHeight = week.total ? Math.round((week.postponed / week.total) * height) : 0;
-          const cancelledHeight = Math.max(0, height - deliveredHeight - postponedHeight);
+          const deliveredHeight = week.total
+            ? Math.round((week.delivered / week.total) * height)
+            : 0;
+          const postponedHeight = week.total
+            ? Math.round((week.postponed / week.total) * height)
+            : 0;
+          const cancelledHeight = Math.max(
+            0,
+            height - deliveredHeight - postponedHeight,
+          );
 
           return (
-            <div key={week.id} className="flex min-w-[54px] flex-1 flex-col items-center justify-end">
-              <div className="mb-2 text-xs font-black text-slate-600">{week.total}</div>
+            <div
+              key={week.id}
+              className="flex min-w-[54px] flex-1 flex-col items-center justify-end"
+            >
+              <div className="mb-2 text-xs font-black text-slate-600">
+                {week.total}
+              </div>
               <div
                 className="flex w-full max-w-[58px] flex-col-reverse overflow-hidden rounded-t-xl bg-slate-100"
                 style={{ height }}
-                title={`${week.fullLabel}: ${week.delivered} delivered, ${week.postponed} postponed, ${week.cancelled} cancelled`}
+                title={`${week.fullLabel}: ${week.delivered} scheduled, ${week.postponed} postponed, ${week.cancelled} cancelled`}
               >
-                <div className="bg-emerald-500" style={{ height: deliveredHeight }} />
-                <div className="bg-amber-400" style={{ height: postponedHeight }} />
-                <div className="bg-rose-500" style={{ height: cancelledHeight }} />
+                <div
+                  className="bg-emerald-500"
+                  style={{ height: deliveredHeight }}
+                />
+                <div
+                  className="bg-amber-400"
+                  style={{ height: postponedHeight }}
+                />
+                <div
+                  className="bg-rose-500"
+                  style={{ height: cancelledHeight }}
+                />
               </div>
-              <div className="mt-3 whitespace-nowrap text-[10px] font-black text-slate-400">{week.label}</div>
+              <div className="mt-3 whitespace-nowrap text-[10px] font-black text-slate-400">
+                {week.label}
+              </div>
             </div>
           );
         })}
       </div>
       <div className="mt-4 flex flex-wrap gap-5 text-xs font-bold text-slate-500">
-        <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Delivered</span>
-        <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-amber-400" />Postponed</span>
-        <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-rose-500" />Cancelled</span>
+        <span className="inline-flex items-center gap-2">
+          <i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+          Scheduled
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <i className="h-2.5 w-2.5 rounded-sm bg-amber-400" />
+          Postponed
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <i className="h-2.5 w-2.5 rounded-sm bg-rose-500" />
+          Cancelled
+        </span>
       </div>
     </div>
   );
@@ -376,11 +539,18 @@ function KickOffBars({ data }) {
   return (
     <div className="flex min-h-[250px] items-end gap-2 overflow-x-auto pb-2">
       {data.map((item) => (
-        <div key={item.label} className="flex min-w-[48px] flex-1 flex-col items-center justify-end">
-          <div className="mb-2 text-xs font-black text-slate-600">{item.count}</div>
+        <div
+          key={item.label}
+          className="flex min-w-[48px] flex-1 flex-col items-center justify-end"
+        >
+          <div className="mb-2 text-xs font-black text-slate-600">
+            {item.count}
+          </div>
           <div
             className="w-full max-w-[54px] rounded-t-xl bg-gradient-to-t from-emerald-700 to-emerald-400"
-            style={{ height: Math.max(12, Math.round((item.count / max) * 190)) }}
+            style={{
+              height: Math.max(12, Math.round((item.count / max) * 190)),
+            }}
             title={`${item.label}: ${item.count} fixtures`}
           />
           <div className="mt-3 -rotate-45 whitespace-nowrap text-[10px] font-black text-slate-400">
@@ -399,41 +569,101 @@ function ParkingLine({ weekly }) {
   const maxValue = Math.max(
     ...weekly.map((week) => week.parkingPeak),
     ...weekly.map((week) => week.parkingCapacity || 0),
-    1
+    1,
   );
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const x = (index) =>
-    padding.left + (weekly.length <= 1 ? chartWidth / 2 : (index / (weekly.length - 1)) * chartWidth);
-  const y = (value) => padding.top + chartHeight - (value / maxValue) * chartHeight;
-  const demandPoints = weekly.map((week, index) => `${x(index)},${y(week.parkingPeak)}`).join(" ");
-  const capacityWeeks = weekly.filter((week) => week.parkingEnabled !== false && week.parkingCapacity > 0);
-  const capacityPoints = weekly.map((week, index) => `${x(index)},${y(week.parkingCapacity || 0)}`).join(" ");
+    padding.left +
+    (weekly.length <= 1
+      ? chartWidth / 2
+      : (index / (weekly.length - 1)) * chartWidth);
+  const y = (value) =>
+    padding.top + chartHeight - (value / maxValue) * chartHeight;
+  const demandPoints = weekly
+    .map((week, index) => `${x(index)},${y(week.parkingPeak)}`)
+    .join(" ");
+  const capacityWeeks = weekly.filter(
+    (week) => week.parkingEnabled !== false && week.parkingCapacity > 0,
+  );
+  const capacityPoints = weekly
+    .map((week, index) => `${x(index)},${y(week.parkingCapacity || 0)}`)
+    .join(" ");
 
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px] w-full" role="img" aria-label="Parking pressure trend">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="min-w-[680px] w-full"
+        role="img"
+        aria-label="Parking pressure trend"
+      >
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const value = Math.round(maxValue * ratio);
           const gridY = y(value);
           return (
             <g key={ratio}>
-              <line x1={padding.left} x2={width - padding.right} y1={gridY} y2={gridY} stroke="#e2e8f0" strokeWidth="1" />
-              <text x={padding.left - 8} y={gridY + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{value}</text>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={gridY}
+                y2={gridY}
+                stroke="#e2e8f0"
+                strokeWidth="1"
+              />
+              <text
+                x={padding.left - 8}
+                y={gridY + 4}
+                textAnchor="end"
+                fontSize="10"
+                fill="#94a3b8"
+              >
+                {value}
+              </text>
             </g>
           );
         })}
         {capacityWeeks.length > 0 && weekly.length > 1 ? (
-          <polyline points={capacityPoints} fill="none" stroke="#f43f5e" strokeWidth="2" strokeDasharray="7 6" />
+          <polyline
+            points={capacityPoints}
+            fill="none"
+            stroke="#f43f5e"
+            strokeWidth="2"
+            strokeDasharray="7 6"
+          />
         ) : null}
         {weekly.length === 1 && capacityWeeks.length ? (
-          <line x1={padding.left} x2={width - padding.right} y1={y(weekly[0].parkingCapacity)} y2={y(weekly[0].parkingCapacity)} stroke="#f43f5e" strokeWidth="2" strokeDasharray="7 6" />
+          <line
+            x1={padding.left}
+            x2={width - padding.right}
+            y1={y(weekly[0].parkingCapacity)}
+            y2={y(weekly[0].parkingCapacity)}
+            stroke="#f43f5e"
+            strokeWidth="2"
+            strokeDasharray="7 6"
+          />
         ) : null}
         {capacityWeeks.length ? (
-          <text x={width - padding.right} y={14} textAnchor="end" fontSize="10" fontWeight="700" fill="#e11d48">Saved capacity</text>
+          <text
+            x={width - padding.right}
+            y={14}
+            textAnchor="end"
+            fontSize="10"
+            fontWeight="700"
+            fill="#e11d48"
+          >
+            Saved capacity
+          </text>
         ) : null}
         {weekly.length > 1 ? (
-          <polyline points={demandPoints} fill="none" stroke="#059669" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline
+            points={demandPoints}
+            fill="none"
+            stroke="#059669"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         ) : null}
         {weekly.map((week, index) => (
           <g key={week.id}>
@@ -441,12 +671,36 @@ function ParkingLine({ weekly }) {
               cx={x(index)}
               cy={y(week.parkingPeak)}
               r="6"
-              fill={week.parkingOver ? "#f43f5e" : week.parkingEnabled === false ? "#94a3b8" : "#10b981"}
+              fill={
+                week.parkingOver
+                  ? "#f43f5e"
+                  : week.parkingEnabled === false
+                    ? "#94a3b8"
+                    : "#10b981"
+              }
               stroke="white"
               strokeWidth="3"
             />
-            <text x={x(index)} y={y(week.parkingPeak) - 12} textAnchor="middle" fontSize="11" fontWeight="800" fill="#334155">{week.parkingPeak}</text>
-            <text x={x(index)} y={height - 13} textAnchor="middle" fontSize="10" fontWeight="700" fill="#94a3b8">{week.label}</text>
+            <text
+              x={x(index)}
+              y={y(week.parkingPeak) - 12}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="800"
+              fill="#334155"
+            >
+              {week.parkingPeak}
+            </text>
+            <text
+              x={x(index)}
+              y={height - 13}
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight="700"
+              fill="#94a3b8"
+            >
+              {week.label}
+            </text>
           </g>
         ))}
       </svg>
@@ -463,10 +717,16 @@ function HorizontalBars({ data }) {
         <div key={item.pitchId}>
           <div className="mb-2 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <div className="truncate text-sm font-black text-slate-800">{item.label}</div>
-              <div className="truncate text-xs font-semibold text-slate-400">{item.description || "Configured playing area"}</div>
+              <div className="truncate text-sm font-black text-slate-800">
+                {item.label}
+              </div>
+              <div className="truncate text-xs font-semibold text-slate-400">
+                {item.description || "Configured playing area"}
+              </div>
             </div>
-            <div className="shrink-0 text-sm font-black text-slate-700">{item.total}</div>
+            <div className="shrink-0 text-sm font-black text-slate-700">
+              {item.total}
+            </div>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-100">
             <div
@@ -496,8 +756,14 @@ function HeatCell({ value, max, label }) {
           : { backgroundColor: "#d1fae5", color: "#065f46" };
 
   return (
-    <td className="min-w-[58px] border border-white p-0 text-center" title={label}>
-      <div className="flex h-11 items-center justify-center text-xs font-black" style={style}>
+    <td
+      className="min-w-[58px] border border-white p-0 text-center"
+      title={label}
+    >
+      <div
+        className="flex h-11 items-center justify-center text-xs font-black"
+        style={style}
+      >
         {value || "–"}
       </div>
     </td>
@@ -505,7 +771,10 @@ function HeatCell({ value, max, label }) {
 }
 
 function PitchHeatmap({ rows, weekly }) {
-  const max = Math.max(...rows.flatMap((row) => row.values.map((value) => value.count)), 1);
+  const max = Math.max(
+    ...rows.flatMap((row) => row.values.map((value) => value.count)),
+    1,
+  );
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -516,7 +785,10 @@ function PitchHeatmap({ rows, weekly }) {
               Pitch
             </th>
             {weekly.map((week) => (
-              <th key={week.id} className="min-w-[58px] border-b border-slate-200 px-2 py-3 text-center text-[10px] font-black text-slate-400">
+              <th
+                key={week.id}
+                className="min-w-[58px] border-b border-slate-200 px-2 py-3 text-center text-[10px] font-black text-slate-400"
+              >
                 {week.label}
               </th>
             ))}
@@ -552,7 +824,10 @@ function PitchHeatmap({ rows, weekly }) {
 
 function TimeHeatmap({ rows }) {
   const slots = rows[0]?.values.map((value) => value.slot) || [];
-  const max = Math.max(...rows.flatMap((row) => row.values.map((value) => value.count)), 1);
+  const max = Math.max(
+    ...rows.flatMap((row) => row.values.map((value) => value.count)),
+    1,
+  );
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -563,7 +838,10 @@ function TimeHeatmap({ rows }) {
               Matchday
             </th>
             {slots.map((slot) => (
-              <th key={slot} className="min-w-[58px] border-b border-slate-200 px-2 py-3 text-center text-[10px] font-black text-slate-400">
+              <th
+                key={slot}
+                className="min-w-[58px] border-b border-slate-200 px-2 py-3 text-center text-[10px] font-black text-slate-400"
+              >
                 {slot}
               </th>
             ))}
@@ -595,15 +873,27 @@ function CoverageBars({ weekly }) {
   return (
     <div className="space-y-4">
       {weekly.map((week) => {
-        const tone = week.officialCoverage >= 90 ? "bg-emerald-500" : week.officialCoverage >= 70 ? "bg-amber-400" : "bg-rose-500";
+        const tone =
+          week.officialCoverage >= 90
+            ? "bg-emerald-500"
+            : week.officialCoverage >= 70
+              ? "bg-amber-400"
+              : "bg-rose-500";
         return (
           <div key={week.id}>
             <div className="mb-2 flex items-center justify-between gap-4">
-              <span className="text-sm font-black text-slate-700">{week.fullLabel}</span>
-              <span className="text-sm font-black text-slate-700">{week.officialCoverage}%</span>
+              <span className="text-sm font-black text-slate-700">
+                {week.fullLabel}
+              </span>
+              <span className="text-sm font-black text-slate-700">
+                {week.officialCoverage}%
+              </span>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-              <div className={`h-full rounded-full ${tone}`} style={{ width: `${week.officialCoverage}%` }} />
+              <div
+                className={`h-full rounded-full ${tone}`}
+                style={{ width: `${week.officialCoverage}%` }}
+              />
             </div>
           </div>
         );
@@ -620,21 +910,31 @@ function RankedPerformance({ data, kind = "team" }) {
         <div key={item.key || item.label}>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-black text-slate-800">{item.label}</div>
+              <div className="text-sm font-black text-slate-800">
+                {item.label}
+              </div>
               <div className="mt-1 text-xs font-semibold text-slate-400">
-                {item.delivered} scheduled · {item.postponed} postponed · {item.cancelled} cancelled
+                {item.delivered} scheduled · {item.postponed} postponed ·{" "}
+                {item.cancelled} cancelled
               </div>
             </div>
             <div className="text-right">
-              <div className="text-sm font-black text-slate-800">{item.total} fixtures</div>
-              <div className="text-xs font-bold text-slate-400">{item.facilityHours} hours</div>
+              <div className="text-sm font-black text-slate-800">
+                {item.total} fixtures
+              </div>
+              <div className="text-xs font-bold text-slate-400">
+                {item.facilityHours} hours
+              </div>
             </div>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-            <div className={`h-full rounded-full ${kind === "format" ? "bg-sky-500" : "bg-emerald-500"}`} style={{ width: `${Math.max(3, (item.total / max) * 100)}%` }} />
+            <div
+              className={`h-full rounded-full ${kind === "format" ? "bg-sky-500" : "bg-emerald-500"}`}
+              style={{ width: `${Math.max(3, (item.total / max) * 100)}%` }}
+            />
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] font-black uppercase tracking-[0.13em] text-slate-400">
-            <span>{item.deliveryRate}% delivery</span>
+            <span>{item.deliveryRate}% remained scheduled</span>
             <span>{item.officialCoverage}% officials</span>
           </div>
         </div>
@@ -643,32 +943,41 @@ function RankedPerformance({ data, kind = "team" }) {
   );
 }
 
-export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...props }) {
+export default function AnalyticsVisualDashboard({
+  midweekEnabled = true,
+  ...props
+}) {
   const [period, setPeriod] = useState("all");
   const [matchday, setMatchday] = useState("all");
   const [day, setDay] = useState("matchweek");
   const [team, setTeam] = useState("all");
   const [pitch, setPitch] = useState("all");
   const [format, setFormat] = useState("all");
-  const [openPanels, setOpenPanels] = useState(() => new Set());
+  const [openPanels, setOpenPanels] = useState(
+    () => new Set(["fixture-trends", "pitch-use"]),
+  );
 
   const dayOptions = midweekEnabled
     ? DAY_OPTIONS
-    : DAY_OPTIONS.filter((option) => !["matchweek", "midweek"].includes(option.value));
+    : DAY_OPTIONS.filter(
+        (option) => !["matchweek", "midweek"].includes(option.value),
+      );
 
-  const effectiveDay = !midweekEnabled && ["matchweek", "midweek"].includes(day) ? "weekend" : day;
+  const effectiveDay =
+    !midweekEnabled && ["matchweek", "midweek"].includes(day) ? "weekend" : day;
 
   const model = useMemo(
-    () => buildAnalyticsVisualisationModel({
-      ...props,
-      period,
-      matchday,
-      day: effectiveDay,
-      team,
-      pitch,
-      format,
-    }),
-    [props, period, matchday, effectiveDay, team, pitch, format]
+    () =>
+      buildAnalyticsVisualisationModel({
+        ...props,
+        period,
+        matchday,
+        day: effectiveDay,
+        team,
+        pitch,
+        format,
+      }),
+    [props, period, matchday, effectiveDay, team, pitch, format],
   );
 
   const togglePanel = (id) => {
@@ -695,57 +1004,88 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
       <PageHeader
         eyebrow="Performance Analytics"
         title="Understand every matchday"
-        subtitle="Track delivery, pitch usage, congestion, parking and officials using the club's saved operational history. No invented figures and no hidden assumptions."
+        subtitle="Track scheduled activity, pitch usage, congestion, parking and officials using the club's saved operational history. Scheduled records are not treated as attendance or completed participation."
         action={
           <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm">
             <CalendarDays size={17} className="text-emerald-600" />
-            {model.savedMatchdays} saved matchday{model.savedMatchdays === 1 ? "" : "s"}
+            {model.savedMatchdays} saved matchday
+            {model.savedMatchdays === 1 ? "" : "s"}
           </div>
         }
       />
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <SelectControl label="Reporting period" value={period} onChange={changePeriod}>
+          <SelectControl
+            label="Reporting period"
+            value={period}
+            onChange={changePeriod}
+          >
             {model.filters.periodOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
-          <SelectControl label="Specific matchday" value={matchday} onChange={changeMatchday}>
+          <SelectControl
+            label="Specific matchday"
+            value={matchday}
+            onChange={changeMatchday}
+          >
             {model.filters.matchdayOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
-          <SelectControl label="Matchday scope" value={effectiveDay} onChange={setDay}>
+          <SelectControl
+            label="Matchday scope"
+            value={effectiveDay}
+            onChange={setDay}
+          >
             {dayOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
           <SelectControl label="Team" value={team} onChange={setTeam}>
             {model.filters.teamOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
           <SelectControl label="Pitch" value={pitch} onChange={setPitch}>
             {model.filters.pitchOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
           <SelectControl label="Format" value={format} onChange={setFormat}>
             {model.filters.formatOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </SelectControl>
         </div>
       </section>
 
-      {model.hasData ? <EvidenceQualityPanel quality={model.quality} /> : null}
-
       {!model.hasData ? (
         <EmptyState
           icon={Database}
-          title={model.savedMatchdays ? "No data matches these filters" : "No saved matchday data yet"}
-          description={model.savedMatchdays ? "Change the reporting period, matchday scope, team, pitch or format filter." : "Build, publish and save completed matchweeks to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."}
+          title={
+            model.savedMatchdays
+              ? "No data matches these filters"
+              : "No saved matchday data yet"
+          }
+          description={
+            model.savedMatchdays
+              ? "Change the reporting period, matchday scope, team, pitch or format filter."
+              : "Build, publish and save completed matchweeks to unlock fixture trends, pitch heatmaps, parking pressure and officials coverage."
+          }
         />
       ) : (
         <>
@@ -754,7 +1094,7 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               icon={Trophy}
-              label="Delivery rate"
+              label="Schedule completion"
               value={`${model.summary.deliveryRate}%`}
               detail={`${model.summary.delivered} scheduled from ${model.summary.total} recorded outcomes`}
               tone={model.summary.deliveryRate >= 90 ? "success" : "warning"}
@@ -763,15 +1103,12 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               icon={MapPinned}
               label="Busiest pitch"
               value={model.summary.busiestPitch?.label || "–"}
-              detail={model.summary.busiestPitch ? `${model.summary.busiestPitch.total} recorded uses` : "No pitch data"}
+              detail={
+                model.summary.busiestPitch
+                  ? `${model.summary.busiestPitch.total} recorded uses`
+                  : "No pitch data"
+              }
               tone="info"
-            />
-            <MetricCard
-              icon={Clock3}
-              label="Peak kick-off"
-              value={model.summary.busiestSlot?.label || "–"}
-              detail={model.summary.busiestSlot ? `${model.summary.busiestSlot.count} fixtures in this slot` : "No kick-off data"}
-              tone="warning"
             />
             <MetricCard
               icon={ShieldCheck}
@@ -781,58 +1118,32 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               tone={model.summary.officialCoverage >= 90 ? "success" : "danger"}
             />
             <MetricCard
-              icon={TriangleAlert}
-              label="Unresolved fixtures"
-              value={model.summary.unresolved}
-              detail={`${model.summary.placementRate}% of fixture records have an outcome`}
-              tone={model.summary.unresolved ? "danger" : "success"}
-            />
-            <MetricCard
-              icon={Activity}
-              label="Facility activity"
-              value={`${model.summary.facilityHours} hrs`}
-              detail={`${model.summary.avgFixtures} fixtures per selected matchday`}
-              tone="info"
-            />
-            <MetricCard
               icon={Car}
               label="Parking pressure"
               value={model.summary.parkingOverCapacity}
               detail={`Peak recorded demand ${model.summary.peakParking} vehicles`}
               tone={model.summary.parkingOverCapacity ? "danger" : "success"}
             />
-            <MetricCard
-              icon={CloudRain}
-              label="Weather evidence"
-              value={`${model.summary.weatherCoverage}%`}
-              detail={`${model.summary.weatherHigh} high risk · ${model.summary.weatherWatch} watch`}
-              tone={model.summary.weatherHigh ? "danger" : model.summary.weatherWatch ? "warning" : "neutral"}
-            />
-          </div>
-
-          <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 p-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                <Sparkles size={20} strokeWidth={2.5} />
-              </div>
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Ground Control insight</div>
-                <p className="mt-2 text-sm font-bold leading-6 text-emerald-950">{model.summary.insight}</p>
-              </div>
-            </div>
           </div>
 
           <div className="space-y-4">
             <Panel
               id="fixture-trends"
               icon={Activity}
-              title="Fixture delivery trend"
-              subtitle="Delivered, postponed and cancelled fixtures by saved matchday."
+              title="Fixture outcome trend"
+              subtitle="Scheduled, postponed and cancelled fixture records by saved matchday."
               badge={`${model.summary.total} fixtures`}
               open={openPanels.has("fixture-trends")}
               onToggle={togglePanel}
             >
-              {model.weekly.length ? <OutcomeTrend weekly={model.weekly} /> : <ChartEmpty title="No fixture trend yet" detail="Save more than one matchday to build a trend." />}
+              {model.weekly.length ? (
+                <OutcomeTrend weekly={model.weekly} />
+              ) : (
+                <ChartEmpty
+                  title="No fixture trend yet"
+                  detail="Save more than one matchday to build a trend."
+                />
+              )}
             </Panel>
 
             <Panel
@@ -845,10 +1156,19 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               onToggle={togglePanel}
             >
               <div className="space-y-8">
-                {model.kickOffDistribution.length ? <KickOffBars data={model.kickOffDistribution} /> : <ChartEmpty title="No kick-off data" detail="Scheduled kick-off times will appear here." />}
+                {model.kickOffDistribution.length ? (
+                  <KickOffBars data={model.kickOffDistribution} />
+                ) : (
+                  <ChartEmpty
+                    title="No kick-off data"
+                    detail="Scheduled kick-off times will appear here."
+                  />
+                )}
                 {model.dayTimeHeatmap[0]?.values.length ? (
                   <div>
-                    <div className="mb-4 text-sm font-black text-slate-800">Day and time heatmap</div>
+                    <div className="mb-4 text-sm font-black text-slate-800">
+                      Day and time heatmap
+                    </div>
                     <TimeHeatmap rows={model.dayTimeHeatmap} />
                   </div>
                 ) : null}
@@ -865,11 +1185,23 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               onToggle={togglePanel}
             >
               <div className="grid gap-8 xl:grid-cols-[0.75fr_1.25fr]">
-                {model.pitchUtilisation.length ? <HorizontalBars data={model.pitchUtilisation} /> : <ChartEmpty title="No pitch usage data" detail="Pitch assignments will appear after saved matchdays." />}
+                {model.pitchUtilisation.length ? (
+                  <HorizontalBars data={model.pitchUtilisation} />
+                ) : (
+                  <ChartEmpty
+                    title="No pitch usage data"
+                    detail="Pitch assignments will appear after saved matchdays."
+                  />
+                )}
                 {model.pitchHeatmap.length ? (
                   <div>
-                    <div className="mb-4 text-sm font-black text-slate-800">Pitch rotation heatmap</div>
-                    <PitchHeatmap rows={model.pitchHeatmap} weekly={model.weekly} />
+                    <div className="mb-4 text-sm font-black text-slate-800">
+                      Pitch rotation heatmap
+                    </div>
+                    <PitchHeatmap
+                      rows={model.pitchHeatmap}
+                      weekly={model.weekly}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -889,21 +1221,36 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
                   <ParkingLine weekly={model.weekly} />
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     <div className="rounded-2xl bg-slate-50 p-4">
-                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Configured capacity</div>
-                      <div className="mt-2 text-2xl font-black text-slate-900">{model.parkingCapacity}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Configured capacity
+                      </div>
+                      <div className="mt-2 text-2xl font-black text-slate-900">
+                        {model.parkingCapacity}
+                      </div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 p-4">
-                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Season peak</div>
-                      <div className="mt-2 text-2xl font-black text-slate-900">{model.summary.peakParking}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Season peak
+                      </div>
+                      <div className="mt-2 text-2xl font-black text-slate-900">
+                        {model.summary.peakParking}
+                      </div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 p-4">
-                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Pressure matchdays</div>
-                      <div className="mt-2 text-2xl font-black text-slate-900">{model.summary.parkingOverCapacity}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Pressure matchdays
+                      </div>
+                      <div className="mt-2 text-2xl font-black text-slate-900">
+                        {model.summary.parkingOverCapacity}
+                      </div>
                     </div>
                   </div>
                 </>
               ) : (
-                <ChartEmpty title="No parking trend yet" detail="Parking demand appears when saved fixtures contain kick-off times and formats." />
+                <ChartEmpty
+                  title="No parking trend yet"
+                  detail="Parking demand appears when saved fixtures contain kick-off times and formats."
+                />
               )}
             </Panel>
 
@@ -916,19 +1263,33 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               open={openPanels.has("officials-coverage")}
               onToggle={togglePanel}
             >
-              {model.weekly.length ? <CoverageBars weekly={model.weekly} /> : <ChartEmpty title="No officials trend yet" detail="Confirmed appointments will appear here." />}
+              {model.weekly.length ? (
+                <CoverageBars weekly={model.weekly} />
+              ) : (
+                <ChartEmpty
+                  title="No officials trend yet"
+                  detail="Confirmed appointments will appear here."
+                />
+              )}
             </Panel>
 
             <Panel
               id="team-performance"
               icon={UsersRound}
-              title="Team activity and delivery"
-              subtitle="Compare fixture volume, delivered hours, postponements and officials coverage by team."
+              title="Team activity and scheduling"
+              subtitle="Compare fixture volume, scheduled pitch hours, postponements and officials coverage by team."
               badge={`${model.teamPerformance.length} teams`}
               open={openPanels.has("team-performance")}
               onToggle={togglePanel}
             >
-              {model.teamPerformance.length ? <RankedPerformance data={model.teamPerformance} /> : <ChartEmpty title="No team trend yet" detail="Team activity appears after saved matchdays contain fixtures." />}
+              {model.teamPerformance.length ? (
+                <RankedPerformance data={model.teamPerformance} />
+              ) : (
+                <ChartEmpty
+                  title="No team trend yet"
+                  detail="Team activity appears after saved matchdays contain fixtures."
+                />
+              )}
             </Panel>
 
             <Panel
@@ -940,7 +1301,29 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
               open={openPanels.has("format-demand")}
               onToggle={togglePanel}
             >
-              {model.formatDistribution.length ? <RankedPerformance data={model.formatDistribution} kind="format" /> : <ChartEmpty title="No format trend yet" detail="Fixture formats will appear here when they are recorded." />}
+              {model.formatDistribution.length ? (
+                <RankedPerformance
+                  data={model.formatDistribution}
+                  kind="format"
+                />
+              ) : (
+                <ChartEmpty
+                  title="No format trend yet"
+                  detail="Fixture formats will appear here when they are recorded."
+                />
+              )}
+            </Panel>
+
+            <Panel
+              id="evidence-quality"
+              icon={Database}
+              title="Evidence quality"
+              subtitle="Review confidence, source depth and gaps behind these analytics."
+              badge={`${model.quality.score}% confidence`}
+              open={openPanels.has("evidence-quality")}
+              onToggle={togglePanel}
+            >
+              <EvidenceQualityPanel quality={model.quality} embedded />
             </Panel>
 
             <Panel
@@ -966,21 +1349,36 @@ export default function AnalyticsVisualDashboard({ midweekEnabled = true, ...pro
             >
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-2xl bg-slate-50 p-5">
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Historical coverage</div>
-                  <div className="mt-2 text-3xl font-black text-slate-950">{model.weather.coverage}%</div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    Historical coverage
+                  </div>
+                  <div className="mt-2 text-3xl font-black text-slate-950">
+                    {model.weather.coverage}%
+                  </div>
                 </div>
                 <div className="rounded-2xl bg-rose-50 p-5">
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-rose-500">High-risk fixtures</div>
-                  <div className="mt-2 text-3xl font-black text-rose-800">{model.weather.high}</div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-rose-500">
+                    High-risk fixtures
+                  </div>
+                  <div className="mt-2 text-3xl font-black text-rose-800">
+                    {model.weather.high}
+                  </div>
                 </div>
                 <div className="rounded-2xl bg-amber-50 p-5">
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-600">Watch fixtures</div>
-                  <div className="mt-2 text-3xl font-black text-amber-800">{model.weather.watch}</div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-amber-600">
+                    Watch fixtures
+                  </div>
+                  <div className="mt-2 text-3xl font-black text-amber-800">
+                    {model.weather.watch}
+                  </div>
                 </div>
               </div>
               {model.weather.coverage === 0 ? (
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-                  Earlier saved matchdays do not contain weather snapshots. Ground Control does not substitute today's forecast for historical conditions. Future snapshot capture can build this evidence safely.
+                  Earlier saved matchdays do not contain weather snapshots.
+                  Ground Control does not substitute today's forecast for
+                  historical conditions. Future snapshot capture can build this
+                  evidence safely.
                 </div>
               ) : null}
             </Panel>

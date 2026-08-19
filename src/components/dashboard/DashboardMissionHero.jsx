@@ -176,33 +176,37 @@ export default function DashboardMissionHero({
           ) : null}
 
           <div className="mt-6 border-t border-white/10 pt-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={onContinue}
-                className={`inline-flex min-h-12 items-center justify-center gap-3 whitespace-nowrap rounded-2xl px-6 py-3 text-sm font-black shadow-lg transition hover:-translate-y-0.5 active:scale-[0.98] ${
-                  ready
-                    ? "bg-emerald-500 text-white shadow-emerald-950/30 hover:bg-emerald-400"
-                    : "bg-amber-400 text-slate-950 shadow-amber-950/20 hover:bg-amber-300"
-                }`}
-              >
-                <span>{nextAction?.title || "Continue Operations"}</span>
-                {ready ? <Rocket size={18} /> : <ArrowRight size={18} />}
-              </button>
+            {onContinue || secondaryAction?.onClick ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {onContinue ? (
+                  <button
+                    type="button"
+                    onClick={onContinue}
+                    className={`inline-flex min-h-12 items-center justify-center gap-3 whitespace-nowrap rounded-2xl px-6 py-3 text-sm font-black shadow-lg transition hover:-translate-y-0.5 active:scale-[0.98] ${
+                      ready
+                        ? "bg-emerald-500 text-white shadow-emerald-950/30 hover:bg-emerald-400"
+                        : "bg-amber-400 text-slate-950 shadow-amber-950/20 hover:bg-amber-300"
+                    }`}
+                  >
+                    <span>{nextAction?.title || "Continue Operations"}</span>
+                    {ready ? <Rocket size={18} /> : <ArrowRight size={18} />}
+                  </button>
+                ) : null}
 
-              {secondaryAction?.onClick ? (
-                <button
-                  type="button"
-                  onClick={secondaryAction.onClick}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-white/15 bg-transparent px-4 py-3 text-sm font-black text-slate-200 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white active:scale-[0.98]"
-                >
-                  {secondaryAction.label || "Open Operations"}
-                  <ArrowRight size={16} />
-                </button>
-              ) : null}
-            </div>
+                {secondaryAction?.onClick ? (
+                  <button
+                    type="button"
+                    onClick={secondaryAction.onClick}
+                    className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-white/15 bg-transparent px-4 py-3 text-sm font-black text-slate-200 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white active:scale-[0.98]"
+                  >
+                    {secondaryAction.label || "Open Operations"}
+                    <ArrowRight size={16} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="mt-3 flex items-center gap-3 text-sm font-bold text-slate-400">
+            <div className={`${onContinue || secondaryAction?.onClick ? "mt-3" : ""} flex items-center gap-3 text-sm font-bold text-slate-400`}>
               <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
                 <div
                   className={`h-full rounded-full ${ready ? "bg-emerald-400" : "bg-amber-300"}`}

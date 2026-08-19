@@ -5,22 +5,33 @@ import { isRecoverableAccessVerificationError } from "../lib/errors/recovery.js"
 
 const ACTIVE_CLUB_KEY = "selected";
 const INVITE_QUERY_KEY = "club_invite";
+const COACH_INVITE_QUERY_KEY = "coach_invite";
 
-function readInviteToken() {
+function pendingInviteStorageKey(key) {
+  return `gc_pending_auth_context_${String(key || "").trim()}`;
+}
+
+function readInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return "";
   try {
-    return new URL(window.location.href).searchParams.get(INVITE_QUERY_KEY)?.trim() || "";
+    const liveToken = new URL(window.location.href).searchParams.get(key)?.trim() || "";
+    if (liveToken) {
+      window.localStorage?.setItem(pendingInviteStorageKey(key), liveToken);
+      return liveToken;
+    }
+    return window.localStorage?.getItem(pendingInviteStorageKey(key))?.trim() || "";
   } catch {
     return "";
   }
 }
 
-function clearInviteToken() {
+function clearInviteToken(key = INVITE_QUERY_KEY) {
   if (typeof window === "undefined") return;
   try {
+    window.localStorage?.removeItem(pendingInviteStorageKey(key));
     const url = new URL(window.location.href);
-    if (!url.searchParams.has(INVITE_QUERY_KEY)) return;
-    url.searchParams.delete(INVITE_QUERY_KEY);
+    if (!url.searchParams.has(key)) return;
+    url.searchParams.delete(key);
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   } catch {
     // A malformed browser URL must not prevent normal workspace access.
@@ -66,6 +77,8 @@ export function useClubAccess(authSession) {
     try {
       let nextMemberships = await DB.listMemberships();
       const inviteToken = readInviteToken();
+      const coachInviteToken = readInviteToken(COACH_INVITE_QUERY_KEY);
+      let coachInviteError = null;
 
       if (inviteToken) {
         try {
@@ -77,6 +90,37 @@ export function useClubAccess(authSession) {
           setError(inviteError?.message || "The club invitation could not be accepted.");
         }
       }
+
+      if (coachInviteToken) {
+        try {
+          await DB.acceptCoachHubInvitation(coachInviteToken);
+          clearInviteToken(COACH_INVITE_QUERY_KEY);
+          nextMemberships = await DB.listMemberships();
+        } catch (inviteError) {
+          coachInviteError = inviteError;
+        }
+      }
+
+      // Email confirmation can be opened in a different browser context from the
+      // original invitation. In that case the raw token is unavailable even though
+      // the authenticated email still matches a live Coach Hub invitation. Recover
+      // that invitation securely by verified email before denying workspace access.
+      if (!nextMemberships.length) {
+        try {
+          const recovery = await DB.claimPendingCoachHubInvitations();
+          const recoveredCount = Number(recovery?.claimed_count || 0)
+            + Number(recovery?.repaired_count || 0);
+          if (recoveredCount > 0) {
+            clearInviteToken(COACH_INVITE_QUERY_KEY);
+            coachInviteError = null;
+            nextMemberships = await DB.listMemberships();
+          }
+        } catch (recoveryError) {
+          if (!coachInviteError) coachInviteError = recoveryError;
+        }
+      }
+
+      if (!nextMemberships.length && coachInviteError) throw coachInviteError;
 
       setMemberships(nextMemberships);
 

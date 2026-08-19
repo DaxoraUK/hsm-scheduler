@@ -14,9 +14,19 @@
     "check": "npm run lint && npm run test && npm run build",
     "release:evidence": "node scripts/run-release-gates.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
-    "preflight:staging": "node scripts/staging-preflight.mjs"
+    "preflight:staging": "node scripts/staging-preflight.mjs",
+    "acceptance:launch": "node scripts/launch-acceptance.mjs",
+    "release:package": "powershell -ExecutionPolicy Bypass -File scripts/create-release-package.ps1",
+    "pilot:hardening": "node scripts/pilot-hardening-evidence.mjs",
+    "demo:teamfeepay": "vite --open /teamfeepay-demo",
+    "demo:teamfeepay-api": "node scripts/teamfeepay-demo-api.mjs",
+    "test:teamfeepay": "vitest run --config scripts/vitest.teamfeepay.config.mjs tests/integrations/teamfeepayIntegration.test.js tests/regression/teamfeepay-acquisition-demo.test.js",
+    "acquisition:teamfeepay": "node scripts/teamfeepay-readiness.mjs",
+    "acquisition:teamfeepay-package": "powershell -ExecutionPolicy Bypass -File scripts/create-teamfeepay-acquisition-package.ps1"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.21.0",

@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 
 describe("authenticated Supabase repository", () => {
-  test("uses the anon key only as apikey and the user JWT as bearer identity", async () => {
+  test("uses the guarded history RPC with the anon key only as apikey and the user JWT as bearer identity", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -68,8 +68,11 @@ describe("authenticated Supabase repository", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toContain("/rest/v1/history?");
-    expect(url).toContain(`club_id=eq.${CLUB_A}`);
+    expect(options.method).toBe("POST");
+    expect(url).toContain("/rest/v1/rpc/load_matchweek_history");
+    expect(JSON.parse(options.body)).toEqual({
+      target_club_id: CLUB_A,
+    });
     expect(options.headers.apikey).toBe(ANON_KEY);
     expect(options.headers.Authorization).toBe("Bearer signed-in-user-jwt");
     expect(options.headers.Authorization).not.toContain(ANON_KEY);

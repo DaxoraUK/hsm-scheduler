@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -23,11 +23,9 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
-import PlatformBillingLegalPanel from "../components/PlatformBillingLegalPanel.jsx";
-import PlatformPilotLaunchPanel from "../components/PlatformPilotLaunchPanel.jsx";
 import { DB } from "../lib/supabase.js";
 import {
   CASE_PRIORITIES,
@@ -43,13 +41,19 @@ import {
   PLAN_CATALOGUE,
   PLAN_CODES,
   SUBSCRIPTION_STATUSES,
+  getAssignablePlans,
 } from "../lib/subscriptions/entitlements.js";
+
+const PlatformBillingLegalPanel = lazy(() => import("../components/PlatformBillingLegalPanel.jsx"));
+const PlatformPilotLaunchPanel = lazy(() => import("../components/PlatformPilotLaunchPanel.jsx"));
+const PlatformSystemHealthPanel = lazy(() => import("../components/system/PlatformSystemHealthPanel.jsx"));
 
 const PANEL_TABS = Object.freeze([
   ["clubs", "Clubs", Building2],
   ["cases", "Support cases", LifeBuoy],
   ["billing", "Billing & legal", ReceiptText],
   ["launch", "Pilot & launch", Rocket],
+  ["health", "System health", ShieldCheck],
   ["activity", "Platform activity", Activity],
 ]);
 
@@ -263,7 +267,6 @@ export default function PlatformAdminPage({
       const detail = await DB.platformGetClubDetail(clubId);
       setClubDetail(detail);
       const subscription = detail?.subscription || {};
-      const record = detail?.subscription_record || {};
       setSubscriptionForm({
         planCode: subscription.plan_code || PLAN_CODES.CORE,
         status: subscription.status || SUBSCRIPTION_STATUSES.ACTIVE,
@@ -274,8 +277,10 @@ export default function PlatformAdminPage({
         currentPeriodEnd: inputDate(subscription.current_period_end),
         cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
         reason: "",
-        entitlementOverrides: record.entitlement_overrides || {},
-        limitOverrides: record.limit_overrides || {},
+        // Package assignments are authoritative. Hidden legacy overrides are
+        // intentionally cleared when an administrator reapplies a package.
+        entitlementOverrides: {},
+        limitOverrides: {},
       });
       const existingClub = clubs.find((item) => item.id === clubId);
       setNewCase((current) => ({ ...current, clubId, requesterEmail: existingClub?.ownerEmail || current.requesterEmail }));
@@ -338,7 +343,7 @@ export default function PlatformAdminPage({
     }
     setBusyAction("subscription");
     try {
-      await DB.platformSetClubSubscription(selectedClubId, {
+      const updatedSubscription = await DB.platformSetClubSubscription(selectedClubId, {
         planCode: subscriptionForm.planCode,
         status: subscriptionForm.status,
         billingInterval: subscriptionForm.billingInterval,
@@ -347,11 +352,25 @@ export default function PlatformAdminPage({
         currentPeriodEnd: toIsoOrNull(subscriptionForm.currentPeriodEnd),
         cancelAtPeriodEnd: subscriptionForm.cancelAtPeriodEnd,
         billingExempt: subscriptionForm.billingExempt,
-        entitlementOverrides: subscriptionForm.entitlementOverrides,
-        limitOverrides: subscriptionForm.limitOverrides,
+        // The selected package is the source of truth. This clears invisible
+        // Core-era overrides that previously survived an upgrade to Pro/Elite.
+        entitlementOverrides: {},
+        limitOverrides: {},
         reason: subscriptionForm.reason,
       });
-      toast.success("Subscription updated", { description: "The club entitlements were recalculated and audited." });
+
+      const returnedPlan = String(updatedSubscription?.plan_code || "").toLowerCase();
+      if (returnedPlan && returnedPlan !== String(subscriptionForm.planCode).toLowerCase()) {
+        throw new Error(`Supabase returned ${returnedPlan} after assigning ${subscriptionForm.planCode}.`);
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ground-control-subscription-updated", {
+          detail: { clubId: selectedClubId, subscription: updatedSubscription },
+        }));
+      }
+
+      toast.success("Subscription updated", { description: "The package is now authoritative and the workspace access has been refreshed." });
       await refreshSelectedClub();
     } catch (error) {
       toast.error("Subscription could not be updated", { description: error?.message });
@@ -563,7 +582,7 @@ export default function PlatformAdminPage({
                     {!platformContext.isPlatformAdmin ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-600">Support operators can review subscriptions but cannot change commercial access.</div> : null}
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                       <label className="text-xs font-black text-slate-600">Plan<select disabled={!platformContext.isPlatformAdmin} value={subscriptionForm.planCode} onChange={(event) => setSubscriptionForm((current) => ({ ...current, planCode: event.target.value }))} className={`${inputClass} mt-2`}>
-                        {Object.values(PLAN_CATALOGUE).map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}
+                        {getAssignablePlans({ includeCode: subscriptionForm.planCode }).map((plan) => <option key={plan.code} value={plan.code}>{plan.name}{plan.launchStatus === "held" ? " (legacy)" : ""}</option>)}
                       </select></label>
                       <label className="text-xs font-black text-slate-600">Status<select disabled={!platformContext.isPlatformAdmin} value={subscriptionForm.status} onChange={(event) => setSubscriptionForm((current) => ({ ...current, status: event.target.value }))} className={`${inputClass} mt-2`}>
                         {Object.values(SUBSCRIPTION_STATUSES).map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
@@ -647,11 +666,21 @@ export default function PlatformAdminPage({
       ) : null}
 
       {tab === "billing" ? (
-        <PlatformBillingLegalPanel isPlatformAdmin={platformContext.isPlatformAdmin} />
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformBillingLegalPanel isPlatformAdmin={platformContext.isPlatformAdmin} />
+        </Suspense>
       ) : null}
 
       {tab === "launch" ? (
-        <PlatformPilotLaunchPanel clubs={clubs} isPlatformAdmin={platformContext.isPlatformAdmin} />
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformPilotLaunchPanel clubs={clubs} isPlatformAdmin={platformContext.isPlatformAdmin} />
+        </Suspense>
+      ) : null}
+
+      {tab === "health" ? (
+        <Suspense fallback={<div className="flex min-h-[360px] items-center justify-center"><LoaderCircle className="animate-spin text-emerald-600" size={30} /></div>}>
+          <PlatformSystemHealthPanel platformContext={platformContext} />
+        </Suspense>
       ) : null}
 
       {tab === "activity" ? (

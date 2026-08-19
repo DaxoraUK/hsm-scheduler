@@ -315,12 +315,13 @@ export function buildOperationsCentreSnapshot({
   incidents = [],
   scope = "weekend",
   dateLabel = "",
+  weatherSnapshot = null,
 } = {}) {
   const activeFixtures = asArray(fixtures).filter((fixture) => !isPostponed(fixture));
   const postponedFixtures = asArray(fixtures).filter(isPostponed);
   const parking = getParkingSnapshot({ fixtures: activeFixtures, club, pitchCfg, scope });
   const officials = calculateOfficialsReadiness({ fixtures: activeFixtures, active: activeFixtures, refs });
-  const weather = getWeatherSnapshot({ club, fixtures: activeFixtures, dateLabel });
+  const weather = weatherSnapshot || getWeatherSnapshot({ club, fixtures: activeFixtures, dateLabel });
 
   const fixtureDomain = getFixtureDomain({ scheduleBuilt, activeFixtures, unresolvedCount, conflictCount });
   const pitchDomain = getPitchDomain({ pitchCfg, closedPitches });
@@ -354,14 +355,19 @@ export function buildOperationsCentreSnapshot({
     target: "officialsIntelligence",
     data: officials,
   });
+  const weatherProvider = weather.provider || "Live weather";
+  const weatherUpdated = weather.updatedAt
+    ? new Date(weather.updatedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })
+    : "Not refreshed";
+  const weatherConnection = String(weather.connectionStatus || "idle").replaceAll("_", " ");
   const weatherDomain = domain({
     id: "weather",
     label: "Weather",
     status: weather.status,
     score: weather.score,
     headline: weather.decision?.headline || weather.label,
-    detail: weather.decision?.detail || "Weather readiness calculated.",
-    metric: weather.forecastAvailable ? weather.overallRisk?.label || weather.label : "Feed needed",
+    detail: `${weather.decision?.detail || "Weather readiness calculated."} ${weather.forecastAvailable ? `${weatherProvider} · refreshed ${weatherUpdated}.` : `Connection: ${weatherConnection}${weather.connectionError ? ` · ${weather.connectionError}` : ""}.`}`,
+    metric: weather.forecastAvailable ? weather.overallRisk?.label || weather.label : weather.label || "Feed needed",
     actionLabel: "Open weather intelligence",
     target: "weatherIntelligence",
     data: weather,

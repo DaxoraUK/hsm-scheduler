@@ -37,6 +37,16 @@ export const ENTITLEMENTS = Object.freeze({
   PRIORITY_SUPPORT: "priority_support",
   PREMIUM_SUPPORT: "premium_support",
   ADVANCED_INTEGRATIONS: "advanced_integrations",
+  ORGANISATION_COMMAND: "organisation_command",
+  EXECUTIVE_REPORTING: "executive_reporting",
+  GOVERNANCE_CONTROLS: "governance_controls",
+  APPROVAL_WORKFLOWS: "approval_workflows",
+  SITE_RESPONSIBILITY: "site_responsibility",
+  COMMUNICATION_GOVERNANCE: "communication_governance",
+  FUNDING_PORTFOLIO: "funding_portfolio",
+  ENHANCED_AUDIT: "enhanced_audit",
+  ANNUAL_PLANNER: "annual_planner",
+  COACH_HUB: "coach_hub",
 });
 
 export const LIMIT_KEYS = Object.freeze({
@@ -55,11 +65,14 @@ const linkFeatures = [
   ENTITLEMENTS.LEAGUE_LINK,
   ENTITLEMENTS.COMMUNICATIONS,
   ENTITLEMENTS.RESOURCE_REGISTRY,
-  ENTITLEMENTS.DATA_EXPORT,
 ];
 
 const coreFeatures = [
-  ...linkFeatures,
+  ENTITLEMENTS.DASHBOARD,
+  ENTITLEMENTS.CLUB_PROFILE,
+  ENTITLEMENTS.FIXTURE_IMPORT,
+  ENTITLEMENTS.RESOURCE_REGISTRY,
+  ENTITLEMENTS.COMMUNICATIONS,
   ENTITLEMENTS.MATCHDAY_SCHEDULING,
   ENTITLEMENTS.MIDWEEK_SCHEDULING,
   ENTITLEMENTS.PITCH_INTELLIGENCE,
@@ -68,6 +81,7 @@ const coreFeatures = [
   ENTITLEMENTS.OFFICIALS_MANAGEMENT,
   ENTITLEMENTS.REPORTS_OPERATIONS,
   ENTITLEMENTS.ANALYTICS_CORE,
+  ENTITLEMENTS.DATA_EXPORT,
 ];
 
 const proFeatures = [
@@ -76,15 +90,27 @@ const proFeatures = [
   ENTITLEMENTS.REPORTS_ADVANCED,
   ENTITLEMENTS.ANALYTICS_ADVANCED,
   ENTITLEMENTS.MULTI_VENUE,
-  ENTITLEMENTS.PRIORITY_SUPPORT,
-  ENTITLEMENTS.ADVANCED_INTEGRATIONS,
+  ENTITLEMENTS.ANNUAL_PLANNER,
+  ENTITLEMENTS.COACH_HUB,
+];
+
+const eliteFeatures = [
+  ...proFeatures,
+  ENTITLEMENTS.ORGANISATION_COMMAND,
+  ENTITLEMENTS.EXECUTIVE_REPORTING,
+  ENTITLEMENTS.GOVERNANCE_CONTROLS,
+  ENTITLEMENTS.APPROVAL_WORKFLOWS,
+  ENTITLEMENTS.SITE_RESPONSIBILITY,
+  ENTITLEMENTS.COMMUNICATION_GOVERNANCE,
+  ENTITLEMENTS.FUNDING_PORTFOLIO,
+  ENTITLEMENTS.ENHANCED_AUDIT,
 ];
 
 export const PLAN_CATALOGUE = Object.freeze({
   [PLAN_CODES.LINK]: Object.freeze({
     code: PLAN_CODES.LINK,
     name: "Link",
-    strapline: "The operational connection between a club and its league.",
+    strapline: "The future operational connection between a club and its league.",
     monthlyPricePence: 2900,
     annualPricePence: 29000,
     features: Object.freeze(linkFeatures),
@@ -96,58 +122,112 @@ export const PLAN_CATALOGUE = Object.freeze({
       history_entries: 12,
       history_retention_days: 90,
     }),
+    launchStatus: "held",
+    customerVisible: false,
+    assignable: false,
   }),
   [PLAN_CODES.CORE]: Object.freeze({
     code: PLAN_CODES.CORE,
     name: "Core",
-    strapline: "Complete matchday control for established grassroots clubs.",
+    strapline: "Complete scheduling and matchday control for a single-site grassroots club.",
     monthlyPricePence: 14900,
     annualPricePence: null,
     features: Object.freeze(coreFeatures),
     limits: Object.freeze({
-      teams: 20,
+      teams: 15,
       venues: 1,
-      users: 6,
-      pitches: 20,
-      history_entries: 104,
+      users: 5,
+      pitches: 15,
+      history_entries: 52,
       history_retention_days: 365,
     }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Support and onboarding scope confirmed in the order form",
+      communications: "Provider usage allowance confirmed before paid activation",
+      storage: "Evidence storage allowance confirmed before paid activation",
+      offboarding: "Data export available before workspace closure",
+    }),
+    launchStatus: "available",
+    customerVisible: true,
+    assignable: true,
   }),
   [PLAN_CODES.PRO]: Object.freeze({
     code: PLAN_CODES.PRO,
     name: "Pro",
-    strapline: "Advanced intelligence, reporting and capacity for larger clubs.",
+    strapline: "Advanced cross-day operations, reporting and funding evidence for larger clubs.",
     monthlyPricePence: 24900,
     annualPricePence: null,
     features: Object.freeze(proFeatures),
     limits: Object.freeze({
       teams: 40,
-      venues: 3,
+      venues: 4,
       users: 15,
       pitches: 50,
-      history_entries: 260,
-      history_retention_days: 1095,
+      history_entries: 156,
+      history_retention_days: 730,
     }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Priority support and onboarding scope confirmed in the order form",
+      communications: "Provider usage allowance confirmed before paid activation",
+      storage: "Expanded evidence storage allowance confirmed before paid activation",
+      offboarding: "Data export available before workspace closure",
+    }),
+    launchStatus: "available",
+    customerVisible: true,
+    assignable: true,
   }),
   [PLAN_CODES.ELITE]: Object.freeze({
     code: PLAN_CODES.ELITE,
     name: "Elite",
-    strapline: "Multi-site operations, premium support and bespoke scale.",
+    strapline: "Organisation-wide command, governance and executive evidence for complex multi-site clubs.",
     monthlyPricePence: 39900,
     annualPricePence: null,
-    features: Object.freeze([
-      ...proFeatures,
-      ENTITLEMENTS.PREMIUM_SUPPORT,
-    ]),
+    features: Object.freeze(eliteFeatures),
     limits: Object.freeze({
-      teams: -1,
-      venues: -1,
-      users: -1,
-      pitches: -1,
-      history_entries: -1,
-      history_retention_days: -1,
+      teams: 60,
+      venues: 8,
+      users: 25,
+      pitches: 80,
+      history_entries: 260,
+      history_retention_days: 1095,
     }),
+    contractModel: Object.freeze({
+      band: "Elite 60",
+      largerOrganisations: "Custom contracted capacity",
+    }),
+    commercial: Object.freeze({
+      capacityExtensions: true,
+      support: "Named onboarding, support and governance scope agreed in the Elite order form",
+      communications: "Provider volumes and any overage rates agreed before activation",
+      storage: "Evidence storage and retention requirements agreed before activation",
+      offboarding: "Governed export and retention handover agreed at contract start",
+    }),
+    launchStatus: "contact",
+    customerVisible: true,
+    assignable: true,
   }),
+});
+
+const RESTRICTED_PLAN = Object.freeze({
+  code: "unverified",
+  name: "Unverified plan",
+  strapline: "Plan access could not be verified.",
+  monthlyPricePence: 0,
+  annualPricePence: null,
+  features: Object.freeze([]),
+  limits: Object.freeze({
+    teams: 0,
+    venues: 0,
+    users: 0,
+    pitches: 0,
+    history_entries: 0,
+    history_retention_days: 0,
+  }),
+  launchStatus: "unavailable",
+  customerVisible: false,
+  assignable: false,
 });
 
 export const ROUTE_ENTITLEMENTS = Object.freeze({
@@ -156,7 +236,20 @@ export const ROUTE_ENTITLEMENTS = Object.freeze({
   communications: ENTITLEMENTS.COMMUNICATIONS,
   analytics: ENTITLEMENTS.ANALYTICS_CORE,
   reports: ENTITLEMENTS.REPORTS_OPERATIONS,
+  planner: ENTITLEMENTS.ANNUAL_PLANNER,
+  executive: ENTITLEMENTS.ORGANISATION_COMMAND,
 });
+
+export function getLaunchPlans() {
+  return Object.values(PLAN_CATALOGUE).filter((plan) => plan.customerVisible);
+}
+
+export function getAssignablePlans({ includeCode = "" } = {}) {
+  const normalisedIncludeCode = String(includeCode || "").toLowerCase();
+  return Object.values(PLAN_CATALOGUE).filter(
+    (plan) => plan.assignable || plan.code === normalisedIncludeCode
+  );
+}
 
 function safeDate(value) {
   if (!value) return null;
@@ -168,78 +261,82 @@ function normaliseLimits(limits = {}) {
   return Object.fromEntries(
     Object.values(LIMIT_KEYS).map((key) => {
       const raw = Number(limits?.[key]);
-      return [key, Number.isFinite(raw) ? raw : -1];
+      return [key, Number.isFinite(raw) ? raw : 0];
     })
   );
 }
 
-export function getPlanDefinition(code = PLAN_CODES.CORE) {
-  return PLAN_CATALOGUE[String(code || "").toLowerCase()] || PLAN_CATALOGUE[PLAN_CODES.CORE];
+export function getPlanDefinition(code) {
+  const normalisedCode = String(code || "").trim().toLowerCase();
+  return PLAN_CATALOGUE[normalisedCode] || RESTRICTED_PLAN;
 }
 
-function parseEntitlementRows(payload, fallback = []) {
-  const candidate =
-    payload?.entitlements ??
-    payload?.effective_entitlements ??
-    payload?.effectiveEntitlements ??
-    payload?.features;
+function normaliseObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
 
-  if (Array.isArray(candidate)) return candidate;
+const KNOWN_ENTITLEMENT_KEYS = new Set(Object.values(ENTITLEMENTS));
 
-  if (candidate instanceof Set) return [...candidate];
-
-  if (typeof candidate === "string") {
-    const value = candidate.trim();
-    if (!value) return [];
-
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // PostgreSQL text-array and comma-separated fallbacks are handled below.
-    }
-
-    const withoutBraces = value.startsWith("{") && value.endsWith("}")
-      ? value.slice(1, -1)
-      : value;
-
-    return withoutBraces
-      .split(",")
-      .map((item) => item.trim().replace(/^"|"$/g, ""))
-      .filter(Boolean);
-  }
-
-  return fallback;
+function enabledOverrideKeys(value) {
+  return Object.entries(normaliseObject(value))
+    .filter(([, enabled]) => enabled === true || String(enabled).toLowerCase() === "true")
+    .map(([key]) => String(key || "").trim())
+    .filter((key) => KNOWN_ENTITLEMENT_KEYS.has(key));
 }
 
 export function normaliseSubscriptionPayload(payload = {}) {
-  const plan = getPlanDefinition(payload.plan_code || payload.planCode);
-  const featureRows = parseEntitlementRows(payload, plan.features);
-  const features = new Set(featureRows.map((item) => String(item || "").trim()).filter(Boolean));
-  const limits = normaliseLimits({ ...plan.limits, ...(payload.limits || {}) });
+  const requestedPlanCode = payload.plan_code || payload.planCode;
+  const plan = getPlanDefinition(requestedPlanCode);
   const status = String(payload.status || SUBSCRIPTION_STATUSES.TRIALING).toLowerCase();
-  const accessState = String(payload.access_state || payload.accessState || "read_only").toLowerCase();
+  const billingExempt = Boolean(payload.billing_exempt ?? payload.billingExempt);
+
+  // The package catalogue is authoritative. Server rows may be stale after a
+  // package change, so only explicit enabled overrides can add capabilities.
+  const overrideRows = enabledOverrideKeys(
+    payload.entitlement_overrides ?? payload.entitlementOverrides
+  );
+  const features = new Set([...plan.features, ...overrideRows]);
+  // Coach Hub is part of the Annual Planner module. Preserve access for Core
+  // clubs that already carry the annual_planner add-on override.
+  if (features.has(ENTITLEMENTS.ANNUAL_PLANNER)) features.add(ENTITLEMENTS.COACH_HUB);
+
+  const limitOverrides = normaliseObject(payload.limit_overrides ?? payload.limitOverrides);
+  // The launch catalogue is authoritative. A stale database plan row must not
+  // silently restore older, more generous limits. Only deliberate per-club
+  // overrides may change the package limits.
+  const limits = normaliseLimits({
+    ...plan.limits,
+    ...limitOverrides,
+  });
+  const accessState = plan.code === RESTRICTED_PLAN.code
+    ? "read_only"
+    : String(payload.access_state || payload.accessState || "read_only").toLowerCase();
 
   return Object.freeze({
     clubId: payload.club_id || payload.clubId || "",
     planCode: plan.code,
-    planName: payload.plan_name || payload.planName || plan.name,
+    planName: plan.code === RESTRICTED_PLAN.code
+      ? RESTRICTED_PLAN.name
+      : payload.plan_name || payload.planName || plan.name,
     status,
     statusLabel: getSubscriptionStatusLabel(status),
     accessState,
     canWrite: accessState === "full",
     isReadOnly: accessState !== "full",
-    isInternal: status === SUBSCRIPTION_STATUSES.INTERNAL || Boolean(payload.billing_exempt ?? payload.billingExempt),
+    isInternal: status === SUBSCRIPTION_STATUSES.INTERNAL || billingExempt,
     billingInterval: payload.billing_interval || payload.billingInterval || "monthly",
     trialEndsAt: safeDate(payload.trial_ends_at || payload.trialEndsAt),
     graceEndsAt: safeDate(payload.grace_ends_at || payload.graceEndsAt),
     currentPeriodEnd: safeDate(payload.current_period_end || payload.currentPeriodEnd),
     cancelAtPeriodEnd: Boolean(payload.cancel_at_period_end ?? payload.cancelAtPeriodEnd),
-    billingExempt: Boolean(payload.billing_exempt ?? payload.billingExempt),
+    billingExempt,
     features,
     limits,
     plan,
-    message: String(payload.access_message || payload.accessMessage || "").trim(),
+    packageVersion: String(payload.package_version || payload.packageVersion || "").trim(),
+    message: String(payload.access_message || payload.accessMessage || "").trim()
+      || (plan.code === RESTRICTED_PLAN.code ? "The workspace plan is unrecognised and has been restricted for safety." : ""),
   });
 }
 
@@ -258,18 +355,37 @@ export function getSubscriptionStatusLabel(status) {
 export function hasEntitlement(subscription, key) {
   if (!key) return true;
   if (!subscription) return false;
-  if (subscription.features instanceof Set) return subscription.features.has(key);
-  if (Array.isArray(subscription.features)) return subscription.features.includes(key);
+
+  const directFeatures = subscription.features;
+  const hasDirect = directFeatures instanceof Set
+    ? directFeatures.has(key)
+    : Array.isArray(directFeatures) && directFeatures.includes(key);
+  if (hasDirect) return true;
+
+  const overrides = normaliseObject(subscription.entitlementOverrides ?? subscription.entitlement_overrides);
+  if (overrides[key] === true || String(overrides[key]).toLowerCase() === "true") return true;
+
+  const planCode = subscription.planCode || subscription.plan_code || subscription.plan?.code;
+  const planFeatures = getPlanDefinition(planCode).features;
+  if (planFeatures.includes(key)) return true;
+
+  if (key === ENTITLEMENTS.COACH_HUB) {
+    const annualPlannerEnabled = directFeatures instanceof Set
+      ? directFeatures.has(ENTITLEMENTS.ANNUAL_PLANNER)
+      : Array.isArray(directFeatures) && directFeatures.includes(ENTITLEMENTS.ANNUAL_PLANNER);
+    const annualPlannerOverride = overrides[ENTITLEMENTS.ANNUAL_PLANNER] === true
+      || String(overrides[ENTITLEMENTS.ANNUAL_PLANNER]).toLowerCase() === "true";
+    return annualPlannerEnabled || annualPlannerOverride || planFeatures.includes(ENTITLEMENTS.ANNUAL_PLANNER);
+  }
+
   return false;
 }
 
 export function canUseMatchdayWorkspace(subscription) {
-  if (!subscription) return false;
-  if (String(subscription.planCode || "").toLowerCase() === PLAN_CODES.LINK) return false;
   return hasEntitlement(subscription, ENTITLEMENTS.MATCHDAY_SCHEDULING);
 }
 
-export function getEntitlementLimit(subscription, key, fallback = -1) {
+export function getEntitlementLimit(subscription, key, fallback = 0) {
   const value = Number(subscription?.limits?.[key]);
   return Number.isFinite(value) ? value : fallback;
 }
@@ -296,8 +412,7 @@ export function canOpenPage(subscription, page) {
 }
 
 export function getUpgradePlanForEntitlement(entitlement) {
-  const plans = Object.values(PLAN_CATALOGUE);
-  return plans.find((plan) => plan.features.includes(entitlement)) || PLAN_CATALOGUE[PLAN_CODES.ELITE];
+  return getLaunchPlans().find((plan) => plan.features.includes(entitlement)) || PLAN_CATALOGUE[PLAN_CODES.ELITE];
 }
 
 export function applySubscriptionAccess(workspaceAccess, subscription) {

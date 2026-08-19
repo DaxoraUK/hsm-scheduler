@@ -38,3 +38,9 @@ coverage
 !.env.staging.example
 
 *.tsbuildinfo
+
+# Local repair artefacts and release packages
+.daxora-backups/
+.release-packages/
+*.zip
+*.patch

@@ -39,7 +39,7 @@ export function buildReportCsv(model) {
       { label: "Pitch", value: "label" },
       { label: "Description", value: "description" },
       { label: "Fixtures", value: "total" },
-      { label: "Delivered", value: "delivered" },
+      { label: "Scheduled", value: (row) => row.scheduled ?? row.delivered },
       { label: "Postponed", value: "postponed" },
       { label: "Cancelled", value: "cancelled" },
       { label: "Unresolved", value: "unresolved" },
@@ -104,12 +104,12 @@ export function buildReportCsv(model) {
 
   const summary = model?.evidence?.summary || {};
   const rows = [
-    ["Recorded fixtures", summary.total, "Delivered, postponed and cancelled outcomes"],
-    ["Delivered fixtures", summary.delivered, "Fixtures scheduled to proceed"],
-    ["Delivery rate", `${summary.deliveryRate || 0}%`, "Delivered as a share of recorded outcomes"],
+    ["Recorded fixtures", summary.total, "Scheduled, postponed and cancelled outcomes"],
+    ["Scheduled fixtures", summary.scheduled ?? summary.delivered, "Fixtures recorded as scheduled to proceed"],
+    ["Schedule completion", `${summary.scheduleCompletionRate ?? summary.deliveryRate ?? 0}%`, "Scheduled fixtures as a share of recorded outcomes"],
     ["Unresolved fixtures", summary.unresolved || 0, "Fixtures without a validated allocation"],
-    ["Fixture hours", summary.facilityHours || 0, "Delivered playing time"],
-    ["Officials coverage", `${summary.officialCoverage || 0}%`, "Confirmed appointments for delivered fixtures"],
+    ["Scheduled pitch hours", summary.facilityHours || 0, "Calculated from scheduled fixture durations"],
+    ["Officials coverage", `${summary.officialCoverage || 0}%`, "Confirmed appointments for scheduled fixtures"],
     ["Peak parking", summary.peakParking || 0, summary.peakParkingLabel || ""],
     ["Parking pressure matchdays", summary.parkingOverCapacity || 0, "Over capacity or concurrency limit"],
     ["Historical weather coverage", `${summary.weatherCoverage || 0}%`, "Saved fixtures carrying a weather-risk snapshot"],

@@ -17,8 +17,11 @@ function resetScrollPosition() {
   };
 
   reset();
-  window.requestAnimationFrame(reset);
-  window.setTimeout(reset, 0);
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(reset);
+  } else {
+    window.setTimeout(reset, 0);
+  }
 }
 
 function normaliseSearchQuery(query = "") {
@@ -31,6 +34,14 @@ export function resolveSearchNavigation(query = "") {
 
   const timelineTarget =
     NAV_TARGETS.TIMELINE || NAV_TARGETS.OPERATIONS_TIMELINE || NAV_TARGETS.OPERATIONS;
+
+  if (q.includes("executive") || q.includes("organisation command") || q.includes("organization command") || q.includes("board pack") || q.includes("site readiness")) {
+    return { target: NAV_TARGETS.EXECUTIVE, options: {} };
+  }
+
+  if (q.includes("annual planner") || q.includes("training planner") || q.includes("pitch booking") || q.includes("friendlies") || q.includes("friendly")) {
+    return { target: NAV_TARGETS.PLANNER, options: {} };
+  }
 
   if (q.includes("timeline") || q.includes("control room")) {
     return { target: timelineTarget, options: { scroll: false } };
@@ -139,7 +150,7 @@ export function createNavigationController({
 
     safeCall(setMainPage, meta.page);
 
-    if (["saturday", "sunday", "midweek", "timeline"].includes(String(requestedDay).toLowerCase())) {
+    if (["centre", "saturday", "sunday", "midweek", "timeline"].includes(String(requestedDay).toLowerCase())) {
       safeCall(setDayTab, requestedDay);
     }
 
@@ -177,6 +188,7 @@ export function createNavigationController({
   return {
     goTo,
     goToMissionControl: () => goTo(NAV_TARGETS.MISSION_CONTROL),
+    goToExecutive: () => goTo(NAV_TARGETS.EXECUTIVE),
     goToOperations: (options) => goTo(NAV_TARGETS.OPERATIONS, options),
     goToOperationsTimeline: (options) => goTo(timelineTarget, options),
     goToFixtures: (options) => goTo(NAV_TARGETS.FIXTURES, options),
@@ -185,7 +197,8 @@ export function createNavigationController({
     goToOfficials: (options) => goTo(NAV_TARGETS.OFFICIALS, options),
     goToWeather: (options) => goTo(NAV_TARGETS.WEATHER, options),
     goToRecommendations: (options) => goTo(NAV_TARGETS.RECOMMENDATIONS, options),
-    goToCommunications: () => goTo(NAV_TARGETS.COMMUNICATIONS),
+    goToAnnualPlanner: () => goTo(NAV_TARGETS.PLANNER),
+    goToCommunications: (options) => goTo(NAV_TARGETS.COMMUNICATIONS, options),
     goToAnalytics: () => goTo(NAV_TARGETS.ANALYTICS),
     goToReports: () => goTo(NAV_TARGETS.REPORTS),
     goToSettings: (options) => goTo(NAV_TARGETS.SETTINGS, options),

@@ -13,8 +13,8 @@ import { sortPitches } from "../pitches.js";
 const DEFAULT_START = 8 * 60;
 const DEFAULT_END = 16 * 60;
 const MIN_RANGE = 60;
-const MIN_VISUAL_WIDTH_PCT = 9;
-const MIN_VISUAL_GAP_PCT = 1.15;
+const MIN_VISUAL_WIDTH_PCT = 5.5;
+const MIN_VISUAL_GAP_PCT = 0.55;
 const TIMELINE_PADDING_MINS = 30;
 
 export function buildMatchdayTimeline({
@@ -77,7 +77,8 @@ export function buildMatchdayTimeline({
           return {
             ...fixture,
             leftPct: clamp(rawLeft, 0, 100),
-            widthPct: clamp(Math.max(rawWidth, MIN_VISUAL_WIDTH_PCT), 5, 100),
+            rawWidthPct: clamp(rawWidth, 0.5, 100),
+            widthPct: clamp(rawWidth, 0.5, 100),
             durationMins: Math.max(0, fixture.endMins - fixture.koMins),
           };
         })
@@ -140,23 +141,40 @@ export function normaliseTimelineGames(games = [], club = null) {
 }
 
 export function allocateTimelineLanes(fixtures = []) {
-  const lanes = [];
-
-  return fixtures.map((fixture) => {
-    let lane = lanes.findIndex((laneEndPct) => fixture.leftPct >= laneEndPct);
+  const laneEnds = [];
+  const positioned = fixtures.map((fixture) => {
+    // Lane allocation must follow real fixture time, not the minimum visual card
+    // width. Two fixtures that meet end-to-start belong on the same line.
+    let lane = laneEnds.findIndex((laneEndMins) => Number(fixture.koMins) >= laneEndMins);
 
     if (lane === -1) {
-      lane = lanes.length;
-      lanes.push(0);
+      lane = laneEnds.length;
+      laneEnds.push(Number.NEGATIVE_INFINITY);
     }
 
-    lanes[lane] = fixture.leftPct + fixture.widthPct + MIN_VISUAL_GAP_PCT;
-
-    return {
-      ...fixture,
-      lane,
-    };
+    laneEnds[lane] = Number(fixture.endMins);
+    return { ...fixture, lane };
   });
+
+  const byLane = new Map();
+  positioned.forEach((fixture) => {
+    if (!byLane.has(fixture.lane)) byLane.set(fixture.lane, []);
+    byLane.get(fixture.lane).push(fixture);
+  });
+
+  byLane.forEach((laneFixtures) => {
+    laneFixtures.sort((left, right) => left.koMins - right.koMins || left.endMins - right.endMins);
+    laneFixtures.forEach((fixture, index) => {
+      const next = laneFixtures[index + 1];
+      const requested = Math.max(Number(fixture.rawWidthPct || fixture.widthPct || 0), MIN_VISUAL_WIDTH_PCT);
+      const available = next
+        ? Math.max(2.75, Number(next.leftPct) - Number(fixture.leftPct) - MIN_VISUAL_GAP_PCT)
+        : Math.max(2.75, 100 - Number(fixture.leftPct));
+      fixture.displayWidthPct = clamp(Math.min(requested, available), 2.75, 100);
+    });
+  });
+
+  return positioned;
 }
 
 export function getTimelineFixtureTone(fixture = {}) {

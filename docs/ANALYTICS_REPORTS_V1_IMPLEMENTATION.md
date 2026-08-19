@@ -65,3 +65,7 @@ The main application chunk remains above Vite's 500 kB warning threshold, so wid
 - Production build passed.
 - Reports placeholder wording was removed.
 - No database migration is required.
+
+## v3.10.13 unified operational extension
+
+Analytics v1 remains the saved-matchday foundation, but it is no longer the whole-club default view. v3.10.13 adds the committed Analytics and Reports roadmap and a unified facility evidence engine that combines matchday fixtures with Annual Planner training, friendlies, events, winter provision, closures, costs and unused configured capacity. See `docs/roadmaps/ANALYTICS_REPORTS_ROADMAP.md` for the active module baseline.

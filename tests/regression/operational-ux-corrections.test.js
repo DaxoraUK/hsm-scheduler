@@ -15,12 +15,19 @@ const appCoreSource = source("../../src/AppCore.jsx");
 const shellSource = source("../../src/layout/ProductShell.jsx");
 const dashboardSource = source("../../src/pages/DashboardPage.jsx");
 const matchdaySource = source("../../src/pages/MatchdayPage.jsx");
-const actionBarSource = source("../../src/components/Operations/shared/MatchdayActionBar.jsx");
-const optimiserSource = source("../../src/components/Operations/shared/DayOptimiserCard.jsx");
-const timelineSource = source("../../src/components/Operations/shared/MatchdayTimelineCard.jsx");
+const actionBarSource = source(
+  "../../src/components/Operations/shared/MatchdayActionBar.jsx",
+);
+const optimiserSource = source(
+  "../../src/components/Operations/shared/DayOptimiserCard.jsx",
+);
+const timelineSource = source(
+  "../../src/components/Operations/shared/MatchdayTimelineCard.jsx",
+);
 const reportsSource = source("../../src/pages/ReportsPage.jsx");
-const unresolvedSource = source("../../src/components/Operations/shared/MatchdayUnresolvedCard.jsx");
-const emptyStateSource = source("../../src/components/Operations/SaturdayEmptyState.jsx");
+const unresolvedSource = source(
+  "../../src/components/Operations/shared/MatchdayUnresolvedCard.jsx",
+);
 const confirmDialogSource = source("../../src/ui/ConfirmDialog.jsx");
 
 describe("combined operational UX corrections", () => {
@@ -31,16 +38,17 @@ describe("combined operational UX corrections", () => {
     expect(shellSource).toContain("h-screen");
     expect(shellSource).toContain("overflow-y-auto");
     expect(shellSource).not.toContain("min-h-0 space-y-1 overflow-y-auto pr-1");
-    expect(shellSource.indexOf('{workspaceCard}</div>')).toBeLessThan(
-      shellSource.lastIndexOf("<NavigationItems")
+    expect(shellSource.indexOf("{workspaceCard}</div>")).toBeLessThan(
+      shellSource.lastIndexOf("<NavigationItems"),
     );
   });
 
-  test("builds selected matchdays from Mission Control and opens Operations Centre", () => {
+  test("builds selected matchdays from Mission Control and opens the plan-appropriate Operations workspace", () => {
     expect(dashboardSource).toContain("Build Matchweek");
     expect(dashboardSource).toContain("buildSelectedMatchweek");
     expect(dashboardSource).toContain("await Promise.resolve(item.run())");
-    expect(dashboardSource).toContain('setDayTab("centre")');
+    expect(dashboardSource).toContain('advancedOperationsEnabled ? "centre"');
+    expect(dashboardSource).toContain("operationsLandingDay");
     expect(dashboardSource).toContain("Open Operations");
   });
 
@@ -66,17 +74,17 @@ describe("combined operational UX corrections", () => {
     expect(optimiserSource).toContain("Apply all validated moves");
   });
 
-
-
   test("uses Ground Control confirmation dialogs instead of native browser popups", () => {
     expect(matchdaySource).toContain("<ConfirmDialog");
     expect(matchdaySource).toContain('eyebrow="Schedule approval"');
     expect(matchdaySource).toContain('eyebrow="Validated improvements"');
-    expect(unresolvedSource).toContain('title="Assign despite pitch conflict?"');
+    expect(unresolvedSource).toContain(
+      'title="Assign despite pitch conflict?"',
+    );
     expect(confirmDialogSource).toContain('role="alertdialog"');
-    expect(confirmDialogSource).toContain('success: {');
+    expect(confirmDialogSource).toContain("success: {");
 
-    [matchdaySource, unresolvedSource, emptyStateSource].forEach((content) => {
+    [matchdaySource, unresolvedSource].forEach((content) => {
       expect(content).not.toContain("window.confirm");
       expect(content).not.toMatch(/\balert\s*\(/);
     });
@@ -90,20 +98,38 @@ describe("combined operational UX corrections", () => {
 
   test("routes Operations print actions to Reports v1 and removes legacy print sheets", () => {
     expect(appCoreSource).toContain("openCurrentReport");
-    expect(appCoreSource).toContain('target:"reports"');
+    expect(appCoreSource).toMatch(/target:\s*"reports"/);
     expect(appCoreSource).not.toContain("CombinedPrintSheet");
     expect(reportsSource).toContain("pendingAutoPrint");
-    expect(reportsSource).toContain('document.body.dataset.printTarget = "reports"');
+    expect(reportsSource).toContain(
+      'document.body.dataset.printTarget = "reports"',
+    );
 
     [
       "../../src/components/SatPrintSheet.jsx",
       "../../src/components/SunPrintSheet.jsx",
       "../../src/components/CombinedPrintSheet.jsx",
-    ].forEach((path) => expect(existsSync(new URL(path, import.meta.url))).toBe(false));
+    ].forEach((path) =>
+      expect(existsSync(new URL(path, import.meta.url))).toBe(false),
+    );
   });
 
   test("uses the shared unresolved card instead of day-specific duplicate wrappers", () => {
-    expect(existsSync(new URL("../../src/components/Operations/SaturdayUnresolvedCard.jsx", import.meta.url))).toBe(false);
-    expect(existsSync(new URL("../../src/components/Operations/SundayUnresolvedCard.jsx", import.meta.url))).toBe(false);
+    expect(
+      existsSync(
+        new URL(
+          "../../src/components/Operations/SaturdayUnresolvedCard.jsx",
+          import.meta.url,
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      existsSync(
+        new URL(
+          "../../src/components/Operations/SundayUnresolvedCard.jsx",
+          import.meta.url,
+        ),
+      ),
+    ).toBe(false);
   });
 });

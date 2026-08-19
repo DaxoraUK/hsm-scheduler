@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ClipboardCopy, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { Auth, DB } from "../../lib/supabase.js";
 import { clearTenantStorageContext } from "../../lib/storage/tenantStorage.js";
 import { createSupportReference } from "../../lib/errors/recovery.js";
@@ -8,15 +8,15 @@ import { buildClientEvent, getClientReleaseMetadata, isClientTelemetryEnabled } 
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, reference: "" };
+    this.state = { error: null, reference: "", copied: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { error, reference: createSupportReference() };
+    return { error, reference: createSupportReference(), copied: false };
   }
 
   componentDidCatch(error, info) {
-    console.error("Ground Control application error", {
+    console.error("Daxora workspace application error", {
       error,
       componentStack: info?.componentStack,
       reference: this.state.reference,
@@ -27,7 +27,7 @@ export default class AppErrorBoundary extends React.Component {
       DB.recordClientEvent(buildClientEvent({
         level: "error",
         category: "application_crash",
-        message: error?.message || "Ground Control application crash",
+        message: error?.message || "Daxora workspace application crash",
         reference: this.state.reference,
         route: typeof window === "undefined" ? "" : window.location.pathname,
         ...releaseMetadata,
@@ -40,6 +40,18 @@ export default class AppErrorBoundary extends React.Component {
       });
     }
   }
+
+  copyReference = async () => {
+    const metadata = getClientReleaseMetadata();
+    const summary = [
+      `Daxora support reference: ${this.state.reference}`,
+      `Release: ${metadata.release}`,
+      `Environment: ${metadata.environment}`,
+      `Route: ${window.location.pathname}`,
+    ].join("\n");
+    await navigator.clipboard?.writeText?.(summary);
+    this.setState({ copied: true });
+  };
 
   reload = () => {
     window.location.reload();
@@ -67,10 +79,10 @@ export default class AppErrorBoundary extends React.Component {
                   Safe recovery mode
                 </div>
                 <h1 className="mt-3 text-4xl font-black leading-tight tracking-tight sm:text-5xl">
-                  Ground Control hit an unexpected problem.
+                  The Daxora workspace hit an unexpected problem.
                 </h1>
                 <p className="mt-4 max-w-xl text-sm font-semibold leading-7 text-slate-300">
-                  The workspace has been stopped before any further actions could run. Reloading usually restores the session without changing club data.
+                  The workspace has been stopped before any further actions could run. Reloading usually restores the session without changing club or league data.
                 </p>
               </div>
 
@@ -80,7 +92,7 @@ export default class AppErrorBoundary extends React.Component {
                   <div>
                     <div className="text-sm font-black text-emerald-950">Your database security remains active</div>
                     <div className="mt-1 text-sm font-semibold leading-6 text-emerald-800">
-                      This recovery screen does not bypass club isolation, roles or Supabase Row Level Security.
+                      This recovery screen does not bypass club or league isolation, roles or Supabase Row Level Security.
                     </div>
                   </div>
                 </div>
@@ -91,6 +103,9 @@ export default class AppErrorBoundary extends React.Component {
                   <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
                     Keep this reference if the problem repeats. Do not include passwords, access keys or private fixture data in a support message.
                   </div>
+                  <button type="button" onClick={this.copyReference} className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100">
+                    <ClipboardCopy size={14} /> {this.state.copied ? "Reference copied" : "Copy support details"}
+                  </button>
                 </div>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -99,7 +114,7 @@ export default class AppErrorBoundary extends React.Component {
                     onClick={this.reload}
                     className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800"
                   >
-                    <RefreshCw size={17} /> Reload Ground Control
+                    <RefreshCw size={17} /> Reload workspace
                   </button>
                   <button
                     type="button"

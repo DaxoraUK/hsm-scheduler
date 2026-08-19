@@ -5,8 +5,10 @@ import {
 } from "../engines/operationalEvidenceEngine.js";
 import { buildEvidenceQuality } from "../engines/evidenceQualityEngine.js";
 import { buildGrantEvidenceFramework } from "../grants/grantEvidenceFramework.js";
+import { buildGrantFundingModel } from "../grants/grantMatchingEngine.js";
 
 export const REPORT_TYPES = [
+  { id: "facilities", label: "Unified facility usage", description: "Fixtures, training, friendlies, winter provision, closures and unused capacity." },
   { id: "operations", label: "Operations pack", description: "Complete matchday schedule, risks and readiness." },
   { id: "fixtures", label: "Fixture allocations", description: "Kick-offs, teams, pitches, formats and outcomes." },
   { id: "pitches", label: "Pitch usage", description: "Fixture load, hours and postponement pressure by pitch." },
@@ -14,7 +16,7 @@ export const REPORT_TYPES = [
   { id: "officials", label: "Officials", description: "Appointment coverage and outstanding confirmations." },
   { id: "exceptions", label: "Exceptions", description: "Postponed, cancelled, unresolved and incomplete records." },
   { id: "analytics", label: "Analytics snapshot", description: "Executive operational summary for the selected period." },
-  { id: "funding", label: "Funding evidence pack", description: "Evidence provenance, gaps, methodology and source appendix." },
+  { id: "funding", label: "Funding evidence draft", description: "Evidence provenance, gaps, limitations and a source appendix for human review." },
 ];
 
 export const REPORT_SCOPES = [
@@ -212,12 +214,19 @@ export function buildReportsModel({
     teamCfg,
     refs,
     metrics: {
-      deliveredFixtures: evidence.summary.delivered,
+      scheduledFixtures: evidence.summary.scheduled ?? evidence.summary.delivered,
       postponedFixtures: evidence.summary.postponed,
       facilityHours: evidence.summary.facilityHours,
       officialCoverage: evidence.summary.officialCoverage,
       parkingPressureWeeks: evidence.summary.parkingOverCapacity,
     },
+  });
+  const grantFunding = buildGrantFundingModel({
+    club,
+    quality,
+    framework: grantFramework,
+    projectType: "all",
+    availability: "current",
   });
   const reportDefinition = REPORT_TYPES.find((item) => item.id === reportType) || REPORT_TYPES[0];
 
@@ -249,6 +258,16 @@ export function buildReportsModel({
     readiness,
     quality,
     grantFramework,
+    funding: grantFunding,
+    metrics: {
+      scheduledFixtures: evidence.summary.scheduled ?? evidence.summary.delivered,
+      teamOpportunitySlots: (evidence.summary.scheduled ?? evidence.summary.delivered) * 2,
+      facilityHours: evidence.summary.facilityHours,
+      postponedFixtures: evidence.summary.postponed,
+      officialCoverage: evidence.summary.officialCoverage,
+    },
+    sourceRows: evidence.rows,
+    narrative: `${club?.name || "The club"} has ${evidence.summary.scheduled ?? evidence.summary.delivered} fixture${(evidence.summary.scheduled ?? evidence.summary.delivered) === 1 ? "" : "s"} scheduled to proceed in this selection, representing ${((evidence.summary.scheduled ?? evidence.summary.delivered) * 2)} team fixture opportunities and ${evidence.summary.facilityHours || 0} scheduled pitch hours. These figures do not prove completed activity, attendance or unique beneficiaries.`,
     configuredOfficials: asArray(refs).length,
     hasData: evidence.rows.length > 0,
     generatedAt: new Date(),

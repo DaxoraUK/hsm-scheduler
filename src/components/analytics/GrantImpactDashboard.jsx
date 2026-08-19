@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import {
   AlertTriangle,
   BarChart3,
@@ -9,6 +10,7 @@ import {
   ClipboardCheck,
   Copy,
   Database,
+  Download,
   ExternalLink,
   FileCheck2,
   HeartPulse,
@@ -30,6 +32,7 @@ import StatusChip from "../../ui/StatusChip.jsx";
 import FundingWorkspacePanel from "./FundingWorkspacePanel.jsx";
 import { buildGrantImpactModel } from "../../lib/engines/grantImpactEngine.js";
 import { inferGrantHomeNation } from "../../lib/grants/grantMatchingEngine.js";
+import { buildFundingEvidencePack, downloadFundingApplicationPack, downloadFundingEvidencePack } from "../../lib/grants/fundingEvidencePack.js";
 
 const TONE = {
   success: {
@@ -217,39 +220,79 @@ function EvidenceMatrix({ framework }) {
 }
 
 function FundingOpportunityCard({ programme }) {
+  const readinessPercent = programme.evidenceTotal
+    ? Math.round((programme.evidenceReady / programme.evidenceTotal) * 100)
+    : 0;
+
+  const factItems = [
+    {
+      id: "funding",
+      Icon: PoundSterling,
+      label: "Funding",
+      value: programme.amountLabel,
+      helper: "Confirm the current award route before applying.",
+    },
+    {
+      id: "contribution",
+      Icon: Target,
+      label: "Club contribution",
+      value: programme.matchFunding,
+      helper: "Cash, partnership or other contribution may need evidence.",
+    },
+    {
+      id: "timing",
+      Icon: CalendarClock,
+      label: "Timing",
+      value: programme.deadline
+        ? `Deadline ${new Date(`${programme.deadline}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`
+        : programme.resolvedStatus.label,
+      helper: programme.decisionTime || programme.projectDuration || "Check the current official timetable.",
+    },
+    {
+      id: "relevance",
+      Icon: Search,
+      label: "Evidence readiness",
+      value: programme.matchLabel,
+      helper: `${programme.evidenceReady} of ${programme.evidenceTotal} mapped evidence areas ready`,
+      progress: readinessPercent,
+    },
+  ];
+
   return (
-    <article className="flex h-full flex-col rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="flex h-full flex-col rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{programme.funder}</div>
-          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{programme.name}</h3>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">{programme.name}</h3>
         </div>
-        <StatusChip status={programme.resolvedStatus.tone} size="sm">{programme.resolvedStatus.label}</StatusChip>
+        <div className="shrink-0"><StatusChip status={programme.resolvedStatus.tone} size="sm">{programme.resolvedStatus.label}</StatusChip></div>
       </div>
 
       <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">{programme.summary}</p>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><PoundSterling size={14} /> Funding</div>
-          <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.amountLabel}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Target size={14} /> Club contribution</div>
-          <div className="mt-2 text-sm font-black leading-6 text-slate-900">{programme.matchFunding}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400"><Search size={14} /> Relevance</div>
-          <div className="mt-2 text-sm font-black text-slate-900">{programme.matchLabel}</div>
-          <div className="mt-1 text-xs font-semibold text-slate-500">{programme.evidenceReady}/{programme.evidenceTotal} mapped evidence areas ready</div>
-        </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {factItems.map(({ id, Icon, label, value, helper, progress }) => (
+          <div key={id} className="flex min-w-0 items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm ring-1 ring-slate-200"><Icon size={17} /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[9px] font-black uppercase tracking-[0.17em] text-slate-400">{label}</div>
+              <div className="mt-1.5 text-sm font-black leading-5 text-slate-900">{value}</div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">{helper}</div>
+              {typeof progress === "number" ? (
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-label={`${progress}% of mapped evidence areas ready`}>
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 border-t border-slate-200 pt-5">
         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Key eligibility checks</div>
-        <ul className="mt-3 space-y-2">
-          {programme.eligibilityNotes.slice(0, 3).map((note) => (
-            <li key={note} className="flex items-start gap-2 text-sm font-semibold leading-5 text-slate-600">
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {programme.eligibilityNotes.slice(0, 4).map((note) => (
+            <li key={note} className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold leading-5 text-slate-600">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
               <span>{note}</span>
             </li>
@@ -264,7 +307,18 @@ function FundingOpportunityCard({ programme }) {
         </div>
       ) : null}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
+      <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-slate-700 marker:hidden">Application documents and manual checks</summary>
+        <div className="border-t border-slate-200 px-4 py-3">
+          <ul className="space-y-2">
+            {[...(programme.requiredDocuments || []), ...(programme.manualRequirements || [])].slice(0, 8).map((item) => (
+              <li key={item} className="flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />{item}</li>
+            ))}
+          </ul>
+        </div>
+      </details>
+
+      <div className="mt-auto flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
             <CalendarClock size={15} /> Verified {new Date(`${programme.lastVerified}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}
@@ -275,7 +329,7 @@ function FundingOpportunityCard({ programme }) {
           href={programme.officialUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3.5 py-2 text-xs font-black text-white transition hover:bg-slate-800"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-3.5 py-2 text-xs font-black text-white transition hover:bg-slate-800"
         >
           Official guidance <ExternalLink size={14} />
         </a>
@@ -291,6 +345,8 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
   const [homeNation, setHomeNation] = useState(() => inferGrantHomeNation(props.club));
   const [projectType, setProjectType] = useState("all");
   const [availability, setAvailability] = useState("current");
+  const [impactEvidence, setImpactEvidence] = useState([]);
+  const [activeFundingProject, setActiveFundingProject] = useState(null);
   const effectiveScope = !midweekEnabled && ["matchweek", "midweek"].includes(scope) ? "weekend" : scope;
   const model = useMemo(
     () => buildGrantImpactModel({ ...props, midweekEnabled, period, scope: effectiveScope, homeNation, projectType, availability }),
@@ -310,6 +366,20 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
     }
   };
 
+  const downloadEvidencePack = () => {
+    const pack = buildFundingEvidencePack({ club: props.club, model, project: activeFundingProject, impactEvidence, source: "funding-analytics" });
+    downloadFundingEvidencePack(pack);
+  };
+
+  const downloadApplicationPack = () => {
+    if (!activeFundingProject) {
+      toast.error("Save and select a funding project", { description: "Application-ready packs must be tied to a saved project and its evidence register." });
+      return;
+    }
+    const pack = buildFundingEvidencePack({ club: props.club, model, project: activeFundingProject, impactEvidence, source: "funding-analytics" });
+    downloadFundingApplicationPack(pack);
+  };
+
   return (
     <PageContainer>
       <PageHeader
@@ -317,10 +387,18 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         title="Find funding and build the evidence case"
         subtitle="Match verified national and UK-wide programmes to a defined club project, then identify the operational evidence, eligibility checks and documents still required."
         action={
-          <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
-            {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
-            {copied ? "Summary copied" : "Copy evidence summary"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={downloadApplicationPack} disabled={!activeFundingProject} title={activeFundingProject ? "Download a project-specific application evidence pack" : "Save and select a funding project first"} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
+              <FileCheck2 size={17} /> Application-ready pack
+            </button>
+            <button type="button" onClick={downloadEvidencePack} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800">
+              <Download size={17} /> Data evidence draft
+            </button>
+            <button type="button" onClick={copyNarrative} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-slate-900">
+              {copied ? <Check size={17} className="text-emerald-300" /> : <Copy size={17} className="text-emerald-300" />}
+              {copied ? "Summary copied" : "Copy evidence summary"}
+            </button>
+          </div>
         }
       />
 
@@ -382,6 +460,9 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
         model={model}
         projectType={projectType}
         onProjectTypeChange={setProjectType}
+        onImpactEvidenceChange={setImpactEvidence}
+        impactEvidence={impactEvidence}
+        onActiveProjectChange={setActiveFundingProject}
       />
 
       <Card
@@ -412,10 +493,10 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={Trophy} label="Fixtures delivered" value={model.metrics.deliveredFixtures} detail={`${model.metrics.teamOpportunitySlots} calculated team opportunities; not individual participant numbers.`} />
+        <Metric icon={Trophy} label="Fixtures scheduled" value={model.metrics.scheduledFixtures ?? model.metrics.deliveredFixtures} detail={`${model.metrics.teamOpportunitySlots} team fixture opportunities; not attendance or individual participant numbers.`} />
         <Metric icon={UsersRound} label="Participation categories" value={model.metrics.youthFixtures} detail={`${model.metrics.femaleFixtures} girls' or women's fixtures inferred from team names.`} />
         <Metric icon={CalendarClock} label="Facility use" value={`${model.metrics.facilityHours} hrs`} detail={`${model.metrics.pitchesUsed}/${model.metrics.pitchesConfigured || model.metrics.pitchesUsed} pitches represented.`} />
-        <Metric icon={HeartPulse} label="Fixture delivery" value={`${100 - model.metrics.postponementRate}%`} detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`} />
+        <Metric icon={HeartPulse} label="Schedule completion" value={`${model.metrics.scheduleCompletionRate ?? 100 - model.metrics.postponementRate}%`} detail={`${model.metrics.postponedFixtures} postponements — ${model.metrics.postponementLabel.toLowerCase()}.`} />
       </div>
 
       <Card eyebrow="Evidence provenance" title="Know where every claim comes from" subtitle="Ground Control keeps direct records, calculations, inferences and manual evidence visibly separate.">

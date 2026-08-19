@@ -29,11 +29,7 @@ function getForecastEndpoint() {
     return { url: OPEN_METEO_FREE_API, usageMode: "evaluation" };
   }
 
-  const error = new Error(
-    "Live weather is temporarily unavailable. Try again later or contact support if the problem continues."
-  );
-  error.code = "WEATHER_PROVIDER_NOT_CONFIGURED";
-  throw error;
+  return { url: "/api/weather", usageMode: "server-proxy" };
 }
 
 function clean(value) {
@@ -365,7 +361,7 @@ const baseWeatherService = createPlatformService("weather", {
     const config = getWeatherConfiguration(club);
     return config.enabled && Boolean(config.postcode);
   },
-  describe: () => "Local evaluation uses the public forecast endpoint; production requires a server-side commercial provider proxy.",
+  describe: () => "Local and staging forecasts use the built-in proxy; commercial production requires an Open-Meteo customer API key.",
 });
 
 export const weatherService = Object.freeze({

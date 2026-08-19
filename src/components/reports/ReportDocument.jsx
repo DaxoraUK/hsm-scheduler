@@ -282,7 +282,7 @@ function FundingEvidenceReport({ model }) {
       <section className="print:break-before-page">
         <div className="mb-4">
           <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Source appendix</div>
-          <h3 className="mt-1 text-xl font-black text-slate-950">Fixture records supporting this pack</h3>
+          <h3 className="mt-1 text-xl font-black text-slate-950">Fixture records supporting this draft</h3>
         </div>
         <FixtureReport model={model} />
       </section>
@@ -295,7 +295,7 @@ function AnalyticsSnapshot({ model }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
-        <SummaryCard icon={Trophy} label="Delivery rate" value={`${summary.deliveryRate}%`} detail={`${summary.delivered}/${summary.total} recorded outcomes`} />
+        <SummaryCard icon={Trophy} label="Schedule completion" value={`${summary.scheduleCompletionRate ?? summary.deliveryRate}%`} detail={`${summary.scheduled ?? summary.delivered}/${summary.total} remained scheduled`} />
         <SummaryCard icon={Clock3} label="Fixture hours" value={summary.facilityHours} detail="Scheduled playing time" />
         <SummaryCard icon={ShieldCheck} label="Officials coverage" value={`${summary.officialCoverage}%`} detail={`${summary.officialConfirmed} confirmed`} />
         <SummaryCard icon={Car} label="Peak parking" value={summary.peakParking} detail={summary.peakParkingLabel} />
@@ -306,11 +306,11 @@ function AnalyticsSnapshot({ model }) {
           <div className="mt-4"><PitchReport model={model} /></div>
         </section>
         <section className="rounded-2xl border border-slate-200 p-5 print:break-inside-avoid">
-          <div className="flex items-center gap-3"><BarChart3 size={19} className="text-emerald-700" /><h3 className="font-black text-slate-950">Team delivery</h3></div>
+          <div className="flex items-center gap-3"><BarChart3 size={19} className="text-emerald-700" /><h3 className="font-black text-slate-950">Team scheduling</h3></div>
           <div className="mt-4"><Table columns={[
             { key: "label", label: "Team", className: "font-black text-slate-950" },
             { key: "total", label: "Fixtures" },
-            { key: "deliveryRate", label: "Delivered", render: (row) => `${row.deliveryRate}%` },
+            { key: "scheduleCompletionRate", label: "Remained scheduled", render: (row) => `${row.scheduleCompletionRate ?? row.deliveryRate}%` },
             { key: "postponed", label: "Postponed" },
             { key: "officialCoverage", label: "Officials", render: (row) => `${row.officialCoverage}%` },
           ]} rows={model.teamRows} /></div>
@@ -358,7 +358,7 @@ export default function ReportDocument({ model, club }) {
       {content}
 
       <footer className="mt-8 border-t border-slate-200 pt-4 text-[10px] font-semibold text-slate-400 print:break-inside-avoid">
-        Generated from club-scoped Ground Control operational data. Calculated and inferred measures are labelled in the funding evidence pack. Historical weather is shown only where it was captured; current forecasts are not substituted for past conditions. This report does not confirm funding eligibility.
+        Generated from club-scoped Ground Control operational data. Calculated and inferred measures are labelled in the funding evidence draft. Historical weather is shown only where it was captured; current forecasts are not substituted for past conditions. This report does not confirm funding eligibility.
       </footer>
     </article>
   );

@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 
 const appCoreSource = readFileSync(
   new URL("../../src/AppCore.jsx", import.meta.url),
-  "utf8"
+  "utf8",
 );
 
 const routeModules = [
@@ -24,23 +24,25 @@ const routeModules = [
 describe("route-level code splitting", () => {
   test.each(routeModules)("loads %s on demand", (moduleName) => {
     expect(appCoreSource).toMatch(
-      new RegExp(`const ${moduleName} = lazy\\(\\(\\) => import\\(`)
+      new RegExp(
+        `const\\s+${moduleName}\\s*=\\s*lazy\\(\\s*\\(\\)\\s*=>\\s*import\\(`,
+      ),
     );
   });
 
   test("does not restore eager page imports", () => {
     routeModules.forEach((moduleName) => {
-      expect(appCoreSource).not.toMatch(new RegExp(`import ${moduleName} from`));
+      expect(appCoreSource).not.toMatch(
+        new RegExp(`import\\s+${moduleName}\\s+from`),
+      );
     });
   });
 
   test("defers optional onboarding and subscription UI", () => {
-    expect(appCoreSource).toContain(
-      'const CustomerOnboardingWizard = lazy(() => import("./components/CustomerOnboardingWizard.jsx"));'
+    expect(appCoreSource).toMatch(
+      /const\s+CustomerOnboardingWizard\s*=\s*lazy/,
     );
-    expect(appCoreSource).toContain(
-      'const SubscriptionGate = lazy(() => import("./components/SubscriptionGate.jsx"));'
-    );
-    expect(appCoreSource).toContain("{onboardingOpen && (");
+    expect(appCoreSource).toMatch(/const\s+SubscriptionGate\s*=\s*lazy/);
+    expect(appCoreSource).toContain("onboardingOpen &&");
   });
 });

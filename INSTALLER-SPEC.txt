@@ -1,0 +1,10 @@
+v3.10.26 installer design
+- Primary project baseline: latest uploaded hsm-scheduler(8).zip
+- TeamFeePay branch is merged into the payload.
+- Existing files are permitted to change only when their SHA-256 matches the primary baseline manifest.
+- This protects any real user changes made after the uploaded baseline.
+- Every changed file is backed up before replacement.
+- New files are recorded for rollback.
+- Native .NET Process execution is used for validation; no Start-Process, npx or cmd pipeline exit-code parsing.
+- Tests run in controlled four-file Vitest batches.
+- No migration is applied until focused tests, regression catalogue, lint and production build pass.

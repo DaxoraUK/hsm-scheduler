@@ -6,7 +6,7 @@ import {
   Sparkles,
   SlidersHorizontal,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../../lib/notifications/daxoraNotifications.js";
 import ConfirmDialog from "../../../ui/ConfirmDialog.jsx";
 import { cleanName, findCfg } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";

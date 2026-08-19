@@ -1,5 +1,6 @@
 export const NAV_TARGETS = Object.freeze({
   MISSION_CONTROL: "mission-control",
+  EXECUTIVE: "executive",
   OPERATIONS: "operations",
   TIMELINE: "operations.timeline",
   FIXTURES: "operations.fixtures",
@@ -8,6 +9,7 @@ export const NAV_TARGETS = Object.freeze({
   OFFICIALS: "operations.officials",
   WEATHER: "operations.weather",
   RECOMMENDATIONS: "operations.recommendations",
+  PLANNER: "planner",
   COMMUNICATIONS: "communications",
   ANALYTICS: "analytics",
   REPORTS: "reports",
@@ -20,14 +22,16 @@ export const NAV_TARGETS = Object.freeze({
 
 export const NAV_TARGET_META = Object.freeze({
   [NAV_TARGETS.MISSION_CONTROL]: { page: "dashboard", label: "Mission Control" },
-  [NAV_TARGETS.OPERATIONS]: { page: "operations", label: "Operations" },
+  [NAV_TARGETS.EXECUTIVE]: { page: "executive", label: "Organisation Command" },
+  [NAV_TARGETS.OPERATIONS]: { page: "operations", dayTab: "centre", label: "Operations Overview" },
   [NAV_TARGETS.TIMELINE]: { page: "operations", workspace: "timeline", dayTab: "timeline", label: "Operations Timeline" },
   [NAV_TARGETS.FIXTURES]: { page: "operations", workspace: "fixtures", card: "schedule", label: "Fixtures" },
   [NAV_TARGETS.RESOURCES]: { page: "operations", workspace: "resources", card: "pitchClosures", label: "Resources" },
   [NAV_TARGETS.PARKING]: { page: "operations", workspace: "intelligence", card: "parkingIntelligence", label: "Parking" },
-  [NAV_TARGETS.OFFICIALS]: { page: "operations", workspace: "intelligence", card: "operationsHealth", label: "Officials" },
+  [NAV_TARGETS.OFFICIALS]: { page: "operations", workspace: "intelligence", card: "officialsIntelligence", label: "Officials" },
   [NAV_TARGETS.WEATHER]: { page: "operations", workspace: "intelligence", card: "weatherIntelligence", label: "Weather" },
   [NAV_TARGETS.RECOMMENDATIONS]: { page: "operations", workspace: "intelligence", card: "recommendationCentre", label: "Recommendations" },
+  [NAV_TARGETS.PLANNER]: { page: "planner", label: "Annual Planner" },
   [NAV_TARGETS.COMMUNICATIONS]: { page: "communications", label: "Communications" },
   [NAV_TARGETS.ANALYTICS]: { page: "analytics", label: "Analytics" },
   [NAV_TARGETS.REPORTS]: { page: "reports", label: "Reports" },

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BadgeCheck,
   CheckCircle2,
   ClipboardList,
   ExternalLink,
@@ -15,10 +16,11 @@ import {
   ShieldCheck,
   Siren,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
 
 import { DB } from "../lib/supabase.js";
 import { getClientStagingDiagnostics } from "../lib/platform/stagingReadiness.js";
+import { buildLaunchAcceptanceReport } from "../lib/platform/launchAcceptance.js";
 import {
   createLaunchEvidenceDraft,
   createPilotFindingDraft,
@@ -87,6 +89,79 @@ function NumberInput({ label, value, onChange }) {
   );
 }
 
+function SubscriptionAcceptancePanel({ gates = [], onUseEvidence }) {
+  const report = useMemo(() => buildLaunchAcceptanceReport(), []);
+  const gateAvailable = gates.some((gate) => gate.code === "subscription_acceptance");
+
+  return (
+    <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-3">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${report.result === "pass" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}><BadgeCheck size={21} /></span>
+          <div>
+            <h3 className="text-xl font-black text-slate-950">Subscription launch acceptance</h3>
+            <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-500">The package contract is checked automatically. Real staging accounts must still prove route visibility, locked actions and database write protection before this launch gate is marked Ready.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill value={report.result} label={`${report.passed}/${report.total} automated checks`} />
+          <button
+            type="button"
+            disabled={!gateAvailable}
+            onClick={() => onUseEvidence(report)}
+            className={secondaryButton}
+            title={gateAvailable ? "Copy the automated result into the launch-evidence form" : "Apply the subscription acceptance migration first"}
+          >
+            <FileCheck2 size={16} /> Use as evidence
+          </button>
+        </div>
+      </div>
+
+      {!gateAvailable ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-900">Apply the included migration before recording this gate. The acceptance checks can still be reviewed now.</div>
+      ) : null}
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {report.scenarios.map((scenario) => (
+          <details key={scenario.id} className="group rounded-[22px] border border-slate-200 bg-slate-50 open:bg-white">
+            <summary className="cursor-pointer list-none px-4 py-4 marker:hidden">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-slate-900">{scenario.title}</div>
+                  <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">{scenario.description}</div>
+                </div>
+                <span className="mt-0.5 text-lg font-black text-slate-400 transition group-open:rotate-45">+</span>
+              </div>
+            </summary>
+            <div className="border-t border-slate-200 px-4 py-4">
+              <ul className="space-y-2">
+                {scenario.expected.map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />{item}</li>
+                ))}
+              </ul>
+              {scenario.limits ? (
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {Object.entries(scenario.limits).slice(0, 4).map(([key, value]) => (
+                    <div key={key} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{key.replaceAll("_", " ")}</div>
+                      <div className="mt-1 text-xs font-black text-slate-800">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ))}
+      </div>
+
+      <div className="mt-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-semibold leading-5 text-sky-950">
+        <ShieldCheck size={17} className="mt-0.5 shrink-0 text-sky-700" />
+        <span>Run the scenarios against actual staging accounts and record screenshots or deployment links in the evidence form below. Automated catalogue checks do not prove that the live database, roles and rendered controls behave correctly.</span>
+      </div>
+    </section>
+  );
+}
+
 export default function PlatformPilotEvidencePanel({ gates = [], selectedPilot = null, selectedClubName = "", isPlatformAdmin = false, onRefresh }) {
   const diagnostics = useMemo(() => getClientStagingDiagnostics(), []);
   const [payload, setPayload] = useState(() => normalisePilotEvidencePayload({}));
@@ -136,6 +211,25 @@ export default function PlatformPilotEvidencePanel({ gates = [], selectedPilot =
       },
     }));
   };
+
+  const useSubscriptionAcceptance = (report) => {
+    setEvidenceDraft({
+      gateCode: gates.some((gate) => gate.code === "subscription_acceptance") ? "subscription_acceptance" : "",
+      evidenceType: "automated_test",
+      result: report.result,
+      environment: diagnostics.environment,
+      release: diagnostics.release,
+      observedAt: new Date().toISOString().slice(0, 16),
+      summary: `${report.passed} of ${report.total} package-contract checks passed. Real-account Core, Pro, Elite, read-only, suspended and invalid-plan scenarios still require recorded staging evidence.`,
+      artifactUrl: "",
+      metadata: {
+        schemaVersion: report.schemaVersion,
+        checks: report.checks.map(({ id, name, passed, detail }) => ({ id, name, passed, detail })),
+        scenarios: report.scenarios.map(({ id, title, expected }) => ({ id, title, expected })),
+      },
+    });
+  };
+
 
   const saveEvidence = async () => {
     if (!isPlatformAdmin) return;
@@ -210,6 +304,8 @@ export default function PlatformPilotEvidencePanel({ gates = [], selectedPilot =
 
   return (
     <div className="space-y-6">
+      <SubscriptionAcceptancePanel gates={gates} onUseEvidence={useSubscriptionAcceptance} />
+
       <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

@@ -15,7 +15,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";

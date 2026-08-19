@@ -1,5 +1,6 @@
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import {
+  ENTITLEMENTS,
   getPlanDefinition,
   getUpgradePlanForEntitlement,
 } from "../lib/subscriptions/entitlements.js";
@@ -14,6 +15,10 @@ export default function PlanFeatureNotice({
 }) {
   const currentPlan = getPlanDefinition(subscription?.planCode);
   const requiredPlan = getUpgradePlanForEntitlement(entitlement);
+  const isAnnualPlannerAddOn = entitlement === ENTITLEMENTS.ANNUAL_PLANNER && currentPlan.code === "core";
+  const availabilityLabel = isAnnualPlannerAddOn
+    ? "Available as a Core add-on or included in Pro and Elite"
+    : `Available from ${requiredPlan.name}`;
 
   return (
     <section className={`rounded-[24px] border border-amber-200 bg-amber-50 ${compact ? "p-4" : "p-5 sm:p-6"}`}>
@@ -28,7 +33,7 @@ export default function PlanFeatureNotice({
             </div>
             <h3 className="mt-1 text-base font-black text-amber-950">{title}</h3>
             <p className="mt-1 text-sm font-semibold leading-5 text-amber-900/75">{description}</p>
-            <div className="mt-2 text-xs font-black text-amber-800">Available from {requiredPlan.name}</div>
+            <div className="mt-2 text-xs font-black text-amber-800">{availabilityLabel}</div>
           </div>
         </div>
 
@@ -38,7 +43,7 @@ export default function PlanFeatureNotice({
             onClick={onOpenSubscription}
             className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-950 px-4 text-xs font-black text-white transition hover:bg-amber-900"
           >
-            Review plans <ArrowRight size={15} />
+            {isAnnualPlannerAddOn ? "Review add-on" : "Review plans"} <ArrowRight size={15} />
           </button>
         ) : null}
       </div>

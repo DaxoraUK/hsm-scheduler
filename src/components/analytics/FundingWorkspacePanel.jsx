@@ -22,17 +22,20 @@ import {
   Target,
   Trash2,
   Upload,
+  UsersRound,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import Card from "../../ui/Card.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import FundingApplicationTracker from "./FundingApplicationTracker.jsx";
 import FundingDocumentUploadDialog from "./FundingDocumentUploadDialog.jsx";
 import FundingLocationPanel from "./FundingLocationPanel.jsx";
+import FundingImpactEvidencePanel from "./FundingImpactEvidencePanel.jsx";
 import ProgressBar from "../../ui/ProgressBar.jsx";
 import StatusChip from "../../ui/StatusChip.jsx";
 import { VERIFIED_GRANT_PROGRAMMES } from "../../lib/grants/grantProgrammeCatalogue.js";
 import { buildFundingReadinessChecklist } from "../../lib/grants/fundingReadinessEngine.js";
+import { summariseFundingImpactEvidence } from "../../lib/grants/fundingImpactEvidenceService.js";
 import {
   FUNDING_DOCUMENT_RULES,
   createFundingSnapshot,
@@ -76,6 +79,20 @@ const STATUS_TONE = {
 };
 
 const STATUS_LABEL = Object.fromEntries(REQUIREMENT_STATUS_OPTIONS);
+const UPLOAD_DOCUMENT_LABEL = "Upload document";
+
+const FUNDING_PRIMARY_VIEWS = [
+  ["project", "Project", Building2],
+  ["local", "Funding", MapPin],
+  ["applications", "Applications", Send],
+  ["impact", "Impact", UsersRound],
+  ["readiness", "Readiness", ClipboardList],
+];
+
+const FUNDING_EVIDENCE_VIEWS = [
+  ["documents", "Documents", FolderOpen],
+  ["snapshots", "Snapshots", History],
+];
 
 function createProjectDraft(projectType = "all", postcode = "") {
   return {
@@ -247,11 +264,14 @@ export default function FundingWorkspacePanel({
   model,
   projectType,
   onProjectTypeChange,
+  onImpactEvidenceChange,
+  impactEvidence = [],
+  onActiveProjectChange,
 }) {
   const [workspace, setWorkspace] = useState({ mode: "loading", profileMode: "local", trackerMode: "local", reason: "", projects: [], requirementRecords: [], documents: [], snapshots: [], applications: [], applicationTasks: [], monitoringObligations: [], profile: {} });
   const [activeProjectId, setActiveProjectId] = useState("");
   const [draft, setDraft] = useState(() => createProjectDraft(projectType, club.postcode || club.weatherPostcode || ""));
-  const [view, setView] = useState("readiness");
+  const [view, setView] = useState("project");
   const [savingProject, setSavingProject] = useState(false);
   const [busyKey, setBusyKey] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -288,6 +308,10 @@ export default function FundingWorkspacePanel({
   }, [resolvedClubId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeProject = workspace.projects.find((project) => project.id === activeProjectId) || null;
+
+  useEffect(() => {
+    onActiveProjectChange?.(activeProject);
+  }, [activeProject, onActiveProjectChange]);
   const selectedProgramme = useMemo(() => {
     const id = draft.selectedProgrammeId || activeProject?.selectedProgrammeId;
     return model.funding.programmes.find((programme) => programme.id === id)
@@ -607,6 +631,7 @@ export default function FundingWorkspacePanel({
             metrics: model.metrics,
             evidencePeriod: model.filters.periodOptions.find((option) => option.value === model.filters.selectedPeriod)?.label || model.filters.selectedPeriod,
           },
+          impactEvidence: summariseFundingImpactEvidence(impactEvidence),
           disclaimer: model.funding.disclaimer,
         },
         workspace.mode
@@ -628,42 +653,100 @@ export default function FundingWorkspacePanel({
     <>
       <Card
         eyebrow="Funding workspace"
-        title="Turn every missing item into a guided action"
-        subtitle="Build the project case, track programme requirements, attach supporting documents and create dated evidence snapshots in one controlled workspace."
+        title={activeProject?.title || "Build a grant-ready project"}
+        subtitle="Keep the project brief, eligibility evidence, applications and supporting records together without overstating what the data proves."
         action={
-          <button type="button" onClick={() => openUpload()} disabled={!canManage || !activeProjectId} title={!activeProjectId ? "Save the funding project before uploading documents" : "Upload a supporting document"} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
-            <Upload size={17} /> {activeProjectId ? "Upload document" : "Save project to upload"}
-          </button>
+          <div
+            title={workspace.reason}
+            className={`inline-flex min-h-10 items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-black ${workspace.mode === "remote" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : workspace.mode === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}
+          >
+            {workspace.mode === "remote" ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+            <span>{workspace.mode === "remote" ? "Secure storage" : workspace.mode === "error" ? "Storage issue" : "Local draft"}</span>
+          </div>
         }
       >
-        <div className={`mb-5 flex items-start gap-3 rounded-2xl border p-4 text-sm font-semibold leading-6 ${workspace.mode === "remote" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : workspace.mode === "error" ? "border-rose-200 bg-rose-50 text-rose-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
-          {workspace.mode === "remote" ? <ShieldCheck size={19} className="mt-0.5 shrink-0 text-emerald-700" /> : <AlertTriangle size={19} className="mt-0.5 shrink-0 text-amber-700" />}
-          <div><strong>{workspace.mode === "remote" ? "Secure club storage active." : "Local draft mode."}</strong> {workspace.reason}</div>
-        </div>
+        <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <Field label="Funding project">
+                <select
+                  className={INPUT_CLASS}
+                  value={activeProjectId}
+                  onChange={(event) => selectProject(event.target.value)}
+                  aria-label="Funding project"
+                >
+                  <option value="">New unsaved project</option>
+                  {workspace.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                </select>
+              </Field>
+              <button
+                type="button"
+                onClick={startNewProject}
+                disabled={!canManage}
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Plus size={16} /> New project
+              </button>
+            </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1fr_auto]">
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-            <Field label="Funding project">
-              <select className={INPUT_CLASS} value={activeProjectId} onChange={(event) => selectProject(event.target.value)}>
-                <option value="">New unsaved project</option>
-                {workspace.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
-              </select>
-            </Field>
-            <div className="flex items-end">
-              <button type="button" onClick={startNewProject} disabled={!canManage} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"><Plus size={16} /> New project</button>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+              {activeProject ? (
+                <>
+                  <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-200">{PROJECT_STATUS_OPTIONS.find(([value]) => value === draft.status)?.[1] || "Planning"}</span>
+                  <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-200">{projectDocuments.length} document{projectDocuments.length === 1 ? "" : "s"}</span>
+                  <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-200">{projectSnapshots.length} snapshot{projectSnapshots.length === 1 ? "" : "s"}</span>
+                </>
+              ) : (
+                <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-slate-200">Save the brief to unlock evidence tools</span>
+              )}
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            {[
-              ["project", "Project brief", Building2],
-              ["local", "Local funding", MapPin],
-              ["applications", "Applications", Send],
-              ["readiness", "Readiness", ClipboardList],
-              ["documents", "Documents", FolderOpen],
-              ["snapshots", "Snapshots", History],
-            ].map(([id, label, Icon]) => (
-              <button key={id} type="button" onClick={() => setView(id)} className={`inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-sm font-black transition ${view === id ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}><Icon size={16} /> {label}</button>
-            ))}
+
+          <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+            <nav
+              className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5"
+              aria-label="Funding workspace sections"
+              role="tablist"
+            >
+              {FUNDING_PRIMARY_VIEWS.map(([id, label, Icon]) => (
+                <button
+                  id={`funding-tab-${id}`}
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === id}
+                  onClick={() => setView(id)}
+                  className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 text-sm font-black transition ${view === id ? "bg-slate-950 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"}`}
+                >
+                  <Icon size={16} /> {label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="flex max-w-full items-center gap-2 overflow-x-auto" aria-label="Funding project evidence actions">
+              <button
+                type="button"
+                onClick={() => openUpload()}
+                disabled={!canManage || !activeProjectId}
+                title={!activeProjectId ? "Save the project before uploading evidence" : "Upload a supporting document"}
+                className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-600 px-3.5 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Upload size={16} /> {UPLOAD_DOCUMENT_LABEL}
+              </button>
+              {FUNDING_EVIDENCE_VIEWS.map(([id, label, Icon]) => (
+                <button
+                  id={`funding-tab-${id}`}
+                  key={id}
+                  type="button"
+                  aria-pressed={view === id}
+                  onClick={() => setView(id)}
+                  disabled={!activeProjectId}
+                  className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40 ${view === id ? "border-sky-300 bg-sky-50 text-sky-900" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}
+                >
+                  <Icon size={16} /> {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -747,8 +830,15 @@ export default function FundingWorkspacePanel({
         {view === "readiness" ? (
           <div className="mt-6">
             {!activeProjectId ? (
-              <div className="rounded-[26px] border border-amber-200 bg-amber-50 p-6 text-amber-950">
-                <div className="flex items-start gap-4"><AlertTriangle size={22} className="mt-1 shrink-0" /><div><h3 className="text-lg font-black">Save the project brief first</h3><p className="mt-2 text-sm font-semibold leading-6">The readiness checklist needs a saved project so documents, statuses and snapshots have a stable home.</p><button type="button" onClick={() => setView("project")} className="mt-4 rounded-2xl bg-amber-900 px-4 py-2.5 text-sm font-black text-white">Open project brief</button></div></div>
+              <div className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 ring-1 ring-amber-200"><AlertTriangle size={19} /></div>
+                  <div>
+                    <h3 className="text-base font-black">Create the project brief first</h3>
+                    <p className="mt-1 text-sm font-semibold leading-5 text-amber-900/80">Save the basic project details before adding readiness evidence, documents or snapshots.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setView("project")} className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-amber-900 px-4 text-sm font-black text-white transition hover:bg-amber-950">Open project</button>
               </div>
             ) : (
               <>
@@ -786,6 +876,15 @@ export default function FundingWorkspacePanel({
               </>
             )}
           </div>
+        ) : null}
+
+        {view === "impact" ? (
+          <FundingImpactEvidencePanel
+            clubId={resolvedClubId}
+            projectId={activeProjectId}
+            canManage={canManage}
+            onEvidenceChange={onImpactEvidenceChange}
+          />
         ) : null}
 
         {view === "documents" ? (

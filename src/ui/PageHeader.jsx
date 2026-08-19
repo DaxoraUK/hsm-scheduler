@@ -10,7 +10,7 @@ export default function PageHeader({ eyebrow, title, subtitle, action, className
           </div>
         ) : null}
 
-        <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950">
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
           {title}
         </h1>
 
@@ -21,7 +21,7 @@ export default function PageHeader({ eyebrow, title, subtitle, action, className
         ) : null}
       </div>
 
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="min-w-0 lg:shrink-0">{action}</div> : null}
     </header>
   );
 }

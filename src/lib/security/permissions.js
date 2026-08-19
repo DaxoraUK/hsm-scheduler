@@ -3,6 +3,7 @@ export const WORKSPACE_ROLES = Object.freeze({
   ADMIN: "admin",
   SCHEDULER: "scheduler",
   VIEWER: "viewer",
+  COACH: "coach",
   SUPPORT: "support",
 });
 
@@ -22,6 +23,7 @@ const ROLE_LABELS = Object.freeze({
   admin: "Club Administrator",
   scheduler: "Scheduler",
   viewer: "Viewer",
+  coach: "Team Coach",
   support: "Daxora Support",
 });
 
@@ -30,6 +32,7 @@ const ROLE_DESCRIPTIONS = Object.freeze({
   admin: "Manages club settings, users and day-to-day operations, but cannot transfer ownership.",
   scheduler: "Builds and publishes matchdays without access to club administration.",
   viewer: "Can review the workspace but cannot change or publish anything.",
+  coach: "Team-scoped Coach Hub access for calendar, requests, messages and contact preferences.",
   support: "Time-limited, visibly read-only support access using the support agent's own account.",
 });
 
@@ -49,6 +52,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS,
   ]),
   viewer: new Set([WORKSPACE_PERMISSIONS.READ_WORKSPACE]),
+  coach: new Set([]),
   support: new Set([WORKSPACE_PERMISSIONS.READ_WORKSPACE]),
 });
 
@@ -72,7 +76,11 @@ export function roleHasPermission(role, permission) {
 
 export function createWorkspaceAccess(membership = null) {
   const role = getWorkspaceRole(membership);
-  const accessMode = membership?.accessMode === "support" ? "support" : "membership";
+  const accessMode = membership?.accessMode === "support"
+    ? "support"
+    : membership?.accessMode === "coach"
+      ? "coach"
+      : "membership";
   const has = (permission) => roleHasPermission(role, permission);
   const isSupport = accessMode === "support";
 
@@ -81,6 +89,7 @@ export function createWorkspaceAccess(membership = null) {
     roleLabel: getRoleLabel(role),
     accessMode,
     isSupport,
+    isCoach: accessMode === "coach" || role === WORKSPACE_ROLES.COACH,
     isReadOnly: isSupport || !has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),
     canRead: has(WORKSPACE_PERMISSIONS.READ_WORKSPACE),
     canOperate: !isSupport && has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),

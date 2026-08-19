@@ -1,17 +1,26 @@
 import { useCallback } from "react";
 import { isSupaConfigured, DB } from "../lib/supabase.js";
-import { toast } from "sonner";
-import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
+import { toast } from "../lib/notifications/daxoraNotifications.js";
+import {
+  decorateFixturesForDay,
+  normaliseFixtureDayKey,
+} from "../lib/domain/fixtureDay.js";
 import { getParkingCapacity } from "../lib/domain/clubDomain.js";
 import { getParkingSettings } from "../lib/intelligence/parking/parkingService.js";
 import { weatherService } from "../lib/services/weatherService.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { ELITE_APPROVAL_TYPES, createEliteApprovalRequest, loadEliteApprovalState } from "../lib/elite/eliteGovernanceService.js";
+import {
+  buildMatchweekApprovalKey,
+  buildMatchweekApprovalSnapshot,
+} from "../lib/elite/eliteApprovalSnapshots.js";
 
 function splitFixtures(fixtures = [], dayKey) {
   const decorated = decorateFixturesForDay(fixtures, dayKey);
   return {
     active: decorated.filter(
-      (game) => game.status !== "postponed" && game.status !== "cancelled"
+      (game) => game.status !== "postponed" && game.status !== "cancelled",
     ),
     postponed: decorated.filter((game) => game.status === "postponed"),
     cancelled: decorated.filter((game) => game.status === "cancelled"),
@@ -37,56 +46,72 @@ function attachWeatherExposure(fixture = {}, exposure = null, forecast = null) {
   };
 }
 
-export async function captureWeatherSnapshots(days = [], club = {}, service = weatherService) {
+export async function captureWeatherSnapshots(
+  days = [],
+  club = {},
+  service = weatherService,
+) {
   const config = service.getConfiguration(club);
   if (!config.enabled || !config.postcode) return days;
 
-  return Promise.all(days.map(async (day) => {
-    if (!day?.hasRun || !day?.date || !day?.scheduled?.length) return day;
-    const controller = typeof AbortController === "undefined" ? null : new AbortController();
-    const timeout = controller ? setTimeout(() => controller.abort(), 3500) : null;
-    try {
-      const forecast = await service.getForecast({
-        postcode: config.postcode,
-        date: day.date,
-        fixtures: day.scheduled,
-        signal: controller?.signal,
-      });
-      const snapshot = calculateWeatherIntelligence({
-        club,
-        fixtures: day.scheduled,
-        dateLabel: day.dateLabel || day.label,
-        forecastSource: forecast,
-        connectionStatus: forecast?.cacheStatus === "stale" ? "stale" : "success",
-        connectionError: forecast?.warning || null,
-      });
-      const exposureById = new Map(
-        (snapshot.fixtureExposure || []).map((exposure) => [String(exposure.id), exposure])
-      );
-      const scheduled = day.scheduled.map((fixture, index) => {
-        const key = String(fixture.id || fixture.fixtureId || `weather-fixture-${index}`);
-        const exposure = exposureById.get(key) || snapshot.fixtureExposure?.[index] || null;
-        return attachWeatherExposure(fixture, exposure, forecast);
-      });
-      return {
-        ...day,
-        scheduled,
-        weatherSnapshot: {
-          provider: snapshot.provider,
-          updatedAt: snapshot.updatedAt,
-          overallRisk: snapshot.overallRisk,
-          forecast: snapshot.forecast,
-          metrics: snapshot.metrics,
-          cacheStatus: forecast?.cacheStatus || "live",
-        },
-      };
-    } catch {
-      // Saving the operational record must not fail because a forecast is unavailable.
-      return day;
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
-  }));
+  return Promise.all(
+    days.map(async (day) => {
+      if (!day?.hasRun || !day?.date || !day?.scheduled?.length) return day;
+      const controller =
+        typeof AbortController === "undefined" ? null : new AbortController();
+      const timeout = controller
+        ? setTimeout(() => controller.abort(), 3500)
+        : null;
+      try {
+        const forecast = await service.getForecast({
+          postcode: config.postcode,
+          date: day.date,
+          fixtures: day.scheduled,
+          signal: controller?.signal,
+        });
+        const snapshot = calculateWeatherIntelligence({
+          club,
+          fixtures: day.scheduled,
+          dateLabel: day.dateLabel || day.label,
+          forecastSource: forecast,
+          connectionStatus:
+            forecast?.cacheStatus === "stale" ? "stale" : "success",
+          connectionError: forecast?.warning || null,
+        });
+        const exposureById = new Map(
+          (snapshot.fixtureExposure || []).map((exposure) => [
+            String(exposure.id),
+            exposure,
+          ]),
+        );
+        const scheduled = day.scheduled.map((fixture, index) => {
+          const key = String(
+            fixture.id || fixture.fixtureId || `weather-fixture-${index}`,
+          );
+          const exposure =
+            exposureById.get(key) || snapshot.fixtureExposure?.[index] || null;
+          return attachWeatherExposure(fixture, exposure, forecast);
+        });
+        return {
+          ...day,
+          scheduled,
+          weatherSnapshot: {
+            provider: snapshot.provider,
+            updatedAt: snapshot.updatedAt,
+            overallRisk: snapshot.overallRisk,
+            forecast: snapshot.forecast,
+            metrics: snapshot.metrics,
+            cacheStatus: forecast?.cacheStatus || "live",
+          },
+        };
+      } catch {
+        // Saving the operational record must not fail because a forecast is unavailable.
+        return day;
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    }),
+  );
 }
 
 function buildFixtureDaySnapshots({
@@ -125,7 +150,14 @@ function buildFixtureDaySnapshots({
   }
 
   return [
-    ["midweek", "Midweek", midweekDate, midweekDateLabel, midweekHasRun, midweekFinal],
+    [
+      "midweek",
+      "Midweek",
+      midweekDate,
+      midweekDateLabel,
+      midweekHasRun,
+      midweekFinal,
+    ],
     ["saturday", "Saturday", satDate, satDateLabel, satHasRun, satFinal],
     ["sunday", "Sunday", sunDate, sunDateLabel, sunHasRun, sunFinal],
   ].map(([key, label, date, dateLabel, hasRun, final]) => {
@@ -169,6 +201,7 @@ export function useWeekPersistence({
   setHistory,
   setDbStatus,
   activeClubId = "",
+  subscription = null,
   canPublish = true,
   onSyncFailure,
   onSyncSuccess,
@@ -199,10 +232,51 @@ export function useWeekPersistence({
     const publishedDays = snapshots.filter((day) => day.hasRun);
     if (!publishedDays.length) return;
 
+    let approvalEntityKey = "";
+    if (hasEntitlement(subscription, ENTITLEMENTS.APPROVAL_WORKFLOWS) && activeClubId) {
+      const approvalSnapshot = buildMatchweekApprovalSnapshot(publishedDays);
+      approvalEntityKey = buildMatchweekApprovalKey(approvalSnapshot);
+      try {
+        const approvalState = await loadEliteApprovalState(activeClubId, ELITE_APPROVAL_TYPES.MATCHWEEK, approvalEntityKey);
+        if (approvalState.policy.matchweekApprovalRequired && !approvalState.approved) {
+          if (!approvalState.pending) {
+            await createEliteApprovalRequest(activeClubId, {
+              approvalType: ELITE_APPROVAL_TYPES.MATCHWEEK,
+              entityKey: approvalEntityKey,
+              title: "Current matchweek release",
+              summary: `${approvalSnapshot.fixtureCount} fixtures across ${approvalSnapshot.days.length} operating day${approvalSnapshot.days.length === 1 ? "" : "s"}.`,
+              snapshot: approvalSnapshot,
+            });
+          }
+          toast.info("Elite approval required", {
+            description: approvalState.pending
+              ? "This exact matchweek is already waiting for a separate reviewer in Organisation Command."
+              : "An approval request has been created in Organisation Command. A separate reviewer must approve this exact matchweek before publication.",
+          });
+          return false;
+        }
+      } catch (error) {
+        toast.error("Matchweek approval could not be checked", { description: error?.message });
+        return false;
+      }
+    }
+
     const byKey = Object.fromEntries(snapshots.map((day) => [day.key, day]));
-    const saturday = byKey.saturday || { scheduled: [], postponed: [], cancelled: [] };
-    const sunday = byKey.sunday || { scheduled: [], postponed: [], cancelled: [] };
-    const midweek = byKey.midweek || { scheduled: [], postponed: [], cancelled: [] };
+    const saturday = byKey.saturday || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
+    const sunday = byKey.sunday || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
+    const midweek = byKey.midweek || {
+      scheduled: [],
+      postponed: [],
+      cancelled: [],
+    };
 
     const parkingSettings = getParkingSettings(club);
     const parkingCapacity = getParkingCapacity(club, 0);
@@ -210,12 +284,17 @@ export function useWeekPersistence({
       id: Date.now(),
       dateLabel:
         mode === "test"
-          ? "Test Matchweek"
+          ? "Demonstration Matchweek"
           : saturday.hasRun || sunday.hasRun
             ? satDateLabel
             : midweekDateLabel || "Midweek",
-      date: saturday.hasRun || sunday.hasRun ? satDate || undefined : midweekDate || undefined,
+      date:
+        saturday.hasRun || sunday.hasRun
+          ? satDate || undefined
+          : midweekDate || undefined,
       savedAt: new Date().toISOString(),
+      approvalEntityKey: approvalEntityKey || undefined,
+      approvalSnapshotHash: approvalEntityKey ? approvalEntityKey.split(":").at(-1) : undefined,
       carParkSpaces: parkingCapacity,
       parking: {
         enabled: parkingSettings.enabled,
@@ -260,13 +339,21 @@ export function useWeekPersistence({
         cloudSaved = false;
         setDbStatus("error");
         onSyncFailure?.(error, publishToCloud);
-        toast.error("Saved on this device only", {
-          description: error?.message || "Cloud sync failed. Use Retry sync before using another device.",
+        toast.error("Matchweek was not published", {
+          description:
+            error?.message ||
+            "The secure workspace rejected the update. No browser-only copy was created.",
         });
+        return false;
       }
+    } else if (activeClubId) {
+      toast.error("Secure workspace unavailable", {
+        description: "Ground Control cannot publish authenticated club data without the cloud workspace.",
+      });
+      return false;
     } else {
-      toast.info("Saved locally", {
-        description: "Cloud sync is not configured. Data is stored on this device only.",
+      toast.info("Saved in local demonstration mode", {
+        description: "This local-only save is available only when no authenticated club workspace is active.",
       });
     }
 
@@ -298,6 +385,7 @@ export function useWeekPersistence({
     setHistory,
     setDbStatus,
     activeClubId,
+    subscription,
     canPublish,
     onSyncFailure,
     onSyncSuccess,
