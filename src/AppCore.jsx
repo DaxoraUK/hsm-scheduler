@@ -1674,12 +1674,13 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, skipped, partial } = await fetchSaturdayFixtures(satDate);
+      const { statuses, fixtures, snapshots, skipped, partial } = await fetchSaturdayFixtures(satDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
       setSatFetchStatus(statuses);
+      await persistFullTimeImportEvidence(statuses, snapshots);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       setSatHasRun(false);
       setSatScheduled([]);
@@ -1689,6 +1690,7 @@ function App() {
       return true;
     } catch (error) {
       if (error?.statuses) setSatFetchStatus(error.statuses);
+      if (error?.statuses) await persistFullTimeImportEvidence(error.statuses);
       toast.error("Full-Time import failed", { description: error?.message || "The existing Saturday schedule was left unchanged." });
       return false;
     }
@@ -1745,16 +1747,18 @@ function App() {
     }
 
     try {
-      const { fixtures, skipped, partial } = await fetchSundayFixtures(sunDate);
+      const { statuses, fixtures, snapshots, skipped, partial } = await fetchSundayFixtures(sunDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
+      await persistFullTimeImportEvidence(statuses, snapshots);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
       runSun(fixtures);
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
     } catch (error) {
+      if (error?.statuses) await persistFullTimeImportEvidence(error.statuses);
       toast.error("Full-Time import failed", { description: error?.message || "The existing Sunday schedule was left unchanged." });
       return false;
     }
@@ -1823,12 +1827,13 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, skipped, partial } = await fetchMidweekFixtures(midweekDate);
+      const { statuses, fixtures, snapshots, skipped, partial } = await fetchMidweekFixtures(midweekDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
       setMidweekFetchStatus(statuses);
+      await persistFullTimeImportEvidence(statuses, snapshots);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       setMidweekHasRun(false);
       setMidweekScheduled([]);
@@ -1838,6 +1843,7 @@ function App() {
       return true;
     } catch (error) {
       if (error?.statuses) setMidweekFetchStatus(error.statuses);
+      if (error?.statuses) await persistFullTimeImportEvidence(error.statuses);
       toast.error("Full-Time import failed", { description: error?.message || "The existing midweek schedule was left unchanged." });
       return false;
     }
@@ -1996,6 +2002,46 @@ function App() {
 
   const { fetchSaturdayFixtures, fetchSundayFixtures, fetchMidweekFixtures } =
     useFixtureFetcher(club.integrations?.fullTimeFa || {});
+
+  const persistFullTimeImportEvidence = useCallback(async (statuses = [], snapshots = []) => {
+    if (!statuses.length) return;
+    const checkedAt = new Date().toISOString();
+    const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot.fixtures]));
+    const fullTime = club.integrations?.fullTimeFa || {};
+    const sources = Array.isArray(fullTime.sources) ? fullTime.sources : [];
+    const nextSources = sources.map((source) => {
+      const status = statuses.find((item) => item.id === source.id);
+      if (!status) return source;
+      const nextSnapshot = snapshotById.get(source.id);
+      return {
+        ...source,
+        ...(status.ok && Array.isArray(nextSnapshot) ? { fixtureSnapshot: nextSnapshot } : {}),
+        health: {
+          ...(source.health || {}),
+          ok: status.ok,
+          lastAttemptAt: checkedAt,
+          lastSuccessfulAt: status.ok ? checkedAt : source.health?.lastSuccessfulAt || "",
+          fixtureCount: status.count || 0,
+          snapshotCount: status.ok ? status.snapshotCount || nextSnapshot?.length || 0 : source.health?.snapshotCount || 0,
+          error: status.ok ? "" : status.error || "Full-Time source failed.",
+        },
+      };
+    });
+    const nextClub = {
+      ...club,
+      integrations: {
+        ...(club.integrations || {}),
+        fullTimeFa: { ...fullTime, sources: nextSources },
+      },
+    };
+    setClub(nextClub);
+    try {
+      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
+      else tenantSetJson("club", nextClub);
+    } catch (error) {
+      console.warn("Full-Time source health could not be persisted.", error);
+    }
+  }, [activeClubId, club]);
 
   const { resetAll } = useOperationsActions({
     setSatScheduled,

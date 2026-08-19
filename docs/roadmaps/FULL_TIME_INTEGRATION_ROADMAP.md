@@ -1,5 +1,14 @@
 # Full-Time FA Integration Roadmap
 
+## Delivered in v3.10.48
+
+- Labels the verified BBDFL source explicitly as the Horwich St. Mary's U14 feed.
+- Persists per-source last-attempt, last-success, fixture-count, retained-count and failure evidence in the existing server-backed club configuration.
+- Retains current and future source fixtures across Full-Time's rolling maximum-fixture window.
+- Refreshes a retained fixture when the same date, home team and opponent is republished with updated details.
+- Keeps the last successful snapshot when a source fails, while the current schedule remains unchanged.
+- Displays durable source health directly on each compact fixture-source summary card.
+
 ## Delivered in v3.10.44
 
 - Uses The FA's official browser code-snippet contract instead of relying on server-side page scraping that Cloudflare rejects.
@@ -35,5 +44,5 @@
 
 - Publishing or writing changes back to Full-Time.
 - Automated reconciliation of later upstream changes.
-- Persisted source-health history and alerting.
+- Longer-term source-health event history and proactive alerting beyond the latest persisted evidence.
 - Results import for the club workspace; League Manager retains its controlled CSV reconciliation workflow.

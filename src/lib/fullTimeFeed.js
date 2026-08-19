@@ -9,7 +9,7 @@ export const LANCASHIRE_AMATEUR_FIXTURE_FEEDS = Object.freeze([
 ]);
 
 export const BBDFL_FIXTURE_FEEDS = Object.freeze([
-  { id: "167398131", name: "BBDFL - Horwich St. Mary's club fixtures" },
+  { id: "167398131", name: "BBDFL U14 - Horwich St. Mary's fixtures" },
 ]);
 
 export function normaliseFullTimeFeedId(value) {

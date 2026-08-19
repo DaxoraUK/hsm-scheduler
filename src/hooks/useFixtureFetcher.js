@@ -7,6 +7,19 @@ function clean(value) {
   return String(value || "").trim();
 }
 
+function fixtureIdentity(fixture = {}) {
+  return [fixture.date, clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase()].join("|");
+}
+
+export function mergeFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10)) {
+  const retained = new Map();
+  previous.filter((fixture) => fixture?.date >= today).forEach((fixture) => retained.set(fixtureIdentity(fixture), fixture));
+  incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => retained.set(fixtureIdentity(fixture), fixture));
+  return deduplicateFullTimeFixtures([...retained.values()]).sort((a, b) =>
+    String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))
+  );
+}
+
 export function normaliseFixtureSource(source = {}, index = 0) {
   const url = clean(source.url || source.sourceUrl);
   const feedId = normaliseFullTimeFeedId(source.feedId || url);
@@ -22,6 +35,7 @@ export function normaliseFixtureSource(source = {}, index = 0) {
     feedId,
     clubId: clean(source.clubId),
     teamAliases,
+    fixtureSnapshot: Array.isArray(source.fixtureSnapshot) ? source.fixtureSnapshot : [],
   };
 }
 
@@ -44,7 +58,7 @@ export function hasConfiguredFixtureSource(config = {}) {
 async function fetchLeagueFixtures(source, targetDate) {
   if (source.feedId) {
     const contents = await loadFullTimeFeedHtml(source.feedId);
-    return parseFullTimeHtml(contents, targetDate, {
+    return parseFullTimeHtml(contents, "", {
       sourceId: source.id,
       sourceName: source.name,
       sourceUrl: `https://fulltime.thefa.com/js/cs1.html?cs=${source.feedId}`,
@@ -61,7 +75,7 @@ async function fetchLeagueFixtures(source, targetDate) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `Full-Time returned HTTP ${response.status}`);
     if (!data.contents) throw new Error("Full-Time returned an empty fixture page.");
-    return parseFullTimeHtml(data.contents, targetDate, {
+    return parseFullTimeHtml(data.contents, "", {
       sourceId: source.id,
       sourceName: source.name,
       sourceUrl: source.url,
@@ -90,10 +104,12 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
 
     const results = await Promise.all(fixtureSources.map(async (source) => {
       try {
-        const fixtures = (await fetchLeagueFixtures(source, targetDate)).filter((fixture) =>
+        const imported = await fetchLeagueFixtures(source, targetDate);
+        const snapshot = mergeFullTimeFixtureSnapshot(source.fixtureSnapshot, imported);
+        const fixtures = snapshot.filter((fixture) => fixture.date === targetDate).filter((fixture) =>
           typeof predicate === "function" ? predicate(fixture) : true
         );
-        return { source, fixtures, status: { id: source.id, name: source.name, ok: true, count: fixtures.length } };
+        return { source, fixtures, snapshot, status: { id: source.id, name: source.name, ok: true, count: fixtures.length, snapshotCount: snapshot.length } };
       } catch (error) {
         return { source, fixtures: [], status: { id: source.id, name: source.name, ok: false, error: error.message, count: 0 } };
       }
@@ -110,6 +126,7 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
     return {
       statuses,
       fixtures: deduplicateFullTimeFixtures(results.flatMap((result) => result.fixtures)),
+      snapshots: results.filter((result) => result.status.ok).map((result) => ({ id: result.source.id, fixtures: result.snapshot })),
       skipped: false,
       partial: statuses.some((status) => !status.ok),
     };

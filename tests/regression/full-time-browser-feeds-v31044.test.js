@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test } from "vitest";
-import { getConfiguredFixtureSources } from "../../src/hooks/useFixtureFetcher.js";
+import { getConfiguredFixtureSources, mergeFullTimeFixtureSnapshot } from "../../src/hooks/useFixtureFetcher.js";
 import { parseFullTimeDate, parseFullTimeHtml } from "../../src/lib/fullTimeParser.js";
 import {
   buildFullTimeFeedDocument,
@@ -31,7 +31,19 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
   });
 
   test("includes the verified BBDFL club fixture feed", () => {
-    expect(BBDFL_FIXTURE_FEEDS).toEqual([{ id: "167398131", name: "BBDFL - Horwich St. Mary's club fixtures" }]);
+    expect(BBDFL_FIXTURE_FEEDS).toEqual([{ id: "167398131", name: "BBDFL U14 - Horwich St. Mary's fixtures" }]);
+  });
+
+  test("retains future fixtures outside Full-Time's rolling maximum while refreshing matching fixtures", () => {
+    const previous = [
+      { date: "2026-09-05", homeTeam: "HSM U14", awayTeam: "A", kickOff: "10:00" },
+      { date: "2026-10-03", homeTeam: "HSM U14", awayTeam: "B", kickOff: "10:00" },
+    ];
+    const incoming = [{ date: "2026-09-05", homeTeam: "HSM U14", awayTeam: "A", kickOff: "10:30" }];
+    expect(mergeFullTimeFixtureSnapshot(previous, incoming, "2026-08-19")).toEqual([
+      expect.objectContaining({ date: "2026-09-05", kickOff: "10:30" }),
+      expect.objectContaining({ date: "2026-10-03", awayTeam: "B" }),
+    ]);
   });
 
   test("normalises feed sources without requiring a legacy page URL", () => {

@@ -30,6 +30,14 @@ function configuredSources(fullTime = {}) {
   }];
 }
 
+function healthLabel(health = {}) {
+  if (!health.lastAttemptAt) return "Not checked yet";
+  const when = new Date(health.lastAttemptAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  return health.ok
+    ? `Last successful check ${when} · ${health.fixtureCount || 0} matching · ${health.snapshotCount || 0} retained`
+    : `Last check failed ${when}${health.error ? ` · ${health.error}` : ""}`;
+}
+
 export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, savedTab }) {
   const [sourceFilter, setSourceFilter] = useState("");
   const [sourceStatus, setSourceStatus] = useState("all");
@@ -162,6 +170,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
                 <div className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Source {index + 1}</div>
                 <div className="mt-1 font-black text-slate-900">{source.name || "Unnamed Full-Time source"}</div>
                 <div className="mt-1 text-sm font-semibold text-slate-500">Feed {source.feedId || "not set"}</div>
+                <div className={`mt-2 text-xs font-bold ${source.health?.ok ? "text-emerald-700" : source.health?.lastAttemptAt ? "text-rose-700" : "text-slate-400"}`}>{healthLabel(source.health)}</div>
               </div>
               <div className="flex items-center gap-3">
                 <span className={`rounded-full px-3 py-1 text-xs font-black ${source.enabled !== false ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>{source.enabled !== false ? "Enabled" : "Disabled"}</span>
@@ -218,7 +227,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
           <Plus size={17} /> Add Lancashire Amateur feeds
         </button>
         <button type="button" onClick={() => addPresetFeeds(BBDFL_FIXTURE_FEEDS)} className="ml-2 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 text-sm font-black text-violet-800 hover:bg-violet-100">
-          <Plus size={17} /> Add BBDFL feed
+          <Plus size={17} /> Add BBDFL U14 feed
         </button>
       </div>
 

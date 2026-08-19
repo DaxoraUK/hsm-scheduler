@@ -1,10 +1,23 @@
-# Daxora Ground Control v3.10.46 - Source Kick-Off Authority
+# Daxora Ground Control v3.10.48 - Full-Time Retention and Source Health
 
 ## Delivered
 
-- Treats imported Full-Time kick-off times as authoritative during scheduling.
-- Uses the legacy adult 14:00 rule only when the imported fixture has no valid time.
-- Normalises Full-Time's escaped apostrophe representation so exact external team aliases match reliably.
+- Clearly labels official feed `167398131` as **BBDFL U14 - Horwich St. Mary's fixtures**.
+- Persists the latest check, last success, matching fixture count, retained future count and current error for every configured source.
+- Retains current and future fixtures when Full-Time's maximum-fixture feed window moves forward.
+- Refreshes republished fixture details without duplicating the same dated home-team/opponent fixture.
+- Shows saved source health on the collapsed fixture-source cards.
+- Keeps failed-source snapshots and existing schedules intact.
+
+## Verification
+
+- Focused official-feed and parser regression suites pass.
+- Production build passes.
+- No database migration or Full-Time write-back is introduced.
+
+## Previous release: v3.10.45
+
+## Delivered
 
 - Adds comma-separated external fixture names to every configured Ground Control team.
 - Resolves provider names such as `Horwich St. Mary's` to the club's chosen internal name such as `HSM 1st Team`.
