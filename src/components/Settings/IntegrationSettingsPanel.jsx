@@ -62,6 +62,8 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
   const integrations = club.integrations || {};
   const fullTime = integrations.fullTimeFa || {};
   const sources = configuredSources(fullTime);
+  const effectiveRefereeSourceUrl = fullTime.refereeSourceUrl
+    || (sources.some((source) => LANCASHIRE_AMATEUR_FIXTURE_FEEDS.some((feed) => feed.id === String(source.feedId || ""))) ? LANCASHIRE_AMATEUR_REFEREE_URL : "");
   const normalisedFilter = sourceFilter.trim().toLowerCase();
   const visibleSources = sources
     .map((source, index) => ({ source, index }))
@@ -184,7 +186,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
 
       <div className="mt-5">
         <Field label="Optional Full-Time referee assignments URL" hint="Uses the public Refs page as a supplemental read-only source. Fixture imports continue if Full-Time blocks this page.">
-          <input className={inputClass} value={fullTime.refereeSourceUrl || ""} onChange={(event) => updateFullTime({ refereeSourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/referees.html?..." />
+          <input className={inputClass} value={effectiveRefereeSourceUrl} onChange={(event) => updateFullTime({ refereeSourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/referees.html?..." />
         </Field>
       </div>
 

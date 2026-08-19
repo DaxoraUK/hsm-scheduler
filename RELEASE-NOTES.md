@@ -1,4 +1,12 @@
-# Daxora Ground Control v3.10.51 - Full-Time Fixture Change Review Centre
+# Daxora Ground Control v3.10.52 - Existing Lancashire Referee Source Migration
+
+## Delivered
+
+- Automatically activates the verified 2026-27 Lancashire Amateur public Refs page for existing Lancashire feed configurations.
+- Displays the inherited referee source URL without requiring feeds to be deleted or re-added.
+- Retains the complete v3.10.51 fixture-change review and optional referee failure boundary.
+
+## Previous release: v3.10.51
 
 ## Delivered
 

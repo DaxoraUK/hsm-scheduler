@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { deduplicateFullTimeFixtures, parseFullTimeHtml, parseFullTimeRefereeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
-import { loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
+import { LANCASHIRE_AMATEUR_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_REFEREE_URL, loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -148,13 +148,16 @@ function isSundayTeam(fixture = {}) {
 
 export function useFixtureFetcher(fixtureSourceConfig = {}) {
   const fixtureSources = useMemo(() => getConfiguredFixtureSources(fixtureSourceConfig), [fixtureSourceConfig]);
+  const lancashireFeedIds = useMemo(() => new Set(LANCASHIRE_AMATEUR_FIXTURE_FEEDS.map((feed) => feed.id)), []);
+  const refereeSourceUrl = fixtureSourceConfig.refereeSourceUrl
+    || (fixtureSources.some((source) => lancashireFeedIds.has(source.feedId)) ? LANCASHIRE_AMATEUR_REFEREE_URL : "");
 
   const fetchFixturesForDate = useCallback(async (targetDate, predicate = null) => {
     if (!fixtureSources.length) {
       return { statuses: [], fixtures: [], skipped: true, reason: "fixture_source_not_configured" };
     }
 
-    const refereeStatus = await fetchRefereeAssignments(fixtureSourceConfig.refereeSourceUrl, targetDate, fixtureSources);
+    const refereeStatus = await fetchRefereeAssignments(refereeSourceUrl, targetDate, fixtureSources);
     const results = await Promise.all(fixtureSources.map(async (source) => {
       try {
         const imported = attachRefereeAssignments(await fetchLeagueFixtures(source, targetDate), refereeStatus.assignments);
@@ -186,7 +189,7 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
       partial: statuses.some((status) => !status.ok),
       refereeStatus,
     };
-  }, [fixtureSourceConfig.refereeSourceUrl, fixtureSources]);
+  }, [fixtureSources, refereeSourceUrl]);
 
   const fetchFixtureDayFixtures = useCallback(async (fixtureDayOrKey, suppliedDate = "") => {
     const key = normaliseFixtureDayKey(typeof fixtureDayOrKey === "string" ? fixtureDayOrKey : fixtureDayOrKey?.key);
