@@ -1,4 +1,13 @@
-# Daxora Ground Control v3.10.52 - Existing Lancashire Referee Source Migration
+# Daxora Ground Control v3.10.53 - Zero-Intervention Full-Time Browser Scraper Proof
+
+## Delivered
+
+- Adds a tightly allow-listed headless Chromium endpoint for public Full-Time fixtures and referee pages.
+- Restricts navigation to HTTPS `fulltime.thefa.com` fixture/referee paths and enforces response-size and runtime boundaries.
+- Switches the supplemental referee importer from the Cloudflare-blocked HTTP proxy to rendered browser retrieval.
+- Preserves snippets as the fixture fallback until production proves the browser path against Full-Time.
+
+## Previous release: v3.10.52
 
 ## Delivered
 

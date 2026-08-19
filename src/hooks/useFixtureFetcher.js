@@ -121,7 +121,7 @@ async function fetchLeagueFixtures(source, targetDate) {
 async function fetchRefereeAssignments(url, targetDate, sources) {
   if (!url) return { ok: true, skipped: true, assignments: [] };
   try {
-    const response = await fetch(`/api/full-time?source=${encodeURIComponent(url)}`, { headers: { accept: "application/json" } });
+    const response = await fetch(`/api/full-time-browser?source=${encodeURIComponent(url)}`, { headers: { accept: "application/json" } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.contents) throw new Error(data.error || "Full-Time did not return the referee assignments page.");
     const aliases = sources.flatMap((source) => source.teamAliases || []);
