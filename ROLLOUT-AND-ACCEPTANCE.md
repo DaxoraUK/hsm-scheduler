@@ -1,16 +1,13 @@
-# v3.10.29 Rollout and Acceptance
+# v3.10.32 Rollout and Acceptance
 
-## Scope
-Vercel API function consolidation legacy-entry cleanup.
-
-## Acceptance
-- The installer runs from the `staging` branch.
-- Each superseded API entry is verified against its expected SHA-256 before deletion.
-- Superseded API entries are backed up before deletion.
-- `api/` contains exactly one deployable JavaScript function entry.
-- The 16 handler sources remain under `server-api/`.
-- Existing public API paths and the daily automation cron remain unchanged.
-- Full regression catalogue, lint, TypeScript build, Vite build, Git and Supabase gates pass.
-
-## Rollback
-The installer restores all backed-up replacement and deletion targets, removes newly created files, and stops without leaving a partial installation if any pre-commit gate fails.
+1. Run `DOUBLE-CLICK-THIS-INSTALL-AND-DEPLOY.cmd` from the extracted release package.
+2. Confirm the installer verifies all payload and deletion-target hashes before modification.
+3. Confirm focused Coach Hub/access regressions pass.
+4. Confirm the full regression catalogue passes in controlled batches.
+5. Confirm lint and production build pass; existing warnings must be reported separately.
+6. Confirm the Supabase dry run passes, then the linked migration is applied.
+7. Confirm Git whitespace validation passes and only release files are staged.
+8. Confirm commit and push target `origin staging`.
+9. After deployment, sign in as a club administrator and confirm Access & Security can display/add/remove additional roles.
+10. Confirm a Coach role remains team-oriented and a Coach + Fixture/Operations role receives combined permissions without member-management access.
+11. Confirm the Vercel API tree still has one deployable `api/[...path].js` entry.

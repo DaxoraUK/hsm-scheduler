@@ -1,16 +1,23 @@
-# Daxora Ground Control v3.10.29 - Vercel API Legacy Entry Cleanup
+# Daxora Ground Control v3.10.32 - Multi-Role Access Architecture
 
-## v3.10.29 - Legacy Entry Cleanup
+## Delivered
 
-Fixes the v3.10.27/28 API consolidation rollout so the Windows installer removes the 16 superseded Vercel Serverless Function entry files from `api/` after moving their handler source to `server-api/`. The installer verifies each deletion target against its expected pre-consolidation SHA-256, backs it up before deletion, stages the deletions, and restores them during rollback if any pre-commit gate fails.
+- Replaced the single-role access calculation with additive multi-role workspace access.
+- Added canonical club role catalogue covering leadership, administration, operations, finance, welfare, communications and team roles.
+- Added club/team/site role-scope types and persisted `club_member_roles` assignments.
+- Added guarded Supabase RPCs for listing, adding and revoking additional member roles.
+- Preserved the legacy primary `club_memberships.role` for backward compatibility.
+- Updated Access & Security to display multiple assigned roles and allow authorised administrators to add/remove additional roles.
+- Updated Coach Hub regression coverage to test behaviour rather than the obsolete `coach: new Set([])` source string.
+- Added regression coverage for Coach + Fixture Officer multi-role access.
+- Retained the v3.10.29 Vercel legacy-handler deletion architecture.
 
-Also fixes the consolidation regression test to normalize Windows path separators when checking the relocated webhook handlers.
+## Deliberately not claimed
 
-## Acceptance
+- Full-Time FA live integration is not declared production-ready by this release.
+- Team/site selectors are not exposed until they are wired to authoritative registries.
+- Dashboard/Club Command visual consolidation remains the next UX phase.
 
-- `api/` contains exactly one deployable JavaScript entry: `api/[...path].js`.
-- The 16 legacy `api/...` handler files are absent after installation.
-- All 16 handler source files remain under `server-api/`.
-- Existing public `/api/...` paths remain unchanged.
-- Daily automation remains `/api/automation/daily`.
-- Full regression catalogue, lint, TypeScript build, Vite build and Git gates must pass.
+## Migration
+
+`supabase/migrations/202608190001_multi_role_access_architecture.sql`

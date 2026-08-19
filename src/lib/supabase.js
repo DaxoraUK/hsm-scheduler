@@ -1368,6 +1368,26 @@ export const DB = {
     });
   },
 
+  async addClubMemberRole(clubId, userId, role, scopeType = "club", scopeId = null) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/add_club_member_role", {
+      target_club_id: id,
+      target_user_id: userId,
+      next_role: role,
+      target_scope_type: scopeType,
+      target_scope_id: scopeId,
+    });
+  },
+
+  async removeClubMemberRole(clubId, userId, roleAssignmentId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/remove_club_member_role", {
+      target_club_id: id,
+      target_user_id: userId,
+      role_assignment_id: roleAssignmentId,
+    });
+  },
+
   async removeClubMember(clubId, userId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/remove_club_member", {

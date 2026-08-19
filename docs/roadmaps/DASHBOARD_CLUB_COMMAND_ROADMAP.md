@@ -52,3 +52,20 @@ The dashboard baseline is now consolidated with the TeamFeePay feature branch. M
 ## Pilot status
 
 The consolidated codebase is a technical baseline, not a declaration that every surfaced module is commercially ready. Paid pilot readiness will follow product simplification and Full-Time reliability work.
+
+## v3.10.32 Access Architecture phase
+
+- Multiple club roles are now modelled additively alongside the legacy primary membership role.
+- Additional roles support club scope immediately and team/site scope through the persisted role-assignment model.
+- Effective workspace access is the union of assigned roles, with subscription entitlements remaining the commercial ceiling.
+- Coach Hub remains team-oriented and is not weakened by the multi-role model.
+- Full-Time FA remains a separate reliability/integration phase; this release does not claim live Full-Time production reliability.
+
+### v3.10.32 acceptance criteria
+
+- A member may hold more than one additional role without creating a second membership.
+- Coach access grants workspace read access and Coach Hub recognition.
+- A Coach plus Fixture/Operations role receives the combined operational permissions without gaining member-management authority.
+- Additional role assignments are protected by Supabase RPCs and RLS.
+- Legacy primary membership roles remain backward compatible.
+- The Vercel API consolidation remains intact with one deployable `api/[...path].js` entry and legacy handler deletion safeguards retained.
