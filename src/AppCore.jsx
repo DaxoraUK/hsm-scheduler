@@ -96,6 +96,7 @@ import {
   tenantSetJson,
 } from "./lib/storage/tenantStorage.js";
 import { createWorkspaceAccess } from "./lib/security/permissions.js";
+import { canOpenClubCommand } from "./lib/navigation/workspacePageAccess.js";
 import {
   applySubscriptionAccess,
   canOpenPage,
@@ -2198,6 +2199,7 @@ function App() {
   const requiredPageEntitlement = getRequiredEntitlementForPage(mainPage);
   const independentWorkspacePage = mainPage === "league" || mainPage === "platform";
   const pageEntitled = independentWorkspacePage || canOpenPage(subscription, mainPage);
+  const clubCommandAllowed = canOpenClubCommand(workspaceAccess);
   const openSubscriptionSettings = () => {
     setMainPage("settings");
     setSettingsTab("subscription");
@@ -2333,8 +2335,8 @@ function App() {
             </Suspense>
           )}
 
-          {mainPage === "executive" && pageEntitled && (
-            <Suspense fallback={<LazyPageFallback label="Organisation Command" />}>
+          {mainPage === "executive" && pageEntitled && clubCommandAllowed && (
+            <Suspense fallback={<LazyPageFallback label="Club Command" />}>
               <EliteCommandCentrePage
                 club={club}
                 teamCfg={teamCfg}
@@ -2376,6 +2378,7 @@ function App() {
                 subscription={subscription}
                 workspaceAccess={operationalWorkspaceAccess}
                 advancedOperationsEnabled={advancedOperationsEnabled}
+                clubCommandAvailable={clubCommandAllowed && canOpenPage(subscription, "executive")}
                 matchdayScope={matchdayScope}
                 setMatchdayScope={setMatchdayScope}
                 saveWeek={saveWeek}

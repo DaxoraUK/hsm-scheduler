@@ -8,7 +8,8 @@ import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
-import { canOpenPage, ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { canOpenWorkspacePage } from "../lib/navigation/workspacePageAccess.js";
 import { setDaxoraNotificationContext } from "../lib/notifications/daxoraNotifications.js";
 
 import {
@@ -114,7 +115,7 @@ export default function ProductShell({
     && !hasEntitlement(subscription, ENTITLEMENTS.ANNUAL_PLANNER);
   const workspaceNavItems = clubWorkspaceAvailable ? [
     ["dashboard", "Mission Control", LayoutDashboard, NAV_TARGETS.MISSION_CONTROL],
-    ["executive", "Organisation Command", Building2, NAV_TARGETS.EXECUTIVE],
+    ["executive", "Club Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
     ["planner", "Annual Planner", CalendarRange, NAV_TARGETS.PLANNER, annualPlannerAddOnAvailable ? { badge: "Add-on" } : {}],
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
@@ -124,7 +125,7 @@ export default function ProductShell({
   ].filter(([key]) => {
     if (key === "settings") return workspaceAccess?.canManageSettings;
     if (key === "planner" && annualPlannerAddOnAvailable) return true;
-    return canOpenPage(subscription, key);
+    return canOpenWorkspacePage(subscription, key, workspaceAccess);
   }) : [];
 
   const leagueAvailable = Boolean(platformContext?.isPlatformStaff || leagueMemberships.length);

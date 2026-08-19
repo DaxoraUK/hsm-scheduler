@@ -329,7 +329,7 @@ export default function EliteCommandCentrePage({
         <div className="grid gap-8 p-6 lg:grid-cols-[1.25fr_0.75fr] lg:p-8">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
-              <Building2 size={14} /> Elite organisation command
+              <Building2 size={14} /> Club Command
             </div>
             <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight sm:text-5xl">One operating picture across every site.</h1>
             <p className="mt-4 max-w-3xl text-sm font-semibold leading-7 text-slate-300 sm:text-base">
@@ -361,7 +361,7 @@ export default function EliteCommandCentrePage({
         </div>
       </section>
 
-      <nav className="overflow-x-auto rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm" aria-label="Elite organisation workspace">
+      <nav className="overflow-x-auto rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm" aria-label="Club Command workspace">
         <div className="flex min-w-max gap-1">
           <button type="button" onClick={() => setView("command")} aria-pressed={view === "command"} className={`inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-xs font-black transition ${view === "command" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}><Building2 size={16} /> Command overview</button>
           <button type="button" onClick={() => setView("control")} aria-pressed={view === "control"} className={`inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-xs font-black transition ${view === "control" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}><Workflow size={16} /> Governance & approvals</button>

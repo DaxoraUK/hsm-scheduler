@@ -1,24 +1,19 @@
-# v3.10.41 Rollout and Acceptance
+# v3.10.42 Rollout and Acceptance
 
-## Installation
+## Automated evidence completed before packaging
 
-Target:
-`C:\Development\hsm-scheduler`
+- Focused Dashboard and Elite regressions: 8 passed.
+- Full Vitest catalogue: 134 files and 738 tests passed.
+- Oxlint: completed with baseline warnings only and no errors.
+- TypeScript and Vite production build: passed.
+- Payload SHA-256 verification: required during installation.
+- PowerShell syntax, ZIP extraction and final ZIP checksum: required during packaging.
 
-Run:
-`DOUBLE-CLICK-THIS-INSTALL-AND-DEPLOY.cmd`
+## Product acceptance
 
-Do not manually edit or reset the working tree before installation.
-
-## Acceptance
-
-1. Access Security lists members and existing primary roles.
-2. An owner/admin can add an additional functional role.
-3. The member can hold multiple roles simultaneously.
-4. An additional role can be revoked without changing the primary role.
-5. Team/site scope is represented in the assignment data.
-6. Existing Coach Hub behaviour remains intact.
-7. Existing primary-role permission tests remain green.
-8. Migration dry-run and linked application pass.
-9. Full regression, lint and production build pass.
-10. Git staging contains only v3.10.41 release files.
+- Mission Control remains the first operational destination.
+- Eligible Elite leaders see Club Command in navigation.
+- Pro-plan users, operational-only users and support sessions do not see or render Club Command.
+- Eligible leaders have one explicit Mission Control action leading to Club Command.
+- Existing Elite governance, reporting and approval functionality remains present.
+- Full-Time behaviour is unchanged.

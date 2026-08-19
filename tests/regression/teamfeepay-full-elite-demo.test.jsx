@@ -51,7 +51,7 @@ describe("TeamFeePay full Elite acquisition demo", () => {
     });
 
     await waitForText("Mission Control");
-    await waitForText("Organisation Command");
+    await waitForText("Club Command");
     await waitForText("Annual Planner");
     await waitForText("League Manager");
 

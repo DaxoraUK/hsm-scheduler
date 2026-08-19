@@ -2,9 +2,9 @@
 
 ## Baseline
 
-**Release:** v3.10.41 Multi-Role Access Architecture
+**Release:** v3.10.42 Dashboard and Club Command Simplification
 
-The dashboard baseline is now consolidated with the TeamFeePay feature branch. Mission Control remains the primary club operating overview. Coach Hub, Annual Planner, League Manager and Elite/Organisation Command are present in the consolidated codebase but their final navigation and role exposure are deliberately not yet simplified.
+Mission Control is the primary club operating overview. Club Command is the Elite leadership and governance view; it is no longer presented as a competing operational home.
 
 ## Current implementation baseline
 
@@ -16,7 +16,7 @@ The dashboard baseline is now consolidated with the TeamFeePay feature branch. M
 - Coach Hub
 - Annual Planner
 - League Manager
-- Elite / Organisation Command
+- Elite Club Command
 - Subscription and entitlement controls
 - TeamFeePay acquisition/readiness tooling
 
@@ -24,27 +24,29 @@ The dashboard baseline is now consolidated with the TeamFeePay feature branch. M
 
 1. Full-Time FA fixture integration is not considered production reliable.
 2. Multiple Full-Time sources are required rather than a single source configuration.
-3. Mission Control and Organisation Command overlap and need information-architecture consolidation.
+3. Mission Control and Club Command must retain distinct operational and leadership purposes.
 4. The product currently exposes more operational concepts than a typical grassroots user needs at once.
 5. Role visibility must be derived from multiple assigned roles, scope and subscription rather than one membership role.
-5. Shared operational metrics must remain sourced from shared operational data rather than duplicate calculations.
+6. Shared operational metrics must remain sourced from shared operational data rather than duplicate calculations.
 
 ## Active phase
 
-**Consolidate, validate and simplify.** v3.10.41 establishes the multi-role access foundation required before role-aware dashboard/navigation simplification. The merged baseline is validated, and the current deployment blocker is the Vercel Hobby Serverless Function limit. v3.10.27 consolidates the existing API handlers behind one Vercel catch-all function without changing the public API paths. After deployment reliability is restored, navigation, role exposure and terminology will be simplified from the merged baseline.
+**Role-aware product simplification.** v3.10.42 uses the v3.10.41 effective multi-role access object and subscription entitlements as one shared navigation and rendering authority. Mission Control remains operational; Club Command is exposed only to entitled users with governance/audit permission.
 
 ## Acceptance criteria
 
 - Consolidated source builds successfully on the target Windows environment.
 - Full regression catalogue passes in controlled batches.
-- Coach Hub, Annual Planner, League Manager and Elite functionality are reachable under their intended entitlements.
+- Coach Hub, Annual Planner, League Manager and Elite functionality are reachable under their intended entitlements and role permissions.
 - Mission Control remains the primary operational entry point.
+- Club Command is labelled consistently and is hidden from support, operational-only and read-only users without governance permission.
+- Eligible leaders can move from Mission Control to Club Command through one explicit handoff rather than duplicated executive cards.
 - No existing Ground Control functionality is silently removed during consolidation.
 - Full-Time FA is tracked as a separate reliability phase.
 
 ## Cross-module dependency: access architecture
 
-Dashboard visibility and Club Command exposure depend on the v3.10.41 multi-role access model. Dashboard implementation must consume effective roles and package entitlements rather than introduce a second permission model.
+Dashboard visibility and Club Command exposure consume the v3.10.41 effective permission object and package entitlements. No second role matrix is introduced.
 
 ## Dependencies
 

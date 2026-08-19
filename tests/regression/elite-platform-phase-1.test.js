@@ -109,7 +109,7 @@ describe("Elite organisation operating layer", () => {
   });
 
   test("exposes the Elite route and governance settings only through entitlement checks", () => {
-    expect(shell).toContain('["executive", "Organisation Command"');
+    expect(shell).toContain('["executive", "Club Command"');
     expect(appCore).toContain('mainPage === "executive"');
     expect(appCore).toContain("<EliteCommandCentrePage");
     expect(settings).toContain('key === "governance"');

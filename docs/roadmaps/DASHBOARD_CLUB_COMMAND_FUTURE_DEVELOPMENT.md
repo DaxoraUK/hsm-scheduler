@@ -8,12 +8,12 @@
 
 ## Role-aware product simplification
 
-- Generate dashboard/navigation from effective multi-role access, scope and package entitlement.
-- Keep Club Command available only to roles and packages that need executive/governance information.
+- Extend the shared v3.10.42 page-access rule to other specialist workspaces only when their permission boundaries are agreed.
+- Add scope-aware leadership summaries when team/site authority is authoritative across every contributing data source.
 
 ## Product simplification
 
-- Merge useful Organisation Command information into Mission Control where it answers a club user's immediate questions.
+- Merge useful Club Command information into Mission Control only where it answers a club user's immediate operational questions.
 - Keep advanced governance and executive controls behind Elite/role-aware access rather than primary navigation.
 - Reduce duplicate status cards and command surfaces.
 - Use direct resolution actions from Mission Control rather than requiring users to locate the owning workspace.
@@ -36,7 +36,7 @@
 
 ## Deferred
 
-- Removal of Organisation Command.
+- Removal of Club Command.
 - Full navigation redesign.
 - New AI-heavy dashboard functionality.
 - New integrations beyond the fixture-source foundation.

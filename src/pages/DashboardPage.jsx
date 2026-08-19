@@ -29,6 +29,7 @@ import {
 } from "../lib/subscriptions/entitlements.js";
 
 import {
+  Building2,
   CalendarDays,
   MoreHorizontal,
   Save,
@@ -48,6 +49,7 @@ export default function DashboardPage({
   subscription,
   workspaceAccess,
   advancedOperationsEnabled = false,
+  clubCommandAvailable = false,
   matchdayScope: matchdayScopeProp,
   setMatchdayScope: setMatchdayScopeProp,
   saveWeek,
@@ -674,6 +676,17 @@ export default function DashboardPage({
                 nav.goToReports();
               }}
             />
+            {clubCommandAvailable ? (
+              <CommandMenuItem
+                icon={Building2}
+                title="Open Club Command"
+                subtitle="Review leadership, governance and cross-site priorities"
+                onClick={() => {
+                  setActionsOpen(false);
+                  setMainPage?.("executive");
+                }}
+              />
+            ) : null}
           </div>
         </div>
       ) : null}

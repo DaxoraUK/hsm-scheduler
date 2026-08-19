@@ -1,31 +1,20 @@
-# Daxora Ground Control v3.10.41 - Multi-Role Access Architecture
+# Daxora Ground Control v3.10.42 - Dashboard and Club Command Simplification
 
-## v3.10.41 - Multi-Role Access Architecture
+## Purpose
 
-Introduces the club multi-role access foundation without replacing the existing primary membership role model.
+Mission Control remains the primary operational home. The former Organisation Command surface is now presented consistently as Club Command: an Elite leadership, governance and cross-site view rather than a competing dashboard.
 
-### Delivered
+## Changes
 
-- Multiple functional roles per club member.
-- Explicit club/team/site scope on additional roles.
-- Access & Security role assignment and removal.
-- Effective client permission calculation across applicable roles.
-- Role-aware Coach Hub compatibility.
-- Supabase role assignment/listing RPCs with the real composite membership key.
-- Dashboard/Club Command roadmap dependency recorded.
+- Adds one shared workspace-page access rule combining subscription entitlement with the effective v3.10.41 multi-role permission object.
+- Shows Club Command only to entitled users with effective audit/governance permission.
+- Excludes read-only support sessions and operational-only roles from Club Command navigation and rendering.
+- Renames the user-facing Organisation Command navigation and page surface to Club Command while retaining stable internal route and entitlement identifiers.
+- Adds one conditional Mission Control handoff to Club Command instead of duplicating executive cards.
+- Updates existing Elite and TeamFeePay regression expectations and adds focused v3.10.42 coverage.
 
-### Deliberately deferred
+## Deliberately unchanged
 
-- Package-aware navigation.
-- Authoritative team/site role picker UI.
-- Migration of every privileged RPC to capability-based authorization.
-- Full dashboard redesign.
-- Full-Time FA integration repair.
-
-## Acceptance
-
-- Existing primary roles continue to work.
-- Additional roles can be assigned and revoked.
-- Scoped roles only contribute when their scope matches the active context.
-- No role assignment bypasses subscription entitlement.
-- Migration targets `club_memberships(club_id, user_id)` correctly.
+- Full-Time FA integration remains a separate release.
+- No database migration is included.
+- No subscription catalogue, API, Vercel or release-engine change is included.
