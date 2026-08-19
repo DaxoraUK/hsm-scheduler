@@ -47,12 +47,17 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 
 Dashboard visibility and Club Command exposure consume the v3.10.41 effective permission object and package entitlements. No second role matrix is introduced.
 
+Every Dashboard and Club Command surface must apply the mandatory access contract in `ACCESS_ARCHITECTURE_ROADMAP.md`: subscription entitlement + combined user permissions + assigned scope + account/workspace status. The same result governs navigation, component visibility, available actions and server-enforced data access.
+
+This access contract is also a product-simplification mechanism. Users should see the smallest useful operating surface for their responsibilities; finance, safeguarding, governance, support and advanced operational controls must not create clutter for users who cannot or need not act on them.
+
 ## Dependencies
 
 - Full-Time source availability remains an external operational dependency with manual fixture entry as the fallback.
 - Subscription/entitlement authority.
 - Shared operational data and scope model.
 - Coach Hub team/contact authority.
+- A declared role/package/scope/action matrix for every newly exposed dashboard capability.
 - Vercel function-count constraint and the consolidated API gateway; this is a cross-module deployment dependency recorded for the dashboard/club-command release path.
 
 ## Pilot status

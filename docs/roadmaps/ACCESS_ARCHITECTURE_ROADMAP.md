@@ -37,16 +37,56 @@ The club access model now supports a primary legacy membership role plus multipl
 
 v3.10.41 establishes the multi-role data and access foundation.
 
+## Mandatory cross-platform access contract
+
+Every existing and future Ground Control capability must derive effective access from all four authorities:
+
+1. **Subscription entitlement** — whether the organisation owns the capability.
+2. **User permissions** — what actions the person may perform through all applicable assigned roles.
+3. **Assigned scope** — which club, team, site or organisation records those permissions cover.
+4. **Account and workspace status** — whether access is active, read-only, suspended, expired or otherwise restricted.
+
+No module may introduce a separate role matrix or rely on navigation visibility as its security boundary. The client may simplify and hide irrelevant controls, but Supabase RLS and capability-aware server/RPC checks remain authoritative.
+
+Subscriptions set the organisation's capability ceiling. Roles and explicit permissions determine what a person may do within that ceiling. Scope determines which records they may access. Account and workspace status can restrict the resulting access further but can never expand it.
+
+### Required module access definition
+
+Every roadmap phase and material release must define and test:
+
+- who may view, create, amend, approve, publish, communicate, export and delete;
+- the subscription entitlement required for each capability;
+- club, team, site and organisation scope behaviour;
+- sensitive-field visibility, including finance, safeguarding and personal contact data;
+- read-only, suspended, expired-subscription and downgrade behaviour;
+- audit events for privileged and consequential actions;
+- server/RPC authorization and RLS enforcement;
+- navigation and action visibility derived from effective access;
+- regression coverage for role combinations and cross-scope denial.
+
+### Role experience principles
+
+- Coaches and team managers see only their assigned teams and permitted team workflows.
+- Operations roles can manage fixtures, facilities and officials without automatically gaining finance, safeguarding or subscription authority.
+- Finance roles can manage authorised financial workflows without inheriting unrelated personal or operational permissions.
+- Welfare and safeguarding access remains explicitly restricted and auditable.
+- Club administrators manage configuration and membership only within their granted authority.
+- Governance and executive views require both the relevant permission and subscription entitlement.
+- Platform support access is explicit, time-bounded where appropriate and auditable; support status never implies unrestricted club-data access.
+- Users should see the smallest clear interface needed for their responsibilities, reducing clutter without weakening security.
+
 ## Acceptance criteria
 
 - A member can hold multiple functional roles without replacing the primary membership role.
 - Club/team/site scope is stored explicitly.
 - Access Security can add and remove additional roles.
 - Effective client access combines applicable roles.
+- Subscription, permissions, scope and account/workspace status combine into one effective access result.
 - Coach Hub remains compatible with team-scoped coach access.
 - Existing primary-role permissions remain unchanged.
 - Migration uses the actual composite `club_memberships(club_id, user_id)` key.
 - Focused and existing permission regressions pass.
+- Every material module release includes its access definition and role/package/scope denial tests.
 
 ## Dependencies
 
