@@ -53,6 +53,18 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     });
   });
 
+  test("upgrades an existing BBDFL source with its U14 label and Horwich fallback alias", () => {
+    expect(getConfiguredFixtureSources({ enabled: true, sources: [{
+      id: "bbdfl-existing",
+      name: "BBDFL - Horwich St. Mary's club fixtures",
+      feedId: "167398131",
+      teamAliases: "Horwich St. Mary's, Horwich St Mary's",
+    }] })[0]).toMatchObject({
+      name: "BBDFL U14 - Horwich St. Mary's fixtures",
+      teamAliases: ["Horwich St. Mary's", "Horwich St Mary's", "Horwich"],
+    });
+  });
+
   test("parses the compact grouped-date table rendered by official feeds", () => {
     const html = `<table><tbody>
       <tr><td colspan="5">Sat 22 Aug 2026 14:30</td></tr>

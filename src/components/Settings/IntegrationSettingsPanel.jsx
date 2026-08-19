@@ -16,10 +16,19 @@ function sourceId() {
   return `full-time-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function upgradeKnownSource(source = {}) {
+  if (String(source.feedId || "") !== "167398131") return source;
+  const aliases = Array.isArray(source.teamAliases) ? source.teamAliases.join(", ") : String(source.teamAliases || "");
+  const withFallback = aliases.split(",").map((alias) => alias.trim()).some((alias) => alias.toLowerCase() === "horwich")
+    ? aliases
+    : [aliases, "Horwich"].filter(Boolean).join(", ");
+  return { ...source, name: "BBDFL U14 - Horwich St. Mary's fixtures", teamAliases: withFallback };
+}
+
 function configuredSources(fullTime = {}) {
-  if (Array.isArray(fullTime.sources) && fullTime.sources.length) return fullTime.sources;
+  if (Array.isArray(fullTime.sources) && fullTime.sources.length) return fullTime.sources.map(upgradeKnownSource);
   if (!fullTime.sourceUrl) return [];
-  return [{
+  return [upgradeKnownSource({
     id: fullTime.clubId || "full-time-primary",
     name: "Primary Full-Time source",
     url: fullTime.sourceUrl,
@@ -27,7 +36,7 @@ function configuredSources(fullTime = {}) {
     clubId: fullTime.clubId || "",
     teamAliases: fullTime.teamAliases || "",
     enabled: true,
-  }];
+  })];
 }
 
 function healthLabel(health = {}) {
@@ -115,7 +124,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
       feedId: feed.id,
       url: "",
       clubId: "",
-      teamAliases: "Horwich St. Mary's, Horwich St Mary's",
+      teamAliases: "Horwich St. Mary's, Horwich St Mary's, Horwich",
       enabled: true,
     }));
     updateSources([...sources, ...additions]);

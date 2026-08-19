@@ -27,10 +27,11 @@ export function normaliseFixtureSource(source = {}, index = 0) {
   const teamAliases = Array.isArray(source.teamAliases)
     ? source.teamAliases.map(clean).filter(Boolean)
     : clean(source.teamAliases).split(",").map(clean).filter(Boolean);
+  if (feedId === "167398131" && !teamAliases.some((alias) => alias.toLowerCase() === "horwich")) teamAliases.push("Horwich");
 
   return {
     id: clean(source.id || source.clubId || `FULLTIME-${index + 1}`),
-    name: clean(source.name || `Full-Time source ${index + 1}`),
+    name: feedId === "167398131" ? "BBDFL U14 - Horwich St. Mary's fixtures" : clean(source.name || `Full-Time source ${index + 1}`),
     url,
     feedId,
     clubId: clean(source.clubId),

@@ -1,4 +1,19 @@
-# Daxora Ground Control v3.10.48 - Full-Time Retention and Source Health
+# Daxora Ground Control v3.10.49 - Existing BBDFL U14 Source Upgrade
+
+## Delivered
+
+- Automatically recognises existing configured feed `167398131` and displays the canonical **BBDFL U14 - Horwich St. Mary's fixtures** label.
+- Automatically appends the required `Horwich` fallback alias to existing and newly added BBDFL U14 sources.
+- Does not require users to delete, recreate or manually rename their existing BBDFL source.
+- Retains all v3.10.48 source-health and rolling fixture-snapshot protections.
+
+## Verification
+
+- 12 focused Full-Time regression tests pass.
+- Production build passes.
+- No database migration or Full-Time write-back is introduced.
+
+## Previous release: v3.10.48
 
 ## Delivered
 
