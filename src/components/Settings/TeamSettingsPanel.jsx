@@ -51,6 +51,7 @@ const DAYS = ["Saturday", "Sunday", "Midweek"];
 
 const TEAM_COLUMNS = [
   { key: "name", label: "Name", aliases: ["Team", "Team name"] },
+  { key: "externalAliases", label: "External Team Names", aliases: ["Full-Time names", "External aliases"] },
   { key: "teamType", label: "Team Type", aliases: ["Type", "Category"] },
   { key: "format", label: "Format" },
   { key: "siteId", label: "Home Site", aliases: ["Site", "Site ID"] },
@@ -84,6 +85,7 @@ function normaliseImportedTeam(row, index, primarySiteId) {
   const day = DAYS.includes(row.day) ? row.day : "Saturday";
   return {
     name,
+    externalAliases: String(row.externalAliases || "").trim(),
     teamType: TEAM_TYPES.some(([value]) => value === teamType) ? teamType : "youth",
     format,
     siteId: String(row.siteId || primarySiteId || "").trim() || null,
@@ -497,6 +499,7 @@ export default function TeamSettingsPanel({
 
               <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-x-4 gap-y-4">
                 <Field label="Team name" className="col-span-full"><input className={inputClass} value={selectedTeam.name || ""} onChange={(event) => updateTeam(selectedIndex, "name", event.target.value)} /></Field>
+                <Field label="External fixture names" hint="Comma-separated names used by Full-Time or other fixture providers." className="col-span-full"><input className={inputClass} value={Array.isArray(selectedTeam.externalAliases) ? selectedTeam.externalAliases.join(", ") : selectedTeam.externalAliases || ""} onChange={(event) => updateTeam(selectedIndex, "externalAliases", event.target.value)} placeholder="Horwich St. Mary's, Horwich St Mary's" /></Field>
                 <Field label="Type"><select className={selectClass} value={classifyFallback(selectedTeam)} onChange={(event) => updateTeam(selectedIndex, "teamType", event.target.value)}>{TEAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                 <Field label="Format"><select className={selectClass} value={selectedTeam.format || ""} onChange={(event) => updateTeam(selectedIndex, "format", event.target.value)}>{FORMATS.map((format) => <option key={format}>{format}</option>)}</select></Field>
                 <Field label="Default day"><select className={selectClass} value={selectedTeam.day || "Saturday"} onChange={(event) => updateTeam(selectedIndex, "day", event.target.value)}>{DAYS.map((day) => <option key={day}>{day}</option>)}</select></Field>

@@ -1,15 +1,16 @@
-# Daxora Ground Control v3.10.44 - Official Full-Time Browser Feeds
-
-## Root repair
-
-Full-Time's Cloudflare protection returns HTTP 403 to server-side fixture-page requests. The supported Full-Time website code-snippet feeds still load in genuine browsers and are now the primary import path.
+# Daxora Ground Control v3.10.45 - External Team Mapping and Verified Updater
 
 ## Delivered
 
-- Numeric official Full-Time `cs` feed IDs as multi-league sources.
-- Browser-isolated feed loading using The FA's published website integration contract.
-- Grouped named-date and compact fixture-row parsing.
-- One-click Lancashire Amateur League fixture feeds for all five divisions.
-- Existing aliases, per-source status, partial failure handling and duplicate removal retained.
-- Legacy fixture-page URLs retained as a labelled fallback.
-- No result write-back and no attempt to bypass Cloudflare.
+- Adds comma-separated external fixture names to every configured Ground Control team.
+- Resolves provider names such as `Horwich St. Mary's` to the club's chosen internal name such as `HSM 1st Team`.
+- Applies the mapped team's format, duration, pitch preferences and internal identity during scheduling.
+- Preserves the original provider team name as `sourceHomeTeam` for audit and diagnostics.
+- Adds a permanent local updater that finds an approved ZIP, verifies its SHA-256 sidecar, extracts it in isolation and invokes the packaged release installer.
+- Retains the official Full-Time browser feeds delivered in v3.10.44.
+
+## Safety
+
+- Updates remain explicit and checksum verified.
+- The existing strict dirty-file protection, backup, rollback, selective staging and staging push remain in force.
+- No Full-Time access-control bypass or write-back is introduced.

@@ -34,10 +34,16 @@ export const isAdult = (n) =>
   );
 
 export function findCfg(name, cfgList) {
-  const n = (name || "").toLowerCase();
-  return cfgList.find((t) =>
-    n.includes(t.name.toLowerCase().replace("hsm ", ""))
-  );
+  const normalise = (value) => String(value || "").toLowerCase().replace(/[.'â€™]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const n = normalise(name);
+  return cfgList.find((team) => {
+    const configuredNames = [team.name, ...(Array.isArray(team.externalAliases)
+      ? team.externalAliases
+      : String(team.externalAliases || "").split(","))]
+      .map(normalise)
+      .filter(Boolean);
+    return configuredNames.some((candidate) => n === candidate || n.includes(candidate) || candidate.includes(n));
+  });
 }
 
 function getPitch(pitchCfg, pitchId) {
@@ -139,7 +145,16 @@ function scheduleFixtureDayCore(
   const pitchCfg = normalisePitchRegistry(pitchCfgArg && pitchCfgArg.length ? pitchCfgArg : PITCHES);
   const closedPitchSet = buildClosedPitchSet(pitchCfg, closedPitches);
 
-  const active = fixtures.filter((fixture) => fixture.status === "active");
+  const active = fixtures.filter((fixture) => fixture.status === "active").map((fixture) => {
+    const mappedTeam = findCfg(fixture.homeTeam, cfgList);
+    if (!mappedTeam || mappedTeam.name === fixture.homeTeam) return fixture;
+    return {
+      ...fixture,
+      sourceHomeTeam: fixture.sourceHomeTeam || fixture.homeTeam,
+      homeTeam: mappedTeam.name,
+      teamId: mappedTeam.id || mappedTeam.teamId || mappedTeam.name,
+    };
+  });
 
   const sorted = [...active].sort(
     (a, b) =>
