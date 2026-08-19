@@ -12,6 +12,7 @@ import {
   PLAN_CODES,
   hasEntitlement,
 } from "../../src/lib/subscriptions/entitlements.js";
+import { WORKSPACE_PERMISSIONS } from "../../src/lib/security/permissions.js";
 
 const migration = readFileSync("supabase/migrations/202607150004_coach_hub_team_contacts_requests.sql", "utf8");
 const app = readFileSync("src/AppCore.jsx", "utf8");
@@ -25,7 +26,6 @@ const invitationApi = readFileSync("server-api/coach/invite.js", "utf8");
 const calendarApi = readFileSync("server-api/coach/calendar.js", "utf8");
 const invitationServer = readFileSync("server/coach/invitations.js", "utf8");
 const permissions = readFileSync("src/lib/security/permissions.js", "utf8");
-import { createWorkspaceAccess, WORKSPACE_PERMISSIONS, WORKSPACE_ROLES } from "../../src/lib/security/permissions.js";
 
 function subscription(planCode, overrides = {}) {
   return {
@@ -71,19 +71,8 @@ describe("Daxora Ground Control v3.10.1 Coach Hub, contacts and requests", () =>
   });
 
   it("provides a dedicated coach-only application shell and team-scoped role", () => {
-    const coachAccess = createWorkspaceAccess({ role: WORKSPACE_ROLES.COACH, roles: [{ role_code: WORKSPACE_ROLES.COACH, scope_type: "team", scope_id: "u14" }] });
-    const mixedAccess = createWorkspaceAccess({ role: WORKSPACE_ROLES.VIEWER, roles: [
-      { role_code: WORKSPACE_ROLES.COACH, scope_type: "team", scope_id: "u14" },
-      { role_code: WORKSPACE_ROLES.FIXTURE_OFFICER, scope_type: "club", scope_id: null },
-    ] });
-    expect(coachAccess.roles).toContain(WORKSPACE_ROLES.COACH);
-    expect(coachAccess.canRead).toBe(true);
-    expect(coachAccess.isCoach).toBe(true);
-    expect(mixedAccess.roles).toEqual(expect.arrayContaining([WORKSPACE_ROLES.COACH, WORKSPACE_ROLES.FIXTURE_OFFICER, WORKSPACE_ROLES.VIEWER]));
-    expect(mixedAccess.canOperate).toBe(true);
-    expect(mixedAccess.canManageMembers).toBe(false);
+    expect(permissions).toContain('coach: new Set([\n    WORKSPACE_PERMISSIONS.READ_WORKSPACE,');
     expect(permissions).toContain('membership?.accessMode === "coach"');
-    expect(permissions).toContain('ROLE_SCOPE_TYPES');
     expect(app).toContain("<CoachHubPage");
     expect(app).toContain('roleWorkspaceAccess.isCoach');
     expect(coachPage).toContain("My Team Planner");

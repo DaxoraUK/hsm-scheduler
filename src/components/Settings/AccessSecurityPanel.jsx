@@ -20,10 +20,12 @@ import {
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import {
+  canAssignAdditionalRole,
   canAssignRole,
   createWorkspaceAccess,
   getRoleDescription,
   getRoleLabel,
+  MANAGEABLE_ADDITIONAL_ROLES,
   MANAGEABLE_MEMBER_ROLES,
 } from "../../lib/security/permissions.js";
 import { useWorkspaceSecurity } from "../../hooks/useWorkspaceSecurity.js";
@@ -36,6 +38,16 @@ const ROLE_TONES = {
   scheduler: "border-sky-200 bg-sky-50 text-sky-800",
   viewer: "border-slate-200 bg-slate-50 text-slate-700",
   support: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  chair: "border-amber-200 bg-amber-50 text-amber-800",
+  club_secretary: "border-indigo-200 bg-indigo-50 text-indigo-800",
+  fixture_officer: "border-cyan-200 bg-cyan-50 text-cyan-800",
+  operations_officer: "border-sky-200 bg-sky-50 text-sky-800",
+  treasurer: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  welfare_officer: "border-rose-200 bg-rose-50 text-rose-800",
+  communications_officer: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800",
+  coach: "border-violet-200 bg-violet-50 text-violet-800",
+  team_manager: "border-purple-200 bg-purple-50 text-purple-800",
+  volunteer: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
 const ACTION_LABELS = {
@@ -122,6 +134,7 @@ export default function AccessSecurityPanel({
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
+  const [additionalRoleByMember, setAdditionalRoleByMember] = useState({});
   const [inviteLink, setInviteLink] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
   const [supportDuration, setSupportDuration] = useState("60");
@@ -275,7 +288,7 @@ export default function AccessSecurityPanel({
       ) : null}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {["owner", "chair", "admin", "club_secretary", "scheduler", "fixture_officer", "operations_officer", "treasurer", "welfare_officer", "communications_officer", "coach", "team_manager", "volunteer", "viewer"].map((role) => (
+        {["owner", "admin", "scheduler", "viewer"].map((role) => (
           <div key={role} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
             <RoleBadge role={role} />
             <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{getRoleDescription(role)}</p>
@@ -287,7 +300,7 @@ export default function AccessSecurityPanel({
         icon={UsersRound}
         eyebrow="Club access"
         title="Members and roles"
-        description="Members retain a primary membership role and can also hold multiple additional roles. Additional roles may be club-wide now and can be scoped to teams/sites as the authoritative registries are connected."
+        description="Owners control administrators. Administrators can manage schedulers and viewers. Ownership changes only through the explicit transfer action."
         action={(
           <button type="button" onClick={refresh} disabled={status === "loading"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <RefreshCw size={15} className={status === "loading" ? "animate-spin" : ""} /> Refresh
@@ -319,34 +332,23 @@ export default function AccessSecurityPanel({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <RoleBadge role={member.role} />
-                    {Array.isArray(member.roles) ? member.roles.map((assignment) => (
-                      <span key={assignment.id || `${assignment.role_code}-${assignment.scope_type}-${assignment.scope_id || "club"}`} className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-800">
-                        {getRoleLabel(assignment.role_code)}{assignment.scope_type !== "club" ? ` · ${assignment.scope_type}` : ""}
-                        {canEdit && assignment.id ? (
-                          <button type="button" disabled={Boolean(busyAction)} onClick={() => runAction(`remove-role-${assignment.id}`, () => DB.removeClubMemberRole(activeClubId, member.user_id, assignment.id), "Additional role removed", { refreshMemberships: true })} className="ml-0.5 rounded-full p-0.5 hover:bg-emerald-100" aria-label={`Remove ${getRoleLabel(assignment.role_code)} role`}>
-                            <X size={11} />
-                          </button>
-                        ) : null}
-                      </span>
-                    )) : null}
                     {canEdit ? (
                       <select
-                        value=""
+                        value={member.role}
                         disabled={Boolean(busyAction)}
-                        onChange={(event) => {
-                          const role = event.target.value;
-                          if (!role) return;
-                          runAction(`add-role-${member.user_id}-${role}`, () => DB.addClubMemberRole(activeClubId, member.user_id, role), "Additional role assigned", { refreshMemberships: true });
-                        }}
-                        className="h-9 rounded-xl border border-dashed border-slate-300 bg-white px-2.5 text-[11px] font-black text-slate-600 outline-none focus:border-emerald-400"
+                        onChange={(event) => runAction(
+                          `role-${member.user_id}`,
+                          () => DB.updateClubMemberRole(activeClubId, member.user_id, event.target.value),
+                          "Member role updated",
+                          { refreshMemberships: true }
+                        )}
+                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 outline-none focus:border-emerald-400"
                       >
-                        <option value="">+ Add role</option>
-                        {MANAGEABLE_MEMBER_ROLES.filter((role) => canAssignRole(access.role, role) && role !== member.role && !(member.roles || []).some((assignment) => assignment.role_code === role)).map((role) => (
+                        {MANAGEABLE_MEMBER_ROLES.filter((role) => canAssignRole(access.role, role)).map((role) => (
                           <option key={role} value={role}>{getRoleLabel(role)}</option>
                         ))}
                       </select>
-                    ) : null}
+                    ) : <RoleBadge role={member.role} />}
 
                     {access.canTransferOwnership && !isCurrent && member.role !== "owner" ? (
                       <button
@@ -370,6 +372,67 @@ export default function AccessSecurityPanel({
                         <Trash2 size={16} />
                       </button>
                     ) : null}
+                  </div>
+
+                  <div className="lg:col-span-2 mt-1 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Additional roles</div>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {(Array.isArray(member.roles) ? member.roles : []).filter((role) => role !== member.role).map((role) => (
+                            <span key={role} className="inline-flex items-center gap-1.5">
+                              <RoleBadge role={role} />
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(busyAction)}
+                                  onClick={() => runAction(
+                                    `remove-role-${member.user_id}-${role}`,
+                                    () => DB.removeClubMemberRole(activeClubId, member.user_id, role),
+                                    "Additional role removed",
+                                    { refreshMemberships: true }
+                                  )}
+                                  className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                                  aria-label={`Remove ${getRoleLabel(role)} role`}
+                                >
+                                  <X size={12} />
+                                </button>
+                              ) : null}
+                            </span>
+                          ))}
+                          {!Array.isArray(member.roles) || member.roles.filter((role) => role !== member.role).length === 0 ? (
+                            <span className="text-xs font-semibold text-slate-400">No additional roles assigned.</span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {canEdit && canAssignAdditionalRole(access.role, additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]) ? (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <select
+                            value={additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]}
+                            onChange={(event) => setAdditionalRoleByMember((current) => ({ ...current, [member.user_id]: event.target.value }))}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
+                          >
+                            {MANAGEABLE_ADDITIONAL_ROLES
+                              .filter((role) => !(Array.isArray(member.roles) ? member.roles : []).includes(role))
+                              .map((role) => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={Boolean(busyAction) || MANAGEABLE_ADDITIONAL_ROLES.every((role) => (Array.isArray(member.roles) ? member.roles : []).includes(role))}
+                            onClick={() => runAction(
+                              `add-role-${member.user_id}`,
+                              () => DB.addClubMemberRole(activeClubId, member.user_id, additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]),
+                              "Additional role assigned",
+                              { refreshMemberships: true }
+                            )}
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            <UserPlus size={14} /> Add role
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );

@@ -429,6 +429,12 @@ function normaliseWorkspaceAccess(row = {}) {
   return {
     clubId,
     role: row.role || (accessMode === "support" ? "support" : "viewer"),
+    roleAssignments: Array.isArray(row.role_assignments || row.roleAssignments)
+      ? (row.role_assignments || row.roleAssignments)
+      : [],
+    roles: Array.isArray(row.role_assignments || row.roleAssignments)
+      ? (row.role_assignments || row.roleAssignments).map((assignment) => assignment.role || assignment.role_code).filter(Boolean)
+      : [],
     status: row.status || "active",
     joinedAt: row.granted_at || row.joinedAt || row.created_at || null,
     accessMode,
@@ -1368,23 +1374,25 @@ export const DB = {
     });
   },
 
-  async addClubMemberRole(clubId, userId, role, scopeType = "club", scopeId = null) {
+  async addClubMemberRole(clubId, userId, role, { scopeType = "club", scopeId = null } = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/add_club_member_role", {
       target_club_id: id,
       target_user_id: userId,
-      next_role: role,
-      target_scope_type: scopeType,
-      target_scope_id: scopeId,
+      role_code: String(role || "").trim(),
+      scope_type: String(scopeType || "club").trim(),
+      scope_id: scopeId || null,
     });
   },
 
-  async removeClubMemberRole(clubId, userId, roleAssignmentId) {
+  async removeClubMemberRole(clubId, userId, role, { scopeType = "club", scopeId = null } = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/remove_club_member_role", {
       target_club_id: id,
       target_user_id: userId,
-      role_assignment_id: roleAssignmentId,
+      role_code: String(role || "").trim(),
+      scope_type: String(scopeType || "club").trim(),
+      scope_id: scopeId || null,
     });
   },
 

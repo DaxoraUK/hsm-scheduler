@@ -1,23 +1,31 @@
-# Daxora Ground Control v3.10.32 - Multi-Role Access Architecture
+# Daxora Ground Control v3.10.41 - Multi-Role Access Architecture
 
-## Delivered
+## v3.10.41 - Multi-Role Access Architecture
 
-- Replaced the single-role access calculation with additive multi-role workspace access.
-- Added canonical club role catalogue covering leadership, administration, operations, finance, welfare, communications and team roles.
-- Added club/team/site role-scope types and persisted `club_member_roles` assignments.
-- Added guarded Supabase RPCs for listing, adding and revoking additional member roles.
-- Preserved the legacy primary `club_memberships.role` for backward compatibility.
-- Updated Access & Security to display multiple assigned roles and allow authorised administrators to add/remove additional roles.
-- Updated Coach Hub regression coverage to test behaviour rather than the obsolete `coach: new Set([])` source string.
-- Added regression coverage for Coach + Fixture Officer multi-role access.
-- Retained the v3.10.29 Vercel legacy-handler deletion architecture.
+Introduces the club multi-role access foundation without replacing the existing primary membership role model.
 
-## Deliberately not claimed
+### Delivered
 
-- Full-Time FA live integration is not declared production-ready by this release.
-- Team/site selectors are not exposed until they are wired to authoritative registries.
-- Dashboard/Club Command visual consolidation remains the next UX phase.
+- Multiple functional roles per club member.
+- Explicit club/team/site scope on additional roles.
+- Access & Security role assignment and removal.
+- Effective client permission calculation across applicable roles.
+- Role-aware Coach Hub compatibility.
+- Supabase role assignment/listing RPCs with the real composite membership key.
+- Dashboard/Club Command roadmap dependency recorded.
 
-## Migration
+### Deliberately deferred
 
-`supabase/migrations/202608190001_multi_role_access_architecture.sql`
+- Package-aware navigation.
+- Authoritative team/site role picker UI.
+- Migration of every privileged RPC to capability-based authorization.
+- Full dashboard redesign.
+- Full-Time FA integration repair.
+
+## Acceptance
+
+- Existing primary roles continue to work.
+- Additional roles can be assigned and revoked.
+- Scoped roles only contribute when their scope matches the active context.
+- No role assignment bypasses subscription entitlement.
+- Migration targets `club_memberships(club_id, user_id)` correctly.

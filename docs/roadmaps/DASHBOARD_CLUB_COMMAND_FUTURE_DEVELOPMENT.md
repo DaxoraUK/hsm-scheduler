@@ -6,6 +6,11 @@
 - Monitor function count and bundle size as new integrations are introduced.
 - Revisit Vercel plan selection only when commercial usage justifies the infrastructure cost.
 
+## Role-aware product simplification
+
+- Generate dashboard/navigation from effective multi-role access, scope and package entitlement.
+- Keep Club Command available only to roles and packages that need executive/governance information.
+
 ## Product simplification
 
 - Merge useful Organisation Command information into Mission Control where it answers a club user's immediate questions.
@@ -36,12 +41,3 @@
 - New AI-heavy dashboard functionality.
 - New integrations beyond the fixture-source foundation.
 - Further backend decomposition unless required by scale, security or provider isolation.
-
-## v3.10.32 role architecture follow-on
-
-- Complete team/site scope selectors using authoritative team and site registries.
-- Replace page-level navigation visibility rules with effective role + package + context evaluation.
-- Introduce package-aware upgrade discovery for capabilities the current user cannot access.
-- Consolidate Mission Control and Club Command into one dashboard experience with executive views revealed by role and Elite entitlement.
-- Quantify operational savings and avoided waste for commercial ROI reporting.
-- Complete and validate the Full-Time FA multi-source integration independently from the access refactor.
