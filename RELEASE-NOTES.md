@@ -1,6 +1,10 @@
-# Daxora Ground Control v3.10.45 - External Team Mapping and Verified Updater
+# Daxora Ground Control v3.10.46 - Source Kick-Off Authority
 
 ## Delivered
+
+- Treats imported Full-Time kick-off times as authoritative during scheduling.
+- Uses the legacy adult 14:00 rule only when the imported fixture has no valid time.
+- Normalises Full-Time's escaped apostrophe representation so exact external team aliases match reliably.
 
 - Adds comma-separated external fixture names to every configured Ground Control team.
 - Resolves provider names such as `Horwich St. Mary's` to the club's chosen internal name such as `HSM 1st Team`.

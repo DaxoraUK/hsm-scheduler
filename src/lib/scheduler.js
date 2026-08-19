@@ -34,7 +34,7 @@ export const isAdult = (n) =>
   );
 
 export function findCfg(name, cfgList) {
-  const normalise = (value) => String(value || "").toLowerCase().replace(/[.'â€™]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const normalise = (value) => String(value || "").toLowerCase().replace(/\\+['’]?/g, "").replace(/[.'’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const n = normalise(name);
   return cfgList.find((team) => {
     const configuredNames = [team.name, ...(Array.isArray(team.externalAliases)
@@ -198,6 +198,14 @@ function scheduleFixtureDayCore(
   )
     ? options.fixedAdultKickOffMins
     : 14 * 60;
+  const importedKickOffMins = (fixture) => {
+    const value = String(fixture.kickOff || fixture.koTime || "").trim();
+    const match = value.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
+  };
 
   const free = (pitchId, start, end) => {
     if (!(pitchId in slots)) return false;
@@ -313,7 +321,8 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-    if (isAdult(fixture.homeTeam) && Number.isFinite(fixedAdultKickOffMins)) {
+    const adultKickOffMins = importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
+    if (isAdult(fixture.homeTeam) && Number.isFinite(adultKickOffMins)) {
       let placed = false;
 
       for (const pitchId of [cfg.defaultPitch, cfg.altPitch].filter(Boolean)) {
@@ -322,15 +331,15 @@ function scheduleFixtureDayCore(
         const pitch = getPitch(pitchCfg, pitchId);
         if (!isPitchSuitableForFixture(pitch, fixtureWithCfg)) continue;
 
-        if (free(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration)) {
-          book(pitchId, fixedAdultKickOffMins, fixedAdultKickOffMins + duration);
+        if (free(pitchId, adultKickOffMins, adultKickOffMins + duration)) {
+          book(pitchId, adultKickOffMins, adultKickOffMins + duration);
 
           scheduled.push({
             ...fixture,
             pitchId,
-            koTime: t2s(fixedAdultKickOffMins),
-            koMins: fixedAdultKickOffMins,
-            endMins: fixedAdultKickOffMins + duration,
+            koTime: t2s(adultKickOffMins),
+            koMins: adultKickOffMins,
+            endMins: adultKickOffMins + duration,
             cfg,
             usingAlt: pitchId !== cfg.defaultPitch,
             usingAstro: isArtificialPitch(pitchCfg, pitchId),
@@ -346,7 +355,7 @@ function scheduleFixtureDayCore(
       if (!placed) {
         unresolved.push({
           ...fixture,
-          reason: `No valid adult ${t2s(fixedAdultKickOffMins)} slot. Preferred pitches may be closed, wrong surface, or already occupied.`,
+          reason: `No valid adult ${t2s(adultKickOffMins)} slot. Preferred pitches may be closed, wrong surface, or already occupied.`,
         });
       }
 

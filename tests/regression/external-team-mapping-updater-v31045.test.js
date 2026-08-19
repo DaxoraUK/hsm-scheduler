@@ -16,11 +16,12 @@ describe("v3.10.45 external team mapping and local updater", () => {
 
   test("maps an official provider name to the club's internal team", () => {
     expect(findCfg("Horwich St. Mary's", [team])).toBe(team);
+    expect(findCfg("Horwich St. Mary\\'s", [team])).toBe(team);
   });
 
   test("retains the official name while scheduling under the internal team identity", () => {
     const result = scheduleSat(
-      [{ homeTeam: "Horwich St. Mary's", awayTeam: "Rossendale", status: "active" }],
+      [{ homeTeam: "Horwich St. Mary's", awayTeam: "Rossendale", status: "active", kickOff: "14:30" }],
       false, [], [team], { "11v11": 15 }, 8 * 60, 18 * 60,
       [{ id: "P1", label: "Pitch 1", formats: ["11v11"], surface: "grass", independent: true }],
       3
@@ -30,6 +31,7 @@ describe("v3.10.45 external team mapping and local updater", () => {
       homeTeam: "HSM 1st Team",
       sourceHomeTeam: "Horwich St. Mary's",
       teamId: "hsm-first",
+      koTime: "14:30",
     });
   });
 
