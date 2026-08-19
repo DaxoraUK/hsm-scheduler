@@ -27,7 +27,7 @@ function walk(directory, predicate, items = []) {
   return items;
 }
 
-add("health_endpoint", has("api/health.js", "x-daxora-health") && has("api/health.js", "SUPABASE_SERVICE_ROLE_KEY"), "Sanitised deployment health endpoint is present.");
+add("health_endpoint", has("server-api/health.js", "x-daxora-health") && has("server-api/health.js", "SUPABASE_SERVICE_ROLE_KEY"), "Sanitised deployment health endpoint is present.");
 add("system_health_ui", has("src/components/system/PlatformSystemHealthPanel.jsx", "Download support pack") && has("src/pages/PlatformAdminPage.jsx", "System health"), "Platform operators have a health and diagnostics workspace.");
 add("support_pack_privacy", has("src/lib/monitoring/systemHealth.js", "excludes passwords, tokens") && has("src/lib/monitoring/systemHealth.js", "daxora-support-diagnostics-v1"), "Support diagnostics declare and enforce privacy boundaries.");
 add("application_recovery", has("src/components/system/AppErrorBoundary.jsx", "Copy support details") && has("src/hooks/useGlobalErrorNotifications.js", "runtime_error"), "Render, promise and browser runtime errors have branded recovery and support references.");

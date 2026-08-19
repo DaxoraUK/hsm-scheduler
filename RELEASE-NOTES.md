@@ -1,16 +1,16 @@
-# Daxora Ground Control v3.10.26 - Git Staging Repair
+# Daxora Ground Control v3.10.29 - Vercel API Legacy Entry Cleanup
 
-## Purpose
-Repair the Windows release validation gate after v3.10.21 completed the full 131-file regression catalogue but lint could not start because the local npm launcher attempted to load missing `node_modules\npm\bin\npm-prefix.js` and `npm-cli.js`.
+## v3.10.29 - Legacy Entry Cleanup
 
-## Fix
-The installer now invokes the pinned local Oxlint, TypeScript and Vite package entry points directly through `node.exe`. This removes the broken npm launcher from the lint and build gates while preserving real non-zero exit handling.
+Fixes the v3.10.27/28 API consolidation rollout so the Windows installer removes the 16 superseded Vercel Serverless Function entry files from `api/` after moving their handler source to `server-api/`. The installer verifies each deletion target against its expected pre-consolidation SHA-256, backs it up before deletion, stages the deletions, and restores them during rollback if any pre-commit gate fails.
 
-## Application scope
-No application source behaviour is changed by this repair. The v3.10.21 navigation runtime repair remains the application baseline.
+Also fixes the consolidation regression test to normalize Windows path separators when checking the relocated webhook handlers.
 
-## Migration
-The merged release contains the existing Supabase migration set. The installer now invokes the standalone Supabase CLI directly and does not depend on npm/npx.
+## Acceptance
 
-## Validation
-The Windows installer remains responsible for the full regression catalogue, direct Oxlint validation, TypeScript build, Vite production build, Git gates and Supabase gates.
+- `api/` contains exactly one deployable JavaScript entry: `api/[...path].js`.
+- The 16 legacy `api/...` handler files are absent after installation.
+- All 16 handler source files remain under `server-api/`.
+- Existing public `/api/...` paths remain unchanged.
+- Daily automation remains `/api/automation/daily`.
+- Full regression catalogue, lint, TypeScript build, Vite build and Git gates must pass.

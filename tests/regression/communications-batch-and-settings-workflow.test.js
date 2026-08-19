@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../../supabase/migrations/202607110005_fix_communication_batch_identifier_ambiguity.sql");
-const dispatch = read("../../api/communications/dispatch.js");
+const dispatch = read("../../server-api/communications/dispatch.js");
 const teams = read("../../src/components/Settings/TeamSettingsPanel.jsx");
 const pitches = read("../../src/components/Settings/PitchSettingsPanel.jsx");
 const primitives = read("../../src/components/Settings/SettingsPrimitives.jsx");

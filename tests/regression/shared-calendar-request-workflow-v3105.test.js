@@ -20,7 +20,7 @@ const reviewDialog = read("src/components/coach/CoachRequestReviewDialog.jsx");
 const annualPlanner = read("src/pages/AnnualPlannerPage.jsx");
 const pitchSettings = read("src/components/Settings/PitchSettingsPanel.jsx");
 const supabase = read("src/lib/supabase.js");
-const calendarApi = read("api/coach/calendar.js");
+const calendarApi = read("server-api/coach/calendar.js");
 
 function assignment() {
   return { id: "assignment-1", teamKey: "u14-spartans", teamName: "U14 Spartans", canRequestTraining: true, canRequestFriendlies: true, canRequestChanges: true };

@@ -12,10 +12,10 @@ const migration = readFileSync("supabase/migrations/202607150002_league_finance_
 const automationWorkspace = readFileSync("src/components/league/LeagueFinanceAutomationWorkspace.jsx", "utf8");
 const financeWorkspace = readFileSync("src/components/league/LeagueFinanceWorkspace.jsx", "utf8");
 const clubFinance = readFileSync("src/components/league/LeagueClubFinancePanel.jsx", "utf8");
-const apiRoute = readFileSync("api/league/finance-delivery.js", "utf8");
+const apiRoute = readFileSync("server-api/league/finance-delivery.js", "utf8");
 const serverDelivery = readFileSync("server/finance/delivery.js", "utf8");
 const supabase = readFileSync("src/lib/supabase.js", "utf8");
-const dailyAutomation = readFileSync("api/automation/daily.js", "utf8");
+const dailyAutomation = readFileSync("server-api/automation/daily.js", "utf8");
 
 function payload() {
   return {

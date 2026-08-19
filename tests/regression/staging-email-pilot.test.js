@@ -7,7 +7,7 @@ import {
 import { sendProviderMessage } from "../../server/communications/providers.js";
 import { mapResendStatus } from "../../server/communications/webhooks.js";
 
-const dispatchSource = readFileSync(new URL("../../api/communications/dispatch.js", import.meta.url), "utf8");
+const dispatchSource = readFileSync(new URL("../../server-api/communications/dispatch.js", import.meta.url), "utf8");
 const pageSource = readFileSync(new URL("../../src/pages/CommunicationsPage.jsx", import.meta.url), "utf8");
 const stagingEnv = readFileSync(new URL("../../.env.staging.example", import.meta.url), "utf8");
 

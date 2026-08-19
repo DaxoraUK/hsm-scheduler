@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { GET } from "../../api/weather.js";
+import { GET } from "../../server-api/weather.js";
 
 function providerResponse(payload = { hourly: { time: [] } }, status = 200) {
   return new Response(JSON.stringify(payload), {

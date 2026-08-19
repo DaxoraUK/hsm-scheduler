@@ -18,7 +18,7 @@ const requestWizard = readFileSync("src/components/coach/CoachRequestWizard.jsx"
 const annualPage = readFileSync("src/pages/AnnualPlannerPage.jsx", "utf8");
 const settings = readFileSync("src/components/Settings/CoachHubSettingsPanel.jsx", "utf8");
 const communications = readFileSync("src/pages/CommunicationsPage.jsx", "utf8");
-const automation = readFileSync("api/automation/daily.js", "utf8");
+const automation = readFileSync("server-api/automation/daily.js", "utf8");
 
 function booking(overrides = {}) {
   return {

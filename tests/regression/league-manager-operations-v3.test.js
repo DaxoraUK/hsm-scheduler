@@ -12,7 +12,7 @@ import {
 const fixtureCommand = readFileSync("src/components/league/LeagueFixtureCommandWorkspace.jsx", "utf8");
 const officialsUi = readFileSync("src/components/league/LeagueOfficialsWorkspace.jsx", "utf8");
 const leaguePage = readFileSync("src/pages/LeagueManagerPage.jsx", "utf8");
-const responseApi = readFileSync("api/league/official-response.js", "utf8");
+const responseApi = readFileSync("server-api/league/official-response.js", "utf8");
 const supabase = readFileSync("src/lib/supabase.js", "utf8");
 const migration = readFileSync("supabase/migrations/202607140001_league_operations_fixture_command_and_officials.sql", "utf8");
 

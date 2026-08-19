@@ -2,7 +2,7 @@
 
 ## Baseline
 
-**Release:** v3.10.21 Navigation Runtime Fallback Repair
+**Release:** v3.10.27 Vercel API Function Consolidation
 
 The dashboard baseline is now consolidated with the TeamFeePay feature branch. Mission Control remains the primary club operating overview. Coach Hub, Annual Planner, League Manager and Elite/Organisation Command are present in the consolidated codebase but their final navigation and role exposure are deliberately not yet simplified.
 
@@ -30,7 +30,7 @@ The dashboard baseline is now consolidated with the TeamFeePay feature branch. M
 
 ## Active phase
 
-**Consolidate, validate and simplify.** No feature is removed merely because it is complex. Navigation, role exposure and terminology will be decided after the merged baseline has been validated.
+**Consolidate, validate and simplify.** The merged baseline is validated, and the current deployment blocker is the Vercel Hobby Serverless Function limit. v3.10.27 consolidates the existing API handlers behind one Vercel catch-all function without changing the public API paths. After deployment reliability is restored, navigation, role exposure and terminology will be simplified from the merged baseline.
 
 ## Acceptance criteria
 
@@ -47,6 +47,7 @@ The dashboard baseline is now consolidated with the TeamFeePay feature branch. M
 - Subscription/entitlement authority.
 - Shared operational data and scope model.
 - Coach Hub team/contact authority.
+- Vercel function-count constraint and the consolidated API gateway; this is a cross-module deployment dependency recorded for the dashboard/club-command release path.
 
 ## Pilot status
 

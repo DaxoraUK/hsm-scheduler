@@ -22,7 +22,7 @@ const migration = readFileSync(
   "utf8",
 );
 const page = readFileSync(new URL("../../src/pages/CommunicationsPage.jsx", import.meta.url), "utf8");
-const dispatchApi = readFileSync(new URL("../../api/communications/dispatch.js", import.meta.url), "utf8");
+const dispatchApi = readFileSync(new URL("../../server-api/communications/dispatch.js", import.meta.url), "utf8");
 const productionEnv = readFileSync(new URL("../../.env.production.example", import.meta.url), "utf8");
 
 const ENV_NAMES = [

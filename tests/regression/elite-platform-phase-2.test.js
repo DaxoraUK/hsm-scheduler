@@ -19,7 +19,7 @@ import { buildDeliveryMessages, EMPTY_DELIVERY_CAPABILITIES } from "../../src/li
 const migration = readFileSync("supabase/migrations/202607130002_elite_governance_approvals.sql", "utf8");
 const commandPage = readFileSync("src/pages/EliteCommandCentrePage.jsx", "utf8");
 const controlWorkspace = readFileSync("src/components/elite/EliteControlWorkspace.jsx", "utf8");
-const dispatch = readFileSync("api/communications/dispatch.js", "utf8");
+const dispatch = readFileSync("server-api/communications/dispatch.js", "utf8");
 const persistence = readFileSync("src/hooks/useWeekPersistence.js", "utf8");
 
 function subscription(planCode) {

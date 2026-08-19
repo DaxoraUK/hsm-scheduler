@@ -143,7 +143,7 @@ describe("Ground Control v3.10.12 Annual Planner completion", () => {
   });
 
   it("exposes a dedicated Annual Planner ICS endpoint", () => {
-    const source = readFileSync("api/planner/calendar.js", "utf8");
+    const source = readFileSync("server-api/planner/calendar.js", "utf8");
     expect(source).toContain("get_annual_planner_calendar_by_token");
     expect(source).toContain("annual-planner-calendar.ics");
     expect(source).toContain("text/calendar");

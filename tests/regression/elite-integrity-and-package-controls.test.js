@@ -20,7 +20,7 @@ const migration = readFileSync("supabase/migrations/202607130003_elite_integrity
 const persistence = readFileSync("src/hooks/useWeekPersistence.js", "utf8");
 const commandPage = readFileSync("src/pages/EliteCommandCentrePage.jsx", "utf8");
 const reportsPage = readFileSync("src/pages/ReportsPage.jsx", "utf8");
-const dispatch = readFileSync("api/communications/dispatch.js", "utf8");
+const dispatch = readFileSync("server-api/communications/dispatch.js", "utf8");
 const subscriptionPanel = readFileSync("src/components/Settings/SubscriptionSettingsPanel.jsx", "utf8");
 
 function fixture(overrides = {}) {

@@ -15,7 +15,7 @@ const fixtureCommand = readFileSync("src/components/league/LeagueFixtureCommandW
 const venueMap = readFileSync("src/components/league/LeagueVenueMap.jsx", "utf8");
 const officialsWorkspace = readFileSync("src/components/league/LeagueOfficialsWorkspace.jsx", "utf8");
 const supabase = readFileSync("src/lib/supabase.js", "utf8");
-const api = readFileSync("api/league/geocode-venues.js", "utf8");
+const api = readFileSync("server-api/league/geocode-venues.js", "utf8");
 const migration = readFileSync("supabase/migrations/202607140002_league_venue_intelligence_and_automated_rearrangements.sql", "utf8");
 
 function workspace() {

@@ -21,8 +21,8 @@ const requestWizard = readFileSync("src/components/coach/CoachRequestWizard.jsx"
 const settingsPanel = readFileSync("src/components/Settings/CoachHubSettingsPanel.jsx", "utf8");
 const teamPanel = readFileSync("src/components/Settings/TeamSettingsPanel.jsx", "utf8");
 const communications = readFileSync("src/pages/CommunicationsPage.jsx", "utf8");
-const invitationApi = readFileSync("api/coach/invite.js", "utf8");
-const calendarApi = readFileSync("api/coach/calendar.js", "utf8");
+const invitationApi = readFileSync("server-api/coach/invite.js", "utf8");
+const calendarApi = readFileSync("server-api/coach/calendar.js", "utf8");
 const invitationServer = readFileSync("server/coach/invitations.js", "utf8");
 const permissions = readFileSync("src/lib/security/permissions.js", "utf8");
 

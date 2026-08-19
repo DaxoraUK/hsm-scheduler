@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { GET as getHealth } from "../../api/health.js";
+import { GET as getHealth } from "../../server-api/health.js";
 import {
   buildSupportDiagnosticsPack,
   normaliseSystemHealth,

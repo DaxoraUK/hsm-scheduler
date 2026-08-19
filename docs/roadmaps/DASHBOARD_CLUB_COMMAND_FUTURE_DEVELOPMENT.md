@@ -1,5 +1,11 @@
 # Dashboard and Club Command Future Development
 
+## Deployment and platform resilience
+
+- Keep public API paths stable while consolidating Vercel Function entry points.
+- Monitor function count and bundle size as new integrations are introduced.
+- Revisit Vercel plan selection only when commercial usage justifies the infrastructure cost.
+
 ## Product simplification
 
 - Merge useful Organisation Command information into Mission Control where it answers a club user's immediate questions.
@@ -29,3 +35,4 @@
 - Full navigation redesign.
 - New AI-heavy dashboard functionality.
 - New integrations beyond the fixture-source foundation.
+- Further backend decomposition unless required by scale, security or provider isolation.

@@ -50,7 +50,7 @@ const migration = readFileSync("supabase/migrations/202607140003_league_club_por
 const leaguePage = readFileSync("src/pages/LeagueManagerPage.jsx", "utf8");
 const operationsUi = readFileSync("src/components/league/LeagueClubOperationsWorkspace.jsx", "utf8");
 const portalUi = readFileSync("src/components/league/LeagueClubPortalPage.jsx", "utf8");
-const calendarApi = readFileSync("api/league/calendar.js", "utf8");
+const calendarApi = readFileSync("server-api/league/calendar.js", "utf8");
 let LeagueClubOperationsWorkspace;
 let LeagueClubPortalPage;
 

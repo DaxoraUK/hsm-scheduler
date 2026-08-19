@@ -7,7 +7,7 @@ import {
 import { describeCommunicationDispatchFailure } from "../../src/lib/communications/deliveryService.js";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
-const dispatch = read("../../api/communications/dispatch.js");
+const dispatch = read("../../server-api/communications/dispatch.js");
 const communications = read("../../src/pages/CommunicationsPage.jsx");
 const teams = read("../../src/components/Settings/TeamSettingsPanel.jsx");
 const pitches = read("../../src/components/Settings/PitchSettingsPanel.jsx");

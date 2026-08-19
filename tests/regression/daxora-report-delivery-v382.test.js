@@ -17,8 +17,8 @@ const notificationPreferences = readFileSync("src/components/system/DaxoraNotifi
 const notificationLibrary = readFileSync("src/lib/notifications/daxoraNotifications.js", "utf8");
 const browserPush = readFileSync("src/lib/notifications/browserPush.js", "utf8");
 const serviceWorker = readFileSync("public/daxora-sw.js", "utf8");
-const dailyAutomation = readFileSync("api/automation/daily.js", "utf8");
-const reportDeliveryApi = readFileSync("api/league/report-delivery.js", "utf8");
+const dailyAutomation = readFileSync("server-api/automation/daily.js", "utf8");
+const reportDeliveryApi = readFileSync("server-api/league/report-delivery.js", "utf8");
 const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
 
 function analyticsModel() {
