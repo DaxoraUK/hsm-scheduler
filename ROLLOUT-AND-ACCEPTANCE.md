@@ -1,4 +1,16 @@
-# v3.10.48 Rollout and Acceptance
+# v3.10.51 Rollout and Acceptance
+
+## Fixture change review acceptance
+
+1. Import a known fixture and retain its source snapshot.
+2. Test an isolated changed kick-off, venue or referee response.
+3. Confirm the source card reports a pending change without altering the retained fixture.
+4. Accept the provider change, save fixture sources and confirm the snapshot updates.
+5. Repeat with Keep Ground Control version and confirm the same provider difference is not repeatedly queued.
+6. Confirm a blocked referee page warns without blocking the fixture import.
+7. When the referee page responds, confirm the assigned referee and assistants join only the matching date/home/away fixture.
+
+## Previous v3.10.48 acceptance
 
 ## Automated acceptance
 

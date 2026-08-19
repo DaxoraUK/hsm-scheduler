@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test } from "vitest";
-import { getConfiguredFixtureSources, mergeFullTimeFixtureSnapshot } from "../../src/hooks/useFixtureFetcher.js";
+import { getConfiguredFixtureSources, reconcileFullTimeFixtureSnapshot } from "../../src/hooks/useFixtureFetcher.js";
 import { parseFullTimeDate, parseFullTimeHtml } from "../../src/lib/fullTimeParser.js";
 import {
   buildFullTimeFeedDocument,
@@ -40,10 +40,12 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
       { date: "2026-10-03", homeTeam: "HSM U14", awayTeam: "B", kickOff: "10:00" },
     ];
     const incoming = [{ date: "2026-09-05", homeTeam: "HSM U14", awayTeam: "A", kickOff: "10:30" }];
-    expect(mergeFullTimeFixtureSnapshot(previous, incoming, "2026-08-19")).toEqual([
-      expect.objectContaining({ date: "2026-09-05", kickOff: "10:30" }),
+    const result = reconcileFullTimeFixtureSnapshot(previous, incoming, "2026-08-19");
+    expect(result.snapshot).toEqual([
+      expect.objectContaining({ date: "2026-09-05", kickOff: "10:00" }),
       expect.objectContaining({ date: "2026-10-03", awayTeam: "B" }),
     ]);
+    expect(result.changes).toEqual([expect.objectContaining({ fields: ["kickOff"] })]);
   });
 
   test("normalises feed sources without requiring a legacy page URL", () => {

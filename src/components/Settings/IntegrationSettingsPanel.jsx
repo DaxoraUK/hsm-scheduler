@@ -10,7 +10,7 @@ import {
   inputClass,
   selectClass,
 } from "./SettingsPrimitives.jsx";
-import { BBDFL_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_FIXTURE_FEEDS } from "../../lib/fullTimeFeed.js";
+import { BBDFL_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_REFEREE_URL } from "../../lib/fullTimeFeed.js";
 
 function sourceId() {
   return `full-time-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -45,6 +45,15 @@ function healthLabel(health = {}) {
   return health.ok
     ? `Last successful check ${when} · ${health.fixtureCount || 0} matching · ${health.snapshotCount || 0} retained`
     : `Last check failed ${when}${health.error ? ` · ${health.error}` : ""}`;
+}
+
+function sameMatchup(left = {}, right = {}) {
+  return String(left.homeTeam || "").toLowerCase() === String(right.homeTeam || "").toLowerCase()
+    && String(left.awayTeam || "").toLowerCase() === String(right.awayTeam || "").toLowerCase();
+}
+
+function changeValue(fixture = {}, field) {
+  return String(fixture[field] || (field === "referee" ? "TBC" : "Not supplied"));
 }
 
 export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, savedTab }) {
@@ -114,6 +123,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
         enabled: true,
       }));
     updateSources([...sources, ...additions]);
+    if (!fullTime.refereeSourceUrl) updateFullTime({ refereeSourceUrl: LANCASHIRE_AMATEUR_REFEREE_URL });
   };
 
   const addPresetFeeds = (feeds) => {
@@ -128,6 +138,22 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
       enabled: true,
     }));
     updateSources([...sources, ...additions]);
+  };
+
+  const acceptProviderChange = (index, change) => {
+    const source = sources[index];
+    updateSource(index, {
+      fixtureSnapshot: (source.fixtureSnapshot || []).map((fixture) => sameMatchup(fixture, change.before) ? change.after : fixture),
+      pendingReconciliations: (source.pendingReconciliations || []).filter((item) => item.key !== change.key),
+    });
+  };
+
+  const keepGroundControlChange = (index, change) => {
+    const source = sources[index];
+    updateSource(index, {
+      ignoredChangeKeys: [...new Set([...(source.ignoredChangeKeys || []), change.key])],
+      pendingReconciliations: (source.pendingReconciliations || []).filter((item) => item.key !== change.key),
+    });
   };
 
   return (
@@ -156,6 +182,12 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
         />
       </div>
 
+      <div className="mt-5">
+        <Field label="Optional Full-Time referee assignments URL" hint="Uses the public Refs page as a supplemental read-only source. Fixture imports continue if Full-Time blocks this page.">
+          <input className={inputClass} value={fullTime.refereeSourceUrl || ""} onChange={(event) => updateFullTime({ refereeSourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/referees.html?..." />
+        </Field>
+      </div>
+
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_190px_auto] md:items-center">
           <label className="relative block">
@@ -182,12 +214,31 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
                 <div className={`mt-2 text-xs font-bold ${source.health?.ok ? "text-emerald-700" : source.health?.lastAttemptAt ? "text-rose-700" : "text-slate-400"}`}>{healthLabel(source.health)}</div>
               </div>
               <div className="flex items-center gap-3">
+                {(source.pendingReconciliations || []).length > 0 && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">{source.pendingReconciliations.length} change{source.pendingReconciliations.length === 1 ? "" : "s"} to review</span>}
                 <span className={`rounded-full px-3 py-1 text-xs font-black ${source.enabled !== false ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>{source.enabled !== false ? "Enabled" : "Disabled"}</span>
                 <span className="text-sm font-black text-slate-500 group-open:hidden">Expand</span>
                 <span className="hidden text-sm font-black text-slate-500 group-open:inline">Collapse</span>
               </div>
             </summary>
             <div className="border-t border-slate-200 p-5">
+            {(source.pendingReconciliations || []).length > 0 && (
+              <div className="mb-5 space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-sm font-black text-amber-950">Full-Time changes awaiting review</div>
+                {(source.pendingReconciliations || []).map((change) => (
+                  <div key={change.key} className="rounded-xl border border-amber-200 bg-white p-4">
+                    <div className="font-black text-slate-950">{change.before?.homeTeam} vs {change.before?.awayTeam}</div>
+                    <div className="mt-3 space-y-2">
+                      {change.fields.map((field) => <div key={field} className="grid gap-1 text-xs font-semibold sm:grid-cols-[110px_1fr_24px_1fr]"><span className="font-black capitalize text-slate-500">{field}</span><span>{changeValue(change.before, field)}</span><span aria-hidden="true">→</span><span className="font-black text-amber-900">{changeValue(change.after, field)}</span></div>)}
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => acceptProviderChange(index, change)} className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white">Accept Full-Time change</button>
+                      <button type="button" onClick={() => keepGroundControlChange(index, change)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700">Keep Ground Control version</button>
+                    </div>
+                  </div>
+                ))}
+                <div className="text-xs font-semibold text-amber-800">Save fixture sources after reviewing changes. Existing schedules are not overwritten automatically.</div>
+              </div>
+            )}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="mt-1 text-sm font-semibold text-slate-500">Prefer the official numeric code-snippet feed ID. Page URLs remain available as a legacy fallback.</div>

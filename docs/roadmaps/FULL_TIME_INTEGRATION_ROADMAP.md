@@ -1,5 +1,15 @@
 # Full-Time FA Integration Roadmap
 
+## Delivered in v3.10.51
+
+- Detects provider changes to date, kick-off, venue, referee and fixture status against the retained source snapshot.
+- Preserves the Ground Control version until an administrator explicitly accepts the Full-Time change.
+- Supports explicit **Accept Full-Time change** and **Keep Ground Control version** decisions on each source card.
+- Persists pending and rejected change fingerprints in the existing server-backed club configuration.
+- Captures venue from compact official fixture feeds.
+- Supports an optional public Full-Time Refs page as a supplemental assignment source, including assistant referees when supplied.
+- Referee-source failure never blocks fixture imports; unmatched officials remain TBC.
+
 ## Delivered in v3.10.48
 
 - Labels the verified BBDFL source explicitly as the Horwich St. Mary's U14 feed.

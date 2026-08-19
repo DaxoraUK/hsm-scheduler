@@ -40,7 +40,7 @@ export function parseFullTimeDate(value) {
   return Number.isNaN(parsed.getTime()) ? "" : iso;
 }
 
-function rowFixture(cells = [], groupedDate = "") {
+function rowFixture(cells = [], groupedDate = "", columns = {}) {
   const values = cells.map(clean);
   const versusIndex = values.findIndex((value) => /^(?:v|vs|v\.|-)$/i.test(value));
   const dateCell = values.find((value) => parseFullTimeDate(value)) || groupedDate;
@@ -57,12 +57,16 @@ function rowFixture(cells = [], groupedDate = "") {
     || "";
   const type = values[0] === dateCell ? "" : values[0];
   const statusText = values.join(" ").toLowerCase();
+  const venue = columns.venueIndex >= 0 ? values[columns.venueIndex] : values[versusIndex + 2] || "";
+  const referee = columns.refereeIndex >= 0 ? values[columns.refereeIndex] : "";
 
   return {
     homeTeam: home,
     awayTeam: away,
     date: parseFullTimeDate(dateCell),
     kickOff: time,
+    venue,
+    referee,
     type,
     isCup: /\bcup\b/i.test(type),
     status: /postponed|cancelled|canceled|abandoned/.test(statusText) ? "postponed" : "active",
@@ -91,6 +95,11 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
 
   doc.querySelectorAll("table").forEach((table) => {
     let groupedDate = "";
+    const headers = [...table.querySelectorAll("tr th")].map((cell) => clean(cell.textContent).toLowerCase());
+    const columns = {
+      venueIndex: headers.findIndex((header) => /venue|ground/.test(header)),
+      refereeIndex: headers.findIndex((header) => /referee|match official|official/.test(header)),
+    };
     table.querySelectorAll("tr").forEach((row) => {
       const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
       const rowText = clean(row.textContent);
@@ -98,14 +107,14 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         groupedDate = rowText;
         return;
       }
-      const parsed = rowFixture(cells, groupedDate);
+      const parsed = rowFixture(cells, groupedDate, columns);
       if (!parsed || (target && parsed.date !== target) || !isHSMHome(parsed.homeTeam, clubAliases)) return;
 
       const fixture = {
         ...parsed,
-        referee: "",
+        referee: parsed.referee || "",
         refPhone: "",
-        refStatus: "TBC",
+        refStatus: parsed.referee ? "assigned" : "TBC",
         league: options.sourceId || "",
         sourceId: options.sourceId || "",
         sourceName: options.sourceName || "Full-Time FA",
@@ -117,4 +126,40 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
   });
 
   return deduplicateFullTimeFixtures(out);
+}
+
+export function parseFullTimeRefereeHtml(html, targetDate, options = {}) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const target = parseFullTimeDate(targetDate) || String(targetDate || "").slice(0, 10);
+  const clubAliases = options.clubAliases || options.teamAliases || DEFAULT_CLUB_ALIASES;
+  const assignments = [];
+  doc.querySelectorAll("table").forEach((table) => {
+    const headers = [...table.querySelectorAll("tr th")].map((cell) => clean(cell.textContent).toLowerCase());
+    const index = (pattern) => headers.findIndex((header) => pattern.test(header));
+    const dateIndex = index(/date/);
+    const homeIndex = index(/home team/);
+    const awayIndex = index(/away team/);
+    const venueIndex = index(/venue|ground/);
+    const refereeIndex = index(/^referee$/);
+    const assistantsIndex = index(/assistant referee/);
+    if ([dateIndex, homeIndex, awayIndex, refereeIndex].some((value) => value < 0)) return;
+    table.querySelectorAll("tr").forEach((row) => {
+      const cells = [...row.querySelectorAll("td")].map((cell) => clean(cell.textContent));
+      if (!cells.length) return;
+      const date = parseFullTimeDate(cells[dateIndex]);
+      const homeTeam = cells[homeIndex];
+      const awayTeam = cells[awayIndex];
+      if (!date || (target && date !== target) || !isHSMHome(homeTeam, clubAliases)) return;
+      assignments.push({
+        date,
+        kickOff: cells[dateIndex].match(/\b(\d{1,2}:\d{2})\b/)?.[1] || "",
+        homeTeam,
+        awayTeam,
+        venue: venueIndex >= 0 ? cells[venueIndex] : "",
+        referee: cells[refereeIndex] || "",
+        assistantReferees: assistantsIndex >= 0 ? cells[assistantsIndex].split(/[,;]/).map(clean).filter(Boolean) : [],
+      });
+    });
+  });
+  return assignments;
 }

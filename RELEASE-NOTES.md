@@ -1,4 +1,22 @@
-# Daxora Ground Control v3.10.50 - HSM First-Team Horwich Alias Migration
+# Daxora Ground Control v3.10.51 - Full-Time Fixture Change Review Centre
+
+## Delivered
+
+- Detects and queues upstream date, kick-off, venue, referee and status changes.
+- Leaves the current retained fixture untouched until the user accepts the provider change.
+- Adds Accept Full-Time change and Keep Ground Control version decisions to each fixture-source card.
+- Imports compact-feed venues that were previously discarded.
+- Adds an optional public Full-Time Refs page URL and joins referee and assistant-referee assignments to matching fixtures.
+- Treats referee-page failure as a warning; fixture import continues and unmatched officials remain TBC.
+- Preconfigures the 2026-27 Lancashire Amateur public referee page when its preset feeds are added.
+
+## Verification
+
+- 18 focused Full-Time, reconciliation and team-mapping tests pass.
+- Production build passes.
+- No database migration or Full-Time write-back is introduced.
+
+## Previous release: v3.10.50
 
 ## Delivered
 

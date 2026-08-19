@@ -1674,14 +1674,15 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, skipped, partial } = await fetchSaturdayFixtures(satDate);
+      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchSaturdayFixtures(satDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
       setSatFetchStatus(statuses);
-      await persistFullTimeImportEvidence(statuses, snapshots);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       setSatHasRun(false);
       setSatScheduled([]);
       setSatUnresolved([]);
@@ -1747,13 +1748,14 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, skipped, partial } = await fetchSundayFixtures(sunDate);
+      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchSundayFixtures(sunDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
-      await persistFullTimeImportEvidence(statuses, snapshots);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
+      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       runSun(fixtures);
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
@@ -1827,14 +1829,15 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, skipped, partial } = await fetchMidweekFixtures(midweekDate);
+      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchMidweekFixtures(midweekDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
       setMidweekFetchStatus(statuses);
-      await persistFullTimeImportEvidence(statuses, snapshots);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       setMidweekHasRun(false);
       setMidweekScheduled([]);
       setMidweekUnresolved([]);
@@ -2003,19 +2006,24 @@ function App() {
   const { fetchSaturdayFixtures, fetchSundayFixtures, fetchMidweekFixtures } =
     useFixtureFetcher(club.integrations?.fullTimeFa || {});
 
-  const persistFullTimeImportEvidence = useCallback(async (statuses = [], snapshots = []) => {
+  const persistFullTimeImportEvidence = useCallback(async (statuses = [], snapshots = [], changes = []) => {
     if (!statuses.length) return;
     const checkedAt = new Date().toISOString();
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot.fixtures]));
+    const changesById = new Map(changes.map((entry) => [entry.id, entry.changes]));
     const fullTime = club.integrations?.fullTimeFa || {};
     const sources = Array.isArray(fullTime.sources) ? fullTime.sources : [];
     const nextSources = sources.map((source) => {
       const status = statuses.find((item) => item.id === source.id);
       if (!status) return source;
       const nextSnapshot = snapshotById.get(source.id);
+      const discoveredChanges = changesById.get(source.id) || [];
+      const pendingByKey = new Map((source.pendingReconciliations || []).map((change) => [change.key, change]));
+      discoveredChanges.forEach((change) => pendingByKey.set(change.key, change));
       return {
         ...source,
         ...(status.ok && Array.isArray(nextSnapshot) ? { fixtureSnapshot: nextSnapshot } : {}),
+        pendingReconciliations: [...pendingByKey.values()],
         health: {
           ...(source.health || {}),
           ok: status.ok,
