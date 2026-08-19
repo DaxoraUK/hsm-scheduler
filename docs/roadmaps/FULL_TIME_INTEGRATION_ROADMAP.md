@@ -1,11 +1,21 @@
 # Full-Time FA Integration Roadmap
 
+## Delivered in v3.10.44
+
+- Uses The FA's official browser code-snippet contract instead of relying on server-side page scraping that Cloudflare rejects.
+- Accepts a numeric `cs` feed ID or an official Full-Time code-snippet URL for every configured source.
+- Loads each feed in an isolated hidden browser frame, reads only its rendered fixture table, then removes the frame.
+- Parses the official feed's grouped named-date format and compact home/v/away rows.
+- Includes a one-click Lancashire Amateur League preset with verified fixture feeds for Premier through Division Four.
+- Keeps multi-league source status, club aliases, partial-failure reporting and deterministic duplicate removal.
+- Retains legacy page URLs as a clearly labelled fallback rather than presenting them as reliable live sources.
+
 ## Delivered in v3.10.43
 
 - Saved club integration configuration is connected to live fixture imports.
 - Multiple enabled league or competition sources can be configured per club.
 - Legacy single-source settings remain readable and migrate into the source list when edited.
-- The browser uses Daxora's same-origin `/api/full-time` route rather than a public third-party proxy.
+- The initial same-origin `/api/full-time` page route was delivered, but Full-Time's Cloudflare protection subsequently proved to reject server-side page requests.
 - The server accepts only HTTPS pages on `fulltime.thefa.com`, rejects credentials/custom ports and limits response time and size.
 - Fixture parsing supports the current type, combined date/time, home, VS, away and venue table shape as well as the legacy compact shape.
 - Club aliases identify home fixtures without hard-coding one exact team name.
@@ -15,7 +25,7 @@
 
 ## Pilot acceptance still required
 
-- Configure every real Full-Time page used by the pilot club.
+- Configure every official Full-Time feed used by the pilot club.
 - Import a known Saturday, Sunday and midweek date where applicable.
 - Compare imported home teams, opponents, dates and kick-off times with Full-Time and the club's own list.
 - Confirm duplicate pages do not create duplicate fixtures.

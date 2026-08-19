@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { deduplicateFullTimeFixtures, parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
+import { loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -8,7 +9,8 @@ function clean(value) {
 
 export function normaliseFixtureSource(source = {}, index = 0) {
   const url = clean(source.url || source.sourceUrl);
-  if (!url || source.enabled === false) return null;
+  const feedId = normaliseFullTimeFeedId(source.feedId || url);
+  if ((!url && !feedId) || source.enabled === false) return null;
   const teamAliases = Array.isArray(source.teamAliases)
     ? source.teamAliases.map(clean).filter(Boolean)
     : clean(source.teamAliases).split(",").map(clean).filter(Boolean);
@@ -17,6 +19,7 @@ export function normaliseFixtureSource(source = {}, index = 0) {
     id: clean(source.id || source.clubId || `FULLTIME-${index + 1}`),
     name: clean(source.name || `Full-Time source ${index + 1}`),
     url,
+    feedId,
     clubId: clean(source.clubId),
     teamAliases,
   };
@@ -29,7 +32,9 @@ export function getConfiguredFixtureSources(config = {}) {
     : [];
   const legacy = normaliseFixtureSource(config, configured.length);
   if (legacy && !configured.some((source) => source.url === legacy.url)) configured.unshift(legacy);
-  return configured.filter((source, index, all) => all.findIndex((item) => item.url === source.url) === index);
+  return configured.filter((source, index, all) => all.findIndex((item) =>
+    (source.feedId && item.feedId === source.feedId) || (!source.feedId && item.url === source.url)
+  ) === index);
 }
 
 export function hasConfiguredFixtureSource(config = {}) {
@@ -37,6 +42,15 @@ export function hasConfiguredFixtureSource(config = {}) {
 }
 
 async function fetchLeagueFixtures(source, targetDate) {
+  if (source.feedId) {
+    const contents = await loadFullTimeFeedHtml(source.feedId);
+    return parseFullTimeHtml(contents, targetDate, {
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceUrl: `https://fulltime.thefa.com/js/cs1.html?cs=${source.feedId}`,
+      teamAliases: source.teamAliases,
+    });
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {

@@ -24,17 +24,22 @@ export function isHSMHome(teamName, clubAliases = DEFAULT_CLUB_ALIASES) {
 export function parseFullTimeDate(value) {
   const text = clean(value);
   const match = text.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
-  if (!match) return "";
-  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
-  const iso = `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  const named = text.match(/\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{2,4})\b/i);
+  if (!match && !named) return "";
+  const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const day = match?.[1] || named[1];
+  const month = match?.[2] || String(monthNames.indexOf(named[2].slice(0, 3).toLowerCase()) + 1);
+  const rawYear = match?.[3] || named[3];
+  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   const parsed = new Date(`${iso}T12:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? "" : iso;
 }
 
-function rowFixture(cells = []) {
+function rowFixture(cells = [], groupedDate = "") {
   const values = cells.map(clean);
   const versusIndex = values.findIndex((value) => /^(?:v|vs|v\.|-)$/i.test(value));
-  const dateCell = values.find((value) => parseFullTimeDate(value));
+  const dateCell = values.find((value) => parseFullTimeDate(value)) || groupedDate;
   if (versusIndex < 0 || !dateCell) return null;
 
   const home = values.slice(0, versusIndex).reverse().find((value) =>
@@ -80,23 +85,31 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
   const clubAliases = options.clubAliases || options.teamAliases || DEFAULT_CLUB_ALIASES;
   const out = [];
 
-  doc.querySelectorAll("table tr").forEach((row) => {
-    const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
-    const parsed = rowFixture(cells);
-    if (!parsed || (target && parsed.date !== target) || !isHSMHome(parsed.homeTeam, clubAliases)) return;
+  doc.querySelectorAll("table").forEach((table) => {
+    let groupedDate = "";
+    table.querySelectorAll("tr").forEach((row) => {
+      const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
+      const rowText = clean(row.textContent);
+      if (cells.length <= 1 && parseFullTimeDate(rowText)) {
+        groupedDate = rowText;
+        return;
+      }
+      const parsed = rowFixture(cells, groupedDate);
+      if (!parsed || (target && parsed.date !== target) || !isHSMHome(parsed.homeTeam, clubAliases)) return;
 
-    const fixture = {
-      ...parsed,
-      referee: "",
-      refPhone: "",
-      refStatus: "TBC",
-      league: options.sourceId || "",
-      sourceId: options.sourceId || "",
-      sourceName: options.sourceName || "Full-Time FA",
-      sourceUrl: options.sourceUrl || "",
-    };
-    fixture.sourceFixtureKey = getFullTimeFixtureKey(fixture);
-    out.push(fixture);
+      const fixture = {
+        ...parsed,
+        referee: "",
+        refPhone: "",
+        refStatus: "TBC",
+        league: options.sourceId || "",
+        sourceId: options.sourceId || "",
+        sourceName: options.sourceName || "Full-Time FA",
+        sourceUrl: options.sourceUrl || "",
+      };
+      fixture.sourceFixtureKey = getFullTimeFixtureKey(fixture);
+      out.push(fixture);
+    });
   });
 
   return deduplicateFullTimeFixtures(out);

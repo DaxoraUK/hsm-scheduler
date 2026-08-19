@@ -10,6 +10,7 @@ import {
   inputClass,
   selectClass,
 } from "./SettingsPrimitives.jsx";
+import { LANCASHIRE_AMATEUR_FIXTURE_FEEDS } from "../../lib/fullTimeFeed.js";
 
 function sourceId() {
   return `full-time-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -22,6 +23,7 @@ function configuredSources(fullTime = {}) {
     id: fullTime.clubId || "full-time-primary",
     name: "Primary Full-Time source",
     url: fullTime.sourceUrl,
+    feedId: fullTime.feedId || "",
     clubId: fullTime.clubId || "",
     teamAliases: fullTime.teamAliases || "",
     enabled: true,
@@ -48,6 +50,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
     updateFullTime({
       sources: nextSources,
       sourceUrl: first.url || "",
+      feedId: first.feedId || "",
       clubId: first.clubId || "",
       teamAliases: first.teamAliases || "",
     });
@@ -61,10 +64,27 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
     id: sourceId(),
     name: `Full-Time source ${sources.length + 1}`,
     url: "",
+    feedId: "",
     clubId: "",
     teamAliases: "",
     enabled: true,
   }]);
+
+  const addLancashireFeeds = () => {
+    const existingIds = new Set(sources.map((source) => String(source.feedId || "")));
+    const additions = LANCASHIRE_AMATEUR_FIXTURE_FEEDS
+      .filter((feed) => !existingIds.has(feed.id))
+      .map((feed) => ({
+        id: `full-time-feed-${feed.id}`,
+        name: feed.name,
+        feedId: feed.id,
+        url: "",
+        clubId: "",
+        teamAliases: "Horwich St. Mary's, Horwich St Mary's, HSM",
+        enabled: true,
+      }));
+    updateSources([...sources, ...additions]);
+  };
 
   return (
     <SettingsPanel>
@@ -98,7 +118,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Source {index + 1}</div>
-                <div className="mt-1 text-sm font-semibold text-slate-500">Use the final HTTPS team or fixture page URL shown by Full-Time.</div>
+                <div className="mt-1 text-sm font-semibold text-slate-500">Prefer the official numeric code-snippet feed ID. Page URLs remain available as a legacy fallback.</div>
               </div>
               <button type="button" onClick={() => updateSources(sources.filter((_, sourceIndex) => sourceIndex !== index))} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700 hover:bg-rose-50" aria-label={`Remove ${source.name || `source ${index + 1}`}`}>
                 <Trash2 size={16} />
@@ -113,8 +133,11 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
                 <input className={inputClass} value={source.clubId || ""} onChange={(event) => updateSource(index, { clubId: event.target.value })} placeholder="Optional reference" />
               </Field>
             </div>
-            <div className="mt-4">
-              <Field label="Fixture page URL" hint="Only secure fulltime.thefa.com pages are accepted by the import service.">
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="Official feed ID" hint="The numeric cs value from Full-Time's Media → Code Snippets feed.">
+                <input className={inputClass} inputMode="numeric" value={source.feedId || ""} onChange={(event) => updateSource(index, { feedId: event.target.value.replace(/\D/g, "") })} placeholder="583264498" />
+              </Field>
+              <Field label="Legacy fixture page URL" hint="Cloudflare may block server-side page imports; official feed IDs are preferred.">
                 <input className={inputClass} value={source.url || source.sourceUrl || ""} onChange={(event) => updateSource(index, { url: event.target.value, sourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/displayTeam.html?..." />
               </Field>
             </div>
@@ -130,6 +153,9 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
         <button type="button" onClick={addSource} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 px-4 text-sm font-black text-emerald-800 hover:bg-emerald-100">
           <Plus size={17} /> Add Full-Time source
         </button>
+        <button type="button" onClick={addLancashireFeeds} className="ml-2 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 text-sm font-black text-sky-800 hover:bg-sky-100">
+          <Plus size={17} /> Add Lancashire Amateur feeds
+        </button>
       </div>
 
       <Notice tone="warning" className="mt-5">
@@ -137,7 +163,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
       </Notice>
 
       <SaveBar onSave={() => saveTab?.("integrations", { club })} saved={savedTab === "integrations"} label="Save fixture sources">
-        Full-Time remains an import source. Daxora does not publish changes back to Full-Time in this release.
+        Official feeds load in your browser using The FA's published website integration. Daxora does not publish changes back to Full-Time.
       </SaveBar>
     </SettingsPanel>
   );
