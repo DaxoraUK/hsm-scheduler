@@ -10,7 +10,7 @@ import {
   inputClass,
   selectClass,
 } from "./SettingsPrimitives.jsx";
-import { BBDFL_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_REFEREE_URL } from "../../lib/fullTimeFeed.js";
+import { BBDFL_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_FIXTURE_FEEDS } from "../../lib/fullTimeFeed.js";
 
 function sourceId() {
   return `full-time-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -62,8 +62,6 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
   const integrations = club.integrations || {};
   const fullTime = integrations.fullTimeFa || {};
   const sources = configuredSources(fullTime);
-  const effectiveRefereeSourceUrl = fullTime.refereeSourceUrl
-    || (sources.some((source) => LANCASHIRE_AMATEUR_FIXTURE_FEEDS.some((feed) => feed.id === String(source.feedId || ""))) ? LANCASHIRE_AMATEUR_REFEREE_URL : "");
   const normalisedFilter = sourceFilter.trim().toLowerCase();
   const visibleSources = sources
     .map((source, index) => ({ source, index }))
@@ -125,7 +123,6 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
         enabled: true,
       }));
     updateSources([...sources, ...additions]);
-    if (!fullTime.refereeSourceUrl) updateFullTime({ refereeSourceUrl: LANCASHIRE_AMATEUR_REFEREE_URL });
   };
 
   const addPresetFeeds = (feeds) => {
@@ -182,12 +179,6 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
           label="Enable Full-Time FA"
           description="Makes enabled, valid sources available to fixture import workflows."
         />
-      </div>
-
-      <div className="mt-5">
-        <Field label="Optional Full-Time referee assignments URL" hint="Uses the public Refs page as a supplemental read-only source. Fixture imports continue if Full-Time blocks this page.">
-          <input className={inputClass} value={effectiveRefereeSourceUrl} onChange={(event) => updateFullTime({ refereeSourceUrl: event.target.value })} placeholder="https://fulltime.thefa.com/referees.html?..." />
-        </Field>
       </div>
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">

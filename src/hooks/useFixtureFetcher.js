@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
-import { deduplicateFullTimeFixtures, parseFullTimeHtml, parseFullTimeRefereeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
-import { LANCASHIRE_AMATEUR_FIXTURE_FEEDS, LANCASHIRE_AMATEUR_REFEREE_URL, loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
+import { deduplicateFullTimeFixtures, parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
+import { loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -118,29 +118,6 @@ async function fetchLeagueFixtures(source, targetDate) {
   }
 }
 
-async function fetchRefereeAssignments(url, targetDate, sources) {
-  if (!url) return { ok: true, skipped: true, assignments: [] };
-  try {
-    const response = await fetch(`/api/full-time?source=${encodeURIComponent(url)}`, { headers: { accept: "application/json" } });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.contents) throw new Error(data.error || "Full-Time did not return the referee assignments page.");
-    const aliases = sources.flatMap((source) => source.teamAliases || []);
-    return { ok: true, skipped: false, assignments: parseFullTimeRefereeHtml(data.contents, targetDate, { teamAliases: aliases }) };
-  } catch (error) {
-    return { ok: false, skipped: false, assignments: [], error: error.message };
-  }
-}
-
-function attachRefereeAssignments(fixtures, assignments) {
-  return fixtures.map((fixture) => {
-    const assignment = assignments.find((item) => item.date === fixture.date
-      && clean(item.homeTeam).toLowerCase() === clean(fixture.homeTeam).toLowerCase()
-      && clean(item.awayTeam).toLowerCase() === clean(fixture.awayTeam).toLowerCase());
-    if (!assignment) return fixture;
-    return { ...fixture, venue: assignment.venue || fixture.venue || "", referee: assignment.referee || fixture.referee || "", assistantReferees: assignment.assistantReferees, refStatus: assignment.referee ? "assigned" : fixture.refStatus || "TBC" };
-  });
-}
-
 function isSundayTeam(fixture = {}) {
   const homeTeam = clean(fixture.homeTeam).toLowerCase();
   return SUN_TEAMS.some((keyword) => homeTeam.includes(keyword));
@@ -148,19 +125,15 @@ function isSundayTeam(fixture = {}) {
 
 export function useFixtureFetcher(fixtureSourceConfig = {}) {
   const fixtureSources = useMemo(() => getConfiguredFixtureSources(fixtureSourceConfig), [fixtureSourceConfig]);
-  const lancashireFeedIds = useMemo(() => new Set(LANCASHIRE_AMATEUR_FIXTURE_FEEDS.map((feed) => feed.id)), []);
-  const refereeSourceUrl = fixtureSourceConfig.refereeSourceUrl
-    || (fixtureSources.some((source) => lancashireFeedIds.has(source.feedId)) ? LANCASHIRE_AMATEUR_REFEREE_URL : "");
 
   const fetchFixturesForDate = useCallback(async (targetDate, predicate = null) => {
     if (!fixtureSources.length) {
       return { statuses: [], fixtures: [], skipped: true, reason: "fixture_source_not_configured" };
     }
 
-    const refereeStatus = await fetchRefereeAssignments(refereeSourceUrl, targetDate, fixtureSources);
     const results = await Promise.all(fixtureSources.map(async (source) => {
       try {
-        const imported = attachRefereeAssignments(await fetchLeagueFixtures(source, targetDate), refereeStatus.assignments);
+        const imported = await fetchLeagueFixtures(source, targetDate);
         const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys);
         const snapshot = reconciliation.snapshot;
         const fixtures = snapshot.filter((fixture) => fixture.date === targetDate).filter((fixture) =>
@@ -182,14 +155,13 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
 
     return {
       statuses,
-      fixtures: attachRefereeAssignments(deduplicateFullTimeFixtures(results.flatMap((result) => result.fixtures)), refereeStatus.assignments),
+      fixtures: deduplicateFullTimeFixtures(results.flatMap((result) => result.fixtures)),
       snapshots: results.filter((result) => result.status.ok).map((result) => ({ id: result.source.id, fixtures: result.snapshot })),
       changes: results.filter((result) => result.status.ok && result.changes.length).map((result) => ({ id: result.source.id, changes: result.changes })),
       skipped: false,
       partial: statuses.some((status) => !status.ok),
-      refereeStatus,
     };
-  }, [fixtureSources, refereeSourceUrl]);
+  }, [fixtureSources]);
 
   const fetchFixtureDayFixtures = useCallback(async (fixtureDayOrKey, suppliedDate = "") => {
     const key = normaliseFixtureDayKey(typeof fixtureDayOrKey === "string" ? fixtureDayOrKey : fixtureDayOrKey?.key);

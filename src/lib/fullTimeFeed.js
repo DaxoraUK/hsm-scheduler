@@ -12,8 +12,6 @@ export const BBDFL_FIXTURE_FEEDS = Object.freeze([
   { id: "167398131", name: "BBDFL U14 - Horwich St. Mary's fixtures" },
 ]);
 
-export const LANCASHIRE_AMATEUR_REFEREE_URL = "https://fulltime.thefa.com/referees.html?selectedSeason=516164312&selectedFixtureGroupKey=&selectedRelatedFixtureOption=2&selectedReferee=&selectedDateCode=all&itemsPerPage=500";
-
 export function normaliseFullTimeFeedId(value) {
   const text = String(value || "").trim();
   if (FEED_ID_PATTERN.test(text)) return text;

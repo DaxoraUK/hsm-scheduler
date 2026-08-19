@@ -1674,7 +1674,7 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchSaturdayFixtures(satDate);
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSaturdayFixtures(satDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
@@ -1682,7 +1682,6 @@ function App() {
       setSatFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
-      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       setSatHasRun(false);
       setSatScheduled([]);
       setSatUnresolved([]);
@@ -1748,14 +1747,13 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchSundayFixtures(sunDate);
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSundayFixtures(sunDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
-      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       runSun(fixtures);
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
@@ -1829,7 +1827,7 @@ function App() {
     }
 
     try {
-      const { statuses, fixtures, snapshots, changes, refereeStatus, skipped, partial } = await fetchMidweekFixtures(midweekDate);
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchMidweekFixtures(midweekDate);
       if (skipped) {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
@@ -1837,7 +1835,6 @@ function App() {
       setMidweekFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
-      if (refereeStatus?.ok === false) toast.warning("Referee assignments unavailable", { description: `${refereeStatus.error} Fixtures were imported and unmatched officials remain TBC.` });
       setMidweekHasRun(false);
       setMidweekScheduled([]);
       setMidweekUnresolved([]);
