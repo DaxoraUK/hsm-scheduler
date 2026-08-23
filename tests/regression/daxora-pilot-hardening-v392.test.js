@@ -50,7 +50,7 @@ describe("Daxora v3.9.2 pilot hardening and launch confidence", () => {
     process.env.VITE_SUPABASE_ANON_KEY = "anon-secret-value";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-secret-value";
     process.env.RESEND_API_KEY = "resend-secret-value";
-    process.env.COMMUNICATIONS_FROM_EMAIL = "support@example.test";
+    process.env.COMMUNICATIONS_EMAIL_FROM = "support@example.test";
     process.env.CRON_SECRET = "cron-secret-value";
     process.env.VERCEL_ENV = "preview";
 
@@ -61,6 +61,7 @@ describe("Daxora v3.9.2 pilot hardening and launch confidence", () => {
     expect(response.status).toBe(200);
     expect(body).toEqual(expect.objectContaining({ product: "Daxora Ground Control", status: expect.any(String), checks: expect.any(Array) }));
     expect(body.checks.some((item) => item.code === "supabase_service" && item.state === "ready")).toBe(true);
+    expect(body.checks.some((item) => item.code === "email" && item.state === "ready")).toBe(true);
     ["anon-secret-value", "service-secret-value", "resend-secret-value", "cron-secret-value"].forEach((secret) => expect(serialised).not.toContain(secret));
   });
 

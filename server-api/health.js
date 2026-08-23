@@ -50,7 +50,11 @@ export async function GET() {
   const supabaseClient = configured("VITE_SUPABASE_URL") && configured("VITE_SUPABASE_ANON_KEY");
   const supabaseService = configured("SUPABASE_URL", "VITE_SUPABASE_URL")
     && configured("SUPABASE_SERVICE_ROLE_KEY");
-  const email = configured("RESEND_API_KEY") && configured("COMMUNICATIONS_FROM_EMAIL", "RESEND_FROM_EMAIL");
+  const email = configured("RESEND_API_KEY") && configured(
+    "COMMUNICATIONS_EMAIL_FROM",
+    "COMMUNICATIONS_FROM_EMAIL",
+    "RESEND_FROM_EMAIL",
+  );
   const automation = configured("CRON_SECRET", "DAXORA_AUTOMATION_SECRET");
   const push = configured("DAXORA_VAPID_PUBLIC_KEY")
     && configured("DAXORA_VAPID_PRIVATE_KEY")
