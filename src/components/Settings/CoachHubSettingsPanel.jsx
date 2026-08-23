@@ -371,6 +371,27 @@ export default function CoachHubSettingsPanel({
     }
   };
 
+  const removePerson = async (person) => {
+    const personName = person.display_name || person.email || "this person";
+    const confirmed = await daxoraConfirm({
+      title: `Remove ${personName} from Coach Hub?`,
+      description: "Their team roles, Coach Hub login, pending invitations and private calendar feeds will be revoked. Historical requests and audit records are retained.",
+      confirmLabel: "Remove person",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusyId(`archive-${person.id}`);
+    try {
+      await DB.archiveCoachHubPerson(clubId, person.id);
+      await load({ quiet: true });
+      toast.success("Coach Hub access removed", { description: `${personName} is no longer assigned to any team.` });
+    } catch (error) {
+      toast.error("Coach or manager could not be removed", { description: error?.message });
+    } finally {
+      setBusyId("");
+    }
+  };
+
   return (
     <div className="space-y-5">
       <SettingsPanel>
@@ -435,6 +456,7 @@ export default function CoachHubSettingsPanel({
                   <button type="button" disabled={!canManage} onClick={() => setPersonEditor(blankPerson(person))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:opacity-40"><Pencil size={14} /> Edit contact</button>
                   <button type="button" disabled={!canManage} onClick={() => setAssignmentEditor({ person, ...blankAssignment(person) })} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-xs font-black text-violet-800 disabled:opacity-40"><UsersRound size={14} /> Teams & roles</button>
                   <button type="button" disabled={!canManage || !person.email || busyId === person.id} onClick={() => deliverInvitation(person, { reissue: invitationStatus === "accepted" })} className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40 ${invitationStatus === "accepted" ? "border border-amber-200 bg-amber-50 text-amber-900" : "bg-slate-950 text-white"}`}><Send size={15} /> {busyId === person.id ? "Sending…" : invitationStatus === "accepted" ? "Reissue access" : invitationStatus === "pending" ? "Resend invite" : "Invite coach"}</button>
+                  <button type="button" disabled={!canManage || Boolean(busyId)} onClick={() => removePerson(person)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-700 disabled:opacity-40"><Trash2 size={14} /> Remove</button>
                 </div>
               </div>
             );

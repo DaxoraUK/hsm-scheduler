@@ -104,6 +104,7 @@ export default function CoachHubPage({
     setError("");
     try {
       const today = new Date();
+      await DB.ensureMyCoachHubRoleAccess(clubId);
       const [payload, preferencePayload, alternativePayload, waitlistOfferPayload] = await Promise.all([
         DB.getCoachHubWorkspace(clubId, {
           startDate: `${today.getFullYear()}-01-01`,

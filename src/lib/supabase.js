@@ -1100,6 +1100,11 @@ export const DB = {
     return { ...base, ...(calendarContext && typeof calendarContext === "object" ? calendarContext : {}), ...(winterContext && typeof winterContext === "object" ? winterContext : {}) };
   },
 
+  async ensureMyCoachHubRoleAccess(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/ensure_my_coach_hub_role_access", { target_club_id: id });
+  },
+
   async checkCoachHubRequestAvailability(clubId, request) {
     const id = requireClubId(clubId);
     const result = await supaFetch("POST", "rpc/check_coach_hub_request_availability", {
@@ -1260,6 +1265,14 @@ export const DB = {
 
   async deleteCoachHubTeamAssignment(clubId, assignmentId) {
     return this.unassignCoachHubTeamAssignment(clubId, assignmentId);
+  },
+
+  async archiveCoachHubPerson(clubId, personId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/archive_coach_hub_person", {
+      target_club_id: id,
+      target_person_id: String(personId || "").trim(),
+    });
   },
 
   async listCoachHubPilotMetrics(clubId, { startDate = null, endDate = null } = {}) {
