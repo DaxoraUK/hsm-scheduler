@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
+import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -74,7 +75,7 @@ export function useFixtureDayScheduling({
         (game) =>
           game.status !== "postponed" &&
           game.status !== "cancelled" &&
-          String(game.refStatus || "").toLowerCase() !== "confirmed"
+          !isFixtureOfficialConfirmed(game)
       ).length,
     [final]
   );

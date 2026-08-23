@@ -5,10 +5,13 @@ const drawer = readFileSync("src/components/Operations/shared/FixtureDrawer.jsx"
 const roadmap = readFileSync("docs/roadmaps/FULL_TIME_INTEGRATION_ROADMAP.md", "utf8");
 
 describe("league-appointed referee workflow", () => {
-  test("offers the official fixture link and permits free-text league appointments only in the editable control", () => {
+  test("offers the fixture link, referee-pool selector and free-text league appointment fallback", () => {
     expect(drawer).toContain("Open fixture on Full-Time");
-    expect(drawer).toContain('placeholder="Type the league-appointed referee"');
+    expect(drawer).toContain('aria-label="Select referee from pool"');
+    expect(drawer).toContain("Select from referee pool...");
+    expect(drawer).toContain('placeholder="Or type the league-appointed referee"');
     expect(drawer).toContain('officialRole: selectedRef?.role || (value ? "league_referee" : "")');
+    expect(drawer).toContain('refStatus: value ? "Assigned" : "TBC"');
     expect(drawer).toContain("{canEdit ? (");
   });
 

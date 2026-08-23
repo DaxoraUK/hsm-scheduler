@@ -1,4 +1,5 @@
 import SaturdaySummaryBar from "./SaturdaySummaryBar.jsx";
+import { isFixtureOfficialConfirmed } from "../../lib/engines/officialsEngine.js";
 
 export default function SundaySummaryBar(props) {
   const sunActive = (props.sunFinal || []).filter(
@@ -12,7 +13,7 @@ export default function SundaySummaryBar(props) {
   const sunRefWarnings = (props.sunFinal || []).filter(
     (fixture) =>
       fixture.status !== "postponed" &&
-      String(fixture.refStatus || "").toLowerCase() !== "confirmed"
+      !isFixtureOfficialConfirmed(fixture)
   ).length;
 
   return (

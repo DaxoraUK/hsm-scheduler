@@ -107,7 +107,7 @@ export function isFixtureOfficialConfirmed(fixture = {}) {
   const official = normalise(getOfficialName(fixture));
 
   if (["confirmed", "accepted", "assigned", "yes", "ok", "ready"].includes(status)) return true;
-  if (["tbc", "unassigned", "missing", "none", "no", "pending", "declined"].includes(status)) return false;
+  if (["tbc", "unassigned", "missing", "none", "no", "pending", "awaiting", "declined", "unavailable", "rejected"].includes(status)) return false;
   if (!official || ["tbc", "none", "unassigned", "missing"].includes(official)) return false;
 
   return Boolean(official);

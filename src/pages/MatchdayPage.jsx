@@ -47,6 +47,7 @@ import { calculateOperationsIntelligence } from "../lib/engines/operationsIntell
 import {
   calculateOfficialsReadiness,
   findOfficialConflicts,
+  isFixtureOfficialConfirmed,
 } from "../lib/engines/officialsEngine.js";
 import useLiveWeather from "../hooks/useLiveWeather.js";
 import {
@@ -393,7 +394,7 @@ export default function MatchdayPage({
       final.filter(
         (fixture) =>
           fixture.status !== "postponed" &&
-          String(fixture.refStatus || "").toLowerCase() !== "confirmed",
+          !isFixtureOfficialConfirmed(fixture),
       ).length,
     [final],
   );

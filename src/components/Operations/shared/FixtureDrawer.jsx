@@ -150,6 +150,26 @@ export default function FixtureDrawer({
     updateFixturePatch(patch);
   };
 
+  const assignOfficial = (rawValue) => {
+    const value = String(rawValue || "").trimStart();
+    const selectedRef = refs.find(
+      (ref) => String(ref.name || ref.referee || "").trim() === value.trim(),
+    );
+
+    updateFixturePatch({
+      referee: value,
+      officialRole: selectedRef?.role || (value ? "league_referee" : ""),
+      refStatus: value ? "Assigned" : "TBC",
+      refPhone:
+        selectedRef?.phone ||
+        selectedRef?.mobile ||
+        selectedRef?.tel ||
+        selectedRef?.contact ||
+        selectedRef?.number ||
+        "",
+    });
+  };
+
   const applySuggestedTime = (time) => {
     updateFixturePatch({
       ...(blockedMove?.pendingPatch || {}),
@@ -501,43 +521,26 @@ Good luck!`;
                   ) : null}
                   <ControlRow icon={UserCheck} label="Official">
                     {canEdit ? (
-                      <>
-                      <input
-                        list={`fixture-officials-${fixtureIndex}`}
-                        value={displayFixture.referee || ""}
-                        onChange={(e) => {
-                          const value = e.target.value.trimStart();
-
-                          const selectedRef = refs.find(
-                            (ref) =>
-                              String(ref.name || "").trim() ===
-                              String(value || "").trim(),
-                          );
-
-                          updateFixturePatch({
-                            referee: value,
-                            officialRole: selectedRef?.role || (value ? "league_referee" : ""),
-                            refStatus: value
-                              ? (["confirmed", "accepted"].includes(String(displayFixture.refStatus || "").toLowerCase()) ? displayFixture.refStatus : "Assigned")
-                              : "TBC",
-                            refPhone:
-                              selectedRef?.phone ||
-                              selectedRef?.mobile ||
-                              selectedRef?.tel ||
-                              selectedRef?.contact ||
-                              selectedRef?.number ||
-                              "",
-                          });
-                        }}
+                      <div className="grid gap-2">
+                      <select
+                        value={refs.some((ref) => String(ref.name || ref.referee || "").trim() === String(displayFixture.referee || "").trim()) ? displayFixture.referee : ""}
+                        onChange={(e) => assignOfficial(e.target.value)}
                         className="control-input"
-                        placeholder="Type the league-appointed referee"
+                        aria-label="Select referee from pool"
+                      >
+                        <option value="">Select from referee pool...</option>
+                        {refs.map((ref) => {
+                          const name = ref.name || ref.referee || "";
+                          return name ? <option key={ref.id || name} value={name}>{name}</option> : null;
+                        })}
+                      </select>
+                      <input
+                        value={displayFixture.referee || ""}
+                        onChange={(e) => assignOfficial(e.target.value)}
+                        className="control-input"
+                        placeholder="Or type the league-appointed referee"
                       />
-                      <datalist id={`fixture-officials-${fixtureIndex}`}>
-                        {refs.map((ref) => (
-                          <option key={ref.id || ref.name} value={ref.name} />
-                        ))}
-                      </datalist>
-                      </>
+                      </div>
                     ) : (
                       <ReadOnlyValue value={displayFixture.referee || "TBC"} />
                     )}

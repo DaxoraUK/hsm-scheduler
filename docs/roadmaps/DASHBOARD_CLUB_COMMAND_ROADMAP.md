@@ -51,6 +51,7 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 - Subscription read-only status disables communication as well as operational publishing. Support sessions remain visibly read-only.
 - The end-to-end journey is: authenticate → enter the role-appropriate home → complete the next authorised task → resolve exceptions → prepare communications → review recipients → send or copy through an audited route → retain delivery evidence.
 - Specialist depth remains available behind focused workspaces and collapsed detail; simplification must remove duplication, not capability.
+- Coach Hub becomes the preferred first-party destination for authorised coach communications: Ground Control prepares and audits the message once, Coach Hub surfaces it to the correct team contacts, and configured external channels remain delivery or fallback routes rather than a separate source of truth.
 
 ## Acceptance criteria
 
