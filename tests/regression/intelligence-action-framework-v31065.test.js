@@ -51,5 +51,9 @@ describe("shared intelligence action framework", () => {
 
     expect(combined.filter((item) => item.dedupeKey === "officials-readiness")).toHaveLength(1);
     expect(combined.filter((item) => item.dedupeKey === "competition-rules")).toHaveLength(1);
+    const rules = intelligence.insights.find((item) => item.dedupeKey === "competition-rules");
+    expect(rules.confidence).toBe(96);
+    expect(rules.evidence).toContain("1 blocking rule issues");
+    expect(rules.impact).toMatch(/non-compliant fixture plan/i);
   });
 });

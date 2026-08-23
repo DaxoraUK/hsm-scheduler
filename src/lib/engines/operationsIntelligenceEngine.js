@@ -70,7 +70,7 @@ function getPitchPressure(fixtures = []) {
     .sort((a, b) => b.count - a.count || a.pitch.localeCompare(b.pitch));
 }
 
-function buildInsight({ id, dedupeKey, severity = "watch", domain = "operations", title, detail, guidance, metric, target }) {
+function buildInsight({ id, dedupeKey, severity = "watch", domain = "operations", title, detail, guidance, metric, target, confidence = 80, evidence = [], impact = "" }) {
   return {
     id,
     dedupeKey,
@@ -81,6 +81,9 @@ function buildInsight({ id, dedupeKey, severity = "watch", domain = "operations"
     guidance,
     metric,
     target,
+    confidence: Math.max(0, Math.min(100, Math.round(Number(confidence) || 0))),
+    evidence,
+    impact,
   };
 }
 
@@ -181,6 +184,9 @@ export function calculateOperationsIntelligence({
       detail: `${parking.utilisation}% peak use at ${parking.peakTime} with ${parking.peakCars}/${parking.capacity} spaces expected.`,
       guidance: "Stagger kick-offs around the peak, move a flexible fixture, or add overflow parking before publishing.",
       metric: `${parking.utilisation}% peak`,
+      confidence: 92,
+      evidence: [`${parking.peakCars} predicted cars`, `${parking.capacity} configured spaces`, `${parking.peakTime} peak window`],
+      impact: "Reduces arrival congestion and protects safe access to the venue.",
       target: "parkingIntelligence",
     }));
   } else if (parking.enabled !== false && (parking.isHighPressure || parking.isOverConcurrentLimit)) {
@@ -193,6 +199,9 @@ export function calculateOperationsIntelligence({
       detail: `${parking.utilisation}% peak use expected at ${parking.peakTime}.`,
       guidance: "Prepare arrival messaging and make sure the busiest arrival window is covered.",
       metric: `${parking.utilisation}% peak`,
+      confidence: 88,
+      evidence: [`${parking.utilisation}% predicted peak use`, `${parking.peakTime} peak window`, "Configured parking thresholds"],
+      impact: "Supports a proportionate steward and arrival-messaging plan.",
       target: "parkingIntelligence",
     }));
   }
@@ -239,6 +248,9 @@ export function calculateOperationsIntelligence({
         : `${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"} need review.`,
       guidance: "Confirm referees before copying coach messages so managers receive one clean update.",
       metric: missingOfficials > 0 ? `${missingOfficials} missing` : `${officialConflicts.length} clashes`,
+      confidence: 98,
+      evidence: [`${games.length} active fixtures checked`, `${missingOfficials} officials unconfirmed`, `${officialConflicts.length} detected clashes`],
+      impact: "Prevents incomplete information being released to coaches.",
       target: "operationsHealth",
     }));
   }
@@ -253,6 +265,9 @@ export function calculateOperationsIntelligence({
       detail: `${closedPitches.length} pitch${closedPitches.length === 1 ? " is" : "es are"} currently closed.`,
       guidance: "Keep closures visible until the final schedule is approved, then rerun the schedule if availability changes.",
       metric: `${closedPitches.length} closed`,
+      confidence: 98,
+      evidence: [`${closedPitches.length} recorded pitch closures`, `${games.length} active fixtures checked`],
+      impact: "Preserves contingency capacity and avoids invalid pitch assignments.",
       target: "pitchClosures",
     }));
   }
@@ -271,6 +286,9 @@ export function calculateOperationsIntelligence({
         : `${ruleWarnings} competition rule warning${ruleWarnings === 1 ? "" : "s"} detected.`,
       guidance: "Check this before publishing, especially for pitch format and timing rules.",
       metric: ruleIssues > 0 ? `${ruleIssues} issues` : `${ruleWarnings} warnings`,
+      confidence: 96,
+      evidence: [`${games.length} active fixtures checked`, `${ruleIssues} blocking rule issues`, `${ruleWarnings} advisory warnings`],
+      impact: "Reduces the risk of publishing a non-compliant fixture plan.",
       target: "competitionRules",
     }));
   }
@@ -285,6 +303,9 @@ export function calculateOperationsIntelligence({
       detail: weatherIntelligence.summary || weatherIntelligence.message || "Venue weather setup needs review.",
       guidance: "Confirm postcode and weather setup so postponement guidance can become reliable.",
       metric: weatherIntelligence.label || "Review",
+      confidence: weatherIntelligence.forecastAvailable ? 82 : 55,
+      evidence: [weatherIntelligence.forecastAvailable ? "Live forecast available" : "Forecast unavailable", weatherIntelligence.summary || "Venue setup check"],
+      impact: "Improves the reliability of postponement and site-readiness decisions.",
       target: "weatherIntelligence",
     }));
   }
@@ -300,6 +321,9 @@ export function calculateOperationsIntelligence({
       detail: `${optimiserMoves} fixture move${optimiserMoves === 1 ? "" : "s"} could improve the matchday flow.`,
       guidance: "Review optimiser moves after critical issues have been cleared.",
       metric: `${optimiserMoves} moves`,
+      confidence: 90,
+      evidence: [`${optimiserMoves} moves passed clash, pitch and timing validation`],
+      impact: "Improves matchday flow without introducing a known scheduling conflict.",
       target: "dayOptimiser",
     }));
   }

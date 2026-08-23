@@ -10,10 +10,13 @@ import {
   MessageSquareText,
   ShieldCheck,
   Sparkles,
+  ThumbsUp,
   UsersRound,
+  X,
 } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
 import { dedupeActions } from "../../../lib/engines/actionFramework.js";
+import { usePersistedWorkspaceState } from "../../../hooks/usePersistedWorkspaceState.js";
 
 const SEVERITY_ORDER = { critical: 0, danger: 0, attention: 1, warning: 1, watch: 2, healthy: 3, success: 3 };
 
@@ -57,6 +60,9 @@ function normaliseAction(item = {}, source = "intelligence") {
     target: item.target || meta.target,
     areaLabel: meta.label,
     Icon: meta.icon,
+    confidence: Number.isFinite(Number(item.confidence)) ? Math.max(0, Math.min(100, Math.round(Number(item.confidence)))) : null,
+    evidence: Array.isArray(item.evidence) ? item.evidence.filter(Boolean) : [],
+    impact: item.impact || "",
   };
 }
 
@@ -99,11 +105,20 @@ export default function MatchdayGuidanceCard({
   intelligence = {},
   recommendations = {},
   onNavigate,
+  feedbackKey = "daxora:intelligence-feedback",
+  canRespond = true,
 }) {
-  const actions = useMemo(
+  const [feedback, setFeedback] = usePersistedWorkspaceState(feedbackKey, {});
+  const allActions = useMemo(
     () => mergeActions(intelligence, recommendations),
     [intelligence, recommendations]
   );
+  const actions = useMemo(() => allActions.filter((item) => feedback[item.dedupeKey || item.id]?.response !== "dismissed"), [allActions, feedback]);
+  const dismissedCount = allActions.length - actions.length;
+  const respond = (item, response) => setFeedback((current) => ({
+    ...current,
+    [item.dedupeKey || item.id]: { response, recordedAt: new Date().toISOString(), title: item.title },
+  }));
 
   const critical = actions.filter((item) => item.severity === "critical").length;
   const attention = actions.filter((item) => item.severity === "attention").length;
@@ -189,7 +204,7 @@ export default function MatchdayGuidanceCard({
 
         <div className="mt-5 space-y-3">
           {actions.length ? actions.slice(0, 7).map((item, index) => (
-            <GuidanceRow key={`${item.id}-${index}`} item={item} position={index + 1} onNavigate={onNavigate} />
+            <GuidanceRow key={`${item.id}-${index}`} item={item} position={index + 1} onNavigate={onNavigate} response={feedback[item.dedupeKey || item.id]?.response} onRespond={canRespond ? respond : null} />
           )) : (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
               <div className="flex items-start gap-3">
@@ -202,6 +217,7 @@ export default function MatchdayGuidanceCard({
             </div>
           )}
         </div>
+        {dismissedCount ? <button type="button" onClick={() => setFeedback({})} className="mt-4 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-4">Restore {dismissedCount} dismissed recommendation{dismissedCount === 1 ? "" : "s"}</button> : null}
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -237,14 +253,12 @@ export default function MatchdayGuidanceCard({
   );
 }
 
-function GuidanceRow({ item, position, onNavigate }) {
+function GuidanceRow({ item, position, onNavigate, response, onRespond }) {
   const styles = severityStyle(item.severity);
   const StatusIcon = styles.Icon;
   const AreaIcon = item.Icon;
   return (
-    <button
-      type="button"
-      onClick={() => onNavigate?.(item.target, item)}
+    <div
       className={`flex w-full flex-col gap-4 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm sm:flex-row sm:items-center ${styles.row}`}
     >
       <div className="flex min-w-0 flex-1 items-start gap-4">
@@ -259,14 +273,18 @@ function GuidanceRow({ item, position, onNavigate }) {
           <div className="mt-2 text-sm font-black text-slate-950">{item.title}</div>
           <div className="mt-1 text-xs font-bold leading-5 text-slate-600">{item.detail}</div>
           <div className="mt-2 text-xs font-black text-slate-800">Recommended: {item.guidance}</div>
+          {item.impact ? <div className="mt-2 text-xs font-bold text-emerald-800">Likely benefit: {item.impact}</div> : null}
+          {item.evidence.length ? <div className="mt-3 flex flex-wrap gap-1.5">{item.evidence.map((evidence) => <span key={evidence} className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">{evidence}</span>)}</div> : null}
+          {onRespond ? <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => onRespond(item, "useful")} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[10px] font-black ring-1 ${response === "useful" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-slate-600 ring-slate-200"}`}><ThumbsUp size={12} /> Useful</button><button type="button" onClick={() => onRespond(item, "dismissed")} className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-600 ring-1 ring-slate-200"><X size={12} /> Dismiss</button></div> : null}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3 self-end sm:self-center">
+        {item.confidence != null ? <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">{item.confidence}% confidence</span> : null}
         {item.metric ? <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">{item.metric}</span> : null}
         <StatusIcon size={18} className={styles.icon.split(" ").find((value) => value.startsWith("text-"))} />
-        <ArrowRight size={17} className="text-slate-400" />
+        <button type="button" aria-label={`Open ${item.areaLabel}`} onClick={() => onNavigate?.(item.target, item)} className="rounded-xl bg-white p-2 text-slate-500 ring-1 ring-slate-200 hover:text-slate-950"><ArrowRight size={17} /></button>
       </div>
-    </button>
+    </div>
   );
 }
 
