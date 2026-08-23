@@ -27,6 +27,7 @@ import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
 import { getDaxoraProducts } from "./lib/platform/products.js";
+import { buildDaxoraPublicEntry, getDaxoraSurface } from "./lib/platform/platformUrls.js";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import {
   MATCHDAY_SCOPES,
@@ -176,6 +177,14 @@ function LazyPageFallback({ label = "workspace" }) {
   );
 }
 
+function initialAuthView() {
+  if (typeof window === "undefined") return "landing";
+  const path = window.location.pathname.replace(/\/+$/, "").toLowerCase();
+  if (path === "/signup") return "signup";
+  if (path === "/signin" || getDaxoraSurface() === "app") return "signin";
+  return "landing";
+}
+
 
 function isMissingCommunicationSchema(error) {
   const status = Number(error?.status || 0);
@@ -264,7 +273,7 @@ function App() {
   const [mainPage, setMainPage] = useState("dashboard");
   const [platformHomeOpen, setPlatformHomeOpen] = useState(true);
   const [coachHubOpen, setCoachHubOpen] = useState(false);
-  const [authView, setAuthView] = useState("landing");
+  const [authView, setAuthView] = useState(initialAuthView);
   const workspaceLandingKeyRef = useRef("");
   const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
   const [settingsTab, setSettingsTab] = useState("overview");
@@ -2215,7 +2224,10 @@ function App() {
 
   if (!authSession) {
     if (authView === "landing") return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraLandingPage onSignIn={() => setAuthView("signin")} onCreateAccount={() => setAuthView("signup")} /></Suspense>;
-    return <LoginScreen key={authView} initialMode={authView} onBack={() => setAuthView("landing")} supaConfigured={isSupaConfigured()} onLogin={(session) => { Auth.saveSession(session); setAuthSession(session); }} />;
+    return <LoginScreen key={authView} initialMode={authView} onBack={() => {
+      if (getDaxoraSurface() === "app") window.location.assign(buildDaxoraPublicEntry());
+      else setAuthView("landing");
+    }} supaConfigured={isSupaConfigured()} onLogin={(session) => { Auth.saveSession(session); setAuthSession(session); }} />;
   }
 
   if (["idle", "loading"].includes(platformStatus))

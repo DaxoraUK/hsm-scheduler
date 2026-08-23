@@ -1,10 +1,12 @@
 import { lazy, Suspense } from "react";
 import AppCore from "./AppCore.jsx";
 import ProductShell from "./layout/ProductShell.jsx";
+import { buildDaxoraAppEntry, getDaxoraSurface } from "./lib/platform/platformUrls.js";
 
 const TeamFeePayAcquisitionDemo = lazy(() =>
   import("./demo/teamfeepay/TeamFeePayAcquisitionDemo.jsx")
 );
+const DaxoraLandingPage = lazy(() => import("./pages/DaxoraLandingPage.jsx"));
 
 function acquisitionDemoEnabled() {
   if (import.meta.env.DEV) return true;
@@ -36,6 +38,17 @@ export default function App() {
     return (
       <Suspense fallback={<DemoLoadingState />}>
         <TeamFeePayAcquisitionDemo />
+      </Suspense>
+    );
+  }
+
+  if (getDaxoraSurface() === "public") {
+    return (
+      <Suspense fallback={<DemoLoadingState />}>
+        <DaxoraLandingPage
+          onSignIn={() => window.location.assign(buildDaxoraAppEntry("signin"))}
+          onCreateAccount={() => window.location.assign(buildDaxoraAppEntry("signup"))}
+        />
       </Suspense>
     );
   }

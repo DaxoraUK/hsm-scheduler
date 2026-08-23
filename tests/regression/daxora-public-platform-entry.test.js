@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
+const appEntry = readFileSync("src/App.jsx", "utf8");
 const app = readFileSync("src/AppCore.jsx", "utf8");
 const landing = readFileSync("src/pages/DaxoraLandingPage.jsx", "utf8");
 const login = readFileSync("src/components/LoginScreen.jsx", "utf8");
@@ -8,8 +9,9 @@ const splash = readFileSync("src/components/BrandSplash.jsx", "utf8");
 
 describe("Daxora public platform entry", () => {
   test("places the public Daxora website before authentication", () => {
-    expect(app).toContain('useState("landing")');
-    expect(app).toContain("<DaxoraLandingPage");
+    expect(appEntry).toContain('getDaxoraSurface() === "public"');
+    expect(appEntry).toContain("<DaxoraLandingPage");
+    expect(app).toContain("useState(initialAuthView)");
     expect(app.indexOf('authView === "landing"')).toBeLessThan(app.indexOf("<LoginScreen"));
   });
 
