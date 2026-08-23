@@ -2473,7 +2473,15 @@ function App() {
         onEndSupportAccess={handleEndSupportAccess}
         onSignOut={handleSignOut}
         onOpenPlatformHome={() => setPlatformHomeOpen(true)}
-        onOpenCoachHub={() => setCoachHubOpen(true)}
+        onOpenCoachHub={() => {
+          if (roleWorkspaceAccess.isCoach) {
+            setCoachHubOpen(true);
+            return;
+          }
+          setMainPage("settings");
+          setSettingsTab("coachhub");
+          setNavigationTarget(null);
+        }}
       >
         <style
           dangerouslySetInnerHTML={{

@@ -45,6 +45,13 @@ describe("Daxora Ground Control v3.10.42 dashboard and Club Command simplificati
     expect(canOpenWorkspacePage(elite, "communications", viewer)).toBe(false);
   });
 
+  test("opens Coach Hub for team users and its administration for club managers", () => {
+    expect(canOpenWorkspacePage(elite, "coach", { isCoach: true, canManageSettings: false })).toBe(true);
+    expect(canOpenWorkspacePage(elite, "coach", { isCoach: false, canManageSettings: true })).toBe(true);
+    expect(canOpenWorkspacePage(elite, "coach", { isCoach: false, canManageSettings: false })).toBe(false);
+    expect(shell).toContain("workspaceAccess?.isCoach || workspaceAccess?.canManageSettings");
+  });
+
   test("guards rendering with the same effective access authority", () => {
     expect(appCore).toContain("const clubCommandAllowed = canOpenClubCommand(workspaceAccess)");
     expect(appCore).toContain('mainPage === "executive" && pageEntitled && clubCommandAllowed');

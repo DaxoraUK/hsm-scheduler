@@ -122,7 +122,7 @@ export default function ProductShell({
     ["executive", "Club Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
     ["planner", "Annual Planner", CalendarRange, NAV_TARGETS.PLANNER, annualPlannerAddOnAvailable ? { badge: "Add-on" } : {}],
-    ...(workspaceAccess?.isCoach && hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB) ? [["coach", "Coach Hub", UsersRound, null]] : []),
+    ...((workspaceAccess?.isCoach || workspaceAccess?.canManageSettings) && hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB) ? [["coach", "Coach Hub", UsersRound, null]] : []),
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],

@@ -15,6 +15,6 @@ export function canOpenWorkspacePage(subscription, page, workspaceAccess = null)
   if (normalisedPage === CLUB_COMMAND_PAGE) return canOpenClubCommand(workspaceAccess);
   if (normalisedPage === COMMUNICATIONS_PAGE) return Boolean(workspaceAccess?.canCommunicate);
   if (normalisedPage === SETTINGS_PAGE) return Boolean(workspaceAccess?.canManageSettings);
-  if (normalisedPage === COACH_HUB_PAGE) return Boolean(workspaceAccess?.isCoach);
+  if (normalisedPage === COACH_HUB_PAGE) return Boolean(workspaceAccess?.isCoach || workspaceAccess?.canManageSettings);
   return true;
 }
