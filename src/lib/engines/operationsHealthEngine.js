@@ -2,6 +2,7 @@ import { getParkingSnapshot } from "./parkingEngine.js";
 import { calculateOfficialsReadiness } from "./officialsEngine.js";
 import { calculatePlatformHealth } from "./platformHealthEngine.js";
 import { normalisePlatformStatus } from "./statusSystem.js";
+import { buildCoreOperationalReadiness } from "./operationalReadinessEngine.js";
 
 const STATUS_RANK = {
   danger: 0,
@@ -163,6 +164,19 @@ export function calculateOperationsHealth({
   }
 
   const parkingScore = !parkingEnabled ? 100 : !capacity ? 65 : toNumber(parking.healthScore, 100);
+  const coreReadiness = buildCoreOperationalReadiness({
+    scheduleBuilt: hasRun,
+    unresolvedCount,
+    conflictCount: clashCount,
+    officialOutstanding: refWarningCount,
+    officialConflictCount,
+    parkingEnabled,
+    parkingConfigured: Boolean(capacity),
+    parkingOverCapacity: parking.isOverCapacity,
+    parkingHighPressure: parking.isHighPressure || parking.isOverConcurrentLimit,
+    closedPitchCount,
+    communicationsReady: hasRun && activeFixtures.length > 0,
+  });
 
   const communicationIssues = [];
   const communicationActions = [];
@@ -266,6 +280,7 @@ export function calculateOperationsHealth({
     },
     parking,
     officials,
+    coreReadiness,
     debug: {
       parkingSource: "parkingEngine.getParkingSnapshot",
       parkingCalculation: "peak concurrent window, not all-day total",

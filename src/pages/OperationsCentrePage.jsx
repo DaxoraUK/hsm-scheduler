@@ -667,9 +667,11 @@ export default function OperationsCentrePage({
                 The most important matchday interventions, ordered by operational risk.
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
-              {snapshot.priorityQueue.length} open
-            </span>
+            <div className="flex flex-wrap justify-end gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{snapshot.priorityQueue.length} action area{snapshot.priorityQueue.length === 1 ? "" : "s"}</span>
+              {snapshot.metrics.blockingItems ? <span className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">{snapshot.metrics.blockingItems} blocking</span> : null}
+              {snapshot.metrics.warningItems ? <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-700">{snapshot.metrics.warningItems} warning{snapshot.metrics.warningItems === 1 ? "" : "s"}</span> : null}
+            </div>
           </div>
 
           <div className="mt-5 space-y-3">

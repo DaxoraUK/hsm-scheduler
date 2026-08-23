@@ -1,6 +1,7 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { calculateOfficialsReadiness } from "./officialsEngine.js";
 import { getWeatherSnapshot } from "./weatherEngine.js";
+import { buildCoreOperationalReadiness } from "./operationalReadinessEngine.js";
 
 const STATUS_WEIGHT = Object.freeze({
   danger: 0,
@@ -373,6 +374,19 @@ export function buildOperationsCentreSnapshot({
     data: weather,
   });
   const communicationsDomain = getCommunicationsDomain({ scheduleBuilt, activeFixtures });
+  const coreReadiness = buildCoreOperationalReadiness({
+    scheduleBuilt,
+    unresolvedCount,
+    conflictCount,
+    officialOutstanding: officials.metrics?.missing,
+    officialConflictCount: officials.metrics?.conflicts,
+    parkingEnabled: parking.enabled !== false,
+    parkingConfigured: Boolean(parking.capacity),
+    parkingOverCapacity: parking.isOverCapacity,
+    parkingHighPressure: parking.isHighPressure || parking.isOverConcurrentLimit,
+    closedPitchCount: closedPitches.length,
+    communicationsReady: scheduleBuilt && activeFixtures.length > 0,
+  });
   const siteDomain = getSiteReadinessDomain(siteChecks);
   const incidentDomain = getIncidentDomain(incidents);
 
@@ -399,6 +413,7 @@ export function buildOperationsCentreSnapshot({
     postponedFixtures,
     domains,
     priorityQueue,
+    coreReadiness,
     waves,
     firstWave: waves[0] || null,
     parking,
@@ -410,6 +425,8 @@ export function buildOperationsCentreSnapshot({
       unresolved: toNumber(unresolvedCount),
       conflicts: toNumber(conflictCount),
       openActions: priorityQueue.length,
+      blockingItems: coreReadiness.blockerCount,
+      warningItems: coreReadiness.warningCount,
       openIncidents: incidentDomain.data.open,
       criticalIncidents: incidentDomain.data.critical,
       siteChecksComplete: siteDomain.data.completed,

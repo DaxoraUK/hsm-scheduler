@@ -21,6 +21,7 @@ import {
 import useLiveWeather from "../hooks/useLiveWeather.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
+import { buildCoreOperationalReadiness } from "../lib/engines/operationalReadinessEngine.js";
 import { readMatchdayLock } from "../lib/operations/matchdayLock.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
@@ -189,6 +190,17 @@ export default function DashboardPage({
       : 0);
 
   const communicationsReady = scheduleBuilt && totalFixtures > 0;
+  const coreReadiness = buildCoreOperationalReadiness({
+    scheduleBuilt,
+    unresolvedCount: fixtureIssues,
+    officialOutstanding: refereeStats.outstanding,
+    officialConflictCount: officialConflicts.length,
+    parkingEnabled: parkingStats.enabled !== false,
+    parkingConfigured: Number(parkingStats.carCap || 0) > 0,
+    parkingOverCapacity: parkingStats.overCapacity,
+    closedPitchCount: closedPitches.length,
+    communicationsReady,
+  });
 
   const buildDays = useMemo(
     () =>
@@ -380,80 +392,7 @@ export default function DashboardPage({
     ],
   );
 
-  const reviewItems = [
-    !scheduleBuilt
-      ? {
-          key: "schedule",
-          title: "Build schedule",
-          detail:
-            "Build the selected matchday schedule before final readiness checks.",
-          area: "Fixtures",
-          severity: "warning",
-          onClick: () =>
-            nav.goToFixtures({
-              day: navigationDay,
-              card: "actionBar",
-              workspace: "fixtures",
-              scrollToSection: true,
-            }),
-        }
-      : null,
-    fixtureIssues > 0
-      ? {
-          key: "fixtures",
-          title: "Resolve fixture issues",
-          detail: `${fixtureIssues} fixture ${fixtureIssues === 1 ? "issue needs" : "issues need"} attention.`,
-          area: "Fixtures",
-          severity: "danger",
-          onClick: () => nav.goToFixtures({ day: navigationDay }),
-        }
-      : null,
-    officialConflicts.length > 0
-      ? {
-          key: "official-clashes",
-          title: "Resolve official clashes",
-          detail: `${officialConflicts.length} overlapping official ${officialConflicts.length === 1 ? "assignment needs" : "assignments need"} attention.`,
-          area: "Officials",
-          severity: "danger",
-          onClick: () => nav.goToOfficials({ day: navigationDay }),
-        }
-      : null,
-    refereeStats.outstanding > 0
-      ? {
-          key: "officials",
-          title: "Confirm officials",
-          detail: `${refereeStats.outstanding} referee ${refereeStats.outstanding === 1 ? "confirmation is" : "confirmations are"} outstanding.`,
-          area: "Officials",
-          severity: "warning",
-          onClick: () => nav.goToOfficials({ day: navigationDay }),
-        }
-      : null,
-    parkingStats.overCapacity
-      ? {
-          key: "parking",
-          title: "Review parking pressure",
-          detail: `Parking peak is projected at ${parkingStats.pct}% of capacity.`,
-          area: "Parking",
-          severity: "danger",
-          onClick: () => nav.goToParking({ day: navigationDay }),
-        }
-      : null,
-    !communicationsReady
-      ? {
-          key: "communications",
-          title: "Prepare coach messages",
-          detail:
-            "Coach communications can be generated after the schedule is built.",
-          area: "Messages",
-          severity: "muted",
-          onClick: () => nav.goToCommunications({ day: navigationDay }),
-        }
-      : null,
-  ].filter(Boolean);
-
-  const blockerCount = reviewItems.filter(
-    (item) => item.severity !== "muted",
-  ).length;
+  const blockerCount = coreReadiness.blockerCount;
   const missionState = getMissionState({
     scheduleBuilt,
     fixtureIssues,
