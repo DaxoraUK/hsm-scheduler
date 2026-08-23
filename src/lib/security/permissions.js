@@ -5,6 +5,8 @@ export const WORKSPACE_ROLES = Object.freeze({
   VIEWER: "viewer",
   COACH: "coach",
   SUPPORT: "support",
+  FIXTURE_OFFICER: "fixture_officer",
+  OPERATIONS_OFFICER: "operations_officer",
 });
 
 export const CLUB_ROLE_CODES = Object.freeze({
@@ -192,6 +194,8 @@ export function roleHasPermission(role, permission) {
 
 export function createWorkspaceAccess(membership = null, context = {}) {
   const role = getWorkspaceRole(membership);
+  const roleAssignments = normaliseRoleAssignments(membership);
+  const roles = [...new Set([role, ...roleAssignments.map((assignment) => assignment.role)])];
   const effectiveRoles = getEffectiveRoleCodes(membership, context);
   const accessMode = membership?.accessMode === "support"
     ? "support"
@@ -213,13 +217,14 @@ export function createWorkspaceAccess(membership = null, context = {}) {
   return Object.freeze({
     role,
     roleLabel: getRoleLabel(role),
+    roles,
     effectiveRoles,
-    roleAssignments: normaliseRoleAssignments(membership),
+    roleAssignments,
     accessMode,
     isSupport,
     isCoach: accessMode === "coach"
-      || effectiveRoles.includes(WORKSPACE_ROLES.COACH)
-      || effectiveRoles.includes(CLUB_ROLE_CODES.COACH),
+      || roles.includes(WORKSPACE_ROLES.COACH)
+      || roles.includes(CLUB_ROLE_CODES.COACH),
     isReadOnly: isSupport || !hasWriteCapability,
     canRead: has(WORKSPACE_PERMISSIONS.READ_WORKSPACE),
     canOperate: !isSupport && has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),
