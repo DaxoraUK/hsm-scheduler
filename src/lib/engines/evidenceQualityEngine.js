@@ -32,7 +32,10 @@ function hasAllocation(row = {}) {
 
 function hasOfficialRecord(row = {}) {
   if (row.status !== "delivered") return true;
-  return Boolean(row.referee || row.officialStatus !== "unconfirmed");
+  return Boolean(
+    String(row.referee || "").trim()
+    || String(row.officialStatus || "").trim(),
+  );
 }
 
 function formatDate(date) {

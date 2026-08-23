@@ -102,6 +102,27 @@ describe("verified grant programme matrix", () => {
     expect(quality.gaps.some((gap) => gap.id === "weather-coverage")).toBe(true);
   });
 
+  test("official evidence requires a referee or an explicitly recorded appointment status", () => {
+    const input = completeEvidence();
+    const missing = buildEvidenceQuality({
+      ...input,
+      evidence: {
+        ...input.evidence,
+        rows: input.evidence.rows.map((row) => ({ ...row, referee: "", officialStatus: "" })),
+      },
+    });
+    const explicitlyOutstanding = buildEvidenceQuality({
+      ...input,
+      evidence: {
+        ...input.evidence,
+        rows: input.evidence.rows.map((row) => ({ ...row, referee: "", officialStatus: "unconfirmed" })),
+      },
+    });
+
+    expect(missing.measures.find((measure) => measure.id === "officials-coverage")?.value).toBe(0);
+    expect(explicitlyOutstanding.measures.find((measure) => measure.id === "officials-coverage")?.value).toBe(100);
+  });
+
   test("funding UI keeps contextual evidence and verification freshness visible", () => {
     const analyticsSource = fs.readFileSync(
       path.join(projectRoot, "src/components/analytics/AnalyticsVisualDashboard.jsx"),
