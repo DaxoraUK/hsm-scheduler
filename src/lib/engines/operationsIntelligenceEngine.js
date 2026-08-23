@@ -70,9 +70,10 @@ function getPitchPressure(fixtures = []) {
     .sort((a, b) => b.count - a.count || a.pitch.localeCompare(b.pitch));
 }
 
-function buildInsight({ id, severity = "watch", domain = "operations", title, detail, guidance, metric, target }) {
+function buildInsight({ id, dedupeKey, severity = "watch", domain = "operations", title, detail, guidance, metric, target }) {
   return {
     id,
+    dedupeKey,
     severity,
     domain,
     title,
@@ -119,6 +120,7 @@ export function calculateOperationsIntelligence({
   if (!hasRun) {
     insights.push(buildInsight({
       id: "build-before-intelligence",
+      dedupeKey: "schedule-build",
       severity: "attention",
       domain: "fixtures",
       title: "Build the schedule to unlock live intelligence",
@@ -132,6 +134,7 @@ export function calculateOperationsIntelligence({
   if (unresolved.length > 0) {
     insights.push(buildInsight({
       id: "unresolved-blockers",
+      dedupeKey: "fixtures-unresolved",
       severity: "critical",
       domain: "fixtures",
       title: "Unresolved fixtures are blocking publish readiness",
@@ -145,6 +148,7 @@ export function calculateOperationsIntelligence({
   if (conflicts.length > 0) {
     insights.push(buildInsight({
       id: "fixture-clashes",
+      dedupeKey: "fixtures-conflicts",
       severity: "critical",
       domain: "fixtures",
       title: "Fixture clashes need fixing before approval",
@@ -158,6 +162,7 @@ export function calculateOperationsIntelligence({
   if (parking.enabled !== false && !parking.configured) {
     insights.push(buildInsight({
       id: "parking-configuration",
+      dedupeKey: "parking-configuration",
       severity: "attention",
       domain: "parking",
       title: "Parking capacity needs configuring",
@@ -169,6 +174,7 @@ export function calculateOperationsIntelligence({
   } else if (parking.enabled !== false && parking.isOverCapacity) {
     insights.push(buildInsight({
       id: "parking-over-capacity",
+      dedupeKey: "parking-capacity",
       severity: "critical",
       domain: "parking",
       title: "Parking is predicted to exceed capacity",
@@ -180,6 +186,7 @@ export function calculateOperationsIntelligence({
   } else if (parking.enabled !== false && (parking.isHighPressure || parking.isOverConcurrentLimit)) {
     insights.push(buildInsight({
       id: "parking-pressure",
+      dedupeKey: "parking-pressure",
       severity: "attention",
       domain: "parking",
       title: "Parking pressure window needs a steward plan",
@@ -223,6 +230,7 @@ export function calculateOperationsIntelligence({
   if (missingOfficials > 0 || officialConflicts.length > 0) {
     insights.push(buildInsight({
       id: "officials-pressure",
+      dedupeKey: "officials-readiness",
       severity: missingOfficials > 2 || officialConflicts.length > 0 ? "attention" : "watch",
       domain: "officials",
       title: "Officials need confirming before communications",
@@ -238,6 +246,7 @@ export function calculateOperationsIntelligence({
   if (closedPitches.length > 0) {
     insights.push(buildInsight({
       id: "closed-pitches",
+      dedupeKey: "pitch-closures",
       severity: "watch",
       domain: "pitches",
       title: "Closed pitches are reducing operational flexibility",
@@ -253,6 +262,7 @@ export function calculateOperationsIntelligence({
   if (ruleIssues > 0 || ruleWarnings > 0) {
     insights.push(buildInsight({
       id: "rules-readiness",
+      dedupeKey: "competition-rules",
       severity: ruleIssues > 0 ? "attention" : "watch",
       domain: "rules",
       title: ruleIssues > 0 ? "Competition rules need attention" : "Competition rules should be reviewed",
@@ -268,6 +278,7 @@ export function calculateOperationsIntelligence({
   if (weatherIntelligence?.status === "warning") {
     insights.push(buildInsight({
       id: "weather-readiness",
+      dedupeKey: "weather-readiness",
       severity: "watch",
       domain: "weather",
       title: "Weather intelligence is not fully ready",
@@ -282,6 +293,7 @@ export function calculateOperationsIntelligence({
   if (optimiserMoves > 0) {
     insights.push(buildInsight({
       id: "validated-optimiser-moves",
+      dedupeKey: "optimiser-moves",
       severity: "healthy",
       domain: "optimiser",
       title: "Validated improvement moves are available",
@@ -295,6 +307,7 @@ export function calculateOperationsIntelligence({
   if (hasRun && insights.length === 0) {
     insights.push(buildInsight({
       id: "ready-to-publish",
+      dedupeKey: "communications-readiness",
       severity: "healthy",
       domain: "communications",
       title: "Matchday is ready for final communications",

@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
+import { dedupeActions } from "../../../lib/engines/actionFramework.js";
 
 const SEVERITY_ORDER = { critical: 0, danger: 0, attention: 1, warning: 1, watch: 2, healthy: 3, success: 3 };
 
@@ -46,6 +47,7 @@ function normaliseAction(item = {}, source = "intelligence") {
   return {
     id: item.id || `${source}-${domain}-${item.title || item.description}`,
     source,
+    dedupeKey: item.dedupeKey || item.metadata?.dedupeKey,
     domain,
     title: item.title || "Review matchday action",
     detail: item.detail || item.description || "Ground Control has identified an item to review.",
@@ -61,17 +63,7 @@ function normaliseAction(item = {}, source = "intelligence") {
 function mergeActions(intelligence = {}, recommendations = {}) {
   const primary = (intelligence.items || intelligence.insights || []).map((item) => normaliseAction(item, "intelligence"));
   const supplementary = (recommendations.items || recommendations.actions || []).map((item) => normaliseAction(item, "recommendations"));
-  const merged = [...primary];
-
-  supplementary.forEach((candidate) => {
-    const duplicate = merged.some((item) =>
-      item.domain === candidate.domain &&
-      normaliseSeverity(item.severity) === normaliseSeverity(candidate.severity)
-    );
-    if (!duplicate) merged.push(candidate);
-  });
-
-  return merged.sort((a, b) =>
+  return dedupeActions([...primary, ...supplementary]).sort((a, b) =>
     (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9)
   );
 }

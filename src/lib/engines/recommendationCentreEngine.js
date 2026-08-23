@@ -57,6 +57,7 @@ export function buildRecommendationCentre({
       severity: "attention",
       priority: 100,
       title: "Build the matchday schedule",
+      dedupeKey: "schedule-build",
       description: "The schedule needs to be built before Ground Control can complete final readiness checks.",
       metadata: { hasRun },
     }));
@@ -68,6 +69,7 @@ export function buildRecommendationCentre({
       severity: "critical",
       priority: 96,
       title: "Resolve unplaced fixtures",
+      dedupeKey: "fixtures-unresolved",
       description: `${unresolved.length} fixture${unresolved.length === 1 ? "" : "s"} need manual review before publishing.`,
       metadata: { count: unresolved.length },
     }));
@@ -79,6 +81,7 @@ export function buildRecommendationCentre({
       severity: "critical",
       priority: 94,
       title: "Fix fixture clashes",
+      dedupeKey: "fixtures-conflicts",
       description: `${conflicts.length} clash${conflicts.length === 1 ? "" : "es"} detected in the selected schedule.`,
       metadata: { count: conflicts.length },
     }));
@@ -90,6 +93,7 @@ export function buildRecommendationCentre({
       severity: "attention",
       priority: 91,
       title: "Configure parking",
+      dedupeKey: "parking-configuration",
       description: "Set the primary venue parking capacity or switch Parking & Arrivals off in Workspace settings.",
       metadata: { parking },
     }));
@@ -99,6 +103,7 @@ export function buildRecommendationCentre({
       severity: "critical",
       priority: 92,
       title: "Parking exceeds capacity",
+      dedupeKey: "parking-capacity",
       description: `Peak demand is ${parking.utilisation}% at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
       metadata: { parking },
     }));
@@ -108,6 +113,7 @@ export function buildRecommendationCentre({
       severity: "watch",
       priority: 70,
       title: "Watch parking pressure",
+      dedupeKey: "parking-pressure",
       description: `Peak demand is ${parking.utilisation}% at ${parking.peakTime} (${parking.peakCars}/${parking.capacity} spaces).`,
       metadata: { parking },
     }));
@@ -119,6 +125,7 @@ export function buildRecommendationCentre({
       severity: missingOfficials > 0 ? "attention" : "watch",
       priority: 82,
       title: "Confirm officials",
+      dedupeKey: "officials-readiness",
       description: missingOfficials > 0
         ? `${missingOfficials} fixture${missingOfficials === 1 ? "" : "s"} need official confirmation.`
         : `${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"} need review.`,
@@ -132,6 +139,7 @@ export function buildRecommendationCentre({
       severity: "watch",
       priority: 65,
       title: "Review pitch closures",
+      dedupeKey: "pitch-closures",
       description: `${closedPitches.length} pitch${closedPitches.length === 1 ? " is" : "es are"} currently closed.`,
       metadata: { closedPitches },
     }));
@@ -146,6 +154,7 @@ export function buildRecommendationCentre({
       severity: ruleIssues > 0 ? "attention" : "watch",
       priority: ruleIssues > 0 ? 80 : 58,
       title: ruleIssues > 0 ? "Competition rules need attention" : "Competition rules need review",
+      dedupeKey: "competition-rules",
       description: ruleIssues > 0
         ? `${ruleIssues} competition rule issue${ruleIssues === 1 ? "" : "s"} detected.`
         : `${ruleWarnings} competition rule warning${ruleWarnings === 1 ? "" : "s"} detected.`,
@@ -159,6 +168,7 @@ export function buildRecommendationCentre({
       severity: "watch",
       priority: 54,
       title: "Weather setup needs review",
+      dedupeKey: "weather-readiness",
       description: weatherIntelligence.summary || weatherIntelligence.message || "Check venue postcode and weather readiness.",
       metadata: { weatherIntelligence },
     }));
@@ -171,6 +181,7 @@ export function buildRecommendationCentre({
       severity: "healthy",
       priority: 48,
       title: "Review day optimiser moves",
+      dedupeKey: "optimiser-moves",
       description: `${optimiserMoves} validated fixture move${optimiserMoves === 1 ? "" : "s"} available for the selected matchday.`,
       metadata: { dayOptimisation },
     }));
@@ -182,6 +193,7 @@ export function buildRecommendationCentre({
       severity: "healthy",
       priority: 10,
       title: "Prepare matchday communications",
+      dedupeKey: "communications-readiness",
       description: "Core checks look healthy. Review coach messages and publish when ready.",
     }));
   }
