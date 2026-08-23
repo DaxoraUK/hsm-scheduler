@@ -53,6 +53,14 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 - Specialist depth remains available behind focused workspaces and collapsed detail; simplification must remove duplication, not capability.
 - Coach Hub becomes the preferred first-party destination for authorised coach communications: Ground Control prepares and audits the message once, Coach Hub surfaces it to the correct team contacts, and configured external channels remain delivery or fallback routes rather than a separate source of truth.
 
+### Shared approval integrity and live operator coordination
+
+- Matchday locks are club-wide, permission-controlled and retained in the shared workspace rather than one browser.
+- Every approval records the responsible operator, approval time and an exact fixture-version fingerprint.
+- Coach Hub publication is rejected when the prepared fixtures do not match the locked version.
+- Open matchday workspaces refresh approval state on focus and at a short interval, so a remote lock immediately stops editing without requiring a page reload.
+- Cloudflare is planned as a complementary security layer for production DNS, Turnstile, rate controls and later document storage; Vercel remains the application host and Supabase remains the protected data authority.
+
 ## Acceptance criteria
 
 - Consolidated source builds successfully on the target Windows environment.

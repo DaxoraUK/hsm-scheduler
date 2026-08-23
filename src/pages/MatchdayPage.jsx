@@ -274,6 +274,7 @@ export default function MatchdayPage({
   const [openSections, setOpenSections] = useState({});
   const [highlightedSection, setHighlightedSection] = useState(null);
   const targetAppliedRef = useRef(null);
+  const remoteLockRevisionRef = useRef("");
 
   const isSunday = day === "Sunday";
   const matchdayDate =
@@ -303,27 +304,50 @@ export default function MatchdayPage({
 
   useEffect(() => {
     let active = true;
+    remoteLockRevisionRef.current = "";
     const localLock = readMatchdayLock(lockIdentity);
     setIsLocked(localLock);
 
     const sharedClubId = props.activeClubId || props.club?.id || "";
     if (!sharedClubId || !isSupaConfigured()) return () => { active = false; };
 
-    DB.getMatchdayLock(sharedClubId, {
-      dayScope: lockIdentity.day,
-      matchdayDate: lockIdentity.date,
-    }).then((result) => {
-      if (!active) return;
-      const sharedLocked = Boolean(result?.locked);
-      writeMatchdayLock(lockIdentity, sharedLocked);
-      setIsLocked(sharedLocked);
-      setLockInfo(result || {});
-    }).catch(() => {
-      // The cached browser state keeps the page usable during a temporary connection fault.
-    });
+    const refreshSharedLock = async () => {
+      try {
+        const result = await DB.getMatchdayLock(sharedClubId, {
+          dayScope: lockIdentity.day,
+          matchdayDate: lockIdentity.date,
+        });
+        if (!active) return;
+        const sharedLocked = Boolean(result?.locked);
+        const revision = String(result?.updated_at || "");
+        const previousRevision = remoteLockRevisionRef.current;
+        writeMatchdayLock(lockIdentity, sharedLocked);
+        setIsLocked(sharedLocked);
+        setLockInfo(result || {});
+        remoteLockRevisionRef.current = revision;
+        if (previousRevision && revision && previousRevision !== revision) {
+          toast.info(sharedLocked ? `${day} schedule was locked` : `${day} schedule was unlocked`, {
+            description: sharedLocked
+              ? `${result?.locked_by_label || "Another authorised operator"} approved this schedule. Editing has been disabled.`
+              : "The shared approval was removed by another authorised operator.",
+          });
+        }
+      } catch {
+        // The cached browser state keeps the page usable during a temporary connection fault.
+      }
+    };
 
-    return () => { active = false; };
-  }, [lockIdentity]);
+    refreshSharedLock();
+    const interval = window.setInterval(refreshSharedLock, 20000);
+    const refreshOnFocus = () => refreshSharedLock();
+    window.addEventListener("focus", refreshOnFocus);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [day, lockIdentity, props.activeClubId, props.club?.id]);
 
   useEffect(() => {
     setTimelineDirty(false);
@@ -509,6 +533,7 @@ export default function MatchdayPage({
           fixtureCount: locked ? final.length : 0,
         });
         setLockInfo(result || {});
+        remoteLockRevisionRef.current = String(result?.updated_at || "");
       }
       writeMatchdayLock(lockIdentity, locked);
       setIsLocked(locked);
