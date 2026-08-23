@@ -28,12 +28,13 @@ Daxora is one secure organisation platform with a shared identity, organisation 
 - Daxora Pay is presented honestly as in development and cannot be opened.
 - Multi-role compatibility remains enforced across legacy and current role-assignment payloads.
 - Protected production release evidence now uploads successfully from the hidden evidence directory.
+- Daxora Home makes the selected organisation, combined roles, assigned scope, plan and league context explicit.
+- Eligible club owners and administrators can open Coach Hub administration from the product launcher without gaining or granting coach-only authority.
+- Multi-role club operators who also hold a coach responsibility retain their authorised Ground Control workspace instead of being forced into Coach Hub.
+- Concise platform alerts expose plan, read-only/support and multi-organisation context without duplicating Mission Control.
 
 ### Next
 
-- Refine organisation selection for multi-club, multi-league and multi-role users, with explicit current organisation and role context.
-- Add a safe Coach Hub administration route for club managers without treating coach-only access as club-wide authority.
-- Add concise cross-product alerts and subscription state to Daxora Home without duplicating Mission Control.
 - Introduce product-level entitlements alongside the existing Ground Control feature entitlements.
 - Separate the public and authenticated surfaces onto canonical `www.daxora.co.uk` and `app.daxora.co.uk` routes after staging and DNS acceptance.
 - Add public-site commercial essentials: contact/enquiry route, product detail pages, privacy notice, terms, cookie position and support route.

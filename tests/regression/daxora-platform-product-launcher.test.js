@@ -22,4 +22,12 @@ describe("Daxora platform product launcher", () => {
   test("labels Daxora Pay honestly until its secure product boundary exists", () => {
     expect(product(getDaxoraProducts(), DAXORA_PRODUCT_CODES.DAXORA_PAY)).toMatchObject({ state: "coming_soon", canOpen: false });
   });
+
+  test("routes authorised club managers to Coach Hub administration", () => {
+    const products = getDaxoraProducts({
+      subscription: { planName: "Pro", features: [ENTITLEMENTS.COACH_HUB] },
+      workspaceAccess: { role: "admin", canManageSettings: true },
+    });
+    expect(product(products, DAXORA_PRODUCT_CODES.COACH_HUB)).toMatchObject({ state: "available", canOpen: true, target: "coach_admin" });
+  });
 });

@@ -1,11 +1,53 @@
-import { ArrowRight, Building2, CircleDollarSign, LogOut, RadioTower, ShieldCheck, Sparkles, Trophy, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, CircleDollarSign, KeyRound, LogOut, RadioTower, ShieldCheck, Sparkles, Trophy, UsersRound } from "lucide-react";
+import { getRoleLabel } from "../lib/security/permissions.js";
 
 const ICONS = { ground_control: RadioTower, coach_hub: UsersRound, league_manager: Trophy, daxora_pay: CircleDollarSign, platform_admin: ShieldCheck };
 const TONES = { emerald: "bg-emerald-100 text-emerald-700", sky: "bg-sky-100 text-sky-700", violet: "bg-violet-100 text-violet-700", amber: "bg-amber-100 text-amber-700", slate: "bg-slate-200 text-slate-700" };
 const STATUS = { available: "Ready to open", managed: "Managed access", upgrade: "Upgrade required", unavailable: "Not available", coming_soon: "Coming soon" };
 
-export default function DaxoraHomePage({ products = [], club, memberships = [], activeClubId = "", user, onClubChange, onOpenProduct, onSignOut }) {
+function scopeLabel(assignment = {}) {
+  const type = String(assignment.scopeType || assignment.scope_type || "club").toLowerCase();
+  if (type === "club") return "Club-wide";
+  if (type === "team") return "Assigned team";
+  if (type === "site") return "Assigned site";
+  return "Scoped access";
+}
+
+export function buildDaxoraAccessContext({ activeMembership = null, workspaceAccess = null, subscription = null, leagueMemberships = [] } = {}) {
+  const roleCodes = Array.isArray(workspaceAccess?.roles) && workspaceAccess.roles.length
+    ? workspaceAccess.roles
+    : [activeMembership?.role || workspaceAccess?.role || "viewer"];
+  const roles = [...new Set(roleCodes.filter(Boolean))].map((role) => ({ code: role, label: getRoleLabel(role) }));
+  const assignments = Array.isArray(workspaceAccess?.roleAssignments) ? workspaceAccess.roleAssignments : [];
+  const scopes = [...new Set(assignments.map(scopeLabel))];
+  const support = workspaceAccess?.isSupport || activeMembership?.accessMode === "support";
+  return {
+    roles,
+    scopes: scopes.length ? scopes : ["Club-wide"],
+    accessLabel: support ? "Time-limited support" : workspaceAccess?.isReadOnly ? "Read-only access" : "Active access",
+    planLabel: subscription?.planName || subscription?.planCode || "Plan being verified",
+    leagueCount: Array.isArray(leagueMemberships) ? leagueMemberships.length : 0,
+  };
+}
+
+export function buildDaxoraHomeAlerts({ products = [], memberships = [], workspaceAccess = null, subscription = null, leagueMemberships = [] } = {}) {
+  const alerts = [];
+  if (subscription?.isReadOnly) {
+    alerts.push({ id: "subscription", tone: "warning", title: "Workspace is read-only", detail: subscription.message || `${subscription.planName || "The current plan"} does not currently permit publishing or sending.` });
+  } else if (subscription) {
+    alerts.push({ id: "subscription", tone: "ready", title: `${subscription.planName || "Daxora"} access active`, detail: `${subscription.statusLabel || "Active"} · operational permissions remain role-controlled.` });
+  }
+  if (workspaceAccess?.isSupport) alerts.push({ id: "support", tone: "warning", title: "Support session active", detail: "This organisation remains read-only and the session is time-limited." });
+  if (memberships.length > 1) alerts.push({ id: "organisations", tone: "info", title: `${memberships.length} organisations available`, detail: "Check the selected organisation before opening a product or completing an action." });
+  if (leagueMemberships.length) alerts.push({ id: "leagues", tone: "info", title: `${leagueMemberships.length} League Manager workspace${leagueMemberships.length === 1 ? "" : "s"}`, detail: "League access is separate from the selected club and retains its own role boundary." });
+  if (!alerts.length && products.some((product) => product.canOpen)) alerts.push({ id: "ready", tone: "ready", title: "Platform ready", detail: "Your available products are shown below." });
+  return alerts.slice(0, 3);
+}
+
+export default function DaxoraHomePage({ products = [], club, memberships = [], activeClubId = "", activeMembership = null, workspaceAccess = null, subscription = null, leagueMemberships = [], user, onClubChange, onOpenProduct, onSignOut }) {
   const displayName = user?.user_metadata?.display_name || user?.email || "Daxora user";
+  const accessContext = buildDaxoraAccessContext({ activeMembership, workspaceAccess, subscription, leagueMemberships });
+  const platformAlerts = buildDaxoraHomeAlerts({ products, memberships, workspaceAccess, subscription, leagueMemberships });
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-950">
       <header className="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
@@ -20,7 +62,26 @@ export default function DaxoraHomePage({ products = [], club, memberships = [], 
           <div className="flex max-w-3xl items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300"><Sparkles size={15} /> Daxora platform</div>
           <h1 className="mt-4 max-w-3xl text-3xl font-black tracking-tight sm:text-5xl">What would you like to run today?</h1>
           <p className="mt-4 max-w-2xl text-sm font-semibold leading-6 text-slate-300 sm:text-base">Choose a product. Your organisation, roles and subscription travel securely with you.</p>
-          {memberships.length > 1 ? <label className="mt-7 block max-w-sm"><span className="mb-2 block text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Organisation</span><select value={activeClubId} onChange={(event) => onClubChange?.(event.target.value)} className="h-12 w-full rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-white outline-none"><option value={activeClubId}>{club?.name || "Current club"}</option>{memberships.filter((item) => item.clubId !== activeClubId).map((item) => <option className="text-slate-950" key={item.clubId} value={item.clubId}>{item.clubName || item.name || "Club workspace"}</option>)}</select></label> : <div className="mt-7 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-xs font-black text-slate-200"><Building2 size={16} className="text-emerald-300" /> {club?.name || "Your Daxora organisation"}</div>}
+          <div className="mt-7 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400"><Building2 size={14} className="text-emerald-300" /> Current organisation</div>
+              {memberships.length > 1 ? <select aria-label="Current organisation" value={activeClubId} onChange={(event) => onClubChange?.(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-[#0b1730] px-3 text-sm font-black text-white outline-none"><option value={activeClubId}>{club?.name || activeMembership?.club?.name || "Current club"}</option>{memberships.filter((item) => item.clubId !== activeClubId).map((item) => <option key={item.clubId} value={item.clubId}>{item.club?.name || item.clubName || item.name || "Club workspace"}</option>)}</select> : <div className="mt-2 text-sm font-black text-white">{club?.name || activeMembership?.club?.name || "Your Daxora organisation"}</div>}
+              <div className="mt-2 text-[11px] font-semibold text-slate-400">{memberships.length > 1 ? `${memberships.length} club workspaces available` : "Secure organisation boundary active"}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400"><KeyRound size={14} className="text-cyan-300" /> Your access here</div>
+              <div className="mt-2 flex flex-wrap gap-2">{accessContext.roles.map((role) => <span key={role.code} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-black text-cyan-100">{role.label}</span>)}</div>
+              <div className="mt-3 text-[11px] font-semibold text-slate-400">{accessContext.accessLabel} · {accessContext.scopes.join(" + ")} · {accessContext.planLabel}{accessContext.leagueCount ? ` · ${accessContext.leagueCount} league workspace${accessContext.leagueCount === 1 ? "" : "s"}` : ""}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-5 grid gap-3 md:grid-cols-3" aria-label="Platform status">
+          {platformAlerts.map((alert) => {
+            const warning = alert.tone === "warning";
+            const Icon = warning ? AlertTriangle : CheckCircle2;
+            return <div key={alert.id} className={`flex items-start gap-3 rounded-2xl border p-4 ${warning ? "border-amber-200 bg-amber-50 text-amber-950" : alert.tone === "info" ? "border-sky-200 bg-sky-50 text-sky-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}><Icon size={18} className={`mt-0.5 shrink-0 ${warning ? "text-amber-600" : alert.tone === "info" ? "text-sky-600" : "text-emerald-600"}`} /><div><div className="text-sm font-black">{alert.title}</div><div className="mt-1 text-xs font-semibold leading-5 opacity-75">{alert.detail}</div></div></div>;
+          })}
         </section>
 
         <section className="mt-9"><div><div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Your products</div><h2 className="mt-2 text-2xl font-black">Choose a workspace</h2></div>

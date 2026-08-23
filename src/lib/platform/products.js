@@ -28,9 +28,10 @@ export function getDaxoraProducts({ subscription = null, workspaceAccess = null,
       target = state === "available" ? "dashboard" : null;
     } else if (product.code === DAXORA_PRODUCT_CODES.COACH_HUB) {
       const included = hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB);
-      state = coachUser && included ? "available" : included ? "managed" : "upgrade";
-      detail = coachUser && included ? "Your team workspace" : included ? "Available to authorised coaches" : "Available with Pro or Elite";
-      target = state === "available" ? "coach" : null;
+      const canManage = Boolean(workspaceAccess?.canManageSettings);
+      state = included && (coachUser || canManage) ? "available" : included ? "managed" : "upgrade";
+      detail = coachUser && included ? "Your team workspace" : canManage && included ? "Manage coaches and team access" : included ? "Available to authorised coaches" : "Available with Pro or Elite";
+      target = coachUser && included ? "coach" : canManage && included ? "coach_admin" : null;
     } else if (product.code === DAXORA_PRODUCT_CODES.LEAGUE_MANAGER) {
       state = leagueAvailable ? "available" : "unavailable";
       detail = leagueAvailable ? "League access confirmed" : "League membership required";

@@ -74,7 +74,7 @@ describe("Daxora Ground Control v3.10.1 Coach Hub, contacts and requests", () =>
     expect(permissions).toContain('coach: new Set([\n    WORKSPACE_PERMISSIONS.READ_WORKSPACE,');
     expect(permissions).toContain('membership?.accessMode === "coach"');
     expect(app).toContain("<CoachHubPage");
-    expect(app).toContain('roleWorkspaceAccess.isCoach');
+    expect(app).toContain('roleWorkspaceAccess.isCoachOnly');
     expect(coachPage).toContain("My Team Planner");
     expect(sharedCalendar).toContain("My calendar");
     expect(coachPage).toContain("One contact record across Daxora");

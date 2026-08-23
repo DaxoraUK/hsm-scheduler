@@ -1,3 +1,21 @@
+# Daxora Ground Control v3.10.74 - Organisation Context and Coach Hub Administration
+
+## Delivered
+
+- Makes the selected club, combined user roles, assigned scope, subscription and League Manager context explicit on Daxora Home.
+- Allows eligible owners and administrators to open Coach Hub administration directly from the Daxora product launcher.
+- Keeps coach-only users inside their team-scoped Coach Hub while allowing multi-role owners and operators to retain Ground Control access.
+- Adds concise platform-level plan, support, multi-organisation and cross-product alerts without duplicating Mission Control intelligence.
+- Retains subscription, combined-role, scope and workspace-status enforcement as the shared authority behind every route.
+
+## Verification
+
+- 163 test files and 836 tests pass.
+- Production build passes.
+- No database migration or product-authority bypass is introduced.
+
+## Previous release: v3.10.52
+
 # Daxora Ground Control v3.10.52 - Existing Lancashire Referee Source Migration
 
 ## Delivered

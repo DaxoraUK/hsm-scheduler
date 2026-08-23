@@ -550,7 +550,7 @@ function App() {
       || subscriptionStatus !== "ready"
       || !activeClubId
       || !authSession?.user?.id
-      || roleWorkspaceAccess.isCoach
+      || roleWorkspaceAccess.isCoachOnly
     ) return;
 
     const landingKey = `${authSession.user.id}:${activeClubId}`;
@@ -567,7 +567,7 @@ function App() {
   }, [
     activeClubId,
     authSession?.user?.id,
-    roleWorkspaceAccess.isCoach,
+    roleWorkspaceAccess.isCoachOnly,
     subscription,
     subscriptionStatus,
     workspaceAccess,
@@ -575,7 +575,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (!workspaceHydrated || roleWorkspaceAccess.isCoach) return;
+    if (!workspaceHydrated || roleWorkspaceAccess.isCoachOnly) return;
     const landingKey = `${authSession?.user?.id || ""}:${activeClubId || ""}`;
     if (workspaceLandingKeyRef.current !== landingKey) return;
     if (!canLandOnWorkspacePage(subscription, mainPage, workspaceAccess)) return;
@@ -584,7 +584,7 @@ function App() {
     activeClubId,
     authSession?.user?.id,
     mainPage,
-    roleWorkspaceAccess.isCoach,
+    roleWorkspaceAccess.isCoachOnly,
     subscription,
     workspaceAccess,
     workspaceHydrated,
@@ -636,7 +636,7 @@ function App() {
     complete: completeOnboarding,
   } = useClubOnboarding(
     activeClubId,
-    clubAccessStatus === "ready" && !roleWorkspaceAccess.isCoach,
+    clubAccessStatus === "ready" && !roleWorkspaceAccess.isCoachOnly,
   );
 
   useLayoutEffect(() => {
@@ -1247,7 +1247,7 @@ function App() {
       });
       migrateLegacyTenantStorage();
 
-      if (roleWorkspaceAccess.isCoach) {
+      if (roleWorkspaceAccess.isCoachOnly) {
         const coachClub = {
           ...DEFAULT_CLUB,
           id: activeClubId,
@@ -1569,7 +1569,7 @@ function App() {
     clearWeekendScheduleForDateChange,
     reportSyncFailure,
     reportSyncSuccess,
-    roleWorkspaceAccess.isCoach,
+    roleWorkspaceAccess.isCoachOnly,
     workspaceAccess.canOperate,
   ]);
 
@@ -1636,7 +1636,7 @@ function App() {
     pitchClosures,
     reportSyncFailure,
     reportSyncSuccess,
-    roleWorkspaceAccess.isCoach,
+    roleWorkspaceAccess.isCoachOnly,
     workspaceAccess.canOperate,
     workspaceHydrated,
   ]);
@@ -2154,6 +2154,13 @@ function App() {
     if (!product?.canOpen) return;
     setPlatformHomeOpen(false);
     if (product.target === "coach") return;
+    if (product.target === "coach_admin") {
+      setMainPage("settings");
+      setSettingsTab("coachhub");
+      setNavigationTarget(null);
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return;
+    }
     setMainPage(product.target || "dashboard");
     setNavigationTarget(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -2217,7 +2224,7 @@ function App() {
         leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
         platformStaff: platformContext.isPlatformStaff,
       });
-      return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} memberships={memberships} activeClubId={activeClubId} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
+      return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} memberships={memberships} activeClubId={activeClubId} activeMembership={activeMembership} workspaceAccess={roleWorkspaceAccess} leagueMemberships={leagueMemberships} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
     }
     return (
       <ProductShell
@@ -2332,14 +2339,14 @@ function App() {
       subscription,
       workspaceAccess,
       clubAvailable: true,
-      coachUser: roleWorkspaceAccess.isCoach,
+      coachUser: roleWorkspaceAccess.isCoachOnly,
       leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
       platformStaff: platformContext.isPlatformStaff,
     });
-    return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} club={club} memberships={memberships} activeClubId={activeClubId} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
+    return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} club={club} memberships={memberships} activeClubId={activeClubId} activeMembership={activeMembership} workspaceAccess={workspaceAccess} subscription={subscription} leagueMemberships={leagueMemberships} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
   }
 
-  if (roleWorkspaceAccess.isCoach) {
+  if (roleWorkspaceAccess.isCoachOnly) {
     return (
       <Suspense fallback={<BrandSplash message="Opening Coach Hub" />}>
         <DaxoraSectionErrorBoundary

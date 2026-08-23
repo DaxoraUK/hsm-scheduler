@@ -18,6 +18,7 @@ describe("multi-role access compatibility", () => {
     ]));
     expect(access.effectiveRoles).not.toContain(WORKSPACE_ROLES.COACH);
     expect(access.isCoach).toBe(true);
+    expect(access.isCoachOnly).toBe(false);
     expect(access.canOperate).toBe(true);
   });
 });
