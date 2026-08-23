@@ -139,6 +139,7 @@ const SubscriptionGate = lazy(
 );
 const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
 const DaxoraHomePage = lazy(() => import("./pages/DaxoraHomePage.jsx"));
+const DaxoraLandingPage = lazy(() => import("./pages/DaxoraLandingPage.jsx"));
 const EliteCommandCentrePage = lazy(() => import("./pages/EliteCommandCentrePage.jsx"));
 const OperationsPage = lazy(() => import("./pages/OperationsPage.jsx"));
 const DayTabs = lazy(() => import("./components/Operations/DayTabs.jsx"));
@@ -260,6 +261,7 @@ function App() {
   }, []);
   const [mainPage, setMainPage] = useState("dashboard");
   const [platformHomeOpen, setPlatformHomeOpen] = useState(true);
+  const [authView, setAuthView] = useState("landing");
   const workspaceLandingKeyRef = useRef("");
   const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
   const [settingsTab, setSettingsTab] = useState("overview");
@@ -2185,16 +2187,10 @@ function App() {
       />
     );
 
-  if (!authSession)
-    return (
-      <LoginScreen
-        supaConfigured={isSupaConfigured()}
-        onLogin={(session) => {
-          Auth.saveSession(session);
-          setAuthSession(session);
-        }}
-      />
-    );
+  if (!authSession) {
+    if (authView === "landing") return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraLandingPage onSignIn={() => setAuthView("signin")} onCreateAccount={() => setAuthView("signup")} /></Suspense>;
+    return <LoginScreen key={authView} initialMode={authView} onBack={() => setAuthView("landing")} supaConfigured={isSupaConfigured()} onLogin={(session) => { Auth.saveSession(session); setAuthSession(session); }} />;
+  }
 
   if (["idle", "loading"].includes(platformStatus))
     return <BrandSplash message="Verifying account access" />;

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Auth, isSupaConfigured } from "../lib/supabase.js";
-import BrandSplash, { GroundControlMark } from "./BrandSplash.jsx";
+import BrandSplash, { DaxoraMark } from "./BrandSplash.jsx";
 import "./authExperience.css";
 
 function Icon({ name }) {
@@ -70,8 +70,8 @@ function Capability({ icon, title, text }) {
   );
 }
 
-export default function LoginScreen({ onLogin }) {
-  const [mode, setMode] = useState("signin");
+export default function LoginScreen({ onLogin, onBack, initialMode = "signin" }) {
+  const [mode, setMode] = useState(initialMode === "signup" ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -94,7 +94,7 @@ export default function LoginScreen({ onLogin }) {
     setMessage("");
 
     if (!configured) {
-      setError("Ground Control has not been configured by the deployment administrator.");
+      setError("Daxora has not been configured by the deployment administrator.");
       return;
     }
     if (!email.trim()) {
@@ -130,7 +130,7 @@ export default function LoginScreen({ onLogin }) {
     setLoading(false);
 
     if (!response || response.error) {
-      setError(response ? response.error : "Ground Control could not complete the request.");
+      setError(response ? response.error : "Daxora could not complete the request.");
       return;
     }
 
@@ -151,7 +151,7 @@ export default function LoginScreen({ onLogin }) {
   }
 
   if (launching) {
-    return <BrandSplash message="Opening Mission Control" />;
+    return <BrandSplash message="Opening your Daxora products" />;
   }
 
   const isReset = mode === "reset";
@@ -164,30 +164,29 @@ export default function LoginScreen({ onLogin }) {
       <div className="gc-auth-ambient gc-auth-ambient-two" aria-hidden="true" />
       <div className="gc-auth-version">Platform Core v1.0</div>
 
-      <section className="gc-auth-story" aria-label="Ground Control platform introduction">
+      <section className="gc-auth-story" aria-label="Daxora platform introduction">
         <div>
           <div className="gc-auth-brand">
-            <GroundControlMark className="gc-auth-mark" />
+            <DaxoraMark className="gc-auth-mark" />
             <div className="gc-auth-wordmark">
-              <span>GROUND</span>
-              <strong>CONTROL</strong>
-              <small>OPERATIONS PLATFORM</small>
+              <span>DAXORA</span>
+              <strong>PLATFORM</strong>
+              <small>GRASSROOTS SPORT, CONNECTED</small>
             </div>
           </div>
 
           <div className="gc-auth-copy">
-            <div className="gc-auth-eyebrow">Grassroots sport, under control</div>
-            <h1>The operating system for <span>your club.</span></h1>
+            <div className="gc-auth-eyebrow">One identity. Every product.</div>
+            <h1>Your club's digital world, <span>connected.</span></h1>
             <p>
-              Run club administration, plan every matchweek and keep the right people
-              informed from one secure command centre.
+              Sign in once, choose the Daxora product you need and continue with the permissions your organisation has given you.
             </p>
           </div>
 
           <div className="gc-auth-capabilities" aria-label="Platform capabilities">
-            <Capability icon="route" title="Run the club clearly" text="People, roles, facilities and responsibilities in one place." />
-            <Capability icon="pulse" title="Operate every matchweek" text="Fixtures, pitches, officials and risks coordinated early." />
-            <Capability icon="chart" title="Keep everyone informed" text="Role-aware updates prepared and sent without duplicated work." />
+            <Capability icon="route" title="One secure identity" text="One account across every authorised club and product." />
+            <Capability icon="pulse" title="Connected operations" text="Products share trusted organisation and role context." />
+            <Capability icon="chart" title="Built to grow" text="Add capabilities without adding disconnected systems." />
           </div>
         </div>
 
@@ -195,7 +194,7 @@ export default function LoginScreen({ onLogin }) {
           <span className="gc-live-dot" aria-hidden="true" />
           <span>Platform services online</span>
           <span>•</span>
-          <span>Secure club workspace</span>
+          <span>Secure Daxora account</span>
         </div>
       </section>
 
@@ -211,13 +210,13 @@ export default function LoginScreen({ onLogin }) {
                   ? "We will send a secure recovery link to your inbox."
                   : isSignup
                     ? "Create the account that will manage your club workspace."
-                    : "Sign in to open the workspace your club role gives you."}
+                    : "Sign in, then choose the product your role gives you."}
             </p>
           </header>
 
           {!configured ? (
             <div className="gc-auth-setup">
-              <Alert type="error">Ground Control is not connected to its deployment environment.</Alert>
+              <Alert type="error">Daxora is not connected to its deployment environment.</Alert>
               <div className="gc-auth-setup-card">
                 <strong>Administrator action required</strong>
                 <p>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the deployment environment, then restart the application. These values are configured once for the platform and are never entered by club users.</p>
@@ -313,7 +312,7 @@ export default function LoginScreen({ onLogin }) {
                 <button className="gc-auth-submit" type="submit" disabled={loading}>
                   {loading
                     ? isReset ? "Sending recovery link..." : isSignup ? "Creating secure account..." : "Authorising access..."
-                    : isReset ? "Send recovery link" : isSignup ? "Create account" : "Enter Mission Control"}
+                    : isReset ? "Send recovery link" : isSignup ? "Create account" : "Continue to Daxora"}
                 </button>
 
                 <div className="gc-auth-form-footer">
@@ -330,7 +329,7 @@ export default function LoginScreen({ onLogin }) {
           )}
 
           <footer className="gc-auth-panel-footer">
-            <span>Engineered by</span>
+            {onBack ? <button className="gc-auth-link" type="button" onClick={onBack}>Back to daxora.co.uk</button> : <span>Secure access</span>}
             <div className="gc-daxora-wordmark">DA<span>X</span>ORA</div>
           </footer>
         </div>

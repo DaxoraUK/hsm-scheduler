@@ -34,7 +34,11 @@ export function GroundControlMark({ className = "", title = "Ground Control" }) 
   );
 }
 
-export default function BrandSplash({ message = "Initialising Ground Control" }) {
+export function DaxoraMark({ className = "", title = "Daxora" }) {
+  return <svg className={className} viewBox="0 0 120 120" role="img" aria-label={title}><defs><linearGradient id="daxora-mark" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#5eead4" /><stop offset="100%" stopColor="#2563eb" /></linearGradient><filter id="daxora-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs><rect x="13" y="13" width="94" height="94" rx="29" fill="rgba(8,18,35,.85)" stroke="rgba(94,234,212,.35)" strokeWidth="2" /><path d="M34 31 60 58 86 31M34 89 60 62 86 89" fill="none" stroke="url(#daxora-mark)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" filter="url(#daxora-glow)" /><circle cx="60" cy="60" r="5" fill="#f97360" /></svg>;
+}
+
+export default function BrandSplash({ message = "Initialising Daxora" }) {
   return (
     <div className="gc-splash" role="status" aria-live="polite">
       <div className="gc-grid-field" aria-hidden="true" />
@@ -44,14 +48,14 @@ export default function BrandSplash({ message = "Initialising Ground Control" })
       <div className="gc-splash-content">
         <div className="gc-splash-mark-wrap">
           <div className="gc-splash-scan" aria-hidden="true" />
-          <GroundControlMark className="gc-splash-mark" />
+          <DaxoraMark className="gc-splash-mark" />
         </div>
 
-        <div className="gc-splash-wordmark" aria-label="Ground Control">
-          <span>GROUND</span>
-          <strong>CONTROL</strong>
+        <div className="gc-splash-wordmark" aria-label="Daxora">
+          <span>DAXORA</span>
+          <strong>PLATFORM</strong>
         </div>
-        <div className="gc-splash-kicker">OPERATIONS PLATFORM</div>
+        <div className="gc-splash-kicker">GRASSROOTS SPORT, CONNECTED</div>
 
         <div className="gc-splash-progress" aria-hidden="true">
           <span />
@@ -59,8 +63,7 @@ export default function BrandSplash({ message = "Initialising Ground Control" })
         <div className="gc-splash-message">{message}</div>
 
         <div className="gc-splash-powered">
-          <span>Powered by</span>
-          <b>DA<span>X</span>ORA</b>
+          <span>Secure platform services</span>
         </div>
       </div>
     </div>
