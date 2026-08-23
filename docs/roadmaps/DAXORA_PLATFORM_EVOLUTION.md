@@ -17,20 +17,27 @@ Daxora is one secure organisation platform with a shared identity, organisation 
 ### Foundation — implemented
 
 - Central Daxora product catalogue.
-- Product launcher within the existing desktop and mobile shell.
-- Ground Control remains the default workspace.
+- Public `daxora.co.uk` platform website presenting Daxora and its product family before authentication.
+- Neutral Daxora loading and authentication identity; Ground Control branding begins only after that product is opened.
+- Authenticated Daxora home for organisation-aware product selection.
+- Ground Control, League Manager and Daxora Admin open as products from the Daxora home rather than containing the product catalogue themselves.
+- Product workspaces expose a compact **Back to Daxora** route instead of duplicating product navigation in their sidebars.
 - League Manager availability follows authenticated league membership or platform staff access.
-- Coach Hub inclusion follows the club subscription while coach access remains role-controlled.
+- Coach Hub inclusion follows the club subscription and opens only for authorised coach access.
 - Daxora Admin is visible only to platform staff.
 - Daxora Pay is presented honestly as in development and cannot be opened.
+- Multi-role compatibility remains enforced across legacy and current role-assignment payloads.
+- Protected production release evidence now uploads successfully from the hidden evidence directory.
 
 ### Next
 
-- Give Coach Hub a first-class product entry for authorised coaches and a safe administration route for club managers.
-- Separate organisation selection from product selection so multi-club and multi-role users always understand their current context.
-- Add a platform home showing products, urgent cross-product actions and subscription state without duplicating Mission Control.
+- Refine organisation selection for multi-club, multi-league and multi-role users, with explicit current organisation and role context.
+- Add a safe Coach Hub administration route for club managers without treating coach-only access as club-wide authority.
+- Add concise cross-product alerts and subscription state to Daxora Home without duplicating Mission Control.
 - Introduce product-level entitlements alongside the existing Ground Control feature entitlements.
-- Prepare canonical `www.daxora.co.uk` and `app.daxora.co.uk` routing without changing production DNS until staging acceptance passes.
+- Separate the public and authenticated surfaces onto canonical `www.daxora.co.uk` and `app.daxora.co.uk` routes after staging and DNS acceptance.
+- Add public-site commercial essentials: contact/enquiry route, product detail pages, privacy notice, terms, cookie position and support route.
+- Establish a shared Daxora design system so future product shells remain recognisably related without losing their specialist identities.
 
 ### Daxora Pay boundary
 

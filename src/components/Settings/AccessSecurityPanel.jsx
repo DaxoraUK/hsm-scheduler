@@ -208,11 +208,7 @@ export default function AccessSecurityPanel({
         expiryHours: 72,
         responsibilities: inviteResponsibilities,
       });
-      const url = new URL(window.location.href);
-      url.search = "";
-      url.hash = "";
-      url.searchParams.set("club_invite", invitation.token);
-      setInviteLink(url.toString());
+      showInvitationLink(invitation.token);
       setInviteEmail("");
       setInviteResponsibilities([]);
       await refresh();
@@ -221,6 +217,40 @@ export default function AccessSecurityPanel({
       });
     } catch (actionError) {
       toast.error("Invitation could not be created", { description: actionError?.message });
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const showInvitationLink = (token) => {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("club_invite", token);
+    setInviteLink(url.toString());
+  };
+
+  const resendInvitation = async (invitation) => {
+    if (busyAction) return;
+    setBusyAction(`resend-invite-${invitation.id}`);
+    try {
+      const replacement = await DB.createClubInvitation(activeClubId, {
+        email: invitation.email,
+        role: invitation.role,
+        expiryHours: 72,
+        responsibilities: (invitation.responsibilities || []).map((assignment) => ({
+          role: assignment.role,
+          scopeType: assignment.scope_type || assignment.scopeType || "club",
+          scopeId: assignment.scope_id ?? assignment.scopeId ?? null,
+        })),
+      });
+      showInvitationLink(replacement.token);
+      await refresh();
+      toast.success("Fresh invitation created", {
+        description: "The previous link has been revoked. Copy and send this new link; it expires after 72 hours.",
+      });
+    } catch (actionError) {
+      toast.error("Invitation could not be resent", { description: actionError?.message });
     } finally {
       setBusyAction("");
     }
@@ -625,7 +655,10 @@ export default function AccessSecurityPanel({
                     <div className="truncate text-sm font-black text-slate-900">{invitation.email}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500"><RoleBadge role={invitation.role} /><span>Expires {formatDate(invitation.expires_at)}</span>{(invitation.responsibilities || []).map((assignment) => <span key={`${assignment.role}:${assignment.scope_type}:${assignment.scope_id || "club"}`} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{getRoleLabel(assignment.role)} · {scopeLabel({ role: assignment.role, scopeType: assignment.scope_type, scopeId: assignment.scope_id })}</span>)}</div>
                   </div>
-                  <button type="button" disabled={Boolean(busyAction)} onClick={() => runAction(`revoke-invite-${invitation.id}`, () => DB.revokeClubInvitation(activeClubId, invitation.id), "Invitation revoked")} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"><X size={14} /> Revoke</button>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" disabled={Boolean(busyAction)} onClick={() => resendInvitation(invitation)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"><RefreshCw size={14} className={busyAction === `resend-invite-${invitation.id}` ? "animate-spin" : ""} /> Resend</button>
+                    <button type="button" disabled={Boolean(busyAction)} onClick={() => runAction(`revoke-invite-${invitation.id}`, () => DB.revokeClubInvitation(activeClubId, invitation.id), "Invitation revoked")} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"><X size={14} /> Revoke</button>
+                  </div>
                 </div>
               ))}
             </div>

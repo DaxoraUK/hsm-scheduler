@@ -24,4 +24,11 @@ describe("scoped responsibilities on club invitations", () => {
     expect(migration).toContain("alter column scope_id set default '__club__'");
     expect(migration).not.toContain("drop constraint if exists club_member_roles_pkey");
   });
+
+  test("can replace a pending invitation with a fresh single-use link", () => {
+    expect(panel).toContain("resendInvitation");
+    expect(panel).toContain("The previous link has been revoked");
+    expect(panel).toContain("Resend");
+    expect(migration).toContain("status='revoked'");
+  });
 });

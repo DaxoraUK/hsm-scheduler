@@ -42,7 +42,7 @@ export default function WorkspaceAccessGate({
               <ShieldCheck size={14} /> Secure workspace access
             </div>
             <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-              Every club is isolated before Ground Control opens.
+              Every organisation is verified before a Daxora product opens.
             </h1>
             <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-slate-400 sm:text-lg">
               Your account must have an active club membership. Database policies then enforce the same boundary even if somebody bypasses the interface.
@@ -147,9 +147,9 @@ export default function WorkspaceAccessGate({
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
                   <Building2 size={27} />
                 </div>
-                <h2 className="mt-5 text-2xl font-black">No club access found</h2>
+                <h2 className="mt-5 text-2xl font-black">No active product access found</h2>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                  Your sign-in is valid, but it is not attached to an active club workspace. A club owner or administrator must add this account.
+                  Your sign-in is valid, but it is not attached to an active club workspace. If you were invited to Coach Hub, open the latest invitation and sign in with the exact invited email. Otherwise, ask a club owner or administrator to add this account.
                 </p>
                 {error ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">{error}</div> : null}
                 <button

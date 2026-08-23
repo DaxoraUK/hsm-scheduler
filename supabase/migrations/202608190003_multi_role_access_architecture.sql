@@ -155,7 +155,7 @@ begin
   ) values (
     target_club_id, target_user_id, safe_role, safe_scope, safe_scope_id, 'active', actor_id
   )
-  on conflict (club_id, user_id, role_code, scope_type, scope_id)
+  on conflict on constraint club_member_roles_pkey
   do update set status = 'active', updated_at = now(), created_by = excluded.created_by;
 
   perform private.write_audit_event(
@@ -225,13 +225,13 @@ begin
     raise exception 'Additional role assignment not found' using errcode = 'P0002';
   end if;
 
-  update public.club_member_roles
+  update public.club_member_roles as member_role
   set status = 'revoked', updated_at = now()
-  where club_id = target_club_id
-    and user_id = target_user_id
-    and role_code = safe_role
-    and scope_type = safe_scope
-    and scope_id is not distinct from safe_scope_id;
+  where member_role.club_id = target_club_id
+    and member_role.user_id = target_user_id
+    and member_role.role_code = safe_role
+    and member_role.scope_type = safe_scope
+    and member_role.scope_id is not distinct from safe_scope_id;
 
   perform private.write_audit_event(
     target_club_id,
