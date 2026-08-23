@@ -59,6 +59,7 @@ import {
   getPlannerFixtureIdentity,
 } from "../lib/engines/matchdayPlannerEngine.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import { DB, isSupaConfigured } from "../lib/supabase.js";
 
 const WORKSPACES = [
   {
@@ -291,6 +292,7 @@ export default function MatchdayPage({
     [dateLabel, day, matchdayDate, props.club?.id, props.club?.name],
   );
   const [isLocked, setIsLocked] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [timelineDirty, setTimelineDirty] = useState(false);
   const [timelineSaving, setTimelineSaving] = useState(false);
@@ -298,7 +300,26 @@ export default function MatchdayPage({
   const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
 
   useEffect(() => {
-    setIsLocked(readMatchdayLock(lockIdentity));
+    let active = true;
+    const localLock = readMatchdayLock(lockIdentity);
+    setIsLocked(localLock);
+
+    const sharedClubId = props.activeClubId || props.club?.id || "";
+    if (!sharedClubId || !isSupaConfigured()) return () => { active = false; };
+
+    DB.getMatchdayLock(sharedClubId, {
+      dayScope: lockIdentity.day,
+      matchdayDate: lockIdentity.date,
+    }).then((result) => {
+      if (!active) return;
+      const sharedLocked = Boolean(result?.locked);
+      writeMatchdayLock(lockIdentity, sharedLocked);
+      setIsLocked(sharedLocked);
+    }).catch(() => {
+      // The cached browser state keeps the page usable during a temporary connection fault.
+    });
+
+    return () => { active = false; };
   }, [lockIdentity]);
 
   useEffect(() => {
@@ -468,20 +489,49 @@ export default function MatchdayPage({
 
   const editableOverride = isLocked ? undefined : onOverride;
 
-  const lockSchedule = useCallback(() => {
-    writeMatchdayLock(lockIdentity, true);
-    setIsLocked(true);
+  const canChangeLock = props.workspaceAccess?.canPublish !== false;
+  const persistScheduleLock = useCallback(async (locked) => {
+    if (!canChangeLock || lockBusy) return false;
+    const sharedClubId = props.activeClubId || props.club?.id || "";
+    setLockBusy(true);
+    try {
+      if (sharedClubId && isSupaConfigured()) {
+        await DB.setMatchdayLock(sharedClubId, {
+          dayScope: lockIdentity.day,
+          matchdayDate: lockIdentity.date,
+          locked,
+        });
+      }
+      writeMatchdayLock(lockIdentity, locked);
+      setIsLocked(locked);
+      return true;
+    } catch (error) {
+      toast.error(`Could not ${locked ? "lock" : "unlock"} the schedule`, {
+        description: error?.message || "The shared club lock was not changed. Please try again.",
+      });
+      return false;
+    } finally {
+      setLockBusy(false);
+    }
+  }, [canChangeLock, lockBusy, lockIdentity, props.activeClubId, props.club?.id]);
+
+  const lockSchedule = useCallback(async () => {
+    const saved = await persistScheduleLock(true);
+    if (!saved) return;
     setPendingConfirmation(null);
     toast.success(`${day} schedule locked`, {
-      description:
-        "The current fixture plan is now protected from schedule changes.",
+      description: "The approved plan is now protected for everyone in the club.",
     });
-  }, [day, lockIdentity]);
+  }, [day, persistScheduleLock]);
 
-  const toggleScheduleLock = useCallback(() => {
+  const toggleScheduleLock = useCallback(async () => {
+    if (!canChangeLock) {
+      toast.error("Your role cannot change the schedule lock");
+      return;
+    }
     if (isLocked) {
-      writeMatchdayLock(lockIdentity, false);
-      setIsLocked(false);
+      const saved = await persistScheduleLock(false);
+      if (!saved) return;
       toast.success(`${day} schedule unlocked`, {
         description:
           "Fixture changes and validated optimiser moves are available again.",
@@ -520,15 +570,16 @@ export default function MatchdayPage({
     lockSchedule();
   }, [
     conflicts.length,
+    canChangeLock,
     day,
     final.length,
     hasRun,
     isLocked,
-    lockIdentity,
     lockSchedule,
     officialConflicts.length,
     refWarnings,
     unresolved.length,
+    persistScheduleLock,
   ]);
 
   const applyOptimisationMove = useCallback(
@@ -1411,6 +1462,8 @@ export default function MatchdayPage({
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}
           isLocked={isLocked}
+          canToggleLock={canChangeLock}
+          lockBusy={lockBusy}
           onToggleLock={toggleScheduleLock}
           onPrint={props.onPrintReport}
           onPublish={props.onPublish}
@@ -1430,13 +1483,14 @@ export default function MatchdayPage({
               optimiser moves are disabled until you unlock the day.
             </div>
           </div>
-          <button
+          {canChangeLock ? <button
             type="button"
             onClick={toggleScheduleLock}
+            disabled={lockBusy}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
           >
-            Unlock schedule
-          </button>
+            {lockBusy ? "Updating…" : "Unlock schedule"}
+          </button> : null}
         </div>
       ) : null}
 

@@ -476,6 +476,26 @@ async function replaceCollection(clubId, collection, records) {
 }
 
 export const DB = {
+  async getMatchdayLock(clubId, { dayScope, matchdayDate } = {}) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/get_matchday_lock", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+    });
+    return result && typeof result === "object" ? result : { locked: false };
+  },
+
+  async setMatchdayLock(clubId, { dayScope, matchdayDate, locked } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/set_matchday_lock", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+      target_locked: Boolean(locked),
+    });
+  },
+
   async listIntelligenceFeedback(clubId, dayScope) {
     const id = requireClubId(clubId);
     return asArray(await supaFetch("POST", "rpc/list_intelligence_feedback", {

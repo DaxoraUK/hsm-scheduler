@@ -32,6 +32,7 @@ export default function MatchweekCommandBar({
   day = "Matchday", mode = "test", hasRun, fixtureCount = 0, unresolvedCount = 0, refWarnings = 0,
   runTest, runLive, saveWeek, pitchCfg = {}, closedPitches = [], allowArtificial, setAllowArtificial,
   isLocked = false, onToggleLock, onPrint, onPublish, onReview, onResolve, onOptimise, optimisationCount = 0,
+  canToggleLock = true, lockBusy = false,
 }) {
   const state = workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const buildSchedule = mode === "test" ? runTest : runLive;
@@ -89,7 +90,7 @@ export default function MatchweekCommandBar({
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
           <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked}><Send size={17} />Review & publish</SecondaryButton>
-          <SecondaryButton onClick={onToggleLock} disabled={!isLocked && (!hasRun || fixtureCount === 0)} title={isLocked ? "Unlock this schedule for editing" : !hasRun || fixtureCount === 0 ? "Build a fixture schedule before locking it" : "Lock the approved schedule"}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{isLocked ? "Unlock" : "Lock"}</SecondaryButton>
+          <SecondaryButton onClick={onToggleLock} disabled={lockBusy || !canToggleLock || (!isLocked && (!hasRun || fixtureCount === 0))} title={!canToggleLock ? "Your role can view this schedule but cannot change its approval lock" : isLocked ? "Unlock this schedule for editing" : !hasRun || fixtureCount === 0 ? "Build a fixture schedule before locking it" : "Lock the approved schedule"}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{lockBusy ? "Updating…" : isLocked ? "Unlock" : "Lock"}</SecondaryButton>
           <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}><Sparkles size={17} />{optimisationCount ? `${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}</SecondaryButton>
           {closedPitches.length > 0 ? <StatusChip variant="warning"><MapPinned size={14} />{closedPitches.length} closed</StatusChip> : null}
         </div>

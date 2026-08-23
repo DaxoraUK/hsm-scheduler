@@ -5,7 +5,7 @@ const source = readFileSync("src/components/Operations/shared/MatchweekCommandBa
 
 describe("matchweek unlock control", () => {
   it("always permits unlock when a persisted day is locked", () => {
-    expect(source).toContain("disabled={!isLocked && (!hasRun || fixtureCount === 0)}");
+    expect(source).toContain("(!isLocked && (!hasRun || fixtureCount === 0))");
   });
 
   it("keeps lock unavailable until a non-empty schedule is built", () => {
