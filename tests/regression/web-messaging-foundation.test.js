@@ -6,6 +6,7 @@ import {
   EMPTY_DELIVERY_CAPABILITIES,
 } from "../../src/lib/communications/deliveryService.js";
 import {
+  communicationProviderConfig,
   publicCommunicationCapabilities,
 } from "../../server/communications/config.js";
 import {
@@ -71,6 +72,11 @@ function configureEmail() {
 }
 
 describe("web messaging delivery foundation", () => {
+  test("normalises trailing slashes from the public communications URL", () => {
+    process.env.COMMUNICATIONS_PUBLIC_BASE_URL = "https://www.daxora.co.uk///";
+    expect(communicationProviderConfig().publicBaseUrl).toBe("https://www.daxora.co.uk");
+  });
+
   test("keeps every provider disabled until explicit server-side flags and credentials exist", () => {
     ENV_NAMES.forEach((name) => delete process.env[name]);
     const capabilities = publicCommunicationCapabilities();

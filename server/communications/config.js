@@ -75,7 +75,7 @@ export function communicationProviderConfig() {
   return {
     globalEnabled,
     environment,
-    publicBaseUrl: env("COMMUNICATIONS_PUBLIC_BASE_URL").replace(/\/$/, ""),
+    publicBaseUrl: env("COMMUNICATIONS_PUBLIC_BASE_URL").replace(/\/+$/, ""),
     email: {
       enabled: email,
       provider: "resend",
