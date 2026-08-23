@@ -40,6 +40,7 @@ import {
 import {
   PLAN_CATALOGUE,
   PLAN_CODES,
+  PRODUCT_ENTITLEMENTS,
   SUBSCRIPTION_STATUSES,
   getAssignablePlans,
 } from "../lib/subscriptions/entitlements.js";
@@ -226,6 +227,7 @@ export default function PlatformAdminPage({
     entitlementOverrides: {},
     limitOverrides: {},
   });
+  const [productAccess, setProductAccess] = useState({ ground_control: true, coach_hub: false });
   const [clubStatusReason, setClubStatusReason] = useState("");
 
   const loadPlatformData = useCallback(async () => {
@@ -281,6 +283,20 @@ export default function PlatformAdminPage({
         // intentionally cleared when an administrator reapplies a package.
         entitlementOverrides: {},
         limitOverrides: {},
+      });
+      const persistedProducts = subscription.product_entitlements
+        ?? detail?.subscription_record?.metadata?.product_entitlements;
+      const explicitProducts = Array.isArray(persistedProducts)
+        ? persistedProducts
+        : null;
+      const inferredFeatures = new Set(subscription.entitlements || []);
+      setProductAccess({
+        [PRODUCT_ENTITLEMENTS.GROUND_CONTROL]: explicitProducts
+          ? explicitProducts.includes(PRODUCT_ENTITLEMENTS.GROUND_CONTROL)
+          : inferredFeatures.has("dashboard"),
+        [PRODUCT_ENTITLEMENTS.COACH_HUB]: explicitProducts
+          ? explicitProducts.includes(PRODUCT_ENTITLEMENTS.COACH_HUB)
+          : inferredFeatures.has("coach_hub"),
       });
       const existingClub = clubs.find((item) => item.id === clubId);
       setNewCase((current) => ({ ...current, clubId, requesterEmail: existingClub?.ownerEmail || current.requesterEmail }));
@@ -374,6 +390,28 @@ export default function PlatformAdminPage({
       await refreshSelectedClub();
     } catch (error) {
       toast.error("Subscription could not be updated", { description: error?.message });
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const saveProductAccess = async () => {
+    if (!selectedClubId || !platformContext?.isPlatformAdmin) return;
+    if (String(subscriptionForm.reason || "").trim().length < 5) {
+      toast.error("Product access needs a reason", { description: "Enter the commercial or support reason before applying access." });
+      return;
+    }
+    setBusyAction("products");
+    try {
+      const enabledProducts = Object.entries(productAccess)
+        .filter(([, enabled]) => enabled)
+        .map(([product]) => product);
+      await DB.platformSetClubProductEntitlements(selectedClubId, enabledProducts, subscriptionForm.reason);
+      window.dispatchEvent(new CustomEvent("ground-control-subscription-updated", { detail: { clubId: selectedClubId } }));
+      toast.success("Product access updated", { description: "Product visibility is now explicit and remains constrained by package features and user roles." });
+      await refreshSelectedClub();
+    } catch (error) {
+      toast.error("Product access could not be updated", { description: error?.message });
     } finally {
       setBusyAction("");
     }
@@ -596,6 +634,23 @@ export default function PlatformAdminPage({
                     </div>
                     <label className="mt-4 block text-xs font-black text-slate-600">Reason for change<textarea disabled={!platformContext.isPlatformAdmin} value={subscriptionForm.reason} onChange={(event) => setSubscriptionForm((current) => ({ ...current, reason: event.target.value }))} className={`${textAreaClass} mt-2`} placeholder="Explain the commercial or support reason." /></label>
                     <button type="button" disabled={!platformContext.isPlatformAdmin || busyAction === "subscription"} onClick={saveSubscription} className={`${buttonPrimary} mt-4 w-full`}>{busyAction === "subscription" ? <LoaderCircle className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Apply and audit subscription</button>
+
+                    <div className="mt-5 border-t border-slate-200 pt-5">
+                      <div className="flex items-center gap-2"><ShieldCheck className="text-violet-700" size={18} /><h4 className="text-sm font-black text-slate-950">Product access</h4></div>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Controls which purchased products appear for this club. Package features and user roles still apply, so this cannot grant access the package or person does not already allow.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {[
+                          [PRODUCT_ENTITLEMENTS.GROUND_CONTROL, "Ground Control", "Club administration and matchday operations"],
+                          [PRODUCT_ENTITLEMENTS.COACH_HUB, "Coach Hub", "Team-scoped coach workspace"],
+                        ].map(([code, label, description]) => (
+                          <label key={code} className="flex items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                            <input disabled={!platformContext.isPlatformAdmin} type="checkbox" checked={Boolean(productAccess[code])} onChange={(event) => setProductAccess((current) => ({ ...current, [code]: event.target.checked }))} className="mt-0.5 h-5 w-5 rounded border-slate-300" />
+                            <span><span className="block text-xs font-black text-slate-800">{label}</span><span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">{description}</span></span>
+                          </label>
+                        ))}
+                      </div>
+                      <button type="button" disabled={!platformContext.isPlatformAdmin || busyAction === "products"} onClick={saveProductAccess} className={`${buttonPrimary} mt-3 w-full`}>{busyAction === "products" ? <LoaderCircle className="animate-spin" size={16} /> : <ShieldCheck size={16} />} Apply and audit product access</button>
+                    </div>
                   </div>
 
                   <div className="space-y-6">

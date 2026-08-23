@@ -1566,8 +1566,12 @@ export const DB = {
 
   async getClubSubscription(clubId) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/get_club_subscription", {
-      target_club_id: id,
+    const [subscription, productEntitlements] = await Promise.all([
+      supaFetch("POST", "rpc/get_club_subscription", { target_club_id: id }),
+      supaFetch("POST", "rpc/get_club_product_entitlements", { target_club_id: id }),
+    ]);
+    return Object.assign({}, subscription, {
+      product_entitlements: Array.isArray(productEntitlements) ? productEntitlements : null,
     });
   },
 
@@ -1629,6 +1633,18 @@ export const DB = {
       next_entitlement_overrides: entitlementOverrides && typeof entitlementOverrides === "object" ? entitlementOverrides : {},
       next_limit_overrides: limitOverrides && typeof limitOverrides === "object" ? limitOverrides : {},
       change_reason: String(reason || "Manual platform assignment").trim(),
+    });
+  },
+
+  async platformSetClubProductEntitlements(clubId, productEntitlements = [], reason = "Manual product access update") {
+    const id = requireClubId(clubId);
+    const products = Array.isArray(productEntitlements)
+      ? productEntitlements.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+      : [];
+    return supaFetch("POST", "rpc/platform_set_club_product_entitlements", {
+      target_club_id: id,
+      next_product_entitlements: products,
+      change_reason: String(reason || "Manual product access update").trim(),
     });
   },
 

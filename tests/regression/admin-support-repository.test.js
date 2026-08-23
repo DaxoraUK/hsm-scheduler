@@ -39,6 +39,19 @@ beforeEach(() => {
 });
 
 describe("Daxora admin repository", () => {
+  test("loads explicit product access alongside the guarded subscription", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ club_id: CLUB_ID, plan_code: "pro", entitlements: ["dashboard", "coach_hub"] }))
+      .mockResolvedValueOnce(jsonResponse(["ground_control"]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const subscription = await DB.getClubSubscription(CLUB_ID);
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/get_club_subscription");
+    expect(fetchMock.mock.calls[1][0]).toContain("/rest/v1/rpc/get_club_product_entitlements");
+    expect(subscription.product_entitlements).toEqual(["ground_control"]);
+  });
+
   test("loads operator context and club inventory through guarded RPCs", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ is_platform_staff: true, platform_role: "admin" }))
@@ -88,6 +101,27 @@ describe("Daxora admin repository", () => {
       next_status: "active",
       next_billing_interval: "annual",
       change_reason: "Annual Pro agreement approved",
+    });
+  });
+
+  test("product access changes use the dedicated audited RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
+      club_id: CLUB_ID,
+      product_entitlements: ["ground_control", "coach_hub"],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await DB.platformSetClubProductEntitlements(
+      CLUB_ID,
+      ["ground_control", "coach_hub"],
+      "Coach Hub purchased for the club",
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/platform_set_club_product_entitlements");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      target_club_id: CLUB_ID,
+      next_product_entitlements: ["ground_control", "coach_hub"],
+      change_reason: "Coach Hub purchased for the club",
     });
   });
 
