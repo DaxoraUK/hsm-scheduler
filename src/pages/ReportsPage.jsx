@@ -416,13 +416,13 @@ export default function ReportsPage({
         title="Create traceable operational reports"
         subtitle="Combine fixtures, training, friendlies, winter provision and downtime into traceable facility, operational and funding reports."
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className={reportType === "fixtures" ? "grid w-full gap-2 sm:grid-cols-3" : "flex flex-wrap gap-2"}>
             {reportType === "fixtures" ? (
               <button
                 type="button"
                 onClick={shareFixturesToWhatsApp}
                 disabled={!model.hasData}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <MessageCircle size={17} /> Share to club WhatsApp
               </button>
@@ -451,7 +451,7 @@ export default function ReportsPage({
               type="button"
               onClick={exportCsv}
               disabled={!activeReportHasData || !dataExportEnabled}
-              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 ${reportType === "fixtures" ? "w-full" : ""}`}
             >
               <Download size={17} /> {dataExportEnabled ? "Export CSV" : "CSV locked"}
             </button>
@@ -459,7 +459,7 @@ export default function ReportsPage({
               type="button"
               onClick={printReport}
               disabled={!activeReportHasData}
-              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${reportType === "fixtures" ? "w-full" : ""}`}
             >
               <Printer size={17} /> Print / save PDF
             </button>

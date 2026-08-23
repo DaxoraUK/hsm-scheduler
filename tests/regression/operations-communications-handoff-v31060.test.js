@@ -12,6 +12,7 @@ describe("operations to communications handoff", () => {
     expect(matchday).not.toContain('id: "coachMessages"');
     expect(command).toContain("Open Communications");
     expect(command).toContain("disabled={!hasRun || needsAttention > 0}");
+    expect(matchday).toContain('className="grid gap-2 sm:grid-cols-3"');
   });
 
   test("builds a clean club WhatsApp schedule without internal governance labels", () => {
@@ -26,5 +27,12 @@ describe("operations to communications handoff", () => {
     expect(message).not.toContain("Review required");
     expect(message).not.toContain("Evidence confidence");
     expect(report).toContain('model.reportType !== "fixtures"');
+  });
+
+  test("balances the three fixture-report actions", () => {
+    const reportsPage = readFileSync("src/pages/ReportsPage.jsx", "utf8");
+    expect(reportsPage).toContain('"grid w-full gap-2 sm:grid-cols-3"');
+    expect(reportsPage).toContain('Share to club WhatsApp');
+    expect(reportsPage).toContain('reportType === "fixtures" ? "w-full"');
   });
 });
