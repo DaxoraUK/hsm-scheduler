@@ -88,6 +88,7 @@ export default function CoachHubPage({
   subscription,
   onClubChange,
   onSignOut,
+  onExit,
 }) {
   const [workspace, setWorkspace] = useState(() => ({ ...normaliseCoachHubWorkspace({}), schedulingPolicies: [], trainingPreferences: [], preferenceProposals: [], closureAlternatives: [], waitlistOffers: [] }));
   const [status, setStatus] = useState("loading");
@@ -263,6 +264,7 @@ export default function CoachHubPage({
             <div className="truncate text-[11px] font-bold text-slate-400">{clubName} · {workspace.assignments.map((row) => row.teamName).join(", ") || "Team access"}</div>
           </div>
           <button type="button" onClick={() => setTab("messages")} className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/10" aria-label={`${unread} unread Coach Hub items`}><Bell size={18} />{unread ? <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black">{Math.min(unread, 99)}</span> : null}</button>
+          {onExit ? <button type="button" onClick={onExit} className="hidden h-10 items-center gap-2 rounded-xl bg-white/10 px-3 text-xs font-black sm:flex"><ChevronRight className="rotate-180" size={16} /> Back</button> : null}
           <button type="button" onClick={onSignOut} className="hidden h-10 items-center gap-2 rounded-xl bg-white/10 px-3 text-xs font-black sm:flex"><LogOut size={16} /> Sign out</button>
         </div>
       </header>
@@ -306,7 +308,7 @@ export default function CoachHubPage({
 
       <button type="button" onClick={() => openRequest()} className="fixed bottom-5 right-5 z-30 flex h-14 items-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-900/20 lg:hidden"><Plus size={20} /> Request</button>
 
-      {mobileNav ? <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileNav(false); }}><aside className="h-full w-[86%] max-w-sm bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Coach Hub</div><div className="mt-1 text-lg font-black">{workspace.person.displayName || authSession?.user?.email}</div></div><button type="button" onClick={() => setMobileNav(false)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="mt-6"><CoachNavigation tab={tab} setTab={(next) => { setTab(next); setMobileNav(false); }} metrics={metrics} /></div><button type="button" onClick={onSignOut} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 text-sm font-black text-white"><LogOut size={17} /> Sign out</button></aside></div> : null}
+      {mobileNav ? <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileNav(false); }}><aside className="h-full w-[86%] max-w-sm bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Coach Hub</div><div className="mt-1 text-lg font-black">{workspace.person.displayName || authSession?.user?.email}</div></div><button type="button" onClick={() => setMobileNav(false)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200"><X size={18} /></button></div><div className="mt-6"><CoachNavigation tab={tab} setTab={(next) => { setTab(next); setMobileNav(false); }} metrics={metrics} /></div>{onExit ? <button type="button" onClick={onExit} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-black text-slate-700"><ChevronRight className="rotate-180" size={17} /> Back to workspace</button> : null}<button type="button" onClick={onSignOut} className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 text-sm font-black text-white"><LogOut size={17} /> Sign out</button></aside></div> : null}
       {requestDraft ? <CoachRequestWizard clubId={clubId} draft={requestDraft} setDraft={setRequestDraft} assignments={workspace.assignments} bookings={workspace.bookings} pitches={workspace.pitches} winterSites={workspace.winterSites} winterSlots={workspace.winterSlots} busy={busy} onSubmit={submitRequest} /> : null}
       {conversationRequest ? <DaxoraSectionErrorBoundary resetKey={conversationRequest.id} title="Conversation needs a refresh"><CoachRequestConversation clubId={clubId} request={conversationRequest} role="coach" onUpdated={() => load({ quiet: true })} onClose={() => setConversationRequest(null)} /></DaxoraSectionErrorBoundary> : null}
     </div>

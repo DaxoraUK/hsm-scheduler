@@ -225,6 +225,9 @@ export function createWorkspaceAccess(membership = null, context = {}) {
   const hasCoachRole = accessMode === "coach"
     || effectiveRoles.includes(WORKSPACE_ROLES.COACH)
     || effectiveRoles.includes(CLUB_ROLE_CODES.COACH)
+    || roles.includes(WORKSPACE_ROLES.COACH)
+    || roles.includes(CLUB_ROLE_CODES.COACH)
+    || roles.includes(CLUB_ROLE_CODES.TEAM_MANAGER)
     || legacyCoachAssignment;
 
   return Object.freeze({

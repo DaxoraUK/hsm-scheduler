@@ -30,4 +30,13 @@ describe("Daxora platform product launcher", () => {
     });
     expect(product(products, DAXORA_PRODUCT_CODES.COACH_HUB)).toMatchObject({ state: "available", canOpen: true, target: "coach_admin" });
   });
+
+  test("opens a multi-role team manager's own Coach Hub rather than the admin panel", () => {
+    const products = getDaxoraProducts({
+      subscription: { planName: "Pro", features: [ENTITLEMENTS.COACH_HUB] },
+      workspaceAccess: { role: "owner", canManageSettings: true, isCoach: true },
+      coachUser: true,
+    });
+    expect(product(products, DAXORA_PRODUCT_CODES.COACH_HUB)).toMatchObject({ state: "available", canOpen: true, target: "coach" });
+  });
 });

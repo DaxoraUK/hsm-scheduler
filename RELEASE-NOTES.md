@@ -1,3 +1,21 @@
+# Daxora Ground Control v3.10.75 - Multi-Role Coach Hub Access
+
+## Delivered
+
+- Shows Coach Hub in Ground Control navigation for users with an entitled coach or team-manager responsibility.
+- Lets a club owner or operator enter their own team-scoped Coach Hub without surrendering their wider authorised workspace.
+- Treats scoped Team Manager assignments as Coach Hub eligibility while retaining the assigned-team database boundary.
+- Adds a clear return route from Coach Hub to the owner/operator workspace.
+- Keeps non-coach administrators on the separate Coach Hub administration route.
+
+## Verification
+
+- Multi-role, product-launcher and Coach Hub regression checks pass.
+- Production build passes.
+- No database migration or permission broadening is introduced.
+
+## Previous release: v3.10.74
+
 # Daxora Ground Control v3.10.74 - Organisation Context and Coach Hub Administration
 
 ## Delivered

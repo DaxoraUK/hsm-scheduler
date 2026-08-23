@@ -261,6 +261,7 @@ function App() {
   }, []);
   const [mainPage, setMainPage] = useState("dashboard");
   const [platformHomeOpen, setPlatformHomeOpen] = useState(true);
+  const [coachHubOpen, setCoachHubOpen] = useState(false);
   const [authView, setAuthView] = useState("landing");
   const workspaceLandingKeyRef = useRef("");
   const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
@@ -649,6 +650,7 @@ function App() {
       if (!clubId || clubId === activeClubId) return false;
       setWorkspaceHydrated(false);
       setWorkspaceSecurityError("");
+      setCoachHubOpen(false);
       clearTenantStorageContext();
       return selectClub(clubId);
     },
@@ -2137,6 +2139,7 @@ function App() {
     setWorkspaceSecurityError("");
     setAuthSession(null);
     setPlatformHomeOpen(true);
+    setCoachHubOpen(false);
     setMainPage("dashboard");
     setDayTab("saturday");
     setSettingsTab("overview");
@@ -2153,7 +2156,10 @@ function App() {
   const handleOpenDaxoraProduct = useCallback((product) => {
     if (!product?.canOpen) return;
     setPlatformHomeOpen(false);
-    if (product.target === "coach") return;
+    if (product.target === "coach") {
+      setCoachHubOpen(true);
+      return;
+    }
     if (product.target === "coach_admin") {
       setMainPage("settings");
       setSettingsTab("coachhub");
@@ -2339,14 +2345,14 @@ function App() {
       subscription,
       workspaceAccess,
       clubAvailable: true,
-      coachUser: roleWorkspaceAccess.isCoachOnly,
+      coachUser: roleWorkspaceAccess.isCoach,
       leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
       platformStaff: platformContext.isPlatformStaff,
     });
     return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} club={club} memberships={memberships} activeClubId={activeClubId} activeMembership={activeMembership} workspaceAccess={workspaceAccess} subscription={subscription} leagueMemberships={leagueMemberships} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
   }
 
-  if (roleWorkspaceAccess.isCoachOnly) {
+  if (roleWorkspaceAccess.isCoachOnly || coachHubOpen) {
     return (
       <Suspense fallback={<BrandSplash message="Opening Coach Hub" />}>
         <DaxoraSectionErrorBoundary
@@ -2362,6 +2368,7 @@ function App() {
             subscription={subscription}
             onClubChange={handleClubChange}
             onSignOut={handleSignOut}
+            onExit={() => roleWorkspaceAccess.isCoachOnly ? setPlatformHomeOpen(true) : setCoachHubOpen(false)}
           />
         </DaxoraSectionErrorBoundary>
       </Suspense>
@@ -2465,6 +2472,7 @@ function App() {
         onEndSupportAccess={handleEndSupportAccess}
         onSignOut={handleSignOut}
         onOpenPlatformHome={() => setPlatformHomeOpen(true)}
+        onOpenCoachHub={() => setCoachHubOpen(true)}
       >
         <style
           dangerouslySetInnerHTML={{

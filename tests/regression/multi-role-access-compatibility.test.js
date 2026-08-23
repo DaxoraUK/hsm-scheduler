@@ -21,4 +21,14 @@ describe("multi-role access compatibility", () => {
     expect(access.isCoachOnly).toBe(false);
     expect(access.canOperate).toBe(true);
   });
+
+  test("treats a team manager as Coach Hub eligible without removing owner authority", () => {
+    const access = createWorkspaceAccess({
+      role: WORKSPACE_ROLES.OWNER,
+      roleAssignments: [{ role: "team_manager", scopeType: "team", scopeId: "u14" }],
+    });
+    expect(access.isCoach).toBe(true);
+    expect(access.isCoachOnly).toBe(false);
+    expect(access.canManageSettings).toBe(true);
+  });
 });

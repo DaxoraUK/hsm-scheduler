@@ -27,7 +27,8 @@ describe("Daxora Ground Control v3.10.41 multi-role access architecture", () => 
     ]));
     expect(access.canManageSettings).toBe(true);
     expect(access.canOperate).toBe(true);
-    expect(access.isCoach).toBe(false);
+    expect(access.isCoach).toBe(true);
+    expect(access.isCoachOnly).toBe(false);
   });
 
   test("applies team-scoped roles only when the active context matches", () => {
