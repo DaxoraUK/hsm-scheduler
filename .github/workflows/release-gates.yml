@@ -38,5 +38,6 @@ jobs:
         with:
           name: ground-control-release-evidence-${{ github.run_number }}
           path: .release-evidence/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 90
