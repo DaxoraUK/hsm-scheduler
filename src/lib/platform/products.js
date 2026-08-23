@@ -16,15 +16,15 @@ const PRODUCT_DEFINITIONS = Object.freeze([
   Object.freeze({ code: DAXORA_PRODUCT_CODES.PLATFORM_ADMIN, name: "Daxora Admin", description: "Platform subscriptions, support and governance.", accent: "slate" }),
 ]);
 
-export function getDaxoraProducts({ subscription = null, workspaceAccess = null, clubAvailable = true, coachUser = false, leagueAvailable = false, platformStaff = false, activeProduct = "" } = {}) {
+export function getDaxoraProducts({ subscription = null, workspaceAccess = null, clubAvailable = true, coachUser = false, coachOnly = false, leagueAvailable = false, platformStaff = false, activeProduct = "" } = {}) {
   return PRODUCT_DEFINITIONS.map((product) => {
     let state = "unavailable";
     let detail = "Not included for this account";
     let target = null;
 
     if (product.code === DAXORA_PRODUCT_CODES.GROUND_CONTROL) {
-      state = clubAvailable && !coachUser ? "available" : "unavailable";
-      detail = coachUser ? "Your role opens Coach Hub" : subscription?.planName ? `${subscription.planName} workspace` : clubAvailable ? "Club operations" : "Club membership required";
+      state = clubAvailable && !coachOnly ? "available" : "unavailable";
+      detail = coachOnly ? "Your role opens Coach Hub" : subscription?.planName ? `${subscription.planName} workspace` : clubAvailable ? "Club operations" : "Club membership required";
       target = state === "available" ? "dashboard" : null;
     } else if (product.code === DAXORA_PRODUCT_CODES.COACH_HUB) {
       const included = hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB);

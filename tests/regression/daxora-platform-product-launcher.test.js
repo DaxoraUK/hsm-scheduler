@@ -38,5 +38,17 @@ describe("Daxora platform product launcher", () => {
       coachUser: true,
     });
     expect(product(products, DAXORA_PRODUCT_CODES.COACH_HUB)).toMatchObject({ state: "available", canOpen: true, target: "coach" });
+    expect(product(products, DAXORA_PRODUCT_CODES.GROUND_CONTROL)).toMatchObject({ state: "available", canOpen: true, target: "dashboard" });
+  });
+
+  test("keeps a genuinely coach-only account out of Ground Control", () => {
+    const products = getDaxoraProducts({
+      subscription: { planName: "Pro", features: [ENTITLEMENTS.COACH_HUB] },
+      workspaceAccess: { role: "coach", isCoach: true, isCoachOnly: true },
+      coachUser: true,
+      coachOnly: true,
+    });
+    expect(product(products, DAXORA_PRODUCT_CODES.GROUND_CONTROL)).toMatchObject({ state: "unavailable", canOpen: false });
+    expect(product(products, DAXORA_PRODUCT_CODES.COACH_HUB)).toMatchObject({ state: "available", canOpen: true, target: "coach" });
   });
 });

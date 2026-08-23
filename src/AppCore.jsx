@@ -2346,6 +2346,7 @@ function App() {
       workspaceAccess,
       clubAvailable: true,
       coachUser: roleWorkspaceAccess.isCoach,
+      coachOnly: roleWorkspaceAccess.isCoachOnly,
       leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
       platformStaff: platformContext.isPlatformStaff,
     });
