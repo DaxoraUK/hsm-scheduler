@@ -498,6 +498,16 @@ export const DB = {
     });
   },
 
+  async assertMatchdayApproval(clubId, { dayScope, matchdayDate, snapshotHash } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/assert_matchday_approval", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+      target_snapshot_hash: String(snapshotHash || "").trim(),
+    });
+  },
+
   async listIntelligenceFeedback(clubId, dayScope) {
     const id = requireClubId(clubId);
     return asArray(await supaFetch("POST", "rpc/list_intelligence_feedback", {
