@@ -5,6 +5,22 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/coach/invite",
+      "destination": "/api/coach-invite"
+    },
+    {
+      "source": "/api/communications/capabilities",
+      "destination": "/api/communications-capabilities"
+    },
+    {
+      "source": "/api/communications/dispatch",
+      "destination": "/api/communications-dispatch"
+    },
+    {
+      "source": "/api/communications/webhooks/resend",
+      "destination": "/api/communications-webhooks-resend"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     },

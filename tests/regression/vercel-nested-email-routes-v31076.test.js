@@ -1,14 +1,21 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 
+const router = readFileSync("api/[...path].js", "utf8");
+const vercel = readFileSync("vercel.json", "utf8");
+
 describe("explicit Vercel email routes", () => {
   test("exposes Coach Hub invitation delivery without relying on a catch-all route", () => {
-    expect(readFileSync("api/coach/invite.js", "utf8")).toContain('server-api/coach/invite.js');
+    expect(router).toContain('["/api/coach-invite", coachInvite]');
+    expect(vercel).toContain('"source": "/api/coach/invite"');
+    expect(vercel).toContain('"destination": "/api/coach-invite"');
   });
 
   test("exposes communications and Resend webhook endpoints at their public paths", () => {
-    expect(readFileSync("api/communications/capabilities.js", "utf8")).toContain('server-api/communications/capabilities.js');
-    expect(readFileSync("api/communications/dispatch.js", "utf8")).toContain('server-api/communications/dispatch.js');
-    expect(readFileSync("api/communications/webhooks/resend.js", "utf8")).toContain('server-api/communications/webhooks/resend.js');
+    expect(router).toContain('["/api/communications-capabilities", communicationsCapabilities]');
+    expect(router).toContain('["/api/communications-dispatch", communicationsDispatch]');
+    expect(router).toContain('["/api/communications-webhooks-resend", resendWebhook]');
+    expect(vercel).toContain('"source": "/api/communications/webhooks/resend"');
+    expect(vercel).toContain('"destination": "/api/communications-webhooks-resend"');
   });
 });
