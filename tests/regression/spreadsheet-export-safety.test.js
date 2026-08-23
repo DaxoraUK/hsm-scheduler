@@ -5,7 +5,7 @@ import { toCsv } from "../../src/lib/settings/dataExchange.js";
 import { leagueAnalyticsToCsv } from "../../src/lib/league/leagueAnalyticsEngine.js";
 
 describe("spreadsheet export safety", () => {
-  test.each(["=1+1", "+SUM(A1:A2)", "@command", "-2+3"])(
+  test.each(["=1+1", "+SUM(A1:A2)", "@command", "-2+3", "  =hidden", "\t@hidden"])(
     "neutralises formula-like text %s",
     (value) => {
       expect(neutraliseSpreadsheetFormula(value)).toBe(`'${value}`);
