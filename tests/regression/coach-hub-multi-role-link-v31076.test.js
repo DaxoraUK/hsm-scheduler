@@ -5,6 +5,7 @@ const read = (path) => readFileSync(path, "utf8");
 
 describe("Coach Hub multi-role access linking", () => {
   const migration = read("supabase/migrations/202608230011_multi_role_coach_hub_link.sql");
+  const reconciliation = read("supabase/migrations/202608230012_coach_hub_identity_reconciliation.sql");
   const api = read("src/lib/supabase.js");
   const page = read("src/pages/CoachHubPage.jsx");
   const settings = read("src/components/Settings/CoachHubSettingsPanel.jsx");
@@ -35,5 +36,13 @@ describe("Coach Hub multi-role access linking", () => {
     expect(settings).toContain("Remove person");
     expect(settings).toContain("Historical requests and audit records are retained.");
     expect(api).toContain("async archiveCoachHubPerson(clubId, personId)");
+  });
+
+  test("identity and assignment reconciliation is safe to repeat", () => {
+    expect(reconciliation).toContain("person.identity_key=identity_value");
+    expect(reconciliation).toContain("pg_advisory_xact_lock");
+    expect(reconciliation).toContain("on conflict(club_id,identity_key) do update");
+    expect(reconciliation).toContain("target_assignment.id is not null");
+    expect(reconciliation).toContain("on conflict(club_id,person_id,team_key,staff_role) do update");
   });
 });
