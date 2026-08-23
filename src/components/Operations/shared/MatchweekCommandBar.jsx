@@ -33,13 +33,16 @@ export default function MatchweekCommandBar({
   runTest, runLive, saveWeek, pitchCfg = {}, closedPitches = [], allowArtificial, setAllowArtificial,
   isLocked = false, onToggleLock, onPrint, onPublish, onReview, onResolve, onOptimise, optimisationCount = 0,
   canToggleLock = true, lockBusy = false,
+  approvalStale = false,
 }) {
   const state = workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const buildSchedule = mode === "test" ? runTest : runLive;
   const matchdayHealth = getMatchdayHealth({ hasRun, unresolvedCount, refWarnings, pitchCfg, closedPitches });
   const blockingCount = unresolvedCount;
   const warningCount = refWarnings + closedPitches.length;
-  const action = state === "publish"
+  const action = approvalStale
+    ? { title: "Review the changed schedule", detail: "This plan no longer matches the approved version. Unlock it, check the changes and approve the new version before publishing.", label: "Unlock and review", icon: AlertTriangle, onClick: onToggleLock }
+    : state === "publish"
     ? { title: "Publish the approved schedule", detail: "Open the prepared queue for this matchday, review recipients and release updates to Coach Hub.", label: "Review and publish", icon: Send, onClick: onPublish }
     : state === "import"
       ? { title: "Import and build the fixture plan", detail: "Load official fixture feeds or demonstration data, then let Ground Control create the first draft.", label: mode === "test" ? `Build ${day} schedule` : `Import ${day} fixtures`, icon: Play, onClick: buildSchedule }
@@ -89,7 +92,7 @@ export default function MatchweekCommandBar({
           {typeof setAllowArtificial === "function" ? <label className={`flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={isLocked} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
-          <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked}><Send size={17} />Review & publish</SecondaryButton>
+          <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked || approvalStale} title={approvalStale ? "The schedule changed after approval. Unlock, review and lock it again." : undefined}><Send size={17} />Review & publish</SecondaryButton>
           <SecondaryButton onClick={onToggleLock} disabled={lockBusy || !canToggleLock || (!isLocked && (!hasRun || fixtureCount === 0))} title={!canToggleLock ? "Your role can view this schedule but cannot change its approval lock" : isLocked ? "Unlock this schedule for editing" : !hasRun || fixtureCount === 0 ? "Build a fixture schedule before locking it" : "Lock the approved schedule"}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{lockBusy ? "Updating…" : isLocked ? "Unlock" : "Lock"}</SecondaryButton>
           <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}><Sparkles size={17} />{optimisationCount ? `${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}</SecondaryButton>
           {closedPitches.length > 0 ? <StatusChip variant="warning"><MapPinned size={14} />{closedPitches.length} closed</StatusChip> : null}

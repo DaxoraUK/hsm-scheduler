@@ -619,7 +619,7 @@ export default function CommunicationsPage(props) {
         body: row.message,
         message_identity: `${row.id}:${row.messageHash}`,
         requires_acknowledgement: true,
-      })));
+      })), props.audience?.approval || {});
       await Promise.all(selectedRows.map((row) => record(row, "coach_hub_published", null, { teamKey: row.contact.teamKey }, false)));
       await loadEvents();
       setCoachHubConfirmation(null);

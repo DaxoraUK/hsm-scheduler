@@ -2358,7 +2358,7 @@ function App() {
     setMainPage("reports");
   };
 
-  const openCoachMessages = (day = "all") => {
+  const openCoachMessages = (day = "all", approval = {}) => {
     const safeDay = ["saturday", "sunday", "midweek"].includes(String(day).toLowerCase())
       ? String(day).toLowerCase()
       : "all";
@@ -2369,6 +2369,7 @@ function App() {
       day: safeDay,
       autoOpen: true,
       teamKeys: [],
+      approval: approval && typeof approval === "object" ? approval : {},
     });
     setNavigationTarget(null);
     setMainPage("communications");
@@ -2636,7 +2637,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={() => openCoachMessages("saturday")}
+                    onPublish={(approval) => openCoachMessages("saturday", approval)}
                     showManual={showManual}
                     setShowManual={setShowManual}
                     satManual={satManual}
@@ -2714,7 +2715,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={() => openCoachMessages("sunday")}
+                    onPublish={(approval) => openCoachMessages("sunday", approval)}
                     showSunManual={showSunManual}
                     setShowSunManual={setShowSunManual}
                     sunManual={sunManual}
@@ -2787,7 +2788,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={() => openCoachMessages("midweek")}
+                    onPublish={(approval) => openCoachMessages("midweek", approval)}
                     showMidweekManual={showMidweekManual}
                     setShowMidweekManual={setShowMidweekManual}
                     midweekManual={midweekManual}

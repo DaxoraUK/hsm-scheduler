@@ -486,13 +486,15 @@ export const DB = {
     return result && typeof result === "object" ? result : { locked: false };
   },
 
-  async setMatchdayLock(clubId, { dayScope, matchdayDate, locked } = {}) {
+  async setMatchdayLock(clubId, { dayScope, matchdayDate, locked, snapshotHash = "", fixtureCount = 0 } = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/set_matchday_lock", {
       target_club_id: id,
       target_day_scope: String(dayScope || "").trim(),
       target_matchday_date: String(matchdayDate || "").trim(),
       target_locked: Boolean(locked),
+      target_snapshot_hash: String(snapshotHash || "").trim() || null,
+      target_fixture_count: Math.max(0, Number(fixtureCount) || 0),
     });
   },
 
@@ -1134,11 +1136,14 @@ export const DB = {
     });
   },
 
-  async publishCoachHubMatchweekMessages(clubId, messages = []) {
+  async publishCoachHubMatchweekMessages(clubId, messages = [], approval = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/publish_coach_hub_matchweek_messages", {
       target_club_id: id,
       messages: Array.isArray(messages) ? messages : [],
+      target_day_scope: String(approval?.dayScope || "").trim() || null,
+      target_matchday_date: String(approval?.matchdayDate || "").trim() || null,
+      target_snapshot_hash: String(approval?.snapshotHash || "").trim() || null,
     });
   },
 

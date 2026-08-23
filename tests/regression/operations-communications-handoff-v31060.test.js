@@ -11,7 +11,7 @@ describe("operations to communications handoff", () => {
     expect(matchday).not.toContain('id: "communications"');
     expect(matchday).not.toContain('id: "coachMessages"');
     expect(command).toContain("Review & publish");
-    expect(command).toContain("disabled={!hasRun || blockingCount > 0 || !isLocked}");
+    expect(command).toContain("disabled={!hasRun || blockingCount > 0 || !isLocked || approvalStale}");
     expect(matchday).toContain('className="grid gap-2 sm:grid-cols-3"');
   });
 

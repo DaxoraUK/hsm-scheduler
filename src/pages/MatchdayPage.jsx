@@ -60,6 +60,7 @@ import {
 } from "../lib/engines/matchdayPlannerEngine.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
+import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 
 const WORKSPACES = [
   {
@@ -293,6 +294,7 @@ export default function MatchdayPage({
   );
   const [isLocked, setIsLocked] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
+  const [lockInfo, setLockInfo] = useState({});
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [timelineDirty, setTimelineDirty] = useState(false);
   const [timelineSaving, setTimelineSaving] = useState(false);
@@ -315,6 +317,7 @@ export default function MatchdayPage({
       const sharedLocked = Boolean(result?.locked);
       writeMatchdayLock(lockIdentity, sharedLocked);
       setIsLocked(sharedLocked);
+      setLockInfo(result || {});
     }).catch(() => {
       // The cached browser state keeps the page usable during a temporary connection fault.
     });
@@ -488,6 +491,8 @@ export default function MatchdayPage({
   );
 
   const editableOverride = isLocked ? undefined : onOverride;
+  const currentSnapshotHash = useMemo(() => buildMatchdaySnapshotHash(final), [final]);
+  const approvalStale = Boolean(isLocked && lockInfo.snapshot_hash && lockInfo.snapshot_hash !== currentSnapshotHash);
 
   const canChangeLock = props.workspaceAccess?.canPublish !== false;
   const persistScheduleLock = useCallback(async (locked) => {
@@ -496,11 +501,14 @@ export default function MatchdayPage({
     setLockBusy(true);
     try {
       if (sharedClubId && isSupaConfigured()) {
-        await DB.setMatchdayLock(sharedClubId, {
+        const result = await DB.setMatchdayLock(sharedClubId, {
           dayScope: lockIdentity.day,
           matchdayDate: lockIdentity.date,
           locked,
+          snapshotHash: locked ? currentSnapshotHash : "",
+          fixtureCount: locked ? final.length : 0,
         });
+        setLockInfo(result || {});
       }
       writeMatchdayLock(lockIdentity, locked);
       setIsLocked(locked);
@@ -513,7 +521,7 @@ export default function MatchdayPage({
     } finally {
       setLockBusy(false);
     }
-  }, [canChangeLock, lockBusy, lockIdentity, props.activeClubId, props.club?.id]);
+  }, [canChangeLock, currentSnapshotHash, final.length, lockBusy, lockIdentity, props.activeClubId, props.club?.id]);
 
   const lockSchedule = useCallback(async () => {
     const saved = await persistScheduleLock(true);
@@ -1464,9 +1472,10 @@ export default function MatchdayPage({
           isLocked={isLocked}
           canToggleLock={canChangeLock}
           lockBusy={lockBusy}
+          approvalStale={approvalStale}
           onToggleLock={toggleScheduleLock}
           onPrint={props.onPrintReport}
-          onPublish={props.onPublish}
+          onPublish={() => props.onPublish?.({ dayScope: lockIdentity.day, matchdayDate: lockIdentity.date, snapshotHash: currentSnapshotHash })}
           onReview={() => openIntelligenceTarget("unresolved")}
           onResolve={() => openIntelligenceTarget(refWarnings > 0 ? "officialsIntelligence" : "pitchClosures")}
           onOptimise={reviewOptimisation}
@@ -1479,8 +1488,7 @@ export default function MatchdayPage({
           <div>
             <div className="text-sm font-black">Approved schedule locked</div>
             <div className="mt-1 text-xs font-bold text-emerald-800">
-              Fixtures remain viewable and printable, but schedule edits and
-              optimiser moves are disabled until you unlock the day.
+              {approvalStale ? "The fixture plan no longer matches the approved version. Unlock, review and lock it again before publishing." : `Approved${lockInfo.locked_by_label ? ` by ${lockInfo.locked_by_label}` : ""}${lockInfo.locked_at ? ` · ${new Date(lockInfo.locked_at).toLocaleString("en-GB")}` : ""}. Fixtures remain viewable and printable until unlocked.`}
             </div>
           </div>
           {canChangeLock ? <button
