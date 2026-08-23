@@ -8,9 +8,11 @@ import {
   getLaunchPlans,
   getUpgradePlanForEntitlement,
   hasEntitlement,
+  hasProductEntitlement,
   LIMIT_KEYS,
   normaliseSubscriptionPayload,
   PLAN_CATALOGUE,
+  PRODUCT_ENTITLEMENTS,
 } from "../../src/lib/subscriptions/entitlements.js";
 import { createWorkspaceAccess } from "../../src/lib/security/permissions.js";
 
@@ -64,6 +66,28 @@ describe("plan entitlement model", () => {
     expect(hasEntitlement(core, ENTITLEMENTS.REPORTS_ADVANCED)).toBe(false);
     expect(hasEntitlement(core, ENTITLEMENTS.ANALYTICS_ADVANCED)).toBe(false);
     expect(hasEntitlement(core, ENTITLEMENTS.MULTI_VENUE)).toBe(false);
+    expect(hasProductEntitlement(core, PRODUCT_ENTITLEMENTS.GROUND_CONTROL, ENTITLEMENTS.DASHBOARD)).toBe(true);
+    expect(hasProductEntitlement(core, PRODUCT_ENTITLEMENTS.COACH_HUB, ENTITLEMENTS.COACH_HUB)).toBe(false);
+  });
+
+  test("explicit product entitlements can narrow but never expand package features", () => {
+    const pro = normaliseSubscriptionPayload({
+      plan_code: "pro",
+      status: "active",
+      access_state: "full",
+      product_entitlements: { ground_control: true, coach_hub: false, unknown_product: true },
+    });
+    expect([...pro.productEntitlements]).toEqual([PRODUCT_ENTITLEMENTS.GROUND_CONTROL]);
+    expect(hasProductEntitlement(pro, PRODUCT_ENTITLEMENTS.GROUND_CONTROL, ENTITLEMENTS.DASHBOARD)).toBe(true);
+    expect(hasProductEntitlement(pro, PRODUCT_ENTITLEMENTS.COACH_HUB, ENTITLEMENTS.COACH_HUB)).toBe(false);
+
+    const core = normaliseSubscriptionPayload({
+      plan_code: "core",
+      status: "active",
+      access_state: "full",
+      product_entitlements: [PRODUCT_ENTITLEMENTS.COACH_HUB],
+    });
+    expect(hasProductEntitlement(core, PRODUCT_ENTITLEMENTS.COACH_HUB, ENTITLEMENTS.COACH_HUB)).toBe(false);
   });
 
   test("Pro enables delivered advanced operations, reporting, analytics and multi-venue capability", () => {

@@ -49,6 +49,14 @@ export const ENTITLEMENTS = Object.freeze({
   COACH_HUB: "coach_hub",
 });
 
+export const PRODUCT_ENTITLEMENTS = Object.freeze({
+  GROUND_CONTROL: "ground_control",
+  COACH_HUB: "coach_hub",
+  LEAGUE_MANAGER: "league_manager",
+  DAXORA_PAY: "daxora_pay",
+  PLATFORM_ADMIN: "platform_admin",
+});
+
 export const LIMIT_KEYS = Object.freeze({
   TEAMS: "teams",
   VENUES: "venues",
@@ -277,6 +285,19 @@ function normaliseObject(value) {
   return value;
 }
 
+function normaliseProductEntitlements(value) {
+  if (value == null) return null;
+  const values = value instanceof Set
+    ? [...value]
+    : Array.isArray(value)
+      ? value
+      : Object.entries(normaliseObject(value))
+        .filter(([, enabled]) => enabled === true || String(enabled).toLowerCase() === "true")
+        .map(([key]) => key);
+  const known = new Set(Object.values(PRODUCT_ENTITLEMENTS));
+  return new Set(values.map((key) => String(key || "").trim().toLowerCase()).filter((key) => known.has(key)));
+}
+
 const KNOWN_ENTITLEMENT_KEYS = new Set(Object.values(ENTITLEMENTS));
 
 function enabledOverrideKeys(value) {
@@ -301,6 +322,13 @@ export function normaliseSubscriptionPayload(payload = {}) {
   // Coach Hub is part of the Annual Planner module. Preserve access for Core
   // clubs that already carry the annual_planner add-on override.
   if (features.has(ENTITLEMENTS.ANNUAL_PLANNER)) features.add(ENTITLEMENTS.COACH_HUB);
+  const declaredProductEntitlements = normaliseProductEntitlements(
+    payload.product_entitlements ?? payload.productEntitlements,
+  );
+  const productEntitlements = declaredProductEntitlements || new Set([
+    ...(features.has(ENTITLEMENTS.DASHBOARD) ? [PRODUCT_ENTITLEMENTS.GROUND_CONTROL] : []),
+    ...(features.has(ENTITLEMENTS.COACH_HUB) ? [PRODUCT_ENTITLEMENTS.COACH_HUB] : []),
+  ]);
 
   const limitOverrides = normaliseObject(payload.limit_overrides ?? payload.limitOverrides);
   // The launch catalogue is authoritative. A stale database plan row must not
@@ -333,6 +361,7 @@ export function normaliseSubscriptionPayload(payload = {}) {
     cancelAtPeriodEnd: Boolean(payload.cancel_at_period_end ?? payload.cancelAtPeriodEnd),
     billingExempt,
     features,
+    productEntitlements,
     limits,
     plan,
     packageVersion: String(payload.package_version || payload.packageVersion || "").trim(),
@@ -380,6 +409,17 @@ export function hasEntitlement(subscription, key) {
   }
 
   return false;
+}
+
+export function hasProductEntitlement(subscription, productCode, requiredEntitlement = null) {
+  if (!subscription || !productCode) return false;
+  const productEntitlements = normaliseProductEntitlements(
+    subscription.productEntitlements ?? subscription.product_entitlements,
+  );
+  const productIncluded = productEntitlements == null
+    ? !requiredEntitlement || hasEntitlement(subscription, requiredEntitlement)
+    : productEntitlements.has(productCode);
+  return productIncluded && (!requiredEntitlement || hasEntitlement(subscription, requiredEntitlement));
 }
 
 export function canUseMatchdayWorkspace(subscription) {

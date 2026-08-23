@@ -8,7 +8,12 @@ import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
 import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index.js";
-import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
+import {
+  ENTITLEMENTS,
+  PRODUCT_ENTITLEMENTS,
+  hasEntitlement,
+  hasProductEntitlement,
+} from "../lib/subscriptions/entitlements.js";
 import { canOpenWorkspacePage } from "../lib/navigation/workspacePageAccess.js";
 import { setDaxoraNotificationContext } from "../lib/notifications/daxoraNotifications.js";
 
@@ -122,7 +127,9 @@ export default function ProductShell({
     ["executive", "Club Command", Building2, NAV_TARGETS.EXECUTIVE],
     ["operations", "Operations", CalendarDays, NAV_TARGETS.OPERATIONS],
     ["planner", "Annual Planner", CalendarRange, NAV_TARGETS.PLANNER, annualPlannerAddOnAvailable ? { badge: "Add-on" } : {}],
-    ...((workspaceAccess?.isCoach || workspaceAccess?.canManageSettings) && hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB) ? [["coach", "Coach Hub", UsersRound, null]] : []),
+    ...((workspaceAccess?.isCoach || workspaceAccess?.canManageSettings)
+      && hasProductEntitlement(subscription, PRODUCT_ENTITLEMENTS.COACH_HUB, ENTITLEMENTS.COACH_HUB)
+      ? [["coach", "Coach Hub", UsersRound, null]] : []),
     ["communications", "Communications", MessageSquareText, NAV_TARGETS.COMMUNICATIONS],
     ["analytics", "Analytics", ChartNoAxesCombined, NAV_TARGETS.ANALYTICS],
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],

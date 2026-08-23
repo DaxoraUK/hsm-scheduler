@@ -107,8 +107,10 @@ import {
   applySubscriptionAccess,
   canOpenPage,
   ENTITLEMENTS,
+  PRODUCT_ENTITLEMENTS,
   getRequiredEntitlementForPage,
   hasEntitlement,
+  hasProductEntitlement,
 } from "./lib/subscriptions/entitlements.js";
 import {
   evaluatePlanCompliance,
@@ -544,6 +546,17 @@ function App() {
     () => applySubscriptionAccess(roleWorkspaceAccess, subscription),
     [roleWorkspaceAccess, subscription],
   );
+  const coachProductEntitled = hasProductEntitlement(
+    subscription,
+    PRODUCT_ENTITLEMENTS.COACH_HUB,
+    ENTITLEMENTS.COACH_HUB,
+  );
+
+  useEffect(() => {
+    if (subscriptionStatus !== "ready" || coachProductEntitled || !coachHubOpen) return;
+    setCoachHubOpen(false);
+    setPlatformHomeOpen(true);
+  }, [coachHubOpen, coachProductEntitled, subscriptionStatus]);
 
   useEffect(() => {
     if (
@@ -2353,7 +2366,7 @@ function App() {
     return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} club={club} memberships={memberships} activeClubId={activeClubId} activeMembership={activeMembership} workspaceAccess={workspaceAccess} subscription={subscription} leagueMemberships={leagueMemberships} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
   }
 
-  if (roleWorkspaceAccess.isCoachOnly || coachHubOpen) {
+  if ((roleWorkspaceAccess.isCoachOnly || coachHubOpen) && coachProductEntitled) {
     return (
       <Suspense fallback={<BrandSplash message="Opening Coach Hub" />}>
         <DaxoraSectionErrorBoundary
