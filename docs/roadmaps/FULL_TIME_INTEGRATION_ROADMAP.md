@@ -1,5 +1,16 @@
 # Full-Time FA Integration Roadmap
 
+## Corrected direction after v3.10.54
+
+- The league, not the club, is authoritative for league referee appointments.
+- Unsupported public Refs-page retrieval and its failure warnings have been removed.
+- Ground Control does not scrape, bypass Full-Time protections or infer that a club may appoint a league referee.
+- Official fixture snippets remain the supported fixture-data source.
+- When a snippet exposes a safe fixture-detail link, Ground Control retains it so an authorised operator can open the official fixture and record the published referee appointment.
+- Operators can type the league-appointed referee or select a known person from the officials directory.
+- Manually recorded appointments remain subject to confirmation, clash, workload and audit checks.
+- Automated referee retrieval remains deferred until The FA or the relevant league supplies an authorised integration or explicit written permission.
+
 ## Delivered in v3.10.51
 
 - Detects provider changes to date, kick-off, venue, referee and fixture status against the retained source snapshot.
@@ -7,8 +18,7 @@
 - Supports explicit **Accept Full-Time change** and **Keep Ground Control version** decisions on each source card.
 - Persists pending and rejected change fingerprints in the existing server-backed club configuration.
 - Captures venue from compact official fixture feeds.
-- Supports an optional public Full-Time Refs page as a supplemental assignment source, including assistant referees when supplied.
-- Referee-source failure never blocks fixture imports; unmatched officials remain TBC.
+- Originally introduced experimental public Refs-page parsing; this was subsequently withdrawn in v3.10.54 after provider blocking and governance review.
 
 ## Delivered in v3.10.48
 
@@ -49,6 +59,9 @@
 - Compare imported home teams, opponents, dates and kick-off times with Full-Time and the club's own list.
 - Confirm duplicate pages do not create duplicate fixtures.
 - Confirm a deliberately unavailable source reports failure without clearing an existing schedule.
+- Confirm a fixture-detail link opens the matching official fixture when Full-Time supplies one.
+- Confirm an authorised operator can record a league appointment manually and that read-only users cannot alter it.
+- Confirm named appointments participate in clash and workload checks without being treated as club-generated appointments.
 
 ## Deferred
 
@@ -56,3 +69,4 @@
 - Automated reconciliation of later upstream changes.
 - Longer-term source-health event history and proactive alerting beyond the latest persisted evidence.
 - Results import for the club workspace; League Manager retains its controlled CSV reconciliation workflow.
+- Automated league referee retrieval without an authorised provider route.

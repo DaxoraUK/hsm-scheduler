@@ -97,8 +97,8 @@ export default function RefereeSettingsPanel({ refs = [], setRefs, saveTab, save
         <SettingsSectionHeader
           icon={ShieldCheck}
           eyebrow="Matchday people"
-          title="Officials & volunteers"
-          description="Maintain the people available to cover fixtures. Ground Control uses roles and clash rules when checking appointments."
+          title="Officials directory"
+          description="Maintain known league-appointed referees and any club volunteers. Ground Control records appointments and checks clashes; it does not appoint league referees."
         />
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -129,7 +129,7 @@ export default function RefereeSettingsPanel({ refs = [], setRefs, saveTab, save
           <div className="mt-4 flex justify-end"><PrimaryButton icon={Plus} onClick={addOfficial} disabled={!form.name.trim()}>Add person</PrimaryButton></div>
         </div>
 
-        <Notice tone="info" className="mt-5">League, club, manager and assistant referees are clash-checked. Parent referees, volunteers and observers are treated as flexible helpers unless you override the setting.</Notice>
+        <Notice tone="info" className="mt-5">League appointments are entered against the relevant fixture after checking the official source. League, club, manager and assistant referees are clash-checked. Parent referees, volunteers and observers remain flexible unless you override the setting.</Notice>
 
         <div className="mt-6 space-y-4">
           {refs.map((official, index) => {

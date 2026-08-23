@@ -5,7 +5,6 @@ import {
   deduplicateFullTimeFixtures,
   isHSMHome,
   parseFullTimeHtml,
-  parseFullTimeRefereeHtml,
 } from "../../src/lib/fullTimeParser.js";
 
 describe("FA Full-Time fixture parsing", () => {
@@ -14,9 +13,11 @@ describe("FA Full-Time fixture parsing", () => {
     expect(parseFullTimeHtml(html, "2026-08-22", { teamAliases: ["Horwich"] })[0]).toMatchObject({ venue: "Scholes Bank", referee: "Alex Official", refStatus: "assigned" });
   });
 
-  test("parses the separate Full-Time referee assignment table", () => {
-    const html = `<table><tr><th>Type</th><th>Date / Time</th><th>Status</th><th>Home Team</th><th>Away Team</th><th>Venue</th><th>Referee</th><th>Assistant Referees</th></tr><tr><td>L</td><td>22/08/26 14:30</td><td>-</td><td>Horwich St. Mary's</td><td>Rossendale Football Club LAL</td><td>Scholes Bank</td><td>Freddie Pye</td><td>Alex One, Alex Two</td></tr></table>`;
-    expect(parseFullTimeRefereeHtml(html, "2026-08-22", { teamAliases: ["Horwich"] })).toEqual([expect.objectContaining({ referee: "Freddie Pye", assistantReferees: ["Alex One", "Alex Two"] })]);
+  test("retains a safe official fixture-detail link for manual league appointment lookup", () => {
+    const html = `<table><tr><td>22/08/2026</td><td>14:30</td><td><a href="/displayFixture.html?id=123">Horwich St. Mary's</a></td><td>v</td><td>Rossendale</td></tr></table>`;
+    expect(parseFullTimeHtml(html, "2026-08-22", { teamAliases: ["Horwich"] })[0]).toMatchObject({
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=123",
+    });
   });
   test("recognises supported club-name variants", () => {
     expect(isHSMHome("Horwich St. Mary's U14 Spartans")).toBe(true);

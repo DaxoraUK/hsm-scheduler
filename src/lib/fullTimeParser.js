@@ -20,6 +20,18 @@ function aliases(values = DEFAULT_CLUB_ALIASES) {
   return cleaned.length ? cleaned : [...DEFAULT_CLUB_ALIASES];
 }
 
+function fullTimeFixtureUrl(row) {
+  const href = row?.querySelector("a[href*='displayFixture']")?.getAttribute("href") || "";
+  if (!href) return "";
+  try {
+    const url = new URL(href, "https://fulltime.thefa.com/");
+    if (!["fulltime.thefa.com", "www.fulltime.thefa.com"].includes(url.hostname.toLowerCase())) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
 export function isHSMHome(teamName, clubAliases = DEFAULT_CLUB_ALIASES) {
   const candidate = normaliseProviderName(teamName);
   return aliases(clubAliases).some((keyword) => candidate.includes(keyword));
@@ -119,6 +131,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         sourceId: options.sourceId || "",
         sourceName: options.sourceName || "Full-Time FA",
         sourceUrl: options.sourceUrl || "",
+        sourceFixtureUrl: fullTimeFixtureUrl(row),
       };
       fixture.sourceFixtureKey = getFullTimeFixtureKey(fixture);
       out.push(fixture);
@@ -126,40 +139,4 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
   });
 
   return deduplicateFullTimeFixtures(out);
-}
-
-export function parseFullTimeRefereeHtml(html, targetDate, options = {}) {
-  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
-  const target = parseFullTimeDate(targetDate) || String(targetDate || "").slice(0, 10);
-  const clubAliases = options.clubAliases || options.teamAliases || DEFAULT_CLUB_ALIASES;
-  const assignments = [];
-  doc.querySelectorAll("table").forEach((table) => {
-    const headers = [...table.querySelectorAll("tr th")].map((cell) => clean(cell.textContent).toLowerCase());
-    const index = (pattern) => headers.findIndex((header) => pattern.test(header));
-    const dateIndex = index(/date/);
-    const homeIndex = index(/home team/);
-    const awayIndex = index(/away team/);
-    const venueIndex = index(/venue|ground/);
-    const refereeIndex = index(/^referee$/);
-    const assistantsIndex = index(/assistant referee/);
-    if ([dateIndex, homeIndex, awayIndex, refereeIndex].some((value) => value < 0)) return;
-    table.querySelectorAll("tr").forEach((row) => {
-      const cells = [...row.querySelectorAll("td")].map((cell) => clean(cell.textContent));
-      if (!cells.length) return;
-      const date = parseFullTimeDate(cells[dateIndex]);
-      const homeTeam = cells[homeIndex];
-      const awayTeam = cells[awayIndex];
-      if (!date || (target && date !== target) || !isHSMHome(homeTeam, clubAliases)) return;
-      assignments.push({
-        date,
-        kickOff: cells[dateIndex].match(/\b(\d{1,2}:\d{2})\b/)?.[1] || "",
-        homeTeam,
-        awayTeam,
-        venue: venueIndex >= 0 ? cells[venueIndex] : "",
-        referee: cells[refereeIndex] || "",
-        assistantReferees: assistantsIndex >= 0 ? cells[assistantsIndex].split(/[,;]/).map(clean).filter(Boolean) : [],
-      });
-    });
-  });
-  return assignments;
 }

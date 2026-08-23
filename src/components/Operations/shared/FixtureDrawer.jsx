@@ -14,6 +14,7 @@ import {
   Building2,
   Radio,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { cleanName } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
@@ -487,26 +488,25 @@ Good luck!`;
                 description="Track the referee or match official for this fixture."
               >
                 <div className="grid gap-4">
+                  {displayFixture.sourceFixtureUrl ? (
+                    <a
+                      href={displayFixture.sourceFixtureUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-emerald-300 hover:text-emerald-800"
+                    >
+                      <ExternalLink size={16} />
+                      Open fixture on Full-Time
+                    </a>
+                  ) : null}
                   <ControlRow icon={UserCheck} label="Official">
                     {canEdit ? (
-                      <select
-                        value={
-                          refs.find(
-                            (ref) =>
-                              String(ref.name || "")
-                                .replace(/\./g, "")
-                                .trim()
-                                .toLowerCase() ===
-                              String(displayFixture.referee || "")
-                                .replace(/\./g, "")
-                                .trim()
-                                .toLowerCase(),
-                          )?.name ||
-                          displayFixture.referee ||
-                          ""
-                        }
+                      <>
+                      <input
+                        list={`fixture-officials-${fixtureIndex}`}
+                        value={displayFixture.referee || ""}
                         onChange={(e) => {
-                          const value = e.target.value;
+                          const value = e.target.value.trimStart();
 
                           const selectedRef = refs.find(
                             (ref) =>
@@ -516,6 +516,10 @@ Good luck!`;
 
                           updateFixturePatch({
                             referee: value,
+                            officialRole: selectedRef?.role || (value ? "league_referee" : ""),
+                            refStatus: value
+                              ? (["confirmed", "accepted"].includes(String(displayFixture.refStatus || "").toLowerCase()) ? displayFixture.refStatus : "Assigned")
+                              : "TBC",
                             refPhone:
                               selectedRef?.phone ||
                               selectedRef?.mobile ||
@@ -526,15 +530,14 @@ Good luck!`;
                           });
                         }}
                         className="control-input"
-                      >
-                        <option value="">Select official...</option>
-                        <option value="Parent Ref">Parent Ref</option>
+                        placeholder="Type the league-appointed referee"
+                      />
+                      <datalist id={`fixture-officials-${fixtureIndex}`}>
                         {refs.map((ref) => (
-                          <option key={ref.id || ref.name} value={ref.name}>
-                            {ref.name}
-                          </option>
+                          <option key={ref.id || ref.name} value={ref.name} />
                         ))}
-                      </select>
+                      </datalist>
+                      </>
                     ) : (
                       <ReadOnlyValue value={displayFixture.referee || "TBC"} />
                     )}
@@ -550,8 +553,10 @@ Good luck!`;
                         className="control-input"
                       >
                         <option value="TBC">TBC</option>
-                        <option value="Awaiting">Awaiting</option>
+                        <option value="Assigned">League appointed</option>
+                        <option value="Awaiting">Awaiting confirmation</option>
                         <option value="Confirmed">Confirmed</option>
+                        <option value="Declined">Declined / unavailable</option>
                       </select>
                     ) : (
                       <ReadOnlyValue
