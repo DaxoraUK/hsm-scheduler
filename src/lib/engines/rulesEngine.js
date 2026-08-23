@@ -42,7 +42,7 @@ export function normaliseRuleFailure(failure = null) {
   };
 }
 
-export function getCompetitionRules({ current = {}, next = {}, club = {} } = {}) {
+export function getCompetitionRules({ next = {}, club = {} } = {}) {
   return [
     {
       id: "competition.kickoffWindow",
@@ -60,7 +60,7 @@ export function getCompetitionRules({ current = {}, next = {}, club = {} } = {})
 
 export function getScheduleRules({ fixtures = [], fixtureIndex, next = {}, pitchCfg = [], closedPitches = [], club = {} } = {}) {
   return [
-    ...getCompetitionRules({ current: fixtures[fixtureIndex], next, club }),
+    ...getCompetitionRules({ next, club }),
     {
       id: "pitch.closed",
       stage: "schedule",

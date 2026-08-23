@@ -15,15 +15,6 @@ function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
 }
 
-function normalise(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function isYouthRow(row = {}) {
   return /\bu(?:[5-9]|1[0-8])\b/i.test(row.fixtureLabel || row.homeTeam || "");
 }

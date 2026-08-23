@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, Car, CheckCircle2, MapPinned, ShieldCheck, UsersRound } from "lucide-react";
+import { AlertTriangle, Car, MapPinned, ShieldCheck, UsersRound } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
 
 const toneClasses = {

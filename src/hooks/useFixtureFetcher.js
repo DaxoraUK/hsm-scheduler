@@ -7,10 +7,6 @@ function clean(value) {
   return String(value || "").trim();
 }
 
-function fixtureIdentity(fixture = {}) {
-  return [fixture.date, clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase()].join("|");
-}
-
 function matchupIdentity(fixture = {}) {
   return [clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase()].join("|");
 }
@@ -84,7 +80,7 @@ export function hasConfiguredFixtureSource(config = {}) {
   return getConfiguredFixtureSources(config).length > 0;
 }
 
-async function fetchLeagueFixtures(source, targetDate) {
+async function fetchLeagueFixtures(source) {
   if (source.feedId) {
     const contents = await loadFullTimeFeedHtml(source.feedId);
     return parseFullTimeHtml(contents, "", {
@@ -133,7 +129,7 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
 
     const results = await Promise.all(fixtureSources.map(async (source) => {
       try {
-        const imported = await fetchLeagueFixtures(source, targetDate);
+        const imported = await fetchLeagueFixtures(source);
         const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys);
         const snapshot = reconciliation.snapshot;
         const fixtures = snapshot.filter((fixture) => fixture.date === targetDate).filter((fixture) =>

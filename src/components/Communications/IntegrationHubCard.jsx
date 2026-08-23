@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ArrowRight, CheckCircle2, Link2, PlugZap, RadioTower, ShieldCheck } from "lucide-react";
+import { ArrowRight, Link2, PlugZap, RadioTower, ShieldCheck } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
 import {
   calculateIntegrationReadiness,

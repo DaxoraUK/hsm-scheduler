@@ -33,7 +33,7 @@ export function inferGrantHomeNation(club = {}) {
   if (explicit.includes("eng")) return "england";
 
   const postcode = String(club.postcode || club.weatherPostcode || "").trim().toUpperCase();
-  if (/^BT/.test(postcode)) return "northern-ireland";
+  if (postcode.startsWith("BT")) return "northern-ireland";
   if (/^(AB|DD|DG|EH|FK|G|HS|IV|KA|KW|KY|ML|PA|PH|TD|ZE)/.test(postcode)) return "scotland";
   if (/^(CF|LD|LL|NP|SA|SY)/.test(postcode)) return "wales";
   return "england";

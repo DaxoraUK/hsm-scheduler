@@ -13,7 +13,6 @@ import {
   FileSpreadsheet,
   Gauge,
   ListPlus,
-  Mail,
   Printer,
   Landmark,
   LineChart,

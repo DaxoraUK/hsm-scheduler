@@ -215,7 +215,7 @@ export function calculateCompetitionRules({
   });
 
   fixtureProfiles.forEach((profile) => {
-    const { fixture, title, teamType, format, pitch, koMins } = profile;
+    const { title, teamType, format, pitch, koMins } = profile;
     const youth = teamType === "youth";
     const adult = teamType === "adult";
 

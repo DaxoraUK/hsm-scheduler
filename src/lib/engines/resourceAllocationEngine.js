@@ -10,10 +10,6 @@ function isActive(fixture = {}) {
   return String(fixture.status || "").toLowerCase() !== "postponed";
 }
 
-function isConfirmedRef(fixture = {}) {
-  return String(fixture.refStatus || "").toLowerCase() === "confirmed";
-}
-
 function timeLabel(mins) {
   if (!Number.isFinite(Number(mins))) return "Unscheduled";
   const total = Number(mins);

@@ -5,10 +5,8 @@ import {
   Car,
   CheckCircle2,
   DoorOpen,
-  Lightbulb,
   MapPin,
   ShieldCheck,
-  Sprout,
 } from "lucide-react";
 
 export default function GroundStatusCard({
