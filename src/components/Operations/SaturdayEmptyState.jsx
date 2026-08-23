@@ -8,7 +8,6 @@ export default function SaturdayEmptyState({
   TEAM_CONFIG_DEFAULT,
   PITCHES,
   satHasRun,
-  satTab,
   satFinal,
   satUnresolved,
   setTeamCfg,

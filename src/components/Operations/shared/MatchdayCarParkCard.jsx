@@ -662,7 +662,6 @@ function applyParkingRecommendation(recommendation, onOverride) {
 }
 export default function MatchdayCarParkCard({
   club,
-  satHasRun,
   satFinal = [],
   pitchCfg = [],
   closedPitches = [],

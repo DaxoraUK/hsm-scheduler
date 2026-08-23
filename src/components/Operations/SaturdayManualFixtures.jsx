@@ -6,7 +6,6 @@ import StatusChip from "@/ui/StatusChip.jsx";
 import SecondaryButton from "@/ui/SecondaryButton.jsx";
 
 export default function SaturdayManualFixtures({
-  RE,
   club,
   showManual,
   setShowManual,

@@ -15,8 +15,6 @@ export default function SaturdaySummaryBar({
   satUnresolved = [],
   refWarnings = 0,
   satHasRun,
-  saveWeek,
-  resetAll,
 }) {
   if (!satHasRun) return null;
 

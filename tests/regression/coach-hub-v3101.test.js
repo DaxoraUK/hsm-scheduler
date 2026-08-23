@@ -12,8 +12,6 @@ import {
   PLAN_CODES,
   hasEntitlement,
 } from "../../src/lib/subscriptions/entitlements.js";
-import { WORKSPACE_PERMISSIONS } from "../../src/lib/security/permissions.js";
-
 const migration = readFileSync("supabase/migrations/202607150004_coach_hub_team_contacts_requests.sql", "utf8");
 const app = readFileSync("src/AppCore.jsx", "utf8");
 const coachPage = readFileSync("src/pages/CoachHubPage.jsx", "utf8");

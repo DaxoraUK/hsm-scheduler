@@ -127,7 +127,6 @@ const STATUS_STYLES = {
 export default function PitchClosuresCard({
   pitchCfg = [],
   pitchClosures = [],
-  closedPitches = [],
   activeDate = todayDateValue(),
   addPitchClosure,
   reopenPitchClosures,
@@ -185,12 +184,6 @@ export default function PitchClosuresCard({
     [allowArtificial, explicitClosures, registry, sorted]
   );
 
-  const linkedUnavailableCount = pitchStatuses.filter(
-    ({ status }) => status.key === "linked"
-  ).length;
-  const surfaceUnavailableCount = pitchStatuses.filter(
-    ({ status }) => status.key === "surface"
-  ).length;
   const unavailableCount = pitchStatuses.filter(({ status }) => status.unavailable).length;
   const availableCount = Math.max(0, sorted.length - unavailableCount);
   const indefiniteCount = activeClosures.filter((record) => record.untilReopened).length;
