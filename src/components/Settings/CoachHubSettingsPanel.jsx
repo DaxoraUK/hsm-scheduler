@@ -177,10 +177,21 @@ export default function CoachHubSettingsPanel({
     }
   };
 
-  const deliverInvitation = async (person) => {
+  const deliverInvitation = async (person, { reissue = false } = {}) => {
+    if (reissue) {
+      const confirmed = await daxoraConfirm({
+        title: `Reissue Coach Hub access for ${person.display_name || person.email}?`,
+        description: "The currently linked login will immediately lose Coach Hub access. A fresh secure invitation will be sent to the email shown on this contact.",
+        confirmLabel: "Reissue access",
+        tone: "danger",
+      });
+      if (!confirmed) return;
+    }
     setBusyId(person.id);
     try {
-      const invitation = await DB.createCoachHubInvitation(clubId, person.id);
+      const invitation = reissue
+        ? await DB.reissueCoachHubAccess(clubId, person.id)
+        : await DB.createCoachHubInvitation(clubId, person.id);
       const inviteUrl = coachInvitationUrl(invitation.token);
       const session = await Auth.getValidSession();
       const response = await fetch("/api/coach/invite", {
@@ -197,7 +208,7 @@ export default function CoachHubSettingsPanel({
         throw new Error(`${result?.error || "Email delivery is unavailable."} The secure invitation link has been copied.`);
       }
       await load({ quiet: true });
-      toast.success("Coach invitation sent", { description: `${person.display_name || person.email} can now activate Coach Hub.` });
+      toast.success(reissue ? "Coach Hub access reissued" : "Coach invitation sent", { description: `${person.display_name || person.email} can now activate Coach Hub using the latest invitation.` });
     } catch (error) {
       toast.error("Invitation was not emailed", { description: error?.message });
     } finally {
@@ -423,7 +434,7 @@ export default function CoachHubSettingsPanel({
                 <div className="flex flex-wrap gap-2">
                   <button type="button" disabled={!canManage} onClick={() => setPersonEditor(blankPerson(person))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:opacity-40"><Pencil size={14} /> Edit contact</button>
                   <button type="button" disabled={!canManage} onClick={() => setAssignmentEditor({ person, ...blankAssignment(person) })} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-xs font-black text-violet-800 disabled:opacity-40"><UsersRound size={14} /> Teams & roles</button>
-                  <button type="button" disabled={!canManage || !person.email || busyId === person.id || invitationStatus === "accepted"} onClick={() => deliverInvitation(person)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40"><Send size={15} /> {busyId === person.id ? "Sending…" : invitationStatus === "accepted" ? "Access active" : invitationStatus === "pending" ? "Resend invite" : "Invite coach"}</button>
+                  <button type="button" disabled={!canManage || !person.email || busyId === person.id} onClick={() => deliverInvitation(person, { reissue: invitationStatus === "accepted" })} className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40 ${invitationStatus === "accepted" ? "border border-amber-200 bg-amber-50 text-amber-900" : "bg-slate-950 text-white"}`}><Send size={15} /> {busyId === person.id ? "Sending…" : invitationStatus === "accepted" ? "Reissue access" : invitationStatus === "pending" ? "Resend invite" : "Invite coach"}</button>
                 </div>
               </div>
             );

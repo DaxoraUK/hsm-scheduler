@@ -1055,6 +1055,15 @@ export const DB = {
     });
   },
 
+  async reissueCoachHubAccess(clubId, personId, expiryHours = 168) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/reissue_coach_hub_access", {
+      target_club_id: id,
+      target_person_id: personId,
+      expiry_hours: Math.max(24, Math.min(Number(expiryHours) || 168, 720)),
+    });
+  },
+
   async acceptCoachHubInvitation(token) {
     return supaFetch("POST", "rpc/accept_coach_hub_invitation", {
       invitation_token: String(token || "").trim(),
