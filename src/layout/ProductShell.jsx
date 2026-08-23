@@ -4,7 +4,6 @@ import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
 import DaxoraNotificationBell from "../components/system/DaxoraNotificationBell.jsx";
 import DaxoraToaster from "../components/system/DaxoraToaster.jsx";
-import DaxoraProductLauncher from "../components/platform/DaxoraProductLauncher.jsx";
 import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
 import { getMatchdayScopeLabel, MATCHDAY_SCOPES } from "../lib/domain/matchdayScope.js";
@@ -12,7 +11,6 @@ import { createNavigationController, NAV_TARGETS } from "../lib/navigation/index
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import { canOpenWorkspacePage } from "../lib/navigation/workspacePageAccess.js";
 import { setDaxoraNotificationContext } from "../lib/notifications/daxoraNotifications.js";
-import { DAXORA_PRODUCT_CODES, getDaxoraProducts } from "../lib/platform/products.js";
 
 import {
   Building2,
@@ -24,6 +22,7 @@ import {
   Eye,
   FileText,
   LayoutDashboard,
+  LayoutGrid,
   MessageSquareText,
   LogOut,
   Menu,
@@ -105,6 +104,7 @@ export default function ProductShell({
   onEndSupportAccess,
   onProfileUpdated,
   onSignOut,
+  onOpenPlatformHome,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const mainContentRef = useRef(null);
@@ -140,12 +140,6 @@ export default function ProductShell({
     ? [...workspaceNavItems, ...leagueNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
     : [...workspaceNavItems, ...leagueNavItems];
 
-  const activeProduct = platformOnly
-    ? DAXORA_PRODUCT_CODES.PLATFORM_ADMIN
-    : leagueMode || leagueOnly
-      ? DAXORA_PRODUCT_CODES.LEAGUE_MANAGER
-      : DAXORA_PRODUCT_CODES.GROUND_CONTROL;
-  const products = getDaxoraProducts({ subscription, workspaceAccess, leagueAvailable, platformStaff: Boolean(platformContext?.isPlatformStaff), activeProduct });
 
   const navigate = (key, target) => {
     if (key === "platform" || key === "league") {
@@ -158,11 +152,6 @@ export default function ProductShell({
       scroll: false,
     });
     setMobileOpen(false);
-  };
-
-  const openProduct = (product) => {
-    if (!product?.target) return;
-    navigate(product.target, product.target === "dashboard" ? NAV_TARGETS.MISSION_CONTROL : null);
   };
 
   useEffect(() => {
@@ -276,8 +265,8 @@ export default function ProductShell({
                 <X size={20} />
               </button>
             </div>
+            {onOpenPlatformHome ? <button type="button" onClick={() => { onOpenPlatformHome(); setMobileOpen(false); }} className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-xs font-black text-slate-300 hover:bg-white/[0.08] hover:text-white"><LayoutGrid size={17} className="text-emerald-400" /> Back to Daxora</button> : null}
             <div className="mt-5">{workspaceCard}</div>
-            <div className="mt-3"><DaxoraProductLauncher products={products} onOpenProduct={openProduct} /></div>
             <div className="mt-5 border-t border-slate-800 pt-5">
               <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{leagueOnly ? "League workspace" : platformOnly ? "Platform" : "Operations"}</div>
               <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />
@@ -289,8 +278,8 @@ export default function ProductShell({
       <div className="flex min-h-screen">
         <aside className="gc-sidebar-scroll sticky top-0 hidden h-screen w-[280px] shrink-0 overflow-y-auto border-r border-slate-800 bg-[#050816] px-5 py-5 text-white lg:block">
           <div className="mb-5"><GroundControlBrand /></div>
+          {onOpenPlatformHome ? <button type="button" onClick={onOpenPlatformHome} className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-xs font-black text-slate-300 hover:bg-white/[0.08] hover:text-white"><LayoutGrid size={17} className="text-emerald-400" /> Back to Daxora</button> : null}
           <div>{workspaceCard}</div>
-          <div className="mt-3"><DaxoraProductLauncher products={products} onOpenProduct={openProduct} /></div>
           <div className="mt-5 border-t border-slate-800 pt-5">
             <div className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-slate-600">{leagueOnly ? "League workspace" : platformOnly ? "Platform" : "Operations"}</div>
             <NavigationItems items={navItems} mainPage={mainPage} onNavigate={navigate} />

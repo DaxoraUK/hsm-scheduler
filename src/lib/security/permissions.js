@@ -213,6 +213,8 @@ export function createWorkspaceAccess(membership = null, context = {}) {
     WORKSPACE_PERMISSIONS.MANAGE_SUPPORT,
     WORKSPACE_PERMISSIONS.TRANSFER_OWNERSHIP,
   ].some(has);
+  const legacyCoachAssignment = Array.isArray(membership?.roles)
+    && roleAssignments.some((assignment) => assignment.role === WORKSPACE_ROLES.COACH);
 
   return Object.freeze({
     role,
@@ -223,8 +225,9 @@ export function createWorkspaceAccess(membership = null, context = {}) {
     accessMode,
     isSupport,
     isCoach: accessMode === "coach"
-      || roles.includes(WORKSPACE_ROLES.COACH)
-      || roles.includes(CLUB_ROLE_CODES.COACH),
+      || effectiveRoles.includes(WORKSPACE_ROLES.COACH)
+      || effectiveRoles.includes(CLUB_ROLE_CODES.COACH)
+      || legacyCoachAssignment,
     isReadOnly: isSupport || !hasWriteCapability,
     canRead: has(WORKSPACE_PERMISSIONS.READ_WORKSPACE),
     canOperate: !isSupport && has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),

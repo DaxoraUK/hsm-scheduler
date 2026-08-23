@@ -26,6 +26,7 @@ import { usePlatformOperator } from "./hooks/usePlatformOperator.js";
 import { useGlobalErrorNotifications } from "./hooks/useGlobalErrorNotifications.js";
 import { useOperationsActions } from "./hooks/useOperationsActions.js";
 import ProductShell from "./layout/ProductShell.jsx";
+import { getDaxoraProducts } from "./lib/platform/products.js";
 import { MatchdayScopeProvider } from "./lib/context/MatchdayScopeContext.jsx";
 import {
   MATCHDAY_SCOPES,
@@ -137,6 +138,7 @@ const SubscriptionGate = lazy(
   () => import("./components/SubscriptionGate.jsx"),
 );
 const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const DaxoraHomePage = lazy(() => import("./pages/DaxoraHomePage.jsx"));
 const EliteCommandCentrePage = lazy(() => import("./pages/EliteCommandCentrePage.jsx"));
 const OperationsPage = lazy(() => import("./pages/OperationsPage.jsx"));
 const DayTabs = lazy(() => import("./components/Operations/DayTabs.jsx"));
@@ -257,6 +259,7 @@ function App() {
     }
   }, []);
   const [mainPage, setMainPage] = useState("dashboard");
+  const [platformHomeOpen, setPlatformHomeOpen] = useState(true);
   const workspaceLandingKeyRef = useRef("");
   const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
   const [settingsTab, setSettingsTab] = useState("overview");
@@ -2131,6 +2134,7 @@ function App() {
     setWorkspaceHydrated(false);
     setWorkspaceSecurityError("");
     setAuthSession(null);
+    setPlatformHomeOpen(true);
     setMainPage("dashboard");
     setDayTab("saturday");
     setSettingsTab("overview");
@@ -2143,6 +2147,15 @@ function App() {
     // Also revoke the remote session when a token is available.
     if (accessToken) await Auth.signOut(accessToken);
   }, [authSession]);
+
+  const handleOpenDaxoraProduct = useCallback((product) => {
+    if (!product?.canOpen) return;
+    setPlatformHomeOpen(false);
+    if (product.target === "coach") return;
+    setMainPage(product.target || "dashboard");
+    setNavigationTarget(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
 
   const handleEndSupportAccess = useCallback(async () => {
     const sessionId = activeMembership?.supportSessionId;
@@ -2202,6 +2215,14 @@ function App() {
     const standalonePage = platformContext.isPlatformStaff
       ? (mainPage === "league" ? "league" : "platform")
       : "league";
+    if (platformHomeOpen) {
+      const products = getDaxoraProducts({
+        clubAvailable: false,
+        leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
+        platformStaff: platformContext.isPlatformStaff,
+      });
+      return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} memberships={memberships} activeClubId={activeClubId} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
+    }
     return (
       <ProductShell
         mainPage={standalonePage}
@@ -2227,6 +2248,7 @@ function App() {
         onClubChange={handleClubChange}
         onProfileUpdated={handleProfileUpdated}
         onSignOut={handleSignOut}
+        onOpenPlatformHome={() => setPlatformHomeOpen(true)}
       >
         {standalonePage === "league" ? (
           <Suspense fallback={<LazyPageFallback label="League Manager" />}>
@@ -2308,6 +2330,18 @@ function App() {
 
   if (!workspaceHydrated)
     return <BrandSplash message="Loading secure club workspace" />;
+
+  if (platformHomeOpen) {
+    const products = getDaxoraProducts({
+      subscription,
+      workspaceAccess,
+      clubAvailable: true,
+      coachUser: roleWorkspaceAccess.isCoach,
+      leagueAvailable: hasLeagueAccess || platformContext.isPlatformStaff,
+      platformStaff: platformContext.isPlatformStaff,
+    });
+    return <Suspense fallback={<BrandSplash message="Opening Daxora" />}><DaxoraHomePage products={products} club={club} memberships={memberships} activeClubId={activeClubId} user={authSession.user} onClubChange={handleClubChange} onOpenProduct={handleOpenDaxoraProduct} onSignOut={handleSignOut} /></Suspense>;
+  }
 
   if (roleWorkspaceAccess.isCoach) {
     return (
@@ -2427,6 +2461,7 @@ function App() {
         onProfileUpdated={handleProfileUpdated}
         onEndSupportAccess={handleEndSupportAccess}
         onSignOut={handleSignOut}
+        onOpenPlatformHome={() => setPlatformHomeOpen(true)}
       >
         <style
           dangerouslySetInnerHTML={{

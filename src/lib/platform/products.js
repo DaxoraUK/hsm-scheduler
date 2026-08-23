@@ -16,20 +16,21 @@ const PRODUCT_DEFINITIONS = Object.freeze([
   Object.freeze({ code: DAXORA_PRODUCT_CODES.PLATFORM_ADMIN, name: "Daxora Admin", description: "Platform subscriptions, support and governance.", accent: "slate" }),
 ]);
 
-export function getDaxoraProducts({ subscription = null, workspaceAccess = null, leagueAvailable = false, platformStaff = false, activeProduct = DAXORA_PRODUCT_CODES.GROUND_CONTROL } = {}) {
+export function getDaxoraProducts({ subscription = null, workspaceAccess = null, clubAvailable = true, coachUser = false, leagueAvailable = false, platformStaff = false, activeProduct = "" } = {}) {
   return PRODUCT_DEFINITIONS.map((product) => {
     let state = "unavailable";
     let detail = "Not included for this account";
     let target = null;
 
     if (product.code === DAXORA_PRODUCT_CODES.GROUND_CONTROL) {
-      state = "available";
-      detail = subscription?.planName ? `${subscription.planName} workspace` : "Club operations";
-      target = "dashboard";
+      state = clubAvailable && !coachUser ? "available" : "unavailable";
+      detail = coachUser ? "Your role opens Coach Hub" : subscription?.planName ? `${subscription.planName} workspace` : clubAvailable ? "Club operations" : "Club membership required";
+      target = state === "available" ? "dashboard" : null;
     } else if (product.code === DAXORA_PRODUCT_CODES.COACH_HUB) {
       const included = hasEntitlement(subscription, ENTITLEMENTS.COACH_HUB);
-      state = included ? "managed" : "upgrade";
-      detail = included ? "Available to authorised coaches" : "Available with Pro or Elite";
+      state = coachUser && included ? "available" : included ? "managed" : "upgrade";
+      detail = coachUser && included ? "Your team workspace" : included ? "Available to authorised coaches" : "Available with Pro or Elite";
+      target = state === "available" ? "coach" : null;
     } else if (product.code === DAXORA_PRODUCT_CODES.LEAGUE_MANAGER) {
       state = leagueAvailable ? "available" : "unavailable";
       detail = leagueAvailable ? "League access confirmed" : "League membership required";

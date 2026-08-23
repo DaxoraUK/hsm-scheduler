@@ -7,7 +7,7 @@ function product(products, code) { return products.find((item) => item.code === 
 describe("Daxora platform product launcher", () => {
   test("keeps Ground Control available and does not expose restricted workspaces", () => {
     const products = getDaxoraProducts({ subscription: { planName: "Core", features: [] } });
-    expect(product(products, DAXORA_PRODUCT_CODES.GROUND_CONTROL)).toMatchObject({ state: "available", canOpen: true, active: true });
+    expect(product(products, DAXORA_PRODUCT_CODES.GROUND_CONTROL)).toMatchObject({ state: "available", canOpen: true, active: false });
     expect(product(products, DAXORA_PRODUCT_CODES.LEAGUE_MANAGER)).toMatchObject({ state: "unavailable", canOpen: false });
     expect(product(products, DAXORA_PRODUCT_CODES.PLATFORM_ADMIN)).toBeUndefined();
   });
