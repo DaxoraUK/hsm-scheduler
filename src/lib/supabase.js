@@ -1086,6 +1086,23 @@ export const DB = {
     });
   },
 
+  async publishCoachHubMatchweekMessages(clubId, messages = []) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/publish_coach_hub_matchweek_messages", {
+      target_club_id: id,
+      messages: Array.isArray(messages) ? messages : [],
+    });
+  },
+
+  async listCoachHubMatchweekDeliveryStatus(clubId, limit = 30) {
+    const id = requireClubId(clubId);
+    const result = await supaFetch("POST", "rpc/list_coach_hub_matchweek_delivery_status", {
+      target_club_id: id,
+      result_limit: Math.max(1, Math.min(Number(limit) || 30, 100)),
+    });
+    return Array.isArray(result) ? result : [];
+  },
+
   async updateMyCoachHubProfile(clubId, profile) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/update_my_coach_hub_profile", {

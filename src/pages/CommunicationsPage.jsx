@@ -103,6 +103,7 @@ function eventLabel(action) {
     undelivered: "Undelivered",
     failed: "Failed",
     cancelled: "Cancelled",
+    coach_hub_published: "Published to Coach Hub",
   }[action] || action;
 }
 
@@ -117,7 +118,7 @@ function communicationLink(recipient, message, teamName) {
   return digits ? `https://wa.me/${digits}?text=${body}` : "";
 }
 
-function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, onClose, onCopySelected, onOpenChannel, onSendWeb }) {
+function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, onClose, onCopySelected, onOpenChannel, onSendWeb, onPublishCoachHub }) {
   if (typeof document === "undefined") return null;
 
   const gaps = communicationPrivacyGaps(privacy);
@@ -243,6 +244,7 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={onClose} disabled={sending} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">Cancel</button>
                 <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
+                <button type="button" onClick={() => onPublishCoachHub(selectedRows)} disabled={!selectedRows.length || sending} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"><MessageSquareText size={17} /> Publish to Coach Hub</button>
                 <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
                   {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
                   {sending ? "Sending securely…" : emailPilot ? "Send staging email test" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending unavailable"}
@@ -275,6 +277,8 @@ export default function CommunicationsPage(props) {
   const [sending, setSending] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState(null);
   const [sendFailure, setSendFailure] = useState(null);
+  const [coachHubConfirmation, setCoachHubConfirmation] = useState(null);
+  const [coachHubDeliveries, setCoachHubDeliveries] = useState([]);
   const canCommunicate = Boolean(props.workspaceAccess?.canCommunicate && !props.workspaceAccess?.isReadOnly);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && canCommunicate);
 
@@ -321,7 +325,12 @@ export default function CommunicationsPage(props) {
     }
     setHistoryLoading(true);
     try {
-      setEvents(await DB.listCommunicationEvents(props.activeClubId, 50));
+      const [eventRows, deliveryRows] = await Promise.all([
+        DB.listCommunicationEvents(props.activeClubId, 50),
+        DB.listCoachHubMatchweekDeliveryStatus(props.activeClubId, 30),
+      ]);
+      setEvents(eventRows);
+      setCoachHubDeliveries(deliveryRows);
     } catch (error) {
       toast.error("Communication history could not be loaded", { description: error?.message });
     } finally {
@@ -525,6 +534,80 @@ export default function CommunicationsPage(props) {
       requestKey,
       signatures: Object.fromEntries(webEligibleRows.map((row) => [row.id, communicationRowSignature(row)])),
     });
+  };
+
+  const prepareCoachHubPublish = (selectedRows) => {
+    const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
+    if (staleRows.length) {
+      toast.error("The message queue changed", { description: "Close and reopen the queue before publishing the latest fixture details." });
+      return;
+    }
+    const missingTeams = selectedRows.filter((row) => !row.contact?.teamKey);
+    if (missingTeams.length) {
+      toast.error("Coach Hub team link missing", { description: `${missingTeams.map((row) => row.teamName).join(", ")} must be linked to a configured team contact first.` });
+      return;
+    }
+    setCoachHubConfirmation({ rows: selectedRows });
+  };
+
+  const confirmCoachHubPublish = async () => {
+    const selectedRows = coachHubConfirmation?.rows || [];
+    if (!selectedRows.length || sending) return;
+    const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
+    if (staleRows.length) {
+      toast.error("The message queue is out of date", { description: "Reopen it and review the latest fixture details." });
+      return;
+    }
+
+    const prepared = {
+      messages: selectedRows.map((row) => ({ channel: "coach_hub", message: row.message })),
+      unavailable: [],
+    };
+    const approvalSnapshot = buildCommunicationApprovalSnapshot(selectedRows, prepared);
+    const requestKey = buildCommunicationApprovalKey(selectedRows, prepared);
+    if (eliteCommunicationGovernance) {
+      try {
+        const approvalState = await loadEliteApprovalState(props.activeClubId, ELITE_APPROVAL_TYPES.COMMUNICATIONS, requestKey);
+        const approvalRequired = approvalState.policy.communicationsApprovalRequired || approvalSnapshot.approvalRequired;
+        if (approvalRequired && !approvalState.approved) {
+          if (!approvalState.pending) {
+            await createEliteApprovalRequest(props.activeClubId, {
+              approvalType: ELITE_APPROVAL_TYPES.COMMUNICATIONS,
+              entityKey: requestKey,
+              title: `Coach Hub batch · ${selectedRows.length} team${selectedRows.length === 1 ? "" : "s"}`,
+              summary: "Exact team, fixture, template and message content prepared for Coach Hub.",
+              snapshot: approvalSnapshot,
+            });
+          }
+          toast.info("Elite approval required", { description: "A separate reviewer must approve this exact Coach Hub batch in Club Command." });
+          return;
+        }
+      } catch (error) {
+        toast.error("Elite approval check failed", { description: error?.message });
+        return;
+      }
+    }
+
+    setSending(true);
+    try {
+      const result = await DB.publishCoachHubMatchweekMessages(props.activeClubId, selectedRows.map((row) => ({
+        team_key: row.contact.teamKey,
+        title: row.subject || `${row.teamName} matchweek update`,
+        body: row.message,
+        message_identity: `${row.id}:${row.messageHash}`,
+        requires_acknowledgement: true,
+      })));
+      await Promise.all(selectedRows.map((row) => record(row, "coach_hub_published", null, { teamKey: row.contact.teamKey }, false)));
+      await loadEvents();
+      setCoachHubConfirmation(null);
+      setQueueOpen(false);
+      if (result?.published) toast.success(`${result.published} Coach Hub update${result.published === 1 ? "" : "s"} published`, { description: "Coaches will see the update for their assigned teams and can acknowledge it in Coach Hub." });
+      if (result?.reused) toast.info(`${result.reused} unchanged update${result.reused === 1 ? " was" : "s were"} already published`);
+    } catch (error) {
+      toast.error("Coach Hub publish failed", { description: error?.message });
+    } finally {
+      setSending(false);
+    }
   };
 
   const confirmWebSend = async () => {
@@ -753,9 +836,38 @@ export default function CommunicationsPage(props) {
         )}
       </Card>
 
+      <Card eyebrow="Coach Hub delivery" title="Reads and acknowledgements" subtitle="Team-scoped Coach Hub updates use the same approved matchweek message and return first-party engagement evidence.">
+        {!coachHubDeliveries.length ? (
+          <EmptyState icon={MessageSquareText} title="No Coach Hub updates published" description="Open the coach-message queue and publish a ready batch to Coach Hub." />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {coachHubDeliveries.slice(0, 20).map((delivery) => {
+              const expected = Number(delivery.expected_recipients) || 0;
+              const read = Number(delivery.read_count) || 0;
+              const acknowledged = Number(delivery.acknowledged_count) || 0;
+              return <div key={delivery.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-black text-slate-950">{delivery.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{delivery.team_key} · {new Date(delivery.created_at).toLocaleString("en-GB")}</div></div><div className="flex flex-wrap gap-2"><StatusChip status={read >= expected && expected ? "success" : "info"} size="sm">Read {read}/{expected}</StatusChip><StatusChip status={acknowledged >= expected && expected ? "success" : "warning"} size="sm">Acknowledged {acknowledged}/{expected}</StatusChip></div></div>;
+            })}
+          </div>
+        )}
+      </Card>
+
       {queueOpen ? (
-        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => !sending && setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} />
+        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => !sending && setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} onPublishCoachHub={prepareCoachHubPublish} />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(coachHubConfirmation)}
+        eyebrow="First-party Coach Hub delivery"
+        title={`Publish ${coachHubConfirmation?.rows?.length || 0} team update${coachHubConfirmation?.rows?.length === 1 ? "" : "s"}?`}
+        description="Each update will appear only to active Coach Hub users assigned to that team. Coaches will be asked to acknowledge receipt."
+        confirmLabel="Publish to Coach Hub"
+        cancelLabel="Go back"
+        tone="warning"
+        busy={sending}
+        initialFocus="cancel"
+        onCancel={() => !sending && setCoachHubConfirmation(null)}
+        onConfirm={confirmCoachHubPublish}
+      />
 
       <ConfirmDialog
         open={Boolean(sendConfirmation)}
