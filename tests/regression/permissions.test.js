@@ -13,6 +13,7 @@ describe("workspace permission model", () => {
       role: WORKSPACE_ROLES.OWNER,
       canOperate: true,
       canPublish: true,
+      canCommunicate: true,
       canManageSettings: true,
       canManageMembers: true,
       canViewAudit: true,
@@ -35,8 +36,21 @@ describe("workspace permission model", () => {
     const access = createWorkspaceAccess({ role: "scheduler" });
     expect(access.canOperate).toBe(true);
     expect(access.canPublish).toBe(true);
+    expect(access.canCommunicate).toBe(true);
     expect(access.canManageSettings).toBe(false);
     expect(access.canViewAudit).toBe(false);
+  });
+
+  test("communications officers can communicate without matchday or settings authority", () => {
+    const access = createWorkspaceAccess({
+      role: "viewer",
+      roleAssignments: [{ role: "communications_officer", scopeType: "club", status: "active" }],
+    });
+    expect(access.canCommunicate).toBe(true);
+    expect(access.canOperate).toBe(false);
+    expect(access.canPublish).toBe(false);
+    expect(access.canManageSettings).toBe(false);
+    expect(access.isReadOnly).toBe(false);
   });
 
   test("viewer and support access are read-only", () => {
@@ -48,6 +62,7 @@ describe("workspace permission model", () => {
     });
     expect(viewer.isReadOnly).toBe(true);
     expect(viewer.canOperate).toBe(false);
+    expect(viewer.canCommunicate).toBe(false);
     expect(support.isReadOnly).toBe(true);
     expect(support.isSupport).toBe(true);
     expect(support.canManageSettings).toBe(false);

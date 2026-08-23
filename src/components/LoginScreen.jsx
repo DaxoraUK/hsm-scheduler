@@ -177,17 +177,17 @@ export default function LoginScreen({ onLogin }) {
 
           <div className="gc-auth-copy">
             <div className="gc-auth-eyebrow">Grassroots sport, under control</div>
-            <h1>The operating system for <span>matchday.</span></h1>
+            <h1>The operating system for <span>your club.</span></h1>
             <p>
-              Plan the weekend, predict operational pressure and guide every decision
-              from one intelligent command centre.
+              Run club administration, plan every matchweek and keep the right people
+              informed from one secure command centre.
             </p>
           </div>
 
           <div className="gc-auth-capabilities" aria-label="Platform capabilities">
-            <Capability icon="route" title="Build with confidence" text="Fixtures, pitches and timings aligned automatically." />
-            <Capability icon="pulse" title="See pressure early" text="Parking, officials and weather risks surfaced before matchday." />
-            <Capability icon="chart" title="Prove your impact" text="Turn club operations into grant-ready evidence." />
+            <Capability icon="route" title="Run the club clearly" text="People, roles, facilities and responsibilities in one place." />
+            <Capability icon="pulse" title="Operate every matchweek" text="Fixtures, pitches, officials and risks coordinated early." />
+            <Capability icon="chart" title="Keep everyone informed" text="Role-aware updates prepared and sent without duplicated work." />
           </div>
         </div>
 
@@ -211,7 +211,7 @@ export default function LoginScreen({ onLogin }) {
                   ? "We will send a secure recovery link to your inbox."
                   : isSignup
                     ? "Create the account that will manage your club workspace."
-                    : "Sign in to open Mission Control and prepare the next matchday."}
+                    : "Sign in to open the workspace your club role gives you."}
             </p>
           </header>
 

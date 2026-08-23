@@ -24,6 +24,7 @@ export const WORKSPACE_PERMISSIONS = Object.freeze({
   READ_WORKSPACE: "read_workspace",
   OPERATE_MATCHDAYS: "operate_matchdays",
   PUBLISH_MATCHWEEKS: "publish_matchweeks",
+  SEND_COMMUNICATIONS: "send_communications",
   MANAGE_SETTINGS: "manage_settings",
   MANAGE_MEMBERS: "manage_members",
   VIEW_AUDIT: "view_audit",
@@ -76,16 +77,19 @@ const ADDITIONAL_ROLE_PERMISSIONS = Object.freeze({
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
     WORKSPACE_PERMISSIONS.MANAGE_SETTINGS,
     WORKSPACE_PERMISSIONS.VIEW_AUDIT,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   fixture_officer: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
     WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS,
     WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   operations_officer: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
     WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS,
     WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   treasurer: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
@@ -97,6 +101,7 @@ const ADDITIONAL_ROLE_PERMISSIONS = Object.freeze({
   ]),
   communications_officer: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   coach: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
@@ -118,11 +123,13 @@ const ROLE_PERMISSIONS = Object.freeze({
     WORKSPACE_PERMISSIONS.MANAGE_SETTINGS,
     WORKSPACE_PERMISSIONS.MANAGE_MEMBERS,
     WORKSPACE_PERMISSIONS.VIEW_AUDIT,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   scheduler: new Set([
     WORKSPACE_PERMISSIONS.READ_WORKSPACE,
     WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS,
     WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
   ]),
   viewer: new Set([WORKSPACE_PERMISSIONS.READ_WORKSPACE]),
   coach: new Set([]),
@@ -193,6 +200,15 @@ export function createWorkspaceAccess(membership = null, context = {}) {
       : "membership";
   const has = (permission) => effectiveRoles.some((effectiveRole) => roleHasPermission(effectiveRole, permission));
   const isSupport = accessMode === "support";
+  const hasWriteCapability = [
+    WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS,
+    WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS,
+    WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS,
+    WORKSPACE_PERMISSIONS.MANAGE_SETTINGS,
+    WORKSPACE_PERMISSIONS.MANAGE_MEMBERS,
+    WORKSPACE_PERMISSIONS.MANAGE_SUPPORT,
+    WORKSPACE_PERMISSIONS.TRANSFER_OWNERSHIP,
+  ].some(has);
 
   return Object.freeze({
     role,
@@ -204,10 +220,11 @@ export function createWorkspaceAccess(membership = null, context = {}) {
     isCoach: accessMode === "coach"
       || effectiveRoles.includes(WORKSPACE_ROLES.COACH)
       || effectiveRoles.includes(CLUB_ROLE_CODES.COACH),
-    isReadOnly: isSupport || !has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),
+    isReadOnly: isSupport || !hasWriteCapability,
     canRead: has(WORKSPACE_PERMISSIONS.READ_WORKSPACE),
     canOperate: !isSupport && has(WORKSPACE_PERMISSIONS.OPERATE_MATCHDAYS),
     canPublish: !isSupport && has(WORKSPACE_PERMISSIONS.PUBLISH_MATCHWEEKS),
+    canCommunicate: !isSupport && has(WORKSPACE_PERMISSIONS.SEND_COMMUNICATIONS),
     canManageSettings: !isSupport && has(WORKSPACE_PERMISSIONS.MANAGE_SETTINGS),
     canManageMembers: !isSupport && has(WORKSPACE_PERMISSIONS.MANAGE_MEMBERS),
     canViewAudit: !isSupport && has(WORKSPACE_PERMISSIONS.VIEW_AUDIT),

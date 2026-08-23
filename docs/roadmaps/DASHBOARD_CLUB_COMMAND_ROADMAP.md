@@ -41,6 +41,17 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 - Specialist schedule, competition-rule, resource, officials, weather, parking and communications detail remains available in collapsed sections.
 - Existing operations permission, read-only subscription and schedule-lock boundaries continue to govern editing and consequential actions.
 
+### Login-to-coach journey and role-aware simplification — v3.10.57
+
+- Login describes the whole club platform—administration, matchweek operations and communications—without presenting every module before entry.
+- After login, subscription entitlement, combined roles, assigned scope and workspace status determine the smallest useful navigation and action set.
+- Mission Control owns the operator journey and presents one primary next action. Eligible leaders receive one secondary handoff to Club Command; the same handoff is not repeated in overflow actions.
+- Club Command remains the governance, assurance and leadership surface and does not duplicate operational task management.
+- Communications has an explicit `send_communications` capability. Communications Officers can prepare, review, copy and send coach updates without receiving fixture, settings or governance authority.
+- Subscription read-only status disables communication as well as operational publishing. Support sessions remain visibly read-only.
+- The end-to-end journey is: authenticate → enter the role-appropriate home → complete the next authorised task → resolve exceptions → prepare communications → review recipients → send or copy through an audited route → retain delivery evidence.
+- Specialist depth remains available behind focused workspaces and collapsed detail; simplification must remove duplication, not capability.
+
 ## Acceptance criteria
 
 - Consolidated source builds successfully on the target Windows environment.

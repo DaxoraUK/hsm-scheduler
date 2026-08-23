@@ -426,6 +426,7 @@ export function applySubscriptionAccess(workspaceAccess, subscription) {
     subscriptionPlanName: subscription?.planName || "Plan unavailable",
     canOperate: Boolean(base.canOperate) && !subscriptionReadOnly,
     canPublish: Boolean(base.canPublish) && !subscriptionReadOnly,
+    canCommunicate: Boolean(base.canCommunicate) && !subscriptionReadOnly,
     isReadOnly: Boolean(base.isReadOnly) || subscriptionReadOnly,
     canManageSubscription: base.role === "owner" && !base.isSupport,
   });

@@ -32,8 +32,17 @@ describe("Daxora Ground Control v3.10.42 dashboard and Club Command simplificati
     expect(shell).toContain('["dashboard", "Mission Control"');
     expect(shell).toContain('["executive", "Club Command"');
     expect(shell).toContain("canOpenWorkspacePage(subscription, key, workspaceAccess)");
-    expect(dashboard).toContain('title="Open Club Command"');
-    expect(dashboard).toContain("clubCommandAvailable ? (");
+    expect(dashboard).toContain('label: "Open Club Command"');
+    expect(dashboard).toContain("secondaryAction={clubCommandAvailable ? {");
+    expect(dashboard).toContain("onContinue={primaryActionHandler}");
+    expect(dashboard).not.toContain('title="Open Club Command"');
+  });
+
+  test("opens communications only for an entitled communication role", () => {
+    const communicator = { canCommunicate: true };
+    const viewer = { canCommunicate: false };
+    expect(canOpenWorkspacePage(elite, "communications", communicator)).toBe(true);
+    expect(canOpenWorkspacePage(elite, "communications", viewer)).toBe(false);
   });
 
   test("guards rendering with the same effective access authority", () => {

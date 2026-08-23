@@ -275,7 +275,8 @@ export default function CommunicationsPage(props) {
   const [sending, setSending] = useState(false);
   const [sendConfirmation, setSendConfirmation] = useState(null);
   const [sendFailure, setSendFailure] = useState(null);
-  const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && props.workspaceAccess?.canOperate);
+  const canCommunicate = Boolean(props.workspaceAccess?.canCommunicate && !props.workspaceAccess?.isReadOnly);
+  const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && canCommunicate);
 
   useEffect(() => {
     setLiveTeamContacts(Array.isArray(props.teamContacts) ? props.teamContacts : []);
@@ -283,7 +284,7 @@ export default function CommunicationsPage(props) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!props.activeClubId || !props.workspaceAccess?.canOperate) return undefined;
+    if (!props.activeClubId || !canCommunicate) return undefined;
     DB.loadTeamContacts(props.activeClubId)
       .then((rows) => {
         if (!cancelled && Array.isArray(rows)) setLiveTeamContacts(rows);
@@ -292,7 +293,7 @@ export default function CommunicationsPage(props) {
         // Existing in-memory contacts remain available if the protected directory is temporarily unavailable.
       });
     return () => { cancelled = true; };
-  }, [props.activeClubId, props.workspaceAccess?.canOperate]);
+  }, [props.activeClubId, canCommunicate]);
 
   const audienceRecipients = Array.isArray(props.audience?.recipients) ? props.audience.recipients.filter((row) => row.ready) : [];
   const audienceRows = filterCommunicationRowsByAudience(model.rows, props.audience);
@@ -590,7 +591,7 @@ export default function CommunicationsPage(props) {
         title="Communications"
         subtitle="Prepare one coach-message queue, send through configured web providers or use the audited copy-out fallback, and track only provider-confirmed delivery states."
         action={model.counts.total ? (
-          <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+          <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady || !canCommunicate} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
             <Send size={17} /> Send coach messages
           </button>
         ) : null}
@@ -714,9 +715,9 @@ export default function CommunicationsPage(props) {
 
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
                     {row.readyState !== "blocked" ? (
-                      <button type="button" onClick={() => markReviewed(row)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50"><ClipboardCheck size={15} /> Record review</button>
+                      <button type="button" onClick={() => markReviewed(row)} disabled={!canCommunicate} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><ClipboardCheck size={15} /> Record review</button>
                     ) : null}
-                    <button type="button" onClick={() => copyMessage(row)} disabled={row.readyState === "blocked"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={15} /> Copy individually</button>
+                    <button type="button" onClick={() => copyMessage(row)} disabled={!canCommunicate || row.readyState === "blocked"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={15} /> Copy individually</button>
                   </div>
                 </article>
               );

@@ -29,7 +29,6 @@ import {
 } from "../lib/subscriptions/entitlements.js";
 
 import {
-  Building2,
   CalendarDays,
   MoreHorizontal,
   Save,
@@ -676,17 +675,6 @@ export default function DashboardPage({
                 nav.goToReports();
               }}
             />
-            {clubCommandAvailable ? (
-              <CommandMenuItem
-                icon={Building2}
-                title="Open Club Command"
-                subtitle="Review leadership, governance and cross-site priorities"
-                onClick={() => {
-                  setActionsOpen(false);
-                  setMainPage?.("executive");
-                }}
-              />
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -710,14 +698,15 @@ export default function DashboardPage({
         issueCount={heroIssueCount}
         weather={heroWeather}
         scopeLabel={getMatchdayScopeLabel(matchdayScope)}
+        onContinue={primaryActionHandler}
+        secondaryAction={clubCommandAvailable ? {
+          label: "Open Club Command",
+          onClick: () => setMainPage?.("executive"),
+        } : null}
       />
 
       <DashboardStatusStrip
         actionsMenu={commandMenu}
-        primaryAction={{
-          label: heroNextAction?.title || "Open Operations",
-          onClick: primaryActionHandler,
-        }}
         scope={matchdayScope}
         onScopeChange={setMatchdayScope}
         midweekEnabled={midweekEnabled}
