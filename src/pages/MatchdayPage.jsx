@@ -15,8 +15,6 @@ import {
   Filter,
   Layers3,
   MapPinned,
-  Megaphone,
-  MessageSquareText,
   Search,
   ShieldAlert,
   Sparkles,
@@ -27,7 +25,6 @@ import MatchdayTimelineCard from "../components/Operations/shared/MatchdayTimeli
 import PitchClosuresCard from "../components/Operations/shared/PitchClosuresCard.jsx";
 import MatchdayPitchAssignmentsCard from "../components/Operations/shared/MatchdayPitchAssignmentsCard.jsx";
 import MatchdayCarParkCard from "../components/Operations/shared/MatchdayCarParkCard.jsx";
-import MatchdayCoachMessagesCard from "../components/Operations/shared/MatchdayCoachMessagesCard.jsx";
 import MatchweekCommandBar from "../components/Operations/shared/MatchweekCommandBar.jsx";
 import MatchdayManualFixtures from "../components/Operations/shared/MatchdayManualFixtures.jsx";
 import MatchdayUnresolvedCard from "../components/Operations/shared/MatchdayUnresolvedCard.jsx";
@@ -83,13 +80,6 @@ const WORKSPACES = [
     description:
       "Review parking, officials, weather and validated operational guidance.",
   },
-  {
-    id: "communications",
-    label: "Communications",
-    icon: Megaphone,
-    description:
-      "Prepare fixture messages for managers, coaches and team contacts.",
-  },
 ];
 
 const FILTERS = [
@@ -137,8 +127,6 @@ const INTELLIGENCE_TARGETS = Object.freeze({
     workspace: "intelligence",
     section: "matchdayGuidance",
   },
-  communications: { workspace: "communications", section: "coachMessages" },
-  coachMessages: { workspace: "communications", section: "coachMessages" },
 });
 
 function getIntelligenceTarget(target, item = {}) {
@@ -1185,25 +1173,6 @@ export default function MatchdayPage({
           />
         ),
       },
-      {
-        id: "coachMessages",
-        workspace: "communications",
-        title: "Coach Messages",
-        subtitle:
-          "Copy fixture messages for managers, coaches and team contacts.",
-        icon: MessageSquareText,
-        badge: hasRun ? `${active.length} messages` : "Build first",
-        ...runState,
-        render: () => (
-          <MatchdayCoachMessagesCard
-            {...props}
-            day={day}
-            satHasRun={hasRun}
-            satFinal={final}
-            satDateLabel={dateLabel}
-          />
-        ),
-      },
     ].filter(Boolean);
   }, [
     ManualFixtures,
@@ -1282,8 +1251,6 @@ export default function MatchdayPage({
       resources: "pitchClosures",
       ground: "pitchClosures",
       pitchClosures: "pitchClosures",
-      coachMessages: "coachMessages",
-      communications: "coachMessages",
     };
 
     const sectionId = aliases[requestedCard] || requestedCard;

@@ -87,7 +87,7 @@ export default function MatchweekCommandBar({
           {typeof setAllowArtificial === "function" ? <label className={`flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={isLocked} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
-          <SecondaryButton onClick={onPublish} disabled={!hasRun}><Send size={17} />Communications</SecondaryButton>
+          <SecondaryButton onClick={onPublish} disabled={!hasRun || needsAttention > 0}><Send size={17} />Open Communications</SecondaryButton>
           <SecondaryButton onClick={onToggleLock} disabled={!hasRun || fixtureCount === 0}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{isLocked ? "Unlock" : "Lock"}</SecondaryButton>
           <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}><Sparkles size={17} />{optimisationCount ? `${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}</SecondaryButton>
           {closedPitches.length > 0 ? <StatusChip variant="warning"><MapPinned size={14} />{closedPitches.length} closed</StatusChip> : null}

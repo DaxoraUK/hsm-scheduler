@@ -347,19 +347,19 @@ export default function ReportDocument({ model, club }) {
             <div>Generated {model.generatedAt.toLocaleString("en-GB")}</div>
           </div>
         </div>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        {model.reportType !== "fixtures" ? <div className="mt-5 flex flex-wrap items-center gap-3">
           <StatusChip status={model.readiness.status}>{model.readiness.label}</StatusChip>
           <span className="text-xs font-bold text-slate-500">Readiness {model.readiness.score}% · {model.readiness.detail}</span>
           <StatusChip status={model.quality.tone}>{model.quality.label}</StatusChip>
           <span className="text-xs font-bold text-slate-500">Evidence confidence {model.quality.score}% · {model.quality.period.label}</span>
-        </div>
+        </div> : null}
       </header>
 
       {content}
 
-      <footer className="mt-8 border-t border-slate-200 pt-4 text-[10px] font-semibold text-slate-400 print:break-inside-avoid">
+      {model.reportType !== "fixtures" ? <footer className="mt-8 border-t border-slate-200 pt-4 text-[10px] font-semibold text-slate-400 print:break-inside-avoid">
         Generated from club-scoped Ground Control operational data. Calculated and inferred measures are labelled in the funding evidence draft. Historical weather is shown only where it was captured; current forecasts are not substituted for past conditions. This report does not confirm funding eligibility.
-      </footer>
+      </footer> : null}
     </article>
   );
 }

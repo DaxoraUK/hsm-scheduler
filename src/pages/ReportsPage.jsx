@@ -9,6 +9,7 @@ import {
   FileText,
   Gauge,
   MapPinned,
+  MessageCircle,
   Printer,
   ShieldCheck,
   TriangleAlert,
@@ -50,6 +51,26 @@ const REPORT_ICONS = {
   analytics: BarChart3,
   funding: FileCheck2,
 };
+
+export function buildWhatsAppFixtureSchedule(model = {}, club = {}) {
+  const fixtures = Array.isArray(model.fixtures) ? model.fixtures : [];
+  const heading = `*${club.name || "Club"} fixture allocations*`;
+  const scope = [model.sourceLabel, model.scope === "matchweek" ? "Matchweek" : model.scope].filter(Boolean).join(" · ");
+  const grouped = fixtures.reduce((map, fixture) => {
+    const key = fixture.dateLabel || fixture.dayLabel || "Fixtures";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(fixture);
+    return map;
+  }, new Map());
+  const sections = [...grouped.entries()].map(([label, rows]) => [
+    `*${label}*`,
+    ...rows.map((fixture) => {
+      const status = ["postponed", "cancelled"].includes(fixture.status) ? ` · ${fixture.statusLabel}` : "";
+      return `${fixture.koTime || "TBC"} · ${fixture.homeTeam} v ${fixture.awayTeam}\n${fixture.pitchLabel || "Pitch TBC"} · ${fixture.format || "Format TBC"} · Ref: ${fixture.referee || "TBC"}${status}`;
+    }),
+  ].join("\n\n"));
+  return [heading, scope, ...sections, "Please check your allocation and contact the club promptly if anything looks incorrect."].filter(Boolean).join("\n\n");
+}
 
 function SelectControl({ label, value, onChange, children }) {
   return (
@@ -348,6 +369,12 @@ export default function ReportsPage({
     window.setTimeout(cleanup, 1500);
   };
 
+  const shareFixturesToWhatsApp = () => {
+    if (reportType !== "fixtures" || !model.fixtures?.length) return;
+    const message = buildWhatsAppFixtureSchedule(model, club);
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  };
+
   useEffect(() => {
     if (!navigationTarget || navigationTarget.target !== "reports") return;
 
@@ -390,6 +417,16 @@ export default function ReportsPage({
         subtitle="Combine fixtures, training, friendlies, winter provision and downtime into traceable facility, operational and funding reports."
         action={
           <div className="flex flex-wrap gap-2">
+            {reportType === "fixtures" ? (
+              <button
+                type="button"
+                onClick={shareFixturesToWhatsApp}
+                disabled={!model.hasData}
+                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MessageCircle size={17} /> Share to club WhatsApp
+              </button>
+            ) : null}
             {reportType === "funding" && advancedReportsEnabled ? (
               <>
                 <button
