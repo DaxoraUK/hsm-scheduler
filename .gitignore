@@ -44,3 +44,4 @@ coverage
 .release-packages/
 *.zip
 *.patch
+.vercel/
