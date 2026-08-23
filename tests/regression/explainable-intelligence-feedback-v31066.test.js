@@ -12,10 +12,15 @@ describe("explainable intelligence feedback", () => {
   });
 
   it("records useful and dismissed responses in a club and day scoped preference", () => {
-    expect(guidanceSource).toContain('response, recordedAt: new Date().toISOString()');
+    expect(guidanceSource).toContain('const recordedAt = new Date().toISOString()');
+    expect(guidanceSource).toContain('[issueKey]: { response, recordedAt, title: item.title }');
     expect(guidanceSource).toContain('onRespond(item, "useful")');
     expect(guidanceSource).toContain('onRespond(item, "dismissed")');
     expect(pageSource).toContain('daxora:intelligence-feedback:${props.activeClubId || "club"}:${day.toLowerCase()}');
+    expect(guidanceSource).toContain("DB.recordIntelligenceFeedback");
+    expect(guidanceSource).toContain("DB.listIntelligenceFeedback");
+    expect(guidanceSource).toContain("DB.clearIntelligenceFeedback");
+    expect(guidanceSource).toContain("Useful to {shared.useful_count} club operator");
   });
 
   it("does not offer feedback controls to users without operating authority", () => {

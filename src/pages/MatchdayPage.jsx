@@ -1053,6 +1053,8 @@ export default function MatchdayPage({
                 onNavigate={openIntelligenceTarget}
                 feedbackKey={`daxora:intelligence-feedback:${props.activeClubId || "club"}:${day.toLowerCase()}`}
                 canRespond={props.workspaceAccess?.canOperate !== false}
+                clubId={props.activeClubId || ""}
+                dayScope={day.toLowerCase()}
               />
             ),
           }

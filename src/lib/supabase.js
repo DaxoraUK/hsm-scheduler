@@ -476,6 +476,34 @@ async function replaceCollection(clubId, collection, records) {
 }
 
 export const DB = {
+  async listIntelligenceFeedback(clubId, dayScope) {
+    const id = requireClubId(clubId);
+    return asArray(await supaFetch("POST", "rpc/list_intelligence_feedback", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+    }));
+  },
+
+  async recordIntelligenceFeedback(clubId, { dayScope, issueKey, issueTitle, response, context = {} } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/record_intelligence_feedback", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_issue_key: String(issueKey || "").trim(),
+      target_issue_title: String(issueTitle || "").trim(),
+      target_response: String(response || "").trim(),
+      target_context: context && typeof context === "object" ? context : {},
+    });
+  },
+
+  async clearIntelligenceFeedback(clubId, dayScope) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/clear_intelligence_feedback", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+    });
+  },
+
   async updateMyProfile(displayName) {
     return supaFetch("POST", "rpc/update_my_profile", {
       next_display_name: String(displayName || "").trim(),

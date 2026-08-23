@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -17,6 +17,8 @@ import {
 import StatusChip from "@/ui/StatusChip.jsx";
 import { dedupeActions } from "../../../lib/engines/actionFramework.js";
 import { usePersistedWorkspaceState } from "../../../hooks/usePersistedWorkspaceState.js";
+import { DB } from "../../../lib/supabase.js";
+import { toast } from "../../../lib/notifications/daxoraNotifications.js";
 
 const SEVERITY_ORDER = { critical: 0, danger: 0, attention: 1, warning: 1, watch: 2, healthy: 3, success: 3 };
 
@@ -107,18 +109,54 @@ export default function MatchdayGuidanceCard({
   onNavigate,
   feedbackKey = "daxora:intelligence-feedback",
   canRespond = true,
+  clubId = "",
+  dayScope = "",
 }) {
   const [feedback, setFeedback] = usePersistedWorkspaceState(feedbackKey, {});
+  const [sharedFeedback, setSharedFeedback] = useState({});
+  useEffect(() => {
+    let active = true;
+    if (!clubId || !dayScope) return undefined;
+    DB.listIntelligenceFeedback(clubId, dayScope).then((rows) => {
+      if (!active) return;
+      const shared = Object.fromEntries(rows.map((row) => [row.issue_key, row]));
+      setSharedFeedback(shared);
+      setFeedback((current) => ({
+        ...current,
+        ...Object.fromEntries(rows.filter((row) => row.my_response).map((row) => [row.issue_key, { response: row.my_response, recordedAt: row.updated_at, shared: true }]))
+      }));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [clubId, dayScope, setFeedback]);
   const allActions = useMemo(
     () => mergeActions(intelligence, recommendations),
     [intelligence, recommendations]
   );
   const actions = useMemo(() => allActions.filter((item) => feedback[item.dedupeKey || item.id]?.response !== "dismissed"), [allActions, feedback]);
   const dismissedCount = allActions.length - actions.length;
-  const respond = (item, response) => setFeedback((current) => ({
-    ...current,
-    [item.dedupeKey || item.id]: { response, recordedAt: new Date().toISOString(), title: item.title },
-  }));
+  const respond = async (item, response) => {
+    const issueKey = item.dedupeKey || item.id;
+    const recordedAt = new Date().toISOString();
+    setFeedback((current) => ({ ...current, [issueKey]: { response, recordedAt, title: item.title } }));
+    if (!clubId || !dayScope) return;
+    try {
+      await DB.recordIntelligenceFeedback(clubId, { dayScope, issueKey, issueTitle: item.title, response, context: { domain: item.domain, severity: item.severity, confidence: item.confidence } });
+      const rows = await DB.listIntelligenceFeedback(clubId, dayScope);
+      setSharedFeedback(Object.fromEntries(rows.map((row) => [row.issue_key, row])));
+    } catch (error) {
+      toast.warning("Feedback saved on this device only", { description: error?.message || "The shared intelligence audit could not be updated." });
+    }
+  };
+  const restoreDismissed = async () => {
+    setFeedback({});
+    if (!clubId || !dayScope) return;
+    try {
+      await DB.clearIntelligenceFeedback(clubId, dayScope);
+      setSharedFeedback({});
+    } catch (error) {
+      toast.warning("Restored on this device only", { description: error?.message || "The shared intelligence audit could not be updated." });
+    }
+  };
 
   const critical = actions.filter((item) => item.severity === "critical").length;
   const attention = actions.filter((item) => item.severity === "attention").length;
@@ -204,7 +242,7 @@ export default function MatchdayGuidanceCard({
 
         <div className="mt-5 space-y-3">
           {actions.length ? actions.slice(0, 7).map((item, index) => (
-            <GuidanceRow key={`${item.id}-${index}`} item={item} position={index + 1} onNavigate={onNavigate} response={feedback[item.dedupeKey || item.id]?.response} onRespond={canRespond ? respond : null} />
+            <GuidanceRow key={`${item.id}-${index}`} item={item} position={index + 1} onNavigate={onNavigate} response={feedback[item.dedupeKey || item.id]?.response} shared={sharedFeedback[item.dedupeKey || item.id]} onRespond={canRespond ? respond : null} />
           )) : (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
               <div className="flex items-start gap-3">
@@ -217,7 +255,7 @@ export default function MatchdayGuidanceCard({
             </div>
           )}
         </div>
-        {dismissedCount ? <button type="button" onClick={() => setFeedback({})} className="mt-4 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-4">Restore {dismissedCount} dismissed recommendation{dismissedCount === 1 ? "" : "s"}</button> : null}
+        {dismissedCount ? <button type="button" onClick={restoreDismissed} className="mt-4 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-4">Restore {dismissedCount} dismissed recommendation{dismissedCount === 1 ? "" : "s"}</button> : null}
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -253,7 +291,7 @@ export default function MatchdayGuidanceCard({
   );
 }
 
-function GuidanceRow({ item, position, onNavigate, response, onRespond }) {
+function GuidanceRow({ item, position, onNavigate, response, shared, onRespond }) {
   const styles = severityStyle(item.severity);
   const StatusIcon = styles.Icon;
   const AreaIcon = item.Icon;
@@ -275,6 +313,7 @@ function GuidanceRow({ item, position, onNavigate, response, onRespond }) {
           <div className="mt-2 text-xs font-black text-slate-800">Recommended: {item.guidance}</div>
           {item.impact ? <div className="mt-2 text-xs font-bold text-emerald-800">Likely benefit: {item.impact}</div> : null}
           {item.evidence.length ? <div className="mt-3 flex flex-wrap gap-1.5">{item.evidence.map((evidence) => <span key={evidence} className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">{evidence}</span>)}</div> : null}
+          {shared?.useful_count ? <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-emerald-700">Useful to {shared.useful_count} club operator{shared.useful_count === 1 ? "" : "s"}</div> : null}
           {onRespond ? <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => onRespond(item, "useful")} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[10px] font-black ring-1 ${response === "useful" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-slate-600 ring-slate-200"}`}><ThumbsUp size={12} /> Useful</button><button type="button" onClick={() => onRespond(item, "dismissed")} className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-600 ring-1 ring-slate-200"><X size={12} /> Dismiss</button></div> : null}
         </div>
       </div>
