@@ -28,6 +28,11 @@ function access(role = "viewer", additionalRoles = [], plan = PLAN_CODES.ELITE, 
 }
 
 describe("role-aware workspace landing", () => {
+  test("keeps owners and administrators in Mission Control", () => {
+    expect(resolveWorkspaceLanding(access("owner", [], PLAN_CODES.ELITE))).toBe("dashboard");
+    expect(resolveWorkspaceLanding(access("admin", [], PLAN_CODES.PRO))).toBe("dashboard");
+  });
+
   test("returns operators to Operations and communications-only users to Communications", () => {
     const operator = access("scheduler", [], PLAN_CODES.PRO);
     const communicator = access("viewer", ["communications_officer"], PLAN_CODES.CORE);

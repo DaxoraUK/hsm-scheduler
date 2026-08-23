@@ -38,6 +38,7 @@ export function resolveWorkspaceLanding({
 
   const candidates = [];
 
+  if (["owner", "admin"].includes(workspaceAccess?.role)) candidates.push("dashboard");
   if (hasRole(workspaceAccess, "treasurer")) candidates.push("analytics");
   if (
     hasRole(workspaceAccess, "chair")
