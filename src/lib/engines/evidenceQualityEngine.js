@@ -32,10 +32,10 @@ function hasAllocation(row = {}) {
 
 function hasOfficialRecord(row = {}) {
   if (row.status !== "delivered") return true;
-  return Boolean(
-    String(row.referee || "").trim()
-    || String(row.officialStatus || "").trim(),
-  );
+  const referee = String(row.referee || "").trim().toLowerCase();
+  const status = String(row.officialStatus || "").trim().toLowerCase();
+  const missingValues = new Set(["", "tbc", "unconfirmed", "unassigned", "missing", "none"]);
+  return !missingValues.has(referee) || !missingValues.has(status);
 }
 
 function formatDate(date) {

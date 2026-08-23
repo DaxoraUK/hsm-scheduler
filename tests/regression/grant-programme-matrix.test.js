@@ -115,12 +115,20 @@ describe("verified grant programme matrix", () => {
       ...input,
       evidence: {
         ...input.evidence,
+        rows: input.evidence.rows.map((row) => ({ ...row, referee: "", officialStatus: "declined" })),
+      },
+    });
+    const unconfirmed = buildEvidenceQuality({
+      ...input,
+      evidence: {
+        ...input.evidence,
         rows: input.evidence.rows.map((row) => ({ ...row, referee: "", officialStatus: "unconfirmed" })),
       },
     });
 
     expect(missing.measures.find((measure) => measure.id === "officials-coverage")?.value).toBe(0);
     expect(explicitlyOutstanding.measures.find((measure) => measure.id === "officials-coverage")?.value).toBe(100);
+    expect(unconfirmed.measures.find((measure) => measure.id === "officials-coverage")?.value).toBe(0);
   });
 
   test("funding UI keeps contextual evidence and verification freshness visible", () => {
