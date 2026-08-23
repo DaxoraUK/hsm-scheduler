@@ -46,6 +46,7 @@ import {
   loadEliteApprovalState,
   loadEliteCommunicationTemplates,
 } from "../lib/elite/eliteGovernanceService.js";
+import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 
 const FILTERS = [
   ["all", "All"],
@@ -283,12 +284,21 @@ export default function CommunicationsPage(props) {
   const canCommunicate = Boolean(props.workspaceAccess?.canCommunicate && !props.workspaceAccess?.isReadOnly);
   const canPublish = Boolean(props.workspaceAccess?.canPublish && !props.workspaceAccess?.isReadOnly);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && canCommunicate);
-  const matchdayApproval = props.audience?.source === "matchday" ? props.audience?.approval : null;
+  const approvalByDay = useMemo(() => ({
+    saturday: { dayScope: "saturday", matchdayDate: props.satDate || props.satDateLabel, snapshotHash: buildMatchdaySnapshotHash(props.satFinal) },
+    sunday: { dayScope: "sunday", matchdayDate: props.sunDate || props.sunDateLabel, snapshotHash: buildMatchdaySnapshotHash(props.sunFinal) },
+    midweek: { dayScope: "midweek", matchdayDate: props.midweekDate || props.midweekDateLabel, snapshotHash: buildMatchdaySnapshotHash(props.midweekFinal) },
+  }), [props.midweekDate, props.midweekDateLabel, props.midweekFinal, props.satDate, props.satDateLabel, props.satFinal, props.sunDate, props.sunDateLabel, props.sunFinal]);
 
-  const assertCurrentMatchdayApproval = async () => {
-    if (!matchdayApproval?.dayScope) return true;
+  const approvalsForRows = (selectedRows = []) => [...new Set(selectedRows.map((row) => row.day).filter(Boolean))]
+    .map((dayKey) => approvalByDay[dayKey])
+    .filter((approval) => approval?.matchdayDate && approval?.snapshotHash);
+
+  const assertCurrentMatchdayApproval = async (selectedRows = []) => {
+    const approvals = approvalsForRows(selectedRows);
+    if (!approvals.length) return true;
     try {
-      await DB.assertMatchdayApproval(props.activeClubId, matchdayApproval);
+      await Promise.all(approvals.map((approval) => DB.assertMatchdayApproval(props.activeClubId, approval)));
       return true;
     } catch (error) {
       toast.error("Schedule approval is no longer current", {
@@ -461,7 +471,7 @@ export default function CommunicationsPage(props) {
       toast.error("Message is blocked", { description: row.issues.join(" · ") || "Resolve the fixture allocation first." });
       return;
     }
-    if (!(await assertCurrentMatchdayApproval())) return;
+    if (!(await assertCurrentMatchdayApproval([row]))) return;
     try {
       await navigator.clipboard.writeText(row.message);
       await record(row, "copied");
@@ -478,7 +488,7 @@ export default function CommunicationsPage(props) {
 
   const copySelected = async (selectedRows) => {
     if (!selectedRows.length) return;
-    if (!(await assertCurrentMatchdayApproval())) return;
+    if (!(await assertCurrentMatchdayApproval(selectedRows))) return;
     try {
       const preparedCopies = selectedRows.flatMap((row) => row.recipients.map((recipient) => `${row.teamName}\nRecipient: ${recipient.name} (${recipient.channel})\n\n${recipient.message || row.message}`));
       await navigator.clipboard.writeText(preparedCopies.join("\n\n--------------------\n\n"));
@@ -492,7 +502,7 @@ export default function CommunicationsPage(props) {
   };
 
   const openChannel = async (row, recipient) => {
-    if (!(await assertCurrentMatchdayApproval())) return;
+    if (!(await assertCurrentMatchdayApproval([row]))) return;
     const link = communicationLink(recipient, recipient.message || row.message, row.teamName);
     if (!link) {
       toast.error("Contact destination is incomplete");
@@ -503,7 +513,7 @@ export default function CommunicationsPage(props) {
   };
 
   const sendSelectedViaWeb = async (selectedRows) => {
-    if (!(await assertCurrentMatchdayApproval())) return;
+    if (!(await assertCurrentMatchdayApproval(selectedRows))) return;
     const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
     if (staleRows.length) {
       toast.error("The message queue changed", { description: "Fixture or contact details changed after the queue was opened. Close and reopen the queue before sending." });
@@ -631,13 +641,15 @@ export default function CommunicationsPage(props) {
 
     setSending(true);
     try {
-      const result = await DB.publishCoachHubMatchweekMessages(props.activeClubId, selectedRows.map((row) => ({
-        team_key: row.contact.teamKey,
-        title: row.subject || `${row.teamName} matchweek update`,
-        body: row.message,
-        message_identity: `${row.id}:${row.messageHash}`,
-        requires_acknowledgement: true,
-      })), props.audience?.approval || {});
+      const groups = selectedRows.reduce((result, row) => ({ ...result, [row.day]: [...(result[row.day] || []), row] }), {});
+      const results = await Promise.all(Object.entries(groups).map(([dayKey, dayRows]) => DB.publishCoachHubMatchweekMessages(props.activeClubId, dayRows.map((row) => ({
+          team_key: row.contact.teamKey,
+          title: row.subject || `${row.teamName} matchweek update`,
+          body: row.message,
+          message_identity: `${row.id}:${row.messageHash}`,
+          requires_acknowledgement: true,
+        })), approvalByDay[dayKey])));
+      const result = results.reduce((total, item) => ({ published: total.published + Number(item?.published || 0), reused: total.reused + Number(item?.reused || 0) }), { published: 0, reused: 0 });
       await Promise.all(selectedRows.map((row) => record(row, "coach_hub_published", null, { teamKey: row.contact.teamKey }, false)));
       await loadEvents();
       setCoachHubConfirmation(null);
@@ -661,7 +673,7 @@ export default function CommunicationsPage(props) {
       toast.error(failure.title, { description: failure.description });
       return;
     }
-    if (!(await assertCurrentMatchdayApproval())) return;
+    if (!(await assertCurrentMatchdayApproval(confirmation.rows))) return;
     setSending(true);
     try {
       const requestKey = confirmation.requestKey || buildCommunicationApprovalKey(confirmation.rows);
@@ -670,7 +682,7 @@ export default function CommunicationsPage(props) {
         rows: confirmation.rows,
         capabilities: deliveryCapabilities,
         requestKey,
-        matchdayApproval,
+        matchdayApprovals: approvalsForRows(confirmation.rows),
       });
       await loadEvents();
       if (result.failed && !result.accepted) {

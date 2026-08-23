@@ -133,7 +133,7 @@ export function buildDeliveryMessages(rows = [], capabilities = EMPTY_DELIVERY_C
   return { messages, unavailable };
 }
 
-export async function dispatchCommunicationBatch({ clubId, rows, capabilities, requestKey, matchdayApproval = null }) {
+export async function dispatchCommunicationBatch({ clubId, rows, capabilities, requestKey, matchdayApprovals = [] }) {
   const session = await Auth.getValidSession();
   if (!session?.access_token) {
     throw new Error("Sign in again to send coach messages");
@@ -156,7 +156,7 @@ export async function dispatchCommunicationBatch({ clubId, rows, capabilities, r
       clubId,
       requestKey,
       pilotAcknowledged: Boolean(capabilities.channels?.email?.pilotMode),
-      matchdayApproval: matchdayApproval && typeof matchdayApproval === "object" ? matchdayApproval : null,
+      matchdayApprovals: Array.isArray(matchdayApprovals) ? matchdayApprovals : [],
       messages: prepared.messages,
     }),
   });

@@ -33,7 +33,7 @@ export async function POST(request) {
     if (!clubId) return json({ error: "No club workspace was supplied", code: "CLUB_CONTEXT_REQUIRED" }, 400);
 
     const messages = sanitiseOutboundMessages(clubId, body?.messages || []);
-    const matchdayApproval = body?.matchdayApproval && typeof body.matchdayApproval === "object" ? body.matchdayApproval : null;
+    const matchdayApprovals = Array.isArray(body?.matchdayApprovals) ? body.matchdayApprovals.slice(0, 7) : [];
     const providerConfig = communicationProviderConfig();
     if (providerConfig.email.pilotMode) {
       const actorEmail = String(user?.email || "").trim().toLowerCase();
@@ -82,12 +82,13 @@ export async function POST(request) {
       })),
     });
 
-    if (matchdayApproval?.dayScope) {
+    for (const approval of matchdayApprovals) {
+      if (!approval?.dayScope) continue;
       await userRpc(token, "assert_matchday_approval", {
         target_club_id: clubId,
-        target_day_scope: text(matchdayApproval.dayScope, 40),
-        target_matchday_date: text(matchdayApproval.matchdayDate, 80),
-        target_snapshot_hash: text(matchdayApproval.snapshotHash, 100),
+        target_day_scope: text(approval.dayScope, 40),
+        target_matchday_date: text(approval.matchdayDate, 80),
+        target_snapshot_hash: text(approval.snapshotHash, 100),
       });
     }
 

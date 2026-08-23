@@ -13,11 +13,12 @@ describe("all-channel matchday approval", () => {
     expect(migration).toContain("public.is_club_member(target_club_id)");
   });
   it("checks browser copy and external-channel actions", () => {
-    expect(page.match(/assertCurrentMatchdayApproval\(\)/g)?.length).toBeGreaterThanOrEqual(5);
-    expect(page).toContain('props.audience?.source === "matchday"');
+    expect(page.match(/assertCurrentMatchdayApproval\(/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(page).toContain("approvalByDay");
+    expect(page).toContain("buildMatchdaySnapshotHash(props.satFinal)");
   });
   it("rechecks approval server-side before provider delivery", () => {
-    expect(delivery).toContain("matchdayApproval");
+    expect(delivery).toContain("matchdayApprovals");
     expect(dispatch).toContain('userRpc(token, "assert_matchday_approval"');
   });
 });

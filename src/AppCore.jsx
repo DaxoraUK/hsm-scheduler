@@ -2503,6 +2503,9 @@ function App() {
                 satDateLabel={satDateLabel}
                 sunDateLabel={sunDateLabel}
                 midweekDateLabel={midweekDateLabel}
+                satDate={satDate}
+                sunDate={sunDate}
+                midweekDate={midweekDate}
                 satHasRun={satHasRun}
                 sunHasRun={sunHasRun}
                 midweekHasRun={midweekHasRun}
