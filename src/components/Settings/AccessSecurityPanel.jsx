@@ -119,6 +119,8 @@ export default function AccessSecurityPanel({
   activeMembership,
   authSession,
   refreshClubAccess,
+  teamCfg = [],
+  club = {},
 }) {
   const daxoraPrompt = useDaxoraPrompt();
   const access = useMemo(() => createWorkspaceAccess(activeMembership), [activeMembership]);
@@ -135,6 +137,7 @@ export default function AccessSecurityPanel({
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
   const [additionalRoleByMember, setAdditionalRoleByMember] = useState({});
+  const [roleScopeByMember, setRoleScopeByMember] = useState({});
   const [inviteLink, setInviteLink] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
   const [supportDuration, setSupportDuration] = useState("60");
@@ -145,6 +148,31 @@ export default function AccessSecurityPanel({
   const currentUserId = authSession?.user?.id || "";
   const activeSupport = supportSessions.filter((session) => session.active);
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
+  const sites = Array.isArray(club?.sites) ? club.sites : [];
+
+  const roleAssignmentsFor = (member) => (Array.isArray(member?.roles) ? member.roles : [])
+    .map((assignment) => typeof assignment === "string"
+      ? { role: assignment, scopeType: "club", scopeId: null }
+      : {
+          role: assignment?.role || assignment?.role_code || "",
+          scopeType: assignment?.scopeType || assignment?.scope_type || "club",
+          scopeId: assignment?.scopeId || assignment?.scope_id || null,
+        })
+    .filter((assignment) => assignment.role);
+
+  const scopeDraftFor = (memberId) => roleScopeByMember[memberId] || { scopeType: "club", scopeId: "" };
+
+  const scopeLabel = (assignment) => {
+    if (assignment.scopeType === "team") {
+      const team = teamCfg.find((row) => String(row.id || row.key || row.name) === String(assignment.scopeId));
+      return `Team: ${team?.name || "Assigned team"}`;
+    }
+    if (assignment.scopeType === "site") {
+      const site = sites.find((row) => String(row.id || row.key || row.name || row.venue) === String(assignment.scopeId));
+      return `Site: ${site?.name || site?.venue || "Assigned site"}`;
+    }
+    return "Club-wide";
+  };
 
   const runAction = async (key, action, successMessage, { refreshMemberships = false } = {}) => {
     if (busyAction) return false;
@@ -273,9 +301,17 @@ export default function AccessSecurityPanel({
             </p>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-white/[0.06] p-4">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Your access</div>
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Your primary access</div>
             <div className="mt-2"><RoleBadge role={access.role} /></div>
             <div className="mt-3 text-xs font-bold text-slate-300">{getRoleDescription(access.role)}</div>
+            {access.effectiveRoles.filter((role) => role !== access.role).length ? (
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Additional responsibilities</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {access.effectiveRoles.filter((role) => role !== access.role).map((role) => <RoleBadge key={role} role={role} />)}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -287,20 +323,24 @@ export default function AccessSecurityPanel({
         </div>
       ) : null}
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {["owner", "admin", "scheduler", "viewer"].map((role) => (
-          <div key={role} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-            <RoleBadge role={role} />
-            <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{getRoleDescription(role)}</p>
-          </div>
-        ))}
+      <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Primary access levels</div>
+        <p className="mt-1 text-sm font-semibold text-slate-500">Choose one when inviting a user. Add their real club responsibilities after they join.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {["owner", "admin", "scheduler", "viewer"].map((role) => (
+            <div key={role} className="rounded-[20px] border border-slate-200 bg-slate-50 p-4">
+              <RoleBadge role={role} />
+              <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{getRoleDescription(role)}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <SectionCard
         icon={UsersRound}
         eyebrow="Club access"
-        title="Members and roles"
-        description="Owners control administrators. Administrators can manage schedulers and viewers. Ownership changes only through the explicit transfer action."
+        title="Members and responsibilities"
+        description="Primary access protects the account. Add club-wide, team or site responsibilities to reflect what each person actually does. Owners can label their own responsibilities without changing protected Owner access."
         action={(
           <button type="button" onClick={refresh} disabled={status === "loading"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <RefreshCw size={15} className={status === "loading" ? "animate-spin" : ""} /> Refresh
@@ -316,6 +356,22 @@ export default function AccessSecurityPanel({
               const canEdit = !isCurrent
                 && member.role !== "owner"
                 && canAssignRole(access.role, member.role);
+              const canManageResponsibilities = canAssignAdditionalRole(
+                access.role,
+                additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0],
+              );
+              const assignments = roleAssignmentsFor(member);
+              const scopeDraft = scopeDraftFor(member.user_id);
+              const scopeOptions = scopeDraft.scopeType === "team"
+                ? teamCfg.map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+                : scopeDraft.scopeType === "site"
+                  ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
+                  : [];
+              const selectedAdditionalRole = additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0];
+              const assignmentAlreadyExists = assignments.some((assignment) =>
+                assignment.role === selectedAdditionalRole
+                && assignment.scopeType === scopeDraft.scopeType
+                && String(assignment.scopeId || "") === String(scopeDraft.scopeId || ""));
               return (
                 <div key={member.user_id} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                   <div className="flex min-w-0 items-center gap-3">
@@ -379,56 +435,91 @@ export default function AccessSecurityPanel({
                       <div>
                         <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Additional roles</div>
                         <div className="mt-1 flex flex-wrap gap-2">
-                          {(Array.isArray(member.roles) ? member.roles : []).filter((role) => role !== member.role).map((role) => (
-                            <span key={role} className="inline-flex items-center gap-1.5">
-                              <RoleBadge role={role} />
-                              {canEdit ? (
+                          {assignments.map((assignment) => (
+                            <span key={`${assignment.role}:${assignment.scopeType}:${assignment.scopeId || "club"}`} className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2">
+                              <RoleBadge role={assignment.role} />
+                              <span className="text-[10px] font-black text-slate-500">{scopeLabel(assignment)}</span>
+                              {canManageResponsibilities ? (
                                 <button
                                   type="button"
                                   disabled={Boolean(busyAction)}
                                   onClick={() => runAction(
-                                    `remove-role-${member.user_id}-${role}`,
-                                    () => DB.removeClubMemberRole(activeClubId, member.user_id, role),
+                                    `remove-role-${member.user_id}-${assignment.role}-${assignment.scopeType}-${assignment.scopeId || "club"}`,
+                                    () => DB.removeClubMemberRole(activeClubId, member.user_id, assignment.role, {
+                                      scopeType: assignment.scopeType,
+                                      scopeId: assignment.scopeId,
+                                    }),
                                     "Additional role removed",
                                     { refreshMemberships: true }
                                   )}
                                   className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-rose-600"
-                                  aria-label={`Remove ${getRoleLabel(role)} role`}
+                                  aria-label={`Remove ${getRoleLabel(assignment.role)} responsibility`}
                                 >
                                   <X size={12} />
                                 </button>
                               ) : null}
                             </span>
                           ))}
-                          {!Array.isArray(member.roles) || member.roles.filter((role) => role !== member.role).length === 0 ? (
+                          {!assignments.length ? (
                             <span className="text-xs font-semibold text-slate-400">No additional roles assigned.</span>
                           ) : null}
                         </div>
                       </div>
 
-                      {canEdit && canAssignAdditionalRole(access.role, additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]) ? (
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                      {canManageResponsibilities ? (
+                        <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[minmax(170px,1fr)_130px_minmax(160px,1fr)_auto]">
                           <select
-                            value={additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]}
+                            aria-label="Responsibility"
+                            value={selectedAdditionalRole}
                             onChange={(event) => setAdditionalRoleByMember((current) => ({ ...current, [member.user_id]: event.target.value }))}
                             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
                           >
-                            {MANAGEABLE_ADDITIONAL_ROLES
-                              .filter((role) => !(Array.isArray(member.roles) ? member.roles : []).includes(role))
-                              .map((role) => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
+                            {MANAGEABLE_ADDITIONAL_ROLES.map((role) => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
                           </select>
+                          <select
+                            aria-label="Responsibility scope"
+                            value={scopeDraft.scopeType}
+                            onChange={(event) => setRoleScopeByMember((current) => ({
+                              ...current,
+                              [member.user_id]: { scopeType: event.target.value, scopeId: "" },
+                            }))}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
+                          >
+                            <option value="club">Whole club</option>
+                            <option value="team">One team</option>
+                            <option value="site">One site</option>
+                          </select>
+                          {scopeDraft.scopeType === "club" ? (
+                            <div className="flex h-10 items-center rounded-xl bg-slate-100 px-3 text-xs font-bold text-slate-500">Applies everywhere</div>
+                          ) : (
+                            <select
+                              aria-label={scopeDraft.scopeType === "team" ? "Team" : "Site"}
+                              value={scopeDraft.scopeId}
+                              onChange={(event) => setRoleScopeByMember((current) => ({
+                                ...current,
+                                [member.user_id]: { ...scopeDraft, scopeId: event.target.value },
+                              }))}
+                              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
+                            >
+                              <option value="">Select {scopeDraft.scopeType}</option>
+                              {scopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                          )}
                           <button
                             type="button"
-                            disabled={Boolean(busyAction) || MANAGEABLE_ADDITIONAL_ROLES.every((role) => (Array.isArray(member.roles) ? member.roles : []).includes(role))}
+                            disabled={Boolean(busyAction) || assignmentAlreadyExists || (scopeDraft.scopeType !== "club" && !scopeDraft.scopeId)}
                             onClick={() => runAction(
                               `add-role-${member.user_id}`,
-                              () => DB.addClubMemberRole(activeClubId, member.user_id, additionalRoleByMember[member.user_id] || MANAGEABLE_ADDITIONAL_ROLES[0]),
-                              "Additional role assigned",
+                              () => DB.addClubMemberRole(activeClubId, member.user_id, selectedAdditionalRole, {
+                                scopeType: scopeDraft.scopeType,
+                                scopeId: scopeDraft.scopeId || null,
+                              }),
+                              "Responsibility assigned",
                               { refreshMemberships: true }
                             )}
                             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50"
                           >
-                            <UserPlus size={14} /> Add role
+                            <UserPlus size={14} /> {assignmentAlreadyExists ? "Assigned" : "Add"}
                           </button>
                         </div>
                       ) : null}
@@ -453,7 +544,7 @@ export default function AccessSecurityPanel({
             <input type="email" required value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="person@club.org" className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-emerald-400 focus:bg-white" />
           </label>
           <label>
-            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Role</span>
+            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Primary access</span>
             <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400">
               {MANAGEABLE_MEMBER_ROLES.filter((role) => canAssignRole(access.role, role)).map((role) => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
             </select>

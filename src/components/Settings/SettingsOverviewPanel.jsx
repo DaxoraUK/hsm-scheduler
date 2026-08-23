@@ -10,7 +10,6 @@ import {
   MapPinned,
   PlugZap,
   Rocket,
-  ShieldCheck,
   Trophy,
   UsersRound,
 } from "lucide-react";
@@ -354,24 +353,6 @@ export default function SettingsOverviewPanel({
         />
       </section>
 
-      <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
-            <ShieldCheck size={21} />
-          </span>
-          <div>
-            <h3 className="text-lg font-black text-slate-950">
-              What no longer belongs in Settings
-            </h3>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-              Analytics and statistics stay in Analytics. Pitch closures stay in
-              Operations, where matchday decisions are made. Product colours and
-              club-logo uploads are removed so Ground Control keeps one
-              consistent interface.
-            </p>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
