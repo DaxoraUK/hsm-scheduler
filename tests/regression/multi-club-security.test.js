@@ -197,6 +197,7 @@ describe("authenticated Supabase repository", () => {
       email: "scheduler@example.test",
       role: "scheduler",
       expiryHours: 72,
+      responsibilities: [{ role: "fixture_officer", scopeType: "club", scopeId: null }],
     });
     await DB.acceptClubInvitation("single-use-token");
 
@@ -206,6 +207,7 @@ describe("authenticated Supabase repository", () => {
       invite_email: "scheduler@example.test",
       invite_role: "scheduler",
       expiry_hours: 72,
+      invite_responsibilities: [{ role: "fixture_officer", scope_type: "club", scope_id: null }],
     });
     expect(fetchMock.mock.calls[1][0]).toContain("/rest/v1/rpc/accept_club_invitation");
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({

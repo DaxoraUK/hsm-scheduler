@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const accessPanel = readFileSync("src/components/Settings/AccessSecurityPanel.jsx", "utf8");
 const settingsTabs = readFileSync("src/components/Settings/SettingsTabs.jsx", "utf8");
 const overview = readFileSync("src/components/Settings/SettingsOverviewPanel.jsx", "utf8");
+const settingsPage = readFileSync("src/pages/SettingsPage.jsx", "utf8");
 
 describe("Settings access and navigation clarity", () => {
   test("separates protected primary access from additional responsibilities", () => {
@@ -25,5 +26,7 @@ describe("Settings access and navigation clarity", () => {
     expect(settingsTabs).toContain("Find a setting");
     expect(settingsTabs).toContain("No matching settings");
     expect(overview).not.toContain("What no longer belongs in Settings");
+    expect(settingsPage).toContain('rounded-[24px]');
+    expect(settingsPage).not.toContain("Ground Control settings");
   });
 });

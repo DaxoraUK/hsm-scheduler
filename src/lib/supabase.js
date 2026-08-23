@@ -1358,13 +1358,18 @@ export const DB = {
     return asArray(await supaFetch("POST", "rpc/list_club_invitations", { target_club_id: id }));
   },
 
-  async createClubInvitation(clubId, { email, role = "viewer", expiryHours = 72 } = {}) {
+  async createClubInvitation(clubId, { email, role = "viewer", expiryHours = 72, responsibilities = [] } = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/create_club_invitation", {
       target_club_id: id,
       invite_email: String(email || "").trim(),
       invite_role: String(role || "viewer").trim(),
       expiry_hours: Number(expiryHours) || 72,
+      invite_responsibilities: Array.isArray(responsibilities) ? responsibilities.map((assignment) => ({
+        role: String(assignment?.role || "").trim(),
+        scope_type: String(assignment?.scopeType || assignment?.scope_type || "club").trim(),
+        scope_id: assignment?.scopeId || assignment?.scope_id || null,
+      })) : [],
     });
   },
 
@@ -1398,7 +1403,7 @@ export const DB = {
       target_user_id: userId,
       role_code: String(role || "").trim(),
       scope_type: String(scopeType || "club").trim(),
-      scope_id: scopeId || null,
+      scope_id: String(scopeType || "club").trim() === "club" ? "__club__" : scopeId || null,
     });
   },
 
@@ -1409,7 +1414,7 @@ export const DB = {
       target_user_id: userId,
       role_code: String(role || "").trim(),
       scope_type: String(scopeType || "club").trim(),
-      scope_id: scopeId || null,
+      scope_id: String(scopeType || "club").trim() === "club" ? "__club__" : scopeId || null,
     });
   },
 

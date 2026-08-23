@@ -211,21 +211,21 @@ export default function SettingsPage(props) {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6">
-      <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-end lg:p-7">
+      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
-              <Settings2 size={14} /> Ground Control settings
+            <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+              <Settings2 size={14} /> Settings
             </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+            <h1 className="mt-1.5 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
               {title}
             </h1>
-            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500 sm:text-base">
+            <p className="mt-1 max-w-3xl text-sm font-semibold leading-5 text-slate-500">
               {subtitle}
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-slate-600 lg:self-auto">
+          <div className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600 sm:self-auto">
             <Database size={16} className="text-slate-400" />
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
               Data

@@ -136,6 +136,9 @@ export default function AccessSecurityPanel({
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
+  const [inviteResponsibilities, setInviteResponsibilities] = useState([]);
+  const [inviteResponsibilityRole, setInviteResponsibilityRole] = useState(MANAGEABLE_ADDITIONAL_ROLES[0]);
+  const [inviteResponsibilityScope, setInviteResponsibilityScope] = useState({ scopeType: "club", scopeId: "" });
   const [additionalRoleByMember, setAdditionalRoleByMember] = useState({});
   const [roleScopeByMember, setRoleScopeByMember] = useState({});
   const [inviteLink, setInviteLink] = useState("");
@@ -203,6 +206,7 @@ export default function AccessSecurityPanel({
         email,
         role: inviteRole,
         expiryHours: 72,
+        responsibilities: inviteResponsibilities,
       });
       const url = new URL(window.location.href);
       url.search = "";
@@ -210,6 +214,7 @@ export default function AccessSecurityPanel({
       url.searchParams.set("club_invite", invitation.token);
       setInviteLink(url.toString());
       setInviteEmail("");
+      setInviteResponsibilities([]);
       await refresh();
       toast.success("Secure invitation created", {
         description: "Copy the link and send it directly to the invited person. It expires after 72 hours.",
@@ -219,6 +224,26 @@ export default function AccessSecurityPanel({
     } finally {
       setBusyAction("");
     }
+  };
+
+  const inviteScopeOptions = inviteResponsibilityScope.scopeType === "team"
+    ? teamCfg.map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+    : inviteResponsibilityScope.scopeType === "site"
+      ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
+      : [];
+  const inviteResponsibilityExists = inviteResponsibilities.some((assignment) =>
+    assignment.role === inviteResponsibilityRole
+    && assignment.scopeType === inviteResponsibilityScope.scopeType
+    && String(assignment.scopeId || "") === String(inviteResponsibilityScope.scopeId || ""));
+
+  const addInviteResponsibility = () => {
+    if (inviteResponsibilityExists) return;
+    if (inviteResponsibilityScope.scopeType !== "club" && !inviteResponsibilityScope.scopeId) return;
+    setInviteResponsibilities((current) => [...current, {
+      role: inviteResponsibilityRole,
+      scopeType: inviteResponsibilityScope.scopeType,
+      scopeId: inviteResponsibilityScope.scopeId || null,
+    }]);
   };
 
   const copyInvitation = async () => {
@@ -554,6 +579,30 @@ export default function AccessSecurityPanel({
           </button>
         </form>
 
+        <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-xs font-black text-slate-950">Initial responsibilities <span className="font-semibold text-slate-400">(optional)</span></div>
+              <p className="mt-1 text-xs font-semibold text-slate-500">These are activated automatically when the invited person joins.</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_130px_minmax(170px,1fr)_auto]">
+            <select aria-label="Initial responsibility" value={inviteResponsibilityRole} onChange={(event) => setInviteResponsibilityRole(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700">
+              {MANAGEABLE_ADDITIONAL_ROLES.map((role) => <option key={role} value={role}>{getRoleLabel(role)}</option>)}
+            </select>
+            <select aria-label="Initial responsibility scope" value={inviteResponsibilityScope.scopeType} onChange={(event) => setInviteResponsibilityScope({ scopeType: event.target.value, scopeId: "" })} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700">
+              <option value="club">Whole club</option><option value="team">One team</option><option value="site">One site</option>
+            </select>
+            {inviteResponsibilityScope.scopeType === "club" ? <div className="flex h-10 items-center rounded-xl bg-white px-3 text-xs font-bold text-slate-500">Applies everywhere</div> : (
+              <select aria-label="Initial responsibility target" value={inviteResponsibilityScope.scopeId} onChange={(event) => setInviteResponsibilityScope((current) => ({ ...current, scopeId: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700">
+                <option value="">Select {inviteResponsibilityScope.scopeType}</option>{inviteScopeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            )}
+            <button type="button" onClick={addInviteResponsibility} disabled={inviteResponsibilityExists || (inviteResponsibilityScope.scopeType !== "club" && !inviteResponsibilityScope.scopeId)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 disabled:opacity-40"><UserPlus size={14} /> {inviteResponsibilityExists ? "Added" : "Add"}</button>
+          </div>
+          {inviteResponsibilities.length ? <div className="mt-3 flex flex-wrap gap-2">{inviteResponsibilities.map((assignment) => <span key={`${assignment.role}:${assignment.scopeType}:${assignment.scopeId || "club"}`} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2"><RoleBadge role={assignment.role} /><span className="text-[10px] font-black text-slate-500">{scopeLabel(assignment)}</span><button type="button" onClick={() => setInviteResponsibilities((current) => current.filter((row) => row !== assignment))} className="rounded-full p-1 text-slate-400 hover:text-rose-600" aria-label="Remove initial responsibility"><X size={12} /></button></span>)}</div> : null}
+        </div>
+
         {inviteLink ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -574,7 +623,7 @@ export default function AccessSecurityPanel({
                 <div key={invitation.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-black text-slate-900">{invitation.email}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500"><RoleBadge role={invitation.role} /><span>Expires {formatDate(invitation.expires_at)}</span></div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500"><RoleBadge role={invitation.role} /><span>Expires {formatDate(invitation.expires_at)}</span>{(invitation.responsibilities || []).map((assignment) => <span key={`${assignment.role}:${assignment.scope_type}:${assignment.scope_id || "club"}`} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{getRoleLabel(assignment.role)} · {scopeLabel({ role: assignment.role, scopeType: assignment.scope_type, scopeId: assignment.scope_id })}</span>)}</div>
                   </div>
                   <button type="button" disabled={Boolean(busyAction)} onClick={() => runAction(`revoke-invite-${invitation.id}`, () => DB.revokeClubInvitation(activeClubId, invitation.id), "Invitation revoked")} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"><X size={14} /> Revoke</button>
                 </div>
