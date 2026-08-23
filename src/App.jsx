@@ -10,7 +10,7 @@ const TeamFeePayAcquisitionDemo = lazy(() =>
 const DaxoraLandingPage = lazy(() => import("./pages/DaxoraLandingPage.jsx"));
 const DaxoraPublicPage = lazy(() => import("./pages/DaxoraPublicPage.jsx"));
 
-const PUBLIC_PAGES = new Set(["pricing", "security", "privacy", "terms", "contact"]);
+const PUBLIC_PAGES = new Set(["pricing", "security", "privacy", "cookies", "terms", "contact"]);
 
 function requestedPublicPage() {
   if (typeof window === "undefined") return "";

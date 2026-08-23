@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ArrowRight, BadgePoundSterling, Check, LockKeyhole, Mail, Scale, ShieldCheck } from "lucide-react";
+import { ArrowRight, BadgePoundSterling, Check, Cookie, LockKeyhole, Mail, Scale, ShieldCheck } from "lucide-react";
 import { buildDaxoraAppEntry } from "../lib/platform/platformUrls.js";
 import { applyPublicMetadata } from "../lib/platform/publicMetadata.js";
 
@@ -15,6 +15,10 @@ const PAGE_CONTENT = Object.freeze({
   privacy: {
     title: "Privacy",
     description: "A plain-English overview of how Daxora handles account, organisation and operational information.",
+  },
+  cookies: {
+    title: "Cookies and storage",
+    description: "How Daxora uses essential browser storage for secure access and saved workspace preferences without advertising trackers.",
   },
   terms: {
     title: "Terms",
@@ -37,7 +41,7 @@ function Header() {
 }
 
 function Footer() {
-  return <footer className="border-t border-white/10 px-5 py-10 sm:px-8"><div className="mx-auto grid max-w-7xl gap-8 text-xs font-bold text-slate-500 sm:grid-cols-[1fr_auto]"><div><div className="uppercase tracking-[0.2em] text-slate-300">Daxora</div><div className="mt-2">Connected operations for grassroots sport.</div></div><nav className="flex flex-wrap gap-x-5 gap-y-3"><a href="/pricing">Pricing</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/contact">Contact</a></nav></div></footer>;
+  return <footer className="border-t border-white/10 px-5 py-10 sm:px-8"><div className="mx-auto grid max-w-7xl gap-8 text-xs font-bold text-slate-500 sm:grid-cols-[1fr_auto]"><div><div className="uppercase tracking-[0.2em] text-slate-300">Daxora</div><div className="mt-2">Connected operations for grassroots sport.</div></div><nav className="flex flex-wrap gap-x-5 gap-y-3"><a href="/pricing">Pricing</a><a href="/security">Security</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/terms">Terms</a><a href="/contact">Contact</a></nav></div></footer>;
 }
 
 function Pricing() {
@@ -50,6 +54,10 @@ function Security() {
 
 function Privacy() {
   return <><Intro icon={LockKeyhole} eyebrow="Privacy overview" title="Operational data is used to deliver the service" copy="Daxora processes account identity, organisation membership, team responsibilities, fixtures, facilities, communications records and related operational evidence where a customer uses those features." /><Grid items={[["Why information is used","To authenticate users, enforce access, run requested workflows, provide support and maintain security and audit records."],["Who controls club data","The subscribing organisation controls the club information it enters. Daxora operates the platform and processes that information to provide the contracted service."],["Service providers","Infrastructure, database, email, payment and monitoring providers may process limited information where needed to deliver enabled services."],["Your choices","Account and contact corrections should normally be requested through the organisation that granted access, or escalated to Daxora support."]]} /><Notice>This public overview does not replace the versioned Privacy Notice and Data Processing Addendum supplied during commercial onboarding.</Notice></>;
+}
+
+function Cookies() {
+  return <><Intro icon={Cookie} eyebrow="Cookies and browser storage" title="Essential storage, explained plainly" copy="Daxora currently uses browser storage only where it is needed to provide secure access, remember useful workspace choices and keep the service operating reliably. The public website does not currently use advertising or behavioural-marketing trackers." /><Grid items={[["Secure sign-in","Authentication technology keeps a signed-in session connected to the correct account and organisation. Removing it signs the user out or prevents protected products from opening."],["Workspace preferences","The application may remember interface choices such as selected views, filters or dismissed notices on the device so users do not have to repeat them."],["Operational security","Short-lived technical information may support request protection, reliability and diagnosis. It is not used to build advertising profiles."],["Your control","Browser settings can remove or block stored information, but blocking essential storage may prevent sign-in and saved preferences from working correctly."]]} /><Notice>Daxora will not introduce optional analytics, advertising or marketing storage without first updating this notice and providing an appropriate choice where consent is required.</Notice></>;
 }
 
 function Terms() {
@@ -67,6 +75,6 @@ function Notice({ children }) { return <div className="mt-8 rounded-2xl border b
 export default function DaxoraPublicPage({ page = "contact" }) {
   const content = PAGE_CONTENT[page] || PAGE_CONTENT.contact;
   useEffect(() => applyPublicMetadata({ ...content, path: `/${page}` }), [content, page]);
-  const Body = { pricing: Pricing, security: Security, privacy: Privacy, terms: Terms, contact: Contact }[page] || Contact;
+  const Body = { pricing: Pricing, security: Security, privacy: Privacy, cookies: Cookies, terms: Terms, contact: Contact }[page] || Contact;
   return <div className="min-h-screen bg-[#050816] text-white"><Header /><main className="mx-auto min-h-[70vh] max-w-7xl px-5 py-20 sm:px-8 lg:py-24"><Body /></main><Footer /></div>;
 }

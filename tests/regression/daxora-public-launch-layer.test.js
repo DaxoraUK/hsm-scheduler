@@ -19,13 +19,20 @@ describe("Daxora public launch layer", () => {
   });
 
   test("publishes durable commercial and trust routes", () => {
-    for (const page of ["pricing", "security", "privacy", "terms", "contact"]) {
+    for (const page of ["pricing", "security", "privacy", "cookies", "terms", "contact"]) {
       expect(app).toContain(`"${page}"`);
       expect(landing).toContain(`href="/${page}"`);
     }
     expect(publicPages).toContain("Daxora Pay remains in development");
     expect(publicPages).toContain("This page is a summary, not the contract");
     expect(publicPages).toContain("support@daxora.co.uk");
+  });
+
+  test("publishes an accurate essential-storage cookie position", () => {
+    expect(publicPages).toContain("does not currently use advertising or behavioural-marketing trackers");
+    expect(publicPages).toContain("Secure sign-in");
+    expect(publicPages).toContain("Workspace preferences");
+    expect(publicPages).toContain("providing an appropriate choice where consent is required");
   });
 
   test("keeps authenticated application pages out of search indexes", () => {
