@@ -32,6 +32,15 @@ Mission Control is the primary club operating overview. Club Command is the Elit
 
 **Role-aware product simplification.** v3.10.42 uses the v3.10.41 effective multi-role access object and subscription entitlements as one shared navigation and rendering authority. Mission Control remains operational; Club Command is exposed only to entitled users with governance/audit permission.
 
+### Matchweek workflow consolidation — v3.10.56
+
+- Matchday now presents one six-stage command route: Import, Review, Allocate, Resolve, Notify and Lock.
+- The command surface selects one next action and routes directly to the owning unresolved-fixture, officials, pitch-closure or communications section.
+- Fixture count, unresolved work, pitch availability and lock state are consolidated in the command surface.
+- The duplicate fixture-summary card has been removed from Saturday, Sunday and Midweek workspaces.
+- Specialist schedule, competition-rule, resource, officials, weather, parking and communications detail remains available in collapsed sections.
+- Existing operations permission, read-only subscription and schedule-lock boundaries continue to govern editing and consequential actions.
+
 ## Acceptance criteria
 
 - Consolidated source builds successfully on the target Windows environment.

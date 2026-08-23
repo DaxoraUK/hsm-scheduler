@@ -20,7 +20,6 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
-  Target,
   UsersRound,
 } from "lucide-react";
 import FixtureDrawer from "../components/Operations/shared/FixtureDrawer.jsx";
@@ -29,9 +28,8 @@ import PitchClosuresCard from "../components/Operations/shared/PitchClosuresCard
 import MatchdayPitchAssignmentsCard from "../components/Operations/shared/MatchdayPitchAssignmentsCard.jsx";
 import MatchdayCarParkCard from "../components/Operations/shared/MatchdayCarParkCard.jsx";
 import MatchdayCoachMessagesCard from "../components/Operations/shared/MatchdayCoachMessagesCard.jsx";
-import MatchdayActionBar from "../components/Operations/shared/MatchdayActionBar.jsx";
+import MatchweekCommandBar from "../components/Operations/shared/MatchweekCommandBar.jsx";
 import MatchdayManualFixtures from "../components/Operations/shared/MatchdayManualFixtures.jsx";
-import MatchdaySummaryBar from "../components/Operations/shared/MatchdaySummaryBar.jsx";
 import MatchdayUnresolvedCard from "../components/Operations/shared/MatchdayUnresolvedCard.jsx";
 import MatchdayScheduleCard from "../components/Operations/shared/MatchdayScheduleCard.jsx";
 import CompetitionRulesCard from "../components/Operations/shared/CompetitionRulesCard.jsx";
@@ -273,7 +271,6 @@ export default function MatchdayPage({
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
-  SummaryBar = MatchdaySummaryBar,
   UnresolvedCard = MatchdayUnresolvedCard,
   ScheduleCard = MatchdayScheduleCard,
   navigationTarget = null,
@@ -914,16 +911,6 @@ export default function MatchdayPage({
         render: () => <ManualFixtures {...matchdayProps} />,
       },
       {
-        id: "summary",
-        workspace: "fixtures",
-        title: "Fixture Summary",
-        subtitle: "Matchday totals, scheduled games and operational readiness.",
-        icon: Target,
-        badge: `${final.length} fixtures`,
-        ...runState,
-        render: () => <SummaryBar {...matchdayProps} />,
-      },
-      {
         id: "unresolved",
         workspace: "fixtures",
         title: "Unresolved Fixtures",
@@ -1220,7 +1207,6 @@ export default function MatchdayPage({
   }, [
     ManualFixtures,
     ScheduleCard,
-    SummaryBar,
     UnresolvedCard,
     active,
     applyAllOptimisationMoves,
@@ -1438,7 +1424,7 @@ export default function MatchdayPage({
   return (
     <div className="space-y-6">
       <div id="matchday-section-actionBar">
-        <MatchdayActionBar
+        <MatchweekCommandBar
           day={day}
           mode={props.mode}
           hasRun={hasRun}
@@ -1456,6 +1442,8 @@ export default function MatchdayPage({
           onToggleLock={toggleScheduleLock}
           onPrint={props.onPrintReport}
           onPublish={props.onPublish}
+          onReview={() => openIntelligenceTarget("unresolved")}
+          onResolve={() => openIntelligenceTarget(refWarnings > 0 ? "officialsIntelligence" : "pitchClosures")}
           onOptimise={reviewOptimisation}
           optimisationCount={dayOptimisation.metrics?.validatedMoves || 0}
         />

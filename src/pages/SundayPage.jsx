@@ -2,7 +2,6 @@ import React from "react";
 import MatchdayPage from "./MatchdayPage.jsx";
 import MatchdayDateControl from "../components/Operations/MatchdayDateControl.jsx";
 import SundayManualFixtures from "../components/Operations/SundayManualFixtures.jsx";
-import SundaySummaryBar from "../components/Operations/SundaySummaryBar.jsx";
 import MatchdayScheduleCard from "../components/Operations/shared/MatchdayScheduleCard.jsx";
 
 export default function SundayPage(props) {
@@ -39,7 +38,6 @@ export default function SundayPage(props) {
         runLive={props.runSunLive}
         dateLabel={props.sunDateLabel}
         ManualFixtures={SundayManualFixtures}
-        SummaryBar={SundaySummaryBar}
         ScheduleCard={(pageProps) => (
           <MatchdayScheduleCard
             title="Sunday Schedule"
