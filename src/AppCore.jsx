@@ -2358,7 +2358,18 @@ function App() {
     setMainPage("reports");
   };
 
-  const openCoachMessages = () => {
+  const openCoachMessages = (day = "all") => {
+    const safeDay = ["saturday", "sunday", "midweek"].includes(String(day).toLowerCase())
+      ? String(day).toLowerCase()
+      : "all";
+    setCoachCommunicationAudience({
+      id: `matchday-${safeDay}-${Date.now()}`,
+      source: "matchday",
+      reason: `${safeDay === "all" ? "Matchweek" : safeDay[0].toUpperCase() + safeDay.slice(1)} approved schedule`,
+      day: safeDay,
+      autoOpen: true,
+      teamKeys: [],
+    });
     setNavigationTarget(null);
     setMainPage("communications");
   };

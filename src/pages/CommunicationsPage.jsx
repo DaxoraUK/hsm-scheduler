@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -118,7 +118,7 @@ function communicationLink(recipient, message, teamName) {
   return digits ? `https://wa.me/${digits}?text=${body}` : "";
 }
 
-function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, onClose, onCopySelected, onOpenChannel, onSendWeb, onPublishCoachHub }) {
+function QueueModal({ rows, selected, setSelected, privacy, capabilities, sending, canPublish, onClose, onCopySelected, onOpenChannel, onSendWeb, onPublishCoachHub }) {
   if (typeof document === "undefined") return null;
 
   const gaps = communicationPrivacyGaps(privacy);
@@ -244,7 +244,7 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={onClose} disabled={sending} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">Cancel</button>
                 <button type="button" onClick={() => onCopySelected(selectedRows)} disabled={!canCopy || sending} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-black text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><Copy size={17} /> Copy selected messages</button>
-                <button type="button" onClick={() => onPublishCoachHub(selectedRows)} disabled={!selectedRows.length || sending} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"><MessageSquareText size={17} /> Publish to Coach Hub</button>
+                <button type="button" onClick={() => onPublishCoachHub(selectedRows)} disabled={!selectedRows.length || sending || !canPublish} title={!canPublish ? "Your responsibilities allow communications preparation, but not matchweek publication." : undefined} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"><MessageSquareText size={17} /> Publish to Coach Hub</button>
                 <button type="button" onClick={() => onSendWeb(webEligibleRows)} disabled={!canSendWeb} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
                   {sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
                   {sending ? "Sending securely…" : emailPilot ? "Send staging email test" : capabilities.webSendingEnabled ? "Send selected via web" : "Web sending unavailable"}
@@ -279,7 +279,9 @@ export default function CommunicationsPage(props) {
   const [sendFailure, setSendFailure] = useState(null);
   const [coachHubConfirmation, setCoachHubConfirmation] = useState(null);
   const [coachHubDeliveries, setCoachHubDeliveries] = useState([]);
+  const automaticAudienceRef = useRef("");
   const canCommunicate = Boolean(props.workspaceAccess?.canCommunicate && !props.workspaceAccess?.isReadOnly);
+  const canPublish = Boolean(props.workspaceAccess?.canPublish && !props.workspaceAccess?.isReadOnly);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && canCommunicate);
 
   useEffect(() => {
@@ -411,6 +413,23 @@ export default function CommunicationsPage(props) {
     await openQueueWithRows(readyRows);
   };
 
+  useEffect(() => {
+    const requestedDay = String(props.audience?.day || "").toLowerCase();
+    if (props.audience?.source === "matchday" && ["all", "saturday", "sunday", "midweek"].includes(requestedDay)) {
+      setDay(requestedDay);
+      setFilter("ready");
+    }
+  }, [props.audience?.id, props.audience?.day, props.audience?.source]);
+
+  useEffect(() => {
+    const audienceId = String(props.audience?.id || "");
+    if (!props.audience?.autoOpen || !audienceId || automaticAudienceRef.current === audienceId) return;
+    if (day !== String(props.audience?.day || "all").toLowerCase()) return;
+    automaticAudienceRef.current = audienceId;
+    if (readyRows.length) openQueueWithRows(readyRows, { source: "approved_matchday", day });
+    else toast.warning("No publish-ready coach messages", { description: "Review the blocked or warning rows before releasing this matchday." });
+  }, [day, props.audience?.autoOpen, props.audience?.day, props.audience?.id, readyRows]);
+
   const reopenFailedMessage = async (event) => {
     const row = model.rows.find((item) => item.id === event.message_key && item.readyState === "ready" && item.recipients.length);
     if (!row) {
@@ -537,6 +556,10 @@ export default function CommunicationsPage(props) {
   };
 
   const prepareCoachHubPublish = (selectedRows) => {
+    if (!canPublish) {
+      toast.error("Publisher access required", { description: "You can prepare and review communications, but an authorised matchweek publisher must release them to Coach Hub." });
+      return;
+    }
     const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
     if (staleRows.length) {
       toast.error("The message queue changed", { description: "Close and reopen the queue before publishing the latest fixture details." });
@@ -852,7 +875,7 @@ export default function CommunicationsPage(props) {
       </Card>
 
       {queueOpen ? (
-        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} onClose={() => !sending && setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} onPublishCoachHub={prepareCoachHubPublish} />
+        <QueueModal rows={readyRows} selected={selected} setSelected={setSelected} privacy={privacy} capabilities={deliveryCapabilities} sending={sending} canPublish={canPublish} onClose={() => !sending && setQueueOpen(false)} onCopySelected={copySelected} onOpenChannel={openChannel} onSendWeb={sendSelectedViaWeb} onPublishCoachHub={prepareCoachHubPublish} />
       ) : null}
 
       <ConfirmDialog

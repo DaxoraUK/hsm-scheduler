@@ -10,8 +10,8 @@ describe("operations to communications handoff", () => {
   test("removes the embedded communications workspace and retains a gated page handoff", () => {
     expect(matchday).not.toContain('id: "communications"');
     expect(matchday).not.toContain('id: "coachMessages"');
-    expect(command).toContain("Open Communications");
-    expect(command).toContain("disabled={!hasRun || needsAttention > 0}");
+    expect(command).toContain("Review & publish");
+    expect(command).toContain("disabled={!hasRun || blockingCount > 0 || !isLocked}");
     expect(matchday).toContain('className="grid gap-2 sm:grid-cols-3"');
   });
 

@@ -6,11 +6,11 @@ import StatusChip from "@/ui/StatusChip.jsx";
 import { getMatchdayHealth } from "../../../lib/operationsEngine.js";
 
 function workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked }) {
-  if (isLocked) return "locked";
+  if (isLocked) return "publish";
   if (!hasRun) return "import";
   if (unresolvedCount > 0) return "review";
-  if (refWarnings > 0 || closedPitches.length > 0) return "resolve";
-  return "notify";
+  if (refWarnings > 0 || closedPitches.length > 0) return "review-warnings";
+  return "lock";
 }
 
 function WorkflowStep({ number, title, state }) {
@@ -36,24 +36,25 @@ export default function MatchweekCommandBar({
   const state = workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const buildSchedule = mode === "test" ? runTest : runLive;
   const matchdayHealth = getMatchdayHealth({ hasRun, unresolvedCount, refWarnings, pitchCfg, closedPitches });
-  const needsAttention = unresolvedCount + refWarnings;
-  const action = state === "locked"
-    ? { title: "Matchweek approved and locked", detail: "The approved plan is protected from changes.", label: "Unlock schedule", icon: LockOpen, onClick: onToggleLock }
+  const blockingCount = unresolvedCount;
+  const warningCount = refWarnings + closedPitches.length;
+  const action = state === "publish"
+    ? { title: "Publish the approved schedule", detail: "Open the prepared queue for this matchday, review recipients and release updates to Coach Hub.", label: "Review and publish", icon: Send, onClick: onPublish }
     : state === "import"
       ? { title: "Import and build the fixture plan", detail: "Load official fixture feeds or demonstration data, then let Ground Control create the first draft.", label: mode === "test" ? `Build ${day} schedule` : `Import ${day} fixtures`, icon: Play, onClick: buildSchedule }
       : state === "review"
         ? { title: "Review unresolved fixtures", detail: `${unresolvedCount} fixture${unresolvedCount === 1 ? "" : "s"} need a team, format, pitch or time decision.`, label: "Open unresolved fixtures", icon: AlertTriangle, onClick: onReview }
-        : state === "resolve"
-          ? { title: "Resolve remaining operational checks", detail: refWarnings ? `${refWarnings} league referee appointment${refWarnings === 1 ? "" : "s"} remain unconfirmed.` : `${closedPitches.length} pitch closure${closedPitches.length === 1 ? "" : "s"} need review.`, label: "Open priority checks", icon: AlertTriangle, onClick: onResolve }
-          : { title: "Notify teams and complete the matchweek", detail: "The schedule is ready for communications, final review and locking.", label: "Open communications", icon: Send, onClick: onPublish };
+        : state === "review-warnings"
+          ? { title: "Review advisories, then approve", detail: `${warningCount} operational warning${warningCount === 1 ? "" : "s"} remain visible. Review them or lock with a recorded exception.`, label: "Review advisories", icon: AlertTriangle, onClick: onResolve }
+          : { title: "Approve and lock the schedule", detail: "The fixture plan has no blocking allocation gaps. Lock it before releasing details to coaches.", label: "Lock approved schedule", icon: Lock, onClick: onToggleLock };
   const ActionIcon = action.icon;
   const steps = [
     { title: "Import", complete: hasRun, active: state === "import" },
     { title: "Review", complete: hasRun && unresolvedCount === 0, active: state === "review" },
     { title: "Allocate", complete: hasRun && unresolvedCount === 0, active: false },
-    { title: "Resolve", complete: hasRun && needsAttention === 0, active: state === "resolve" },
-    { title: "Notify", complete: isLocked, active: state === "notify" },
-    { title: "Lock", complete: isLocked, active: hasRun && needsAttention === 0 && !isLocked },
+    { title: "Check", complete: hasRun && warningCount === 0, active: state === "review-warnings" },
+    { title: "Lock", complete: isLocked, active: state === "lock" },
+    { title: "Publish", complete: false, active: state === "publish" },
   ];
 
   return (
@@ -66,7 +67,7 @@ export default function MatchweekCommandBar({
             <p className="mt-3 text-sm font-bold leading-6 text-slate-300">One guided route from fixture import through review, allocation, communication and approval.</p>
           </div>
           <div className="flex flex-wrap gap-2 xl:max-w-lg xl:justify-end">
-            <StatusChip variant={isLocked ? "success" : needsAttention ? "warning" : hasRun ? "success" : "neutral"}>{isLocked ? "Locked" : needsAttention ? `${needsAttention} to resolve` : hasRun ? "Ready" : "Not built"}</StatusChip>
+            <StatusChip variant={isLocked ? "success" : blockingCount ? "danger" : warningCount ? "warning" : hasRun ? "success" : "neutral"}>{isLocked ? "Locked" : blockingCount ? `${blockingCount} blocked` : warningCount ? `${warningCount} warning${warningCount === 1 ? "" : "s"}` : hasRun ? "Ready to lock" : "Not built"}</StatusChip>
             <StatusChip variant="neutral">{fixtureCount} fixture{fixtureCount === 1 ? "" : "s"}</StatusChip>
             <StatusChip variant={matchdayHealth.pitchCapacity.variant}>{matchdayHealth.pitchCapacity.available}/{matchdayHealth.pitchCapacity.total} pitches</StatusChip>
           </div>
@@ -87,7 +88,7 @@ export default function MatchweekCommandBar({
           {typeof setAllowArtificial === "function" ? <label className={`flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={isLocked} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
-          <SecondaryButton onClick={onPublish} disabled={!hasRun || needsAttention > 0}><Send size={17} />Open Communications</SecondaryButton>
+          <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked}><Send size={17} />Review & publish</SecondaryButton>
           <SecondaryButton onClick={onToggleLock} disabled={!hasRun || fixtureCount === 0}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{isLocked ? "Unlock" : "Lock"}</SecondaryButton>
           <SecondaryButton onClick={onOptimise} disabled={isLocked || optimisationCount === 0}><Sparkles size={17} />{optimisationCount ? `${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}</SecondaryButton>
           {closedPitches.length > 0 ? <StatusChip variant="warning"><MapPinned size={14} />{closedPitches.length} closed</StatusChip> : null}

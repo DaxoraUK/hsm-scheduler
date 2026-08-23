@@ -6,10 +6,11 @@ const page = readFileSync("src/pages/MatchdayPage.jsx", "utf8");
 
 describe("guided matchweek command workflow", () => {
   test("presents one six-stage route through matchweek operations", () => {
-    ["Import", "Review", "Allocate", "Resolve", "Notify", "Lock"].forEach((stage) => {
+    ["Import", "Review", "Allocate", "Check", "Lock", "Publish"].forEach((stage) => {
       expect(command).toContain(`title: "${stage}"`);
     });
     expect(command).toContain("Next action");
+    expect(command).toContain('if (isLocked) return "publish"');
   });
 
   test("routes primary actions to their owning specialist sections", () => {
