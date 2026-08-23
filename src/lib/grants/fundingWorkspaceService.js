@@ -281,6 +281,7 @@ function remoteEligible(clubId) {
 async function storageFetch(path, { method = "POST", body = null, headers = {} } = {}) {
   const session = await Auth.getValidSession();
   if (!session?.access_token) throw new SupabaseRequestError("Sign in again to continue", { status: 401, code: "AUTH_REQUIRED", path });
+  const requestBody = body == null ? {} : { body };
   const response = await fetch(`${SUPA_URL}/storage/v1/${path}`, {
     method,
     headers: {
@@ -288,7 +289,7 @@ async function storageFetch(path, { method = "POST", body = null, headers = {} }
       Authorization: `Bearer ${session.access_token}`,
       ...headers,
     },
-    body,
+    ...requestBody,
   });
   const text = await response.text();
   let payload = null;
