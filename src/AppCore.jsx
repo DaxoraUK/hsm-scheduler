@@ -98,6 +98,11 @@ import {
 import { createWorkspaceAccess } from "./lib/security/permissions.js";
 import { canOpenClubCommand } from "./lib/navigation/workspacePageAccess.js";
 import {
+  canLandOnWorkspacePage,
+  LAST_WORKSPACE_PAGE_KEY,
+  resolveWorkspaceLanding,
+} from "./lib/navigation/workspaceLanding.js";
+import {
   applySubscriptionAccess,
   canOpenPage,
   ENTITLEMENTS,
@@ -252,6 +257,7 @@ function App() {
     }
   }, []);
   const [mainPage, setMainPage] = useState("dashboard");
+  const workspaceLandingKeyRef = useRef("");
   const [coachCommunicationAudience, setCoachCommunicationAudience] = useState(null);
   const [settingsTab, setSettingsTab] = useState("overview");
   const [navigationTarget, setNavigationTarget] = useState(null);
@@ -532,6 +538,52 @@ function App() {
     () => applySubscriptionAccess(roleWorkspaceAccess, subscription),
     [roleWorkspaceAccess, subscription],
   );
+
+  useEffect(() => {
+    if (
+      !workspaceHydrated
+      || subscriptionStatus !== "ready"
+      || !activeClubId
+      || !authSession?.user?.id
+      || roleWorkspaceAccess.isCoach
+    ) return;
+
+    const landingKey = `${authSession.user.id}:${activeClubId}`;
+    if (workspaceLandingKeyRef.current === landingKey) return;
+
+    const nextPage = resolveWorkspaceLanding({
+      workspaceAccess,
+      subscription,
+      rememberedPage: tenantGetItem(LAST_WORKSPACE_PAGE_KEY, ""),
+    });
+    workspaceLandingKeyRef.current = landingKey;
+    setMainPage(nextPage);
+    setNavigationTarget(null);
+  }, [
+    activeClubId,
+    authSession?.user?.id,
+    roleWorkspaceAccess.isCoach,
+    subscription,
+    subscriptionStatus,
+    workspaceAccess,
+    workspaceHydrated,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceHydrated || roleWorkspaceAccess.isCoach) return;
+    const landingKey = `${authSession?.user?.id || ""}:${activeClubId || ""}`;
+    if (workspaceLandingKeyRef.current !== landingKey) return;
+    if (!canLandOnWorkspacePage(subscription, mainPage, workspaceAccess)) return;
+    tenantSetItem(LAST_WORKSPACE_PAGE_KEY, mainPage);
+  }, [
+    activeClubId,
+    authSession?.user?.id,
+    mainPage,
+    roleWorkspaceAccess.isCoach,
+    subscription,
+    workspaceAccess,
+    workspaceHydrated,
+  ]);
 
   const {
     billing,

@@ -123,7 +123,6 @@ export default function ProductShell({
     ["reports", "Reports", FileText, NAV_TARGETS.REPORTS],
     ["settings", "Settings", Settings, NAV_TARGETS.SETTINGS],
   ].filter(([key]) => {
-    if (key === "settings") return workspaceAccess?.canManageSettings;
     if (key === "planner" && annualPlannerAddOnAvailable) return true;
     return canOpenWorkspacePage(subscription, key, workspaceAccess);
   }) : [];
