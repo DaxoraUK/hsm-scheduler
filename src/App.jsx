@@ -1,12 +1,22 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import AppCore from "./AppCore.jsx";
 import ProductShell from "./layout/ProductShell.jsx";
 import { buildDaxoraAppEntry, getDaxoraSurface } from "./lib/platform/platformUrls.js";
+import { applyAppMetadata } from "./lib/platform/publicMetadata.js";
 
 const TeamFeePayAcquisitionDemo = lazy(() =>
   import("./demo/teamfeepay/TeamFeePayAcquisitionDemo.jsx")
 );
 const DaxoraLandingPage = lazy(() => import("./pages/DaxoraLandingPage.jsx"));
+const DaxoraPublicPage = lazy(() => import("./pages/DaxoraPublicPage.jsx"));
+
+const PUBLIC_PAGES = new Set(["pricing", "security", "privacy", "terms", "contact"]);
+
+function requestedPublicPage() {
+  if (typeof window === "undefined") return "";
+  const page = window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
+  return PUBLIC_PAGES.has(page) ? page : "";
+}
 
 function acquisitionDemoEnabled() {
   if (import.meta.env.DEV) return true;
@@ -34,6 +44,11 @@ function DemoLoadingState() {
 }
 
 export default function App() {
+  const surface = getDaxoraSurface();
+  useEffect(() => {
+    if (surface === "app") applyAppMetadata();
+  }, [surface]);
+
   if (acquisitionDemoRequested()) {
     return (
       <Suspense fallback={<DemoLoadingState />}>
@@ -42,13 +57,14 @@ export default function App() {
     );
   }
 
-  if (getDaxoraSurface() === "public") {
+  if (surface === "public") {
+    const publicPage = requestedPublicPage();
     return (
       <Suspense fallback={<DemoLoadingState />}>
-        <DaxoraLandingPage
-          onSignIn={() => window.location.assign(buildDaxoraAppEntry("signin"))}
-          onCreateAccount={() => window.location.assign(buildDaxoraAppEntry("signup"))}
-        />
+        {publicPage ? <DaxoraPublicPage page={publicPage} /> : <DaxoraLandingPage
+            onSignIn={() => window.location.assign(buildDaxoraAppEntry("signin"))}
+            onCreateAccount={() => window.location.assign(buildDaxoraAppEntry("signup"))}
+          />}
       </Suspense>
     );
   }

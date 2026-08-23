@@ -30,7 +30,7 @@ describe("Daxora public and application boundary", () => {
   });
 
   test("keeps the public host out of authenticated application startup", () => {
-    expect(app).toContain('getDaxoraSurface() === "public"');
+    expect(app).toContain('surface === "public"');
     expect(app).toContain('buildDaxoraAppEntry("signin")');
     expect(appCore).toContain('getDaxoraSurface() === "app"');
     expect(appCore).toContain("buildDaxoraPublicEntry()");

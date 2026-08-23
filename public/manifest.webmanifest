@@ -1,7 +1,7 @@
 {
-  "name": "Daxora Ground Control",
-  "short_name": "Ground Control",
-  "description": "Daxora operations platform for grassroots sport and league management.",
+  "name": "Daxora Platform",
+  "short_name": "Daxora",
+  "description": "Connected operations for grassroots sport.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

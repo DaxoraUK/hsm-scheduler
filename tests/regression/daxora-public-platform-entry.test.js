@@ -9,7 +9,7 @@ const splash = readFileSync("src/components/BrandSplash.jsx", "utf8");
 
 describe("Daxora public platform entry", () => {
   test("places the public Daxora website before authentication", () => {
-    expect(appEntry).toContain('getDaxoraSurface() === "public"');
+    expect(appEntry).toContain('surface === "public"');
     expect(appEntry).toContain("<DaxoraLandingPage");
     expect(app).toContain("useState(initialAuthView)");
     expect(app.indexOf('authView === "landing"')).toBeLessThan(app.indexOf("<LoginScreen"));

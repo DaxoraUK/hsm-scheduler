@@ -90,7 +90,7 @@ describe("Daxora v3.8.1 interaction and notification system", () => {
   });
 
   test("ships installable Daxora PWA identity assets", () => {
-    expect(manifest.name).toBe("Daxora Ground Control");
+    expect(manifest.name).toBe("Daxora Platform");
     expect(manifest.display).toBe("standalone");
     expect(manifest.theme_color).toBe("#07121f");
     expect(manifest.icons).toHaveLength(4);
