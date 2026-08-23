@@ -62,6 +62,8 @@ describe("Daxora v3.9.2 pilot hardening and launch confidence", () => {
     expect(body).toEqual(expect.objectContaining({ product: "Daxora Ground Control", status: expect.any(String), checks: expect.any(Array) }));
     expect(body.checks.some((item) => item.code === "supabase_service" && item.state === "ready")).toBe(true);
     expect(body.checks.some((item) => item.code === "email" && item.state === "ready")).toBe(true);
+    expect(body.checks.some((item) => item.code === "weather" && item.state === "ready")).toBe(true);
+    expect(body.status).toBe("ready");
     ["anon-secret-value", "service-secret-value", "resend-secret-value", "cron-secret-value"].forEach((secret) => expect(serialised).not.toContain(secret));
   });
 

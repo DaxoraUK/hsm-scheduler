@@ -27,7 +27,7 @@ function weatherCheck(environment, branch) {
     return check("weather", "Live weather", "ready", "Commercial Open-Meteo credentials are configured.", { category: "providers" });
   }
   if (publicAllowed) {
-    return check("weather", "Live weather", "conditional", "Evaluation weather mode is available for this environment.", { category: "providers" });
+    return check("weather", "Live weather", "ready", "Evaluation weather access is enabled for this non-production environment.", { category: "providers" });
   }
   return check("weather", "Live weather", "blocked", "Production weather credentials are missing.", { critical: true, category: "providers" });
 }
