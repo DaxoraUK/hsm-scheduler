@@ -1,3 +1,5 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 const OFFICIAL_ROLES = Object.freeze(["referee", "assistant_1", "assistant_2", "fourth_official", "observer"]);
 const ROLE_LABELS = Object.freeze({
   referee: "Referee",
@@ -495,7 +497,7 @@ export function getLeagueOfficialCoverage(fixtures = [], requirements = [], assi
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

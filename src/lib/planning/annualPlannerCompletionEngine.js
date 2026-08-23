@@ -1,3 +1,5 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 const clean = (value) => String(value ?? "").trim();
 const finite = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -146,7 +148,7 @@ export function buildAnnualPlannerReadiness({ bookings = [], waitlist = [], wait
 }
 
 function csv(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

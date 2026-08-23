@@ -1,3 +1,5 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -249,7 +251,7 @@ export function normaliseLeagueDisciplineData(payload = {}) {
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

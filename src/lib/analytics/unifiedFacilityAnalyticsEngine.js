@@ -1,3 +1,4 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
 import { buildOperationalEvidence, normaliseSavedHistory } from "../engines/operationalEvidenceEngine.js";
 import { bookingDurationMinutes, normaliseAnnualBooking, normaliseAnnualBlackout } from "../planning/annualPlannerEngine.js";
 
@@ -571,7 +572,7 @@ export function buildUnifiedFacilityAnalyticsModel({
 }
 
 function csvCell(value) {
-  const string = String(value ?? "");
+  const string = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
 }
 

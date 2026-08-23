@@ -1,3 +1,4 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
 import { compareLeagueDivisions } from "./leagueOrdering.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -932,7 +933,7 @@ export function compareLeagueScheduleVersions(leftEntries = [], rightEntries = [
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

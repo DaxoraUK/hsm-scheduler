@@ -1,3 +1,4 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
 import { getClubSites, getPrimarySite, resolveSiteId } from "../siteAssignments.js";
 
 const DAY_LABELS = Object.freeze({
@@ -292,7 +293,7 @@ export function buildEliteCommandModel({
 }
 
 function escapeCsv(value) {
-  const text = value == null ? "" : String(value);
+  const text = value == null ? "" : String(neutraliseSpreadsheetFormula(value));
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

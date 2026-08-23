@@ -1,3 +1,5 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -168,7 +170,7 @@ function fullTimeDate(value) {
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
