@@ -48,7 +48,7 @@ function json(payload, status = 200) {
 }
 
 function pathname(request) {
-  const value = new URL(request.url).pathname.replace(/\/+$/, "");
+  const value = new URL(request.url).pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
   return value || "/";
 }
 
