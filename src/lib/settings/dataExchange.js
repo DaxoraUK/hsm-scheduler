@@ -1,5 +1,7 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 function csvEscape(value) {
-  const text = value == null ? "" : String(value);
+  const text = value == null ? "" : String(neutraliseSpreadsheetFormula(value));
   if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 }

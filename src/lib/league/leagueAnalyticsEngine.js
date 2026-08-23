@@ -1,3 +1,4 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
 import { getCurrentLeagueSeason } from "./leagueManagerModel.js";
 import { getFixtureOfficialRequirement, getRequiredOfficialRoles } from "./leagueOperationsEngine.js";
 import { buildLeagueStandings, buildMissingResultQueue, fixtureResultKey } from "./leagueResultsEngine.js";
@@ -503,7 +504,7 @@ export function leagueAnalyticsSnapshotAgeHours(snapshot = {}, reference = Date.
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = String(neutraliseSpreadsheetFormula(value) ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

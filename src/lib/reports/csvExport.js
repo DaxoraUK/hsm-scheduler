@@ -1,5 +1,7 @@
+import { neutraliseSpreadsheetFormula } from "../export/spreadsheetSafety.js";
+
 function escapeCsv(value) {
-  const text = value == null ? "" : String(value);
+  const text = value == null ? "" : String(neutraliseSpreadsheetFormula(value));
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
