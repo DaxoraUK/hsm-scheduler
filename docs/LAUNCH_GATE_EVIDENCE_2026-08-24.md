@@ -1,8 +1,10 @@
 # Daxora Ground Control launch-gate evidence register
 
-**Audit date:** 24 August 2026  
-**Production release:** `9bbbb4d`  
-**Production URL:** <https://app.daxora.co.uk>  
+**Audit date:** 24 August 2026
+
+**Production release:** `9bbbb4d`
+
+**Production URL:** <https://app.daxora.co.uk>
 **Audit rule:** a gate is Ready only where current, definitive evidence proves the full wording of the gate. A runbook, implementation or automated check does not stand in for a required rehearsal, professional review or human sign-off.
 
 ## Evidence generated for this audit
