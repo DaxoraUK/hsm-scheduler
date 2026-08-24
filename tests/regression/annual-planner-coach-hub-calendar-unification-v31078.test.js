@@ -45,4 +45,13 @@ describe("Annual Planner and Coach Hub calendar unification", () => {
     expect(sql).toContain("delete from public.annual_planner_bookings booking");
     expect(sql).toContain("matchday.calendar.synchronised");
   });
+
+  it("maps legacy planner team identities onto the coach's current assignment", () => {
+    const sql = read("supabase/migrations/202608240004_resolve_shared_calendar_team_identity.sql");
+    expect(sql).toContain("candidate.team_key=booking.team_key");
+    expect(sql).toContain("regexp_replace(lower(candidate.team_name)");
+    expect(sql).toContain("jsonb_build_object('team_key',assignment.team_key,'team_name',assignment.team_name)");
+    expect(sql).toContain("candidate.person_id=coach_person_id");
+    expect(sql).toContain("candidate.status='active'");
+  });
 });
