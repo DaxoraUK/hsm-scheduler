@@ -1034,6 +1034,29 @@ function App() {
   const [testMidweek, setTestMidweek] = useState(() =>
     defaultTestFixtures("midweek"),
   );
+  const setTestSatAndInvalidate = useCallback((next) => {
+    setTestSat(next);
+    setSatScheduled([]);
+    setSatUnresolved([]);
+    setSatOverrides({});
+    setSatFetchStatus([]);
+    setSatHasRun(false);
+  }, []);
+  const setTestSunAndInvalidate = useCallback((next) => {
+    setTestSun(next);
+    setSunScheduled([]);
+    setSunUnresolved([]);
+    setSunOverrides({});
+    setSunHasRun(false);
+  }, []);
+  const setTestMidweekAndInvalidate = useCallback((next) => {
+    setTestMidweek(next);
+    setMidweekScheduled([]);
+    setMidweekUnresolved([]);
+    setMidweekOverrides({});
+    setMidweekFetchStatus([]);
+    setMidweekHasRun(false);
+  }, []);
 
   useEffect(() => {
     persistMatchWeekend(matchWeekend);
@@ -3179,11 +3202,11 @@ function App() {
                 refs={refs}
                 setRefs={setRefs}
                 testSat={testSat}
-                setTestSat={setTestSat}
+                setTestSat={setTestSatAndInvalidate}
                 testSun={testSun}
-                setTestSun={setTestSun}
+                setTestSun={setTestSunAndInvalidate}
                 testMidweek={testMidweek}
-                setTestMidweek={setTestMidweek}
+                setTestMidweek={setTestMidweekAndInvalidate}
                 pitchClosures={pitchClosures}
                 setPitchClosures={setPitchClosures}
                 closedPitches={closedPitches}

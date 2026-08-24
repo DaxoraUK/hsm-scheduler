@@ -33,18 +33,65 @@ export const isAdult = (n) =>
     (a) => (n || "").toLowerCase().includes(a)
   );
 
+const normaliseTeamIdentity = (value) => String(value || "")
+  .toLowerCase()
+  .replace(/\\+['’]?/g, "")
+  .replace(/[.'’]/g, "")
+  .replace(/[^a-z0-9]+/g, " ")
+  .trim();
+
+const configuredTeamNames = (team = {}) => {
+  const externalAliases = Array.isArray(team.externalAliases)
+    ? team.externalAliases
+    : String(team.externalAliases || "").split(",");
+  const implicitNames = normaliseTeamIdentity(team.name) === "hsm 1st team"
+    ? ["Horwich"]
+    : [];
+  return [team.name, ...externalAliases, ...implicitNames]
+    .map(normaliseTeamIdentity)
+    .filter(Boolean);
+};
+
 export function findCfg(name, cfgList) {
-  const normalise = (value) => String(value || "").toLowerCase().replace(/\\+['’]?/g, "").replace(/[.'’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-  const n = normalise(name);
-  return cfgList.find((team) => {
-    const implicitNames = normalise(team.name) === "hsm 1st team" ? ["Horwich"] : [];
-    const configuredNames = [team.name, ...(Array.isArray(team.externalAliases)
-      ? team.externalAliases
-      : String(team.externalAliases || "").split(",")), ...implicitNames]
-      .map(normalise)
-      .filter(Boolean);
-    return configuredNames.some((candidate) => n === candidate || n.includes(candidate) || candidate.includes(n));
-  });
+  const fixtureName = normaliseTeamIdentity(name);
+  if (!fixtureName) return undefined;
+
+  const matches = (Array.isArray(cfgList) ? cfgList : []).flatMap((team, teamIndex) =>
+    configuredTeamNames(team).map((candidate) => {
+      const exact = fixtureName === candidate;
+      const suffix = fixtureName.endsWith(` ${candidate}`);
+      return {
+        team,
+        teamIndex,
+        score: exact ? 10_000 + candidate.length : suffix ? 1_000 + candidate.length : 0,
+      };
+    }),
+  ).filter((match) => match.score > 0);
+
+  matches.sort((left, right) => right.score - left.score || left.teamIndex - right.teamIndex);
+  return matches[0]?.team;
+}
+
+export function resolveFixtureTeam(fixture = {}, cfgList = []) {
+  const identities = [fixture.homeTeamId, fixture.homeTeamKey, fixture.teamId, fixture.teamKey]
+    .map(normaliseTeamIdentity)
+    .filter(Boolean);
+  const teams = Array.isArray(cfgList) ? cfgList : [];
+
+  for (const identity of identities) {
+    const identityMatch = teams.find((team) => [
+      team.id,
+      team.teamId,
+      team.homeTeamId,
+      team.key,
+      team.teamKey,
+      team.homeTeamKey,
+      team.name,
+    ].map(normaliseTeamIdentity).filter(Boolean).includes(identity));
+    if (identityMatch) return identityMatch;
+  }
+
+  return findCfg(fixture.homeTeam, cfgList);
 }
 
 function getPitch(pitchCfg, pitchId) {
@@ -68,7 +115,7 @@ function isIndependentPitch(pitchCfg, pitchId) {
 }
 
 function resolveTeamConfig(fixture, cfgList) {
-  const cfg = findCfg(fixture.homeTeam, cfgList);
+  const cfg = resolveFixtureTeam(fixture, cfgList);
   if (cfg) return cfg;
 
   if (fixture.manualFormat) {
@@ -83,6 +130,13 @@ function resolveTeamConfig(fixture, cfgList) {
   }
 
   return null;
+}
+
+function isAdultTeamConfig(cfg, fixture = {}) {
+  const type = String(cfg?.teamType || "").toLowerCase();
+  if (["adult", "veterans", "women"].includes(type)) return true;
+  if (cfg?.format === "11v11") return true;
+  return isAdult(cfg?.name || fixture.homeTeam);
 }
 
 function formatCanUsePitch(teamFormat, pitch, fixture = {}) {
@@ -147,13 +201,16 @@ function scheduleFixtureDayCore(
   const closedPitchSet = buildClosedPitchSet(pitchCfg, closedPitches);
 
   const active = fixtures.filter((fixture) => fixture.status === "active").map((fixture) => {
-    const mappedTeam = findCfg(fixture.homeTeam, cfgList);
-    if (!mappedTeam || mappedTeam.name === fixture.homeTeam) return fixture;
+    const mappedTeam = resolveFixtureTeam(fixture, cfgList);
+    if (!mappedTeam) return fixture;
+    const stableTeamId = mappedTeam.id || mappedTeam.teamId || "";
     return {
       ...fixture,
-      sourceHomeTeam: fixture.sourceHomeTeam || fixture.homeTeam,
+      sourceHomeTeam: fixture.sourceHomeTeam || (mappedTeam.name !== fixture.homeTeam ? fixture.homeTeam : ""),
       homeTeam: mappedTeam.name,
-      teamId: mappedTeam.id || mappedTeam.teamId || mappedTeam.name,
+      homeTeamId: stableTeamId,
+      homeTeamKey: normaliseTeamIdentity(mappedTeam.name).replaceAll(" ", "-"),
+      teamId: stableTeamId || mappedTeam.name,
     };
   });
 
@@ -296,8 +353,8 @@ function scheduleFixtureDayCore(
   const scheduled = [];
   const unresolved = [];
 
-  const youth = sorted.filter((fixture) => !isAdult(fixture.homeTeam));
-  const adults = sorted.filter((fixture) => isAdult(fixture.homeTeam));
+  const youth = sorted.filter((fixture) => !isAdultTeamConfig(resolveTeamConfig(fixture, cfgList), fixture));
+  const adults = sorted.filter((fixture) => isAdultTeamConfig(resolveTeamConfig(fixture, cfgList), fixture));
 
   for (const fixture of [...youth, ...adults]) {
     const cfg = resolveTeamConfig(fixture, cfgList);
@@ -323,7 +380,7 @@ function scheduleFixtureDayCore(
     }
 
     const adultKickOffMins = importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
-    if (isAdult(fixture.homeTeam) && Number.isFinite(adultKickOffMins)) {
+    if (isAdultTeamConfig(cfg, fixture) && Number.isFinite(adultKickOffMins)) {
       let placed = false;
 
       for (const pitchId of [cfg.defaultPitch, cfg.altPitch].filter(Boolean)) {

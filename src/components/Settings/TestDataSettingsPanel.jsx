@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Save, TestTube2, Trash2 } from "lucide-react";
 import { getFixtureDayDefinition } from "../../lib/domain/fixtureDay.js";
 import {
   TEST_DATA_SCENARIOS,
+  createFixtureTeamKey,
   createTestDataSeed,
   generateTestFixtures,
 } from "../../lib/testData/testFixtureGenerator.js";
@@ -88,6 +89,21 @@ export default function TestDataSettingsPanel({
         rowIndex === index ? { ...fixture, [field]: value } : fixture,
       ),
     );
+  };
+
+  const selectHomeTeam = (index, homeTeam) => {
+    const team = teamCfg.find((candidate) =>
+      `${club.name || "Ground Control FC"} ${candidate.name}` === homeTeam,
+    );
+    setList?.((current) => current.map((fixture, rowIndex) => rowIndex === index
+      ? {
+          ...fixture,
+          homeTeam,
+          homeTeamId: team?.id || team?.teamId || "",
+          homeTeamKey: createFixtureTeamKey(team),
+          teamId: team?.id || team?.teamId || "",
+        }
+      : fixture));
   };
 
   const generate = (nextSeed = seed) => {
@@ -235,7 +251,7 @@ export default function TestDataSettingsPanel({
                   className={selectClass}
                   value={fixture.homeTeam || ""}
                   onChange={(event) =>
-                    update(index, "homeTeam", event.target.value)
+                    selectHomeTeam(index, event.target.value)
                   }
                 >
                   <option value="">Select team…</option>

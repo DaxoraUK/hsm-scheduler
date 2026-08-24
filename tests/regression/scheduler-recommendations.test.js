@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { scheduleFixtureDay, scheduleSat } from "../../src/lib/scheduler.js";
+import { findCfg, resolveFixtureTeam, scheduleFixtureDay, scheduleSat } from "../../src/lib/scheduler.js";
 import {
   getAvailablePitchSuggestions,
   getNextAvailableTimes,
@@ -19,6 +19,43 @@ const buffers = {
 };
 
 describe("fixture scheduling regressions", () => {
+  test("club-prefixed youth names never resolve to the adult team through the short Horwich alias", () => {
+    const youth = TEAM_CONFIG_DEFAULT.find((team) => team.name === "U13 Vulcans");
+    const adult = TEAM_CONFIG_DEFAULT.find((team) => team.name === "HSM 1st Team");
+    const teams = [adult, youth];
+
+    expect(findCfg("Horwich St Mary's FC U13 Vulcans", teams)).toBe(youth);
+    expect(findCfg("Horwich", teams)).toBe(adult);
+  });
+
+  test("stable fixture identity overrides a corrupted display name before format and kick-off rules run", () => {
+    const result = scheduleSat(
+      [{
+        homeTeam: "HSM 1st Team",
+        homeTeamKey: "u13-vulcans",
+        teamId: "HSM 1st Team",
+        awayTeam: "Bury Juniors U13",
+        status: "active",
+      }],
+      false,
+      [],
+      TEAM_CONFIG_DEFAULT,
+      buffers,
+      8 * 60 + 30,
+      11 * 60 + 30,
+      clonePitches(),
+      3,
+    );
+
+    const fixture = [...result.scheduled, ...result.unresolved][0];
+    expect(resolveFixtureTeam(fixture, TEAM_CONFIG_DEFAULT)?.name).toBe("U13 Vulcans");
+    expect(fixture.homeTeam).toBe("U13 Vulcans");
+    expect(fixture.homeTeamKey).toBe("u13-vulcans");
+    expect(fixture.cfg?.format).toBe("9v9");
+    expect(fixture.fixedKO).not.toBe(true);
+    expect(fixture.reason || "").not.toContain("adult 14:00");
+  });
+
   test("closed preferred pitches are excluded from automatic scheduling", () => {
     const result = scheduleSat(
       [{ homeTeam: "U10 Wanderers", awayTeam: "Visitors", status: "active" }],

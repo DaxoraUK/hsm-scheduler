@@ -78,6 +78,14 @@ function normaliseDayKey(value) {
   return "saturday";
 }
 
+export function createFixtureTeamKey(team = {}) {
+  return String(team.name || "")
+    .toLowerCase()
+    .replace(/[.'’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function teamDay(team = {}) {
   return String(team.day || "Saturday").toLowerCase();
 }
@@ -149,18 +157,24 @@ export function generateTestFixtures({
   const clubName = String(club?.name || "Ground Control FC").trim();
   const usedOpponents = new Set();
 
-  return candidates.slice(0, count).map((team, index) => ({
-    id: `demo-${normalisedDay}-${hashSeed(`${seed}-${team.name}-${index}`).toString(36)}`,
-    homeTeam: `${clubName} ${team.name}`.trim(),
-    awayTeam: opponentFor(team, random, usedOpponents),
-    league: leagueFor(team, normalisedDay, random),
-    isCup: random() < 0.16,
-    status: "active",
-    ...refereeData(random, officials),
-    fixtureDayKey: normalisedDay,
-    __day: normalisedDay,
-    demoSeed: seed,
-  }));
+  return candidates.slice(0, count).map((team, index) => {
+    const stableTeamId = team.id || team.teamId || "";
+    return {
+      id: `demo-${normalisedDay}-${hashSeed(`${seed}-${team.name}-${index}`).toString(36)}`,
+      homeTeam: `${clubName} ${team.name}`.trim(),
+      homeTeamId: stableTeamId,
+      homeTeamKey: createFixtureTeamKey(team),
+      teamId: stableTeamId,
+      awayTeam: opponentFor(team, random, usedOpponents),
+      league: leagueFor(team, normalisedDay, random),
+      isCup: random() < 0.16,
+      status: "active",
+      ...refereeData(random, officials),
+      fixtureDayKey: normalisedDay,
+      __day: normalisedDay,
+      demoSeed: seed,
+    };
+  });
 }
 
 export default generateTestFixtures;

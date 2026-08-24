@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { RE, WH } from "../lib/constants.js";
-import { createTestDataSeed, generateTestFixtures } from "../lib/testData/testFixtureGenerator.js";
+import { createFixtureTeamKey, createTestDataSeed, generateTestFixtures } from "../lib/testData/testFixtureGenerator.js";
 import { S } from "../lib/styles.js";
 
 const DAY_OPTIONS = [
@@ -54,6 +54,19 @@ function TestDataManager(props) {
   function update(index, field, value) {
     const copy = list.slice();
     copy[index] = { ...copy[index], [field]: value };
+    setList?.(copy);
+  }
+
+  function selectHomeTeam(index, homeTeam) {
+    const team = cfgList.find((candidate) => `${club.name} ${candidate.name}` === homeTeam);
+    const copy = list.slice();
+    copy[index] = {
+      ...copy[index],
+      homeTeam,
+      homeTeamId: team?.id || team?.teamId || "",
+      homeTeamKey: createFixtureTeamKey(team),
+      teamId: team?.id || team?.teamId || "",
+    };
     setList?.(copy);
   }
 
@@ -116,7 +129,7 @@ function TestDataManager(props) {
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 180px" }}>
                 <label style={labelStyle}>Home Team</label>
-                <select style={inputStyle} value={fixture.homeTeam} onChange={(event) => update(index, "homeTeam", event.target.value)}>
+                <select style={inputStyle} value={fixture.homeTeam} onChange={(event) => selectHomeTeam(index, event.target.value)}>
                   <option value="">Select team...</option>
                   {cfgList.map((team) => {
                     const full = `${club.name} ${team.name}`;

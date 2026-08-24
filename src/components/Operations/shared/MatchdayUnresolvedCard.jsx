@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "../../../lib/notifications/daxoraNotifications.js";
 import ConfirmDialog from "../../../ui/ConfirmDialog.jsx";
-import { cleanName, findCfg } from "../../../lib/scheduler.js";
+import { cleanName, resolveFixtureTeam } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
 import {
   getPitchDisplayFormat,
@@ -136,7 +136,7 @@ function buildResolutionSuggestions({
   scheduled = [],
   limit = 3,
 } = {}) {
-  const cfg = findCfg(fixture.homeTeam, teamCfg);
+  const cfg = resolveFixtureTeam(fixture, teamCfg);
   const duration = getDuration(cfg);
   const suitablePitches = getSuitablePitches({ fixture, cfg, pitchCfg, closedPitches });
   const maxConcurrent = Number(club.maxConcurrent || 3);
@@ -305,7 +305,7 @@ export default function MatchdayUnresolvedCard({
     }
 
     const koMins = timeToMinutes(ov.koTime);
-    const cfg = findCfg(fixture.homeTeam, teamCfg);
+    const cfg = resolveFixtureTeam(fixture, teamCfg);
     const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
 
     if (!isPitchSuitableForFixture(selectedPitch, { ...fixture, cfg })) {
@@ -374,7 +374,7 @@ export default function MatchdayUnresolvedCard({
           </div>
         ) : null}
         {unresolved.map((fixture, index) => {
-          const cfg = findCfg(fixture.homeTeam, teamCfg);
+          const cfg = resolveFixtureTeam(fixture, teamCfg);
           const configuredCompatiblePitches = getSuitablePitches({
             fixture,
             cfg,
