@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import PageContainer from "@/ui/PageContainer.jsx";
 import DashboardMissionHero from "../components/dashboard/DashboardMissionHero.jsx";
 import DashboardStatusStrip from "../components/dashboard/DashboardStatusStrip.jsx";
+import PilotMatchweekGate from "../components/dashboard/PilotMatchweekGate.jsx";
 import RecentActivityCard from "../components/dashboard/RecentActivityCard.jsx";
 import { getRefereeStats, getParkingStats } from "../lib/dashboardStats.js";
 import {
@@ -23,6 +24,7 @@ import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligence
 import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { buildCoreOperationalReadiness } from "../lib/engines/operationalReadinessEngine.js";
 import { readMatchdayLock } from "../lib/operations/matchdayLock.js";
+import { buildMatchweekPilotReadiness } from "../lib/pilot/matchweekPilotReadiness.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
   ENTITLEMENTS,
@@ -447,6 +449,27 @@ export default function DashboardPage({
   };
   const completedSteps = workflowModel.completedSteps;
 
+  const pilotReadiness = buildMatchweekPilotReadiness({
+    mode,
+    scope: matchdayScope,
+    scheduleBuilt,
+    fixtureIssues,
+    officialOutstanding: refereeStats.outstanding,
+    officialConflicts: officialConflicts.length,
+    history,
+    satDate,
+    sunDate,
+    midweekDate,
+    buildDays,
+  });
+
+  const handlePilotAction = (action) => {
+    if (action === "save") return saveWeek?.();
+    if (action === "officials") return nav.goToOfficials({ day: navigationDay });
+    if (action === "operations") return nav.goToOperations({ day: operationsLandingDay });
+    return nav.goToFixtures({ day: navigationDay, card: scheduleBuilt ? "schedule" : "actionBar", workspace: "fixtures", scrollToSection: true });
+  };
+
   const heroIssues = [
     !scheduleBuilt
       ? {
@@ -702,6 +725,8 @@ export default function DashboardPage({
           },
         ]}
       />
+
+      <PilotMatchweekGate model={pilotReadiness} onAction={handlePilotAction} />
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <MatchweekSummaryCard
