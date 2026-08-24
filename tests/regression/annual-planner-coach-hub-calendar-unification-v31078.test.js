@@ -54,4 +54,16 @@ describe("Annual Planner and Coach Hub calendar unification", () => {
     expect(sql).toContain("candidate.person_id=coach_person_id");
     expect(sql).toContain("candidate.status='active'");
   });
+
+  it("publishes only confirmed bookings and notifies assigned coaches of material changes", () => {
+    const sql = read("supabase/migrations/202608240005_controlled_planner_publishing_notifications.sql");
+    const delivery = read("src/components/planning/AnnualPlannerCompletionWorkspace.jsx");
+    expect(sql).toContain("booking.status='confirmed'");
+    expect(sql).toContain("private.notify_coach_hub_booking_change()");
+    expect(sql).toContain("Fixture details changed");
+    expect(sql).toContain("requires_acknowledgement");
+    expect(delivery).toContain("Draft → review → publish");
+    expect(delivery).toContain("Only confirmed bookings appear in Coach Hub");
+    expect(delivery).toContain("Prepare {publication.awaiting.length} for publishing");
+  });
 });
