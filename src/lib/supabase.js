@@ -1100,6 +1100,16 @@ export const DB = {
     return { ...base, ...(calendarContext && typeof calendarContext === "object" ? calendarContext : {}), ...(winterContext && typeof winterContext === "object" ? winterContext : {}) };
   },
 
+  async syncMatchdayCalendar(clubId, { dayScope, matchdayDate, fixtures = [] } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/sync_matchday_calendar", {
+      target_club_id: id,
+      day_scope: String(dayScope || "").trim().toLowerCase(),
+      matchday_date: matchdayDate || null,
+      fixture_rows: Array.isArray(fixtures) ? fixtures : [],
+    });
+  },
+
   async ensureMyCoachHubRoleAccess(clubId) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/ensure_my_coach_hub_role_access", { target_club_id: id });

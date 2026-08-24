@@ -479,8 +479,9 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
   const endAt = localDateTime(dateKey, `${pad(Math.floor(endMinutes / 60) % 24)}:${pad(endMinutes % 60)}`);
   if (!startAt || !endAt) return null;
   if (endMinutes >= 24 * 60) endAt.setDate(endAt.getDate() + 1);
+  const stableSourceId = clean(fixture.id || fixture.fixtureId || `${dateKey}_${fixture.pitchId}_${startMinutes}_${fixture.homeTeam || fixture.team || "home"}`);
   return normaliseAnnualBooking({
-    id: `matchday_${clean(fixture.id || fixture.fixtureId || `${dateKey}_${fixture.pitchId}_${startMinutes}`)}`,
+    id: `matchday_${stableSourceId}`,
     title: `${fixture.homeTeam || fixture.team || "Home"} vs ${fixture.awayTeam || "TBC"}`,
     bookingType: "match",
     status: "confirmed",
@@ -493,7 +494,7 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
     startAt: startAt.toISOString(),
     endAt: endAt.toISOString(),
     sourceType,
-    sourceId: clean(fixture.id || fixture.fixtureId),
+    sourceId: stableSourceId,
   });
 }
 

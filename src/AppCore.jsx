@@ -121,6 +121,7 @@ import {
 import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { reconcileSiteAssignments } from "./lib/siteAssignments.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
+import { matchdayFixtureToAnnualBooking } from "./lib/planning/annualPlannerEngine.js";
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,
@@ -1976,7 +1977,7 @@ function App() {
     club,
   });
 
-  const { sunFinal } = useSundayScheduling({
+  const { sunFinal, sunActive } = useSundayScheduling({
     sunScheduled,
     sunOverrides,
   });
@@ -2005,6 +2006,64 @@ function App() {
   const activeMidweekConflicts = midweekEnabled ? midweekConflicts : [];
   const activeMidweekUnresolved = midweekEnabled ? midweekUnresolved : [];
   const activeMidweekReadiness = midweekEnabled ? midweekReadiness : null;
+
+  const matchdayCalendarSyncRef = useRef(new Map());
+  useEffect(() => {
+    if (!workspaceHydrated || !activeClubId || !workspaceAccess.canOperate) return undefined;
+    const days = [
+      { scope: "saturday", date: satDate, hasRun: satHasRun, fixtures: satActive },
+      { scope: "sunday", date: sunDate, hasRun: sunHasRun, fixtures: sunActive },
+      { scope: "midweek", date: midweekDate, hasRun: activeMidweekHasRun, fixtures: activeMidweekActive },
+    ].filter((day) => day.hasRun && day.date);
+    if (!days.length) return undefined;
+
+    const timer = window.setTimeout(() => {
+      days.forEach((day) => {
+        const bookings = day.fixtures
+          .map((fixture) => matchdayFixtureToAnnualBooking(fixture, {
+            date: day.date,
+            pitchCfg,
+            sourceType: `matchday_${day.scope}`,
+          }))
+          .filter(Boolean);
+        const signature = JSON.stringify(bookings.map((booking) => ({
+          sourceId: booking.sourceId,
+          teamKey: booking.teamKey,
+          pitchId: booking.pitchId,
+          startAt: booking.startAt,
+          endAt: booking.endAt,
+        })));
+        const syncKey = `${activeClubId}:${day.scope}:${day.date}`;
+        if (matchdayCalendarSyncRef.current.get(syncKey) === signature) return;
+        matchdayCalendarSyncRef.current.set(syncKey, signature);
+        DB.syncMatchdayCalendar(activeClubId, {
+          dayScope: day.scope,
+          matchdayDate: day.date,
+          fixtures: bookings,
+        }).catch((error) => {
+          matchdayCalendarSyncRef.current.delete(syncKey);
+          toast.error("Shared calendar sync needs attention", {
+            description: error?.message || "The schedule was built, but Coach Hub has not received the latest fixtures yet.",
+          });
+        });
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeClubId,
+    activeMidweekActive,
+    activeMidweekHasRun,
+    midweekDate,
+    pitchCfg,
+    satActive,
+    satDate,
+    satHasRun,
+    sunActive,
+    sunDate,
+    sunHasRun,
+    workspaceAccess.canOperate,
+    workspaceHydrated,
+  ]);
 
   const satDateLabel = formatMatchdayDate(satDate, "Saturday");
   const sunDateLabel = formatMatchdayDate(sunDate, "Sunday");
