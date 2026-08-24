@@ -2043,6 +2043,7 @@ function App() {
         }).catch((error) => {
           matchdayCalendarSyncRef.current.delete(syncKey);
           toast.error("Shared calendar sync needs attention", {
+            id: "shared-calendar-sync-needs-attention",
             description: error?.message || "The schedule was built, but Coach Hub has not received the latest fixtures yet.",
           });
         });

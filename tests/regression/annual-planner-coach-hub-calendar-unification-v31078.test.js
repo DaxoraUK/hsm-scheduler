@@ -66,4 +66,12 @@ describe("Annual Planner and Coach Hub calendar unification", () => {
     expect(delivery).toContain("Only confirmed bookings appear in Coach Hub");
     expect(delivery).toContain("Prepare {publication.awaiting.length} for publishing");
   });
+
+  it("permits the synchroniser audit action and deduplicates operator warnings", () => {
+    const sql = read("supabase/migrations/202608240006_allow_matchday_calendar_audit_action.sql");
+    const app = read("src/AppCore.jsx");
+    expect(sql).toContain("'matchday.calendar.synchronised'");
+    expect(sql).toContain("not public.can_operate_club(target_club_id)");
+    expect(app).toContain('id: "shared-calendar-sync-needs-attention"');
+  });
 });
