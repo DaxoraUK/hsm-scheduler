@@ -4,6 +4,7 @@ import { Auth, DB } from "../../lib/supabase.js";
 import { clearTenantStorageContext } from "../../lib/storage/tenantStorage.js";
 import { createSupportReference } from "../../lib/errors/recovery.js";
 import { buildClientEvent, getClientReleaseMetadata, isClientTelemetryEnabled } from "../../lib/monitoring/clientTelemetry.js";
+import { recoverStaleDeploymentChunk } from "../../lib/errors/staleDeploymentRecovery.js";
 
 export default class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -16,6 +17,7 @@ export default class AppErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    if (recoverStaleDeploymentChunk(error)) return;
     console.error("Daxora workspace application error", {
       error,
       componentStack: info?.componentStack,
