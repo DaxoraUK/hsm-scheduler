@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync("supabase/migrations/202608240001_fix_client_event_resolution_ambiguity.sql", "utf8");
+const hardenedMigration = readFileSync(
+  "supabase/migrations/202608240002_harden_client_event_resolution_parameter.sql",
+  "utf8",
+);
 
 describe("client event resolution ambiguity repair", () => {
   it("copies the RPC input into an unambiguous local value", () => {
@@ -14,5 +18,12 @@ describe("client event resolution ambiguity repair", () => {
   it("retains the protected support permission boundary", () => {
     expect(migration).toContain("perform private.require_platform_staff('support')");
     expect(migration).toContain("grant execute on function public.platform_resolve_client_event(uuid, text) to authenticated");
+  });
+
+  it("pins PL/pgSQL name resolution to the RPC argument", () => {
+    expect(hardenedMigration).toContain("#variable_conflict use_variable");
+    expect(hardenedMigration).toContain(
+      "coalesce(platform_resolve_client_event.resolution_note, '')",
+    );
   });
 });
