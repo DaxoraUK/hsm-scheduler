@@ -23,7 +23,7 @@ describe("pilot system search, incidents and notifications", () => {
     const bell = readFileSync("src/components/system/DaxoraNotificationBell.jsx", "utf8");
     expect(shell).toContain("PilotIncidentReporter");
     expect(incident).toContain("DB.recordClientEvent");
-    expect(incident).toContain("Passwords, tokens, emails, contacts, teams and fixture records are not included");
+    expect(incident).toContain("Passwords, tokens, emails, contacts, teams and fixture records are never included");
     expect(coach).toContain("Mark all as read");
     expect(bell).toContain("Mark all read");
   });
