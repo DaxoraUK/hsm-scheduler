@@ -3,6 +3,7 @@ import HeaderSearch from "../layout/HeaderSearch.jsx";
 import HeaderProfile from "../layout/HeaderProfile.jsx";
 import GroundControlBrand from "../components/GroundControlBrand.jsx";
 import DaxoraNotificationBell from "../components/system/DaxoraNotificationBell.jsx";
+import PilotIncidentReporter from "../components/system/PilotIncidentReporter.jsx";
 import DaxoraToaster from "../components/system/DaxoraToaster.jsx";
 import { useConnectivity } from "../hooks/useConnectivity.js";
 import { getSyncBanner } from "../lib/errors/recovery.js";
@@ -149,6 +150,8 @@ export default function ProductShell({
   const navItems = platformContext?.isPlatformStaff
     ? [...workspaceNavItems, ...leagueNavItems, ["platform", "Daxora Admin", ShieldCheck, null]]
     : [...workspaceNavItems, ...leagueNavItems];
+
+  const searchablePages = navItems.map(([key]) => key);
 
 
   const navigate = (key, target) => {
@@ -308,19 +311,17 @@ export default function ProductShell({
                 <Menu size={21} />
               </button>
               <div className="hidden min-w-0 flex-1 md:block">
-                {leagueMode || leagueOnly ? (
-                  <div>
-                    <div className="text-sm font-black text-slate-950">Daxora League Manager</div>
-                    <div className="mt-0.5 text-xs font-semibold text-slate-500">Secure league scheduling and competition operations</div>
-                  </div>
-                ) : platformOnly ? (
-                  <div>
-                    <div className="text-sm font-black text-slate-950">Daxora platform operations</div>
-                    <div className="mt-0.5 text-xs font-semibold text-slate-500">Secure administration, subscriptions and support cases</div>
-                  </div>
-                ) : (
-                  <HeaderSearch setMainPage={setMainPage} setDayTab={setDayTab} setNavigationTarget={setNavigationTarget} canOpenSettings={Boolean(workspaceAccess?.canManageSettings)} />
-                )}
+                  <HeaderSearch
+                    setMainPage={setMainPage}
+                    setDayTab={setDayTab}
+                    setSettingsTab={setSettingsTab}
+                    setNavigationTarget={setNavigationTarget}
+                    availablePages={searchablePages}
+                    fixturesByDay={{ saturday: satFinal, sunday: sunFinal, midweek: midweekFinal }}
+                    canOpenSettings={Boolean(workspaceAccess?.canManageSettings)}
+                    canOpenCoachHub={Boolean((workspaceAccess?.isCoach || workspaceAccess?.canManageSettings) && hasProductEntitlement(subscription, PRODUCT_ENTITLEMENTS.COACH_HUB, ENTITLEMENTS.COACH_HUB))}
+                    onOpenCoachHub={onOpenCoachHub}
+                  />
               </div>
               <div className="min-w-0 md:hidden">
                 <div className="truncate text-sm font-black text-slate-950">{leagueMode || leagueOnly ? "League Manager" : "Ground Control"}</div>
@@ -328,6 +329,7 @@ export default function ProductShell({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <PilotIncidentReporter clubId={clubWorkspaceAvailable && !leagueMode ? activeClubId : ""} page={mainPage} role={leagueMode || leagueOnly ? (activeLeague?.role || "viewer") : platformOnly ? (platformContext?.roleLabel || "platform") : (workspaceAccess?.role || activeMembership?.role || "viewer")} workspaceName={leagueMode || leagueOnly ? (activeLeague?.name || "League Manager") : platformOnly ? "Daxora Platform" : (club?.name || "Ground Control")} />
               <DaxoraNotificationBell />
               <HeaderProfile
               session={authSession}
