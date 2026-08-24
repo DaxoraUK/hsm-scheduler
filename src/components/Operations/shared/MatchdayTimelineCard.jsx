@@ -389,7 +389,7 @@ export default function MatchdayTimelineCard({
           />
 
           {view === "timeline" ? (
-            <div ref={scrollRef} className="max-h-[720px] overflow-auto bg-slate-50/70">
+            <div ref={scrollRef} className="isolate max-h-[720px] overflow-auto overscroll-contain bg-slate-50/70">
               <div style={{ width: `${PITCH_COLUMN_WIDTH + canvasWidth}px` }}>
                 <PlannerHeader
                   timeline={timeline}
@@ -577,7 +577,7 @@ function SegmentButton({ active, onClick, icon: Icon, children }) {
 function PlannerHeader({ timeline, canvasWidth, overlayMetrics, activeOverlays }) {
   const visibleMetrics = overlayMetrics.filter((metric) => metric.value % 30 === 0);
   return (
-    <div className="sticky top-0 z-40 grid border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur" style={{ gridTemplateColumns: `${PITCH_COLUMN_WIDTH}px ${canvasWidth}px` }}>
+    <div className="sticky top-0 z-20 grid border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur" style={{ gridTemplateColumns: `${PITCH_COLUMN_WIDTH}px ${canvasWidth}px` }}>
       <div className="sticky left-0 z-50 flex items-center border-r border-slate-200 bg-[#07121f] px-4 py-3 text-white">
         <div>
           <div className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-300">Pitch plan</div>
