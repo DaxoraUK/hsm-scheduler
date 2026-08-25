@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { sortTeamsAlphabetically } from "../../lib/teams/teamOrdering.js";
-import { DB } from "../../lib/supabase.js";
+import { Auth, DB } from "../../lib/supabase.js";
 import {
   canAssignAdditionalRole,
   canAssignRole,
@@ -209,12 +209,13 @@ export default function AccessSecurityPanel({
         expiryHours: 72,
         responsibilities: inviteResponsibilities,
       });
-      showInvitationLink(invitation.token);
+      const inviteUrl = showInvitationLink(invitation.token);
+      const delivery = await emailClubInvitation(invitation, inviteUrl);
       setInviteEmail("");
       setInviteResponsibilities([]);
       await refresh();
-      toast.success("Secure invitation created", {
-        description: "Copy the link and send it directly to the invited person. It expires after 72 hours.",
+      toast.success(delivery.delivered && !delivery.pilotMode ? "Invitation emailed" : delivery.pilotMode ? "Test invitation emailed" : "Secure invitation created", {
+        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${email}. It expires after 72 hours.` : delivery.pilotMode ? "Email pilot mode redirected this to the configured test mailbox. Copy the link for the intended recipient." : "Email delivery is unavailable. Copy the secure link and send it directly; it expires after 72 hours.",
       });
     } catch (actionError) {
       toast.error("Invitation could not be created", { description: actionError?.message });
@@ -228,7 +229,24 @@ export default function AccessSecurityPanel({
     url.search = "";
     url.hash = "";
     url.searchParams.set("club_invite", token);
-    setInviteLink(url.toString());
+    const value = url.toString();
+    setInviteLink(value);
+    return value;
+  };
+
+  const emailClubInvitation = async (invitation, inviteUrl) => {
+    try {
+      const session = await Auth.getValidSession();
+      const response = await fetch("/api/coach/invite", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token || ""}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: activeClubId, invitationId: invitation.id, inviteUrl, invitationType: "club" }),
+      });
+      const result = await response.json().catch(() => ({}));
+      return { delivered: response.ok, pilotMode: Boolean(result.pilotMode) };
+    } catch {
+      return { delivered: false, pilotMode: false };
+    }
   };
 
   const resendInvitation = async (invitation) => {
@@ -245,10 +263,11 @@ export default function AccessSecurityPanel({
           scopeId: assignment.scope_id ?? assignment.scopeId ?? null,
         })),
       });
-      showInvitationLink(replacement.token);
+      const inviteUrl = showInvitationLink(replacement.token);
+      const delivery = await emailClubInvitation(replacement, inviteUrl);
       await refresh();
-      toast.success("Fresh invitation created", {
-        description: "The previous link has been revoked. Copy and send this new link; it expires after 72 hours.",
+      toast.success(delivery.delivered && !delivery.pilotMode ? "Fresh invitation emailed" : delivery.pilotMode ? "Test invitation emailed" : "Fresh invitation created", {
+        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${invitation.email}. The previous link has been revoked.` : delivery.pilotMode ? "Pilot mode redirected this to the test mailbox. Copy the link for the intended recipient." : "Email delivery is unavailable. The previous link was revoked; copy and send the new link.",
       });
     } catch (actionError) {
       toast.error("Invitation could not be resent", { description: actionError?.message });

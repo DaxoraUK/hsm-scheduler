@@ -63,3 +63,18 @@ export async function deliverCoachHubInvitation(prepared = {}, inviteUrl = "") {
     tags: { product: "coach-hub", type: "invitation" },
   });
 }
+
+export async function deliverClubInvitation(prepared = {}, inviteUrl = "") {
+  let safeUrl = "";
+  try {
+    const parsed = new URL(String(inviteUrl || "").trim());
+    if (parsed.protocol === "https:" && parsed.searchParams.get("club_invite")) safeUrl = parsed.toString();
+  } catch { /* validated below */ }
+  if (!safeUrl) throw Object.assign(new Error("The club invitation link is invalid."), { code: "CLUB_INVITE_URL_INVALID", status: 400 });
+  const recipient = String(prepared.email || "").trim().toLowerCase();
+  const clubName = String(prepared.club_name || "your club").trim();
+  const role = String(prepared.role || "club user").replaceAll("_", " ");
+  const subject = `${clubName} invited you to Daxora Ground Control`;
+  const html = `<div style="background:#f1f5f9;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden"><div style="background:#020617;padding:26px 28px;color:#fff"><div style="font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#6ee7b7">Daxora Ground Control</div><h1 style="margin:12px 0 0;font-size:27px">Your club workspace is ready</h1></div><div style="padding:28px"><p style="font-size:16px;line-height:1.65"><strong>${escapeHtml(clubName)}</strong> has invited you to Ground Control with ${escapeHtml(role)} access.</p><a href="${escapeHtml(safeUrl)}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;font-weight:800;padding:14px 20px;border-radius:12px">Accept invitation</a><p style="font-size:12px;line-height:1.6;color:#64748b;margin:24px 0 0">This secure invitation is personal to you and expires automatically. Sign in using this email address and do not forward the link.</p></div></div></div>`;
+  return sendDaxoraEmail({ to: [recipient], subject, html, text: `${clubName} invited you to Daxora Ground Control as ${role}. Open: ${safeUrl}`, idempotencyKey: `club-invite-${prepared.invitation_id}`, tags: { product: "ground-control", type: "invitation" } });
+}
