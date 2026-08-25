@@ -13,6 +13,7 @@ import {
   UsersRound,
   ExternalLink,
 } from "lucide-react";
+import { compareTeamsAlphabetically } from "../../lib/teams/teamOrdering.js";
 import { toast } from "sonner";
 import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 import { alignTeamContacts, getTeamContactKey } from "../../lib/communications/contactModel.js";
@@ -499,7 +500,10 @@ function PersonEditorDialog({ draft, setDraft, busy, onSave }) {
 }
 
 function AssignmentEditorDialog({ draft, setDraft, assignments, teams, busyId, onSave, onRemove, onEditPerson, onOpenTeam }) {
-  const teamOptions = (Array.isArray(teams) ? teams : []).map((team, index) => ({ key: getTeamContactKey(team, index), name: text(team.name || team.teamName || `Team ${index + 1}`) }));
+  const teamOptions = (Array.isArray(teams) ? teams : [])
+    .map((team, index) => ({ team, index }))
+    .sort((left, right) => compareTeamsAlphabetically(left.team, right.team))
+    .map(({ team, index }) => ({ key: getTeamContactKey(team, index), name: text(team.name || team.teamName || `Team ${index + 1}`) }));
   const editingSourceManaged = Boolean(draft.id) && ["coach", "assistant"].includes(draft.sourceSlot);
   const selectTeam = (teamKey) => {
     const team = teamOptions.find((row) => row.key === teamKey);

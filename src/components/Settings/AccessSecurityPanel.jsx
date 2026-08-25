@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
+import { sortTeamsAlphabetically } from "../../lib/teams/teamOrdering.js";
 import { DB } from "../../lib/supabase.js";
 import {
   canAssignAdditionalRole,
@@ -257,7 +258,7 @@ export default function AccessSecurityPanel({
   };
 
   const inviteScopeOptions = inviteResponsibilityScope.scopeType === "team"
-    ? teamCfg.map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+    ? sortTeamsAlphabetically(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
     : inviteResponsibilityScope.scopeType === "site"
       ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
       : [];
@@ -418,7 +419,7 @@ export default function AccessSecurityPanel({
               const assignments = roleAssignmentsFor(member);
               const scopeDraft = scopeDraftFor(member.user_id);
               const scopeOptions = scopeDraft.scopeType === "team"
-                ? teamCfg.map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+                ? sortTeamsAlphabetically(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
                 : scopeDraft.scopeType === "site"
                   ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
                   : [];

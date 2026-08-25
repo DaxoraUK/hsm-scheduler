@@ -16,6 +16,7 @@ import { DB } from "../../lib/supabase.js";
 import { resolveCoachHubContactForTeam } from "../../lib/coachHubContactBridge.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
 import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
+import { sortTeamEntriesAlphabetically } from "../../lib/teams/teamOrdering.js";
 import {
   alignTeamContactsForEditing,
   getTeamContactKey,
@@ -255,7 +256,7 @@ export default function TeamSettingsPanel({
 
   const filteredTeams = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return teamCfg
+    return sortTeamEntriesAlphabetically(teamCfg
       .map((team, index) => {
         const contact = contacts[index];
         return {
@@ -271,7 +272,7 @@ export default function TeamSettingsPanel({
         const siteName = sites.find((site) => site.id === resolvedSiteId)?.name || "";
         return [team.name, team.day, team.format, teamTypeLabel(team), siteName, visibleContact?.coachName, visibleContact?.coachEmail]
           .some((value) => String(value || "").toLowerCase().includes(needle));
-      });
+      }));
   }, [coachHubWorkspace, contacts, primarySite?.id, query, sites, teamCfg]);
 
   const setAlignedContacts = (updater) => {

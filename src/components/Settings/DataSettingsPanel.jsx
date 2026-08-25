@@ -1,5 +1,8 @@
 import React, { useRef, useState } from "react";
-import { Archive, Database, Download, FileUp, ShieldCheck } from "lucide-react";
+import { Archive, Database, Download, FileUp, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { DB } from "../../lib/supabase.js";
+import { clearAllDaxoraNotifications } from "../../lib/notifications/daxoraNotifications.js";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 import SupabaseStatusBar from "./SupabaseStatusBar.jsx";
 import { downloadJson } from "../../lib/settings/dataExchange.js";
 import { normalisePitchClosures } from "../../lib/domain/pitchClosures.js";
@@ -45,6 +48,47 @@ export default function DataSettingsPanel({
   const inputRef = useRef(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [resetPreview, setResetPreview] = useState(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
+
+  const resetLabels = {
+    audit_events: "Club audit events",
+    platform_activity_events: "Platform activity events",
+    client_events: "Client error reports",
+    notifications: "Notifications",
+    coach_hub_messages: "Coach Hub messages",
+    coach_hub_request_messages: "Coach Hub request conversations",
+    communication_events: "Communication delivery events",
+  };
+
+  const previewPilotReset = async () => {
+    setResetBusy(true);
+    setError("");
+    try {
+      setResetPreview(await DB.previewClubPilotActivityReset(activeClubId));
+    } catch (previewError) {
+      setError(previewError?.message || "The clean-start preview could not be loaded.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const completePilotReset = async () => {
+    setResetBusy(true);
+    setError("");
+    try {
+      await DB.resetClubPilotActivity(activeClubId);
+      clearAllDaxoraNotifications();
+      setResetPreview(null);
+      setResetConfirmationOpen(false);
+      setMessage("Pilot audit, message and notification activity cleared. Permanent club setup was retained.");
+    } catch (resetError) {
+      setError(resetError?.message || "The pilot activity could not be cleared.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   const backup = {
     product: "Daxora Ground Control",
@@ -114,6 +158,47 @@ export default function DataSettingsPanel({
           <StatTile label="Saved matchweeks" value={history.length} tone="amber" />
         </div>
       </SettingsPanel>
+
+      <SettingsPanel>
+        <SettingsSectionHeader
+          icon={RefreshCw}
+          eyebrow="Pilot handover"
+          title="Start with a clean activity centre"
+          description="Review and clear pilot-generated audit entries, error reports, notifications and Coach Hub conversations. Teams, fixtures, bookings, contacts, access roles and notification preferences are retained."
+        />
+        {resetPreview ? (
+          <div className="mt-5 rounded-[22px] border border-amber-200 bg-amber-50 p-5">
+            <div className="text-sm font-black text-amber-950">Records ready to clear</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {Object.entries(resetLabels).map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                  <span>{label}</span><span>{Number(resetPreview[key]) || 0}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <SecondaryButton onClick={() => setResetPreview(null)} disabled={resetBusy}>Cancel</SecondaryButton>
+              <PrimaryButton icon={Trash2} onClick={() => setResetConfirmationOpen(true)} disabled={resetBusy}>Clear pilot activity</PrimaryButton>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-col gap-4 rounded-[22px] border border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-semibold leading-6 text-slate-600">The first step is read-only and shows the exact number of records in every category.</div>
+            <SecondaryButton icon={RefreshCw} onClick={previewPilotReset} disabled={resetBusy || !activeClubId}>{resetBusy ? "Checking…" : "Review clean start"}</SecondaryButton>
+          </div>
+        )}
+      </SettingsPanel>
+
+      <ConfirmDialog
+        open={resetConfirmationOpen}
+        title="Clear pilot activity?"
+        description="This permanently removes the reviewed audit, error, notification and conversation records. Teams, fixtures, bookings, contacts, roles and preferences will be kept."
+        confirmLabel="Clear pilot activity"
+        busy={resetBusy}
+        initialFocus="cancel"
+        onCancel={() => !resetBusy && setResetConfirmationOpen(false)}
+        onConfirm={completePilotReset}
+      />
 
       <SettingsPanel>
         <SettingsSectionHeader

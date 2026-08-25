@@ -1398,6 +1398,22 @@ export const DB = {
     );
   },
 
+  async previewClubPilotActivityReset(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/reset_club_pilot_activity", {
+      target_club_id: id,
+      dry_run: true,
+    });
+  },
+
+  async resetClubPilotActivity(clubId) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/reset_club_pilot_activity", {
+      target_club_id: id,
+      dry_run: false,
+    });
+  },
+
   async savePitchClosures(clubId, closures) {
     return replaceCollection(
       clubId,
