@@ -1300,6 +1300,7 @@ function App() {
           ...DEFAULT_CLUB,
           id: activeClubId,
           name: activeMembership?.club?.name || DEFAULT_CLUB.name,
+          slug: activeMembership?.club?.slug || activeMembership?.club?.club_slug || "",
         };
         setClub(coachClub);
         setTeamCfg([]);
@@ -1337,6 +1338,7 @@ function App() {
         ...(localClub || {}),
         id: activeClubId,
         name: localClub?.name || memberClub.name || DEFAULT_CLUB.name,
+        slug: localClub?.slug || memberClub.slug || memberClub.club_slug || "",
         features: {
           ...(DEFAULT_CLUB.features || {}),
           ...(localClub?.features || {}),

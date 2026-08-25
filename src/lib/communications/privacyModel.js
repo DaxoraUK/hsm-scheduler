@@ -26,6 +26,20 @@ export const DEFAULT_COMMUNICATION_PRIVACY = Object.freeze({
   configured: false,
 });
 
+export function clubPrivacySlug(club = {}) {
+  const configured = text(club.slug || club.club_slug);
+  if (configured) return configured.toLowerCase();
+  return text(club.name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function buildHostedPrivacyNoticeUrl(club = {}, origin = "https://app.daxora.co.uk") {
+  const slug = clubPrivacySlug(club);
+  return slug ? `${String(origin || "https://app.daxora.co.uk").replace(/\/$/, "")}/privacy/${encodeURIComponent(slug)}` : "";
+}
+
 function text(value) {
   return String(value || "").trim();
 }

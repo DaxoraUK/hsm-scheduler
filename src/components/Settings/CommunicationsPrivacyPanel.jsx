@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, Eraser, RefreshCw, Save, ShieldCheck } from "lucide-react";
+import { Copy, Download, Eraser, ExternalLink, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
 import { alignTeamContacts } from "../../lib/communications/contactModel.js";
@@ -7,6 +7,7 @@ import {
   COMMUNICATION_LAWFUL_BASES,
   DPIA_STATUSES,
   communicationPrivacyGaps,
+  buildHostedPrivacyNoticeUrl,
   normaliseCommunicationPrivacy,
 } from "../../lib/communications/privacyModel.js";
 import {
@@ -52,7 +53,8 @@ export default function CommunicationsPrivacyPanel({
   const [exporting, setExporting] = useState(false);
   const [purging, setPurging] = useState(false);
   const contacts = useMemo(() => alignTeamContacts(teamCfg, teamContacts), [teamCfg, teamContacts]);
-  const gaps = communicationPrivacyGaps(draft);
+  const hostedNoticeUrl = useMemo(() => buildHostedPrivacyNoticeUrl(club), [club]);
+  const gaps = communicationPrivacyGaps({ ...draft, privacyNoticeUrl: hostedNoticeUrl });
   const canManage = Boolean(workspaceAccess?.canManageSettings);
 
   useEffect(() => {
@@ -73,7 +75,13 @@ export default function CommunicationsPrivacyPanel({
     }
     setSaving(true);
     try {
-      const saved = normaliseCommunicationPrivacy(await DB.saveCommunicationPrivacy(activeClubId, draft));
+      const nextDraft = normaliseCommunicationPrivacy({ ...draft, privacyNoticeUrl: hostedNoticeUrl });
+      const missing = communicationPrivacyGaps(nextDraft);
+      if (missing.length) {
+        toast.error("Complete the privacy setup first", { description: missing.join(" · ") });
+        return;
+      }
+      const saved = normaliseCommunicationPrivacy(await DB.saveCommunicationPrivacy(activeClubId, nextDraft));
       setDraft(saved);
       setCommunicationPrivacy?.(saved);
       toast.success("Privacy settings saved");
@@ -166,8 +174,12 @@ export default function CommunicationsPrivacyPanel({
             {DPIA_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
-        <Field label="Privacy notice URL" className="lg:col-span-2">
-          <input type="url" className={inputClass} value={draft.privacyNoticeUrl} onChange={(event) => update("privacyNoticeUrl", event.target.value)} disabled={!canManage} placeholder="https://club.example/privacy" />
+        <Field label="Hosted privacy notice" className="lg:col-span-2" hint="Daxora publishes this club-specific notice. It contains privacy information only and can be opened without signing in.">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input type="url" className={`${inputClass} flex-1 bg-slate-50`} value={hostedNoticeUrl} readOnly aria-label="Hosted privacy notice URL" />
+            <SecondaryButton icon={Copy} onClick={() => navigator.clipboard.writeText(hostedNoticeUrl).then(() => toast.success("Privacy notice link copied"))} disabled={!hostedNoticeUrl}>Copy link</SecondaryButton>
+            <SecondaryButton icon={ExternalLink} onClick={() => window.open(hostedNoticeUrl, "_blank", "noopener,noreferrer")} disabled={!hostedNoticeUrl}>Preview</SecondaryButton>
+          </div>
         </Field>
         <Field label="Specific purpose" className="lg:col-span-2" hint="Do not broaden this into marketing or unrelated contact use.">
           <textarea className={`${inputClass} min-h-28 py-3`} value={draft.purpose} onChange={(event) => update("purpose", event.target.value)} disabled={!canManage} />
@@ -187,7 +199,7 @@ export default function CommunicationsPrivacyPanel({
       )}
 
       <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-200 pt-5">
-        <PrimaryButton icon={Save} onClick={save} disabled={!canManage || saving || !communicationSchemaReady}>{saving ? "Saving…" : "Save privacy settings"}</PrimaryButton>
+        <PrimaryButton icon={Save} onClick={save} disabled={!canManage || saving || !communicationSchemaReady || !hostedNoticeUrl}>{saving ? "Saving…" : "Save and publish notice"}</PrimaryButton>
         <SecondaryButton icon={Download} onClick={exportData} disabled={!canManage || exporting || !communicationSchemaReady}>{exporting ? "Exporting…" : "Export contact and audit data"}</SecondaryButton>
         <SecondaryButton icon={Eraser} onClick={purgeExpired} disabled={!canManage || purging || !communicationSchemaReady}>{purging ? "Applying…" : "Apply retention now"}</SecondaryButton>
         <SecondaryButton icon={RefreshCw} onClick={() => setDraft(normaliseCommunicationPrivacy(communicationPrivacy))}>Reset unsaved changes</SecondaryButton>

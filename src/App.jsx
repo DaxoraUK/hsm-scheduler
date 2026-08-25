@@ -9,6 +9,7 @@ const TeamFeePayAcquisitionDemo = lazy(() =>
 );
 const DaxoraLandingPage = lazy(() => import("./pages/DaxoraLandingPage.jsx"));
 const DaxoraPublicPage = lazy(() => import("./pages/DaxoraPublicPage.jsx"));
+const ClubPrivacyNoticePage = lazy(() => import("./pages/ClubPrivacyNoticePage.jsx"));
 
 const PUBLIC_PAGES = new Set(["pricing", "security", "privacy", "cookies", "terms", "contact"]);
 
@@ -16,6 +17,12 @@ function requestedPublicPage() {
   if (typeof window === "undefined") return "";
   const page = window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
   return PUBLIC_PAGES.has(page) ? page : "";
+}
+
+function requestedClubPrivacySlug() {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^\/privacy\/([^/]+)\/?$/i);
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
 function acquisitionDemoEnabled() {
@@ -45,6 +52,7 @@ function DemoLoadingState() {
 
 export default function App() {
   const surface = getDaxoraSurface();
+  const privacySlug = requestedClubPrivacySlug();
   useEffect(() => {
     if (surface === "app") applyAppMetadata();
   }, [surface]);
@@ -55,6 +63,10 @@ export default function App() {
         <TeamFeePayAcquisitionDemo />
       </Suspense>
     );
+  }
+
+  if (privacySlug) {
+    return <Suspense fallback={<DemoLoadingState />}><ClubPrivacyNoticePage slug={privacySlug} /></Suspense>;
   }
 
   if (surface === "public") {
