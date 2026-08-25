@@ -1449,10 +1449,13 @@ function App() {
           DB.loadTestFixtures(activeClubId, "testmidweek"),
           workspaceAccess.canOperate
             ? Promise.all([
-                DB.loadTeamContacts(activeClubId),
                 DB.getCommunicationPrivacy(activeClubId),
+                DB.loadTeamContacts(activeClubId).catch((error) => {
+                  if (isMissingCommunicationSchema(error)) return [];
+                  throw error;
+                }),
               ])
-                .then(([contacts, privacy]) => ({ available: true, contacts, privacy }))
+                .then(([privacy, contacts]) => ({ available: true, contacts, privacy }))
                 .catch((error) => {
                   if (isMissingCommunicationSchema(error)) {
                     return { available: false, contacts: [], privacy: DEFAULT_COMMUNICATION_PRIVACY };
