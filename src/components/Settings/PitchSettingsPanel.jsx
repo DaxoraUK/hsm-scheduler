@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, Info, Layers3, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { sortPitches } from "../../lib/pitches.js";
+import { createNextPitchIdentity, sortPitches } from "../../lib/pitches.js";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
 import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
 import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
@@ -256,9 +256,9 @@ export default function PitchSettingsPanel({
     }
     setLimitMessage("");
     const nextIndex = pitchCfg.length;
+    const identity = createNextPitchIdentity(pitchCfg);
     setPitchCfg((current) => [...current, {
-      id: `P${current.length + 1}`,
-      label: `Pitch ${current.length + 1}`,
+      ...identity,
       desc: "",
       format: "",
       siteId: primarySite?.id || null,
