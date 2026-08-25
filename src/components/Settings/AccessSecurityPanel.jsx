@@ -215,7 +215,7 @@ export default function AccessSecurityPanel({
       setInviteResponsibilities([]);
       await refresh();
       toast.success(delivery.delivered && !delivery.pilotMode ? "Invitation emailed" : delivery.pilotMode ? "Test invitation emailed" : "Secure invitation created", {
-        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${email}. It expires after 72 hours.` : delivery.pilotMode ? "Email pilot mode redirected this to the configured test mailbox. Copy the link for the intended recipient." : "Email delivery is unavailable. Copy the secure link and send it directly; it expires after 72 hours.",
+        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${email}. It expires after 72 hours.` : delivery.pilotMode ? "Email pilot mode redirected this to the configured test mailbox. Copy the link for the intended recipient." : `${delivery.error || "Email delivery is unavailable."} Copy the secure link and send it directly; it expires after 72 hours.`,
       });
     } catch (actionError) {
       toast.error("Invitation could not be created", { description: actionError?.message });
@@ -243,9 +243,9 @@ export default function AccessSecurityPanel({
         body: JSON.stringify({ clubId: activeClubId, invitationId: invitation.id, inviteUrl, invitationType: "club" }),
       });
       const result = await response.json().catch(() => ({}));
-      return { delivered: response.ok, pilotMode: Boolean(result.pilotMode) };
+      return { delivered: response.ok, pilotMode: Boolean(result.pilotMode), error: response.ok ? "" : String(result.error || "Email delivery is unavailable.") };
     } catch {
-      return { delivered: false, pilotMode: false };
+      return { delivered: false, pilotMode: false, error: "Email delivery request could not reach Daxora." };
     }
   };
 
@@ -267,7 +267,7 @@ export default function AccessSecurityPanel({
       const delivery = await emailClubInvitation(replacement, inviteUrl);
       await refresh();
       toast.success(delivery.delivered && !delivery.pilotMode ? "Fresh invitation emailed" : delivery.pilotMode ? "Test invitation emailed" : "Fresh invitation created", {
-        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${invitation.email}. The previous link has been revoked.` : delivery.pilotMode ? "Pilot mode redirected this to the test mailbox. Copy the link for the intended recipient." : "Email delivery is unavailable. The previous link was revoked; copy and send the new link.",
+        description: delivery.delivered && !delivery.pilotMode ? `Sent to ${invitation.email}. The previous link has been revoked.` : delivery.pilotMode ? "Pilot mode redirected this to the test mailbox. Copy the link for the intended recipient." : `${delivery.error || "Email delivery is unavailable."} The previous link was revoked; copy and send the new link.`,
       });
     } catch (actionError) {
       toast.error("Invitation could not be resent", { description: actionError?.message });
