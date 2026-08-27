@@ -1,4 +1,5 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
+import { isFixtureOfficialConfirmed } from "./officialsEngine.js";
 
 function activeFixtures(fixtures = []) {
   return fixtures.filter((fixture) => String(fixture?.status || "").toLowerCase() !== "postponed");
@@ -25,20 +26,8 @@ function getPitchName(fixture = {}) {
   return fixture.pitch || fixture.pitchName || fixture.pitchId || fixture.venue || "Unassigned";
 }
 
-function getOfficialName(fixture = {}) {
-  return fixture.referee || fixture.official || fixture.ref || "";
-}
-
-function getOfficialStatus(fixture = {}) {
-  return String(fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || "TBC").toLowerCase();
-}
-
 function countMissingOfficials(fixtures = []) {
-  return activeFixtures(fixtures).filter((fixture) => {
-    const official = getOfficialName(fixture);
-    const status = getOfficialStatus(fixture);
-    return !official || ["tbc", "awaiting", "unconfirmed", "missing"].includes(status);
-  }).length;
+  return activeFixtures(fixtures).filter((fixture) => !isFixtureOfficialConfirmed(fixture)).length;
 }
 
 function getKickoffClusters(fixtures = []) {

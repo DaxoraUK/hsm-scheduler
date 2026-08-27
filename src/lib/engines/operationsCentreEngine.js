@@ -1,5 +1,5 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
-import { calculateOfficialsReadiness } from "./officialsEngine.js";
+import { calculateOfficialsReadiness, getOfficialDisplayName, isFixtureOfficialConfirmed } from "./officialsEngine.js";
 import { getWeatherSnapshot } from "./weatherEngine.js";
 import { buildCoreOperationalReadiness } from "./operationalReadinessEngine.js";
 
@@ -244,13 +244,12 @@ function buildFixtureWaves(fixtures = [], pitchCfg = []) {
         id: fixture.id || fixture.fixtureId || `${key}-${index}`,
         label: fixtureLabel(fixture),
         pitch: pitchLabel(fixture, pitchCfg),
-        official: fixture.referee || fixture.official || "Official TBC",
+        official: getOfficialDisplayName(fixture),
         fixture,
       });
       existing.pitches.add(pitchLabel(fixture, pitchCfg));
 
-      const refereeStatus = clean(fixture.refStatus || fixture.officialStatus).toLowerCase();
-      if (!fixture.referee || !["confirmed", "accepted"].includes(refereeStatus)) {
+      if (!isFixtureOfficialConfirmed(fixture)) {
         existing.officialsOutstanding += 1;
       }
 

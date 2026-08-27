@@ -16,6 +16,14 @@ import {
   buildMatchweekApprovalSnapshot,
 } from "../lib/elite/eliteApprovalSnapshots.js";
 
+export function shouldCheckMatchweekApproval({ subscription, activeClubId, workspaceRole } = {}) {
+  return Boolean(
+    activeClubId &&
+    String(workspaceRole || "").toLowerCase() !== "scheduler" &&
+    hasEntitlement(subscription, ENTITLEMENTS.APPROVAL_WORKFLOWS)
+  );
+}
+
 function splitFixtures(fixtures = [], dayKey) {
   const decorated = decorateFixturesForDay(fixtures, dayKey);
   return {
@@ -202,6 +210,7 @@ export function useWeekPersistence({
   setDbStatus,
   activeClubId = "",
   subscription = null,
+  workspaceRole = "",
   canPublish = true,
   onSyncFailure,
   onSyncSuccess,
@@ -233,7 +242,7 @@ export function useWeekPersistence({
     if (!publishedDays.length) return;
 
     let approvalEntityKey = "";
-    if (hasEntitlement(subscription, ENTITLEMENTS.APPROVAL_WORKFLOWS) && activeClubId) {
+    if (shouldCheckMatchweekApproval({ subscription, activeClubId, workspaceRole })) {
       const approvalSnapshot = buildMatchweekApprovalSnapshot(publishedDays);
       approvalEntityKey = buildMatchweekApprovalKey(approvalSnapshot);
       try {
@@ -386,6 +395,7 @@ export function useWeekPersistence({
     setDbStatus,
     activeClubId,
     subscription,
+    workspaceRole,
     canPublish,
     onSyncFailure,
     onSyncSuccess,

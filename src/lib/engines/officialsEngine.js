@@ -48,8 +48,8 @@ export function getOfficialAssignmentState(fixture = {}) {
   const hasOfficial = Boolean(official) && !["tbc", "none", "unassigned", "missing"].includes(official);
 
   if (["declined", "unavailable", "no", "rejected"].includes(status)) return "declined";
-  if (!hasOfficial) return "unassigned";
   if (["confirmed", "accepted", "yes", "ok", "ready"].includes(status)) return "confirmed";
+  if (!hasOfficial) return "unassigned";
   if (["assigned"].includes(status)) return "assigned";
   return "awaiting";
 }
@@ -113,6 +113,10 @@ export function isFixtureOfficialConfirmed(fixture = {}) {
   return Boolean(official);
 }
 
+export function getOfficialDisplayName(fixture = {}) {
+  return getOfficialName(fixture) || (isFixtureOfficialConfirmed(fixture) ? "League-appointed official" : "TBC");
+}
+
 function fixtureLabel(fixture = {}) {
   const home = fixture.homeTeam || fixture.team || fixture.home || "Fixture";
   const away = fixture.awayTeam || fixture.opponent || fixture.away || "";
@@ -161,7 +165,7 @@ function fixtureSummary(fixture = {}, index = 0) {
     label: fixtureLabel(fixture),
     time: start == null ? timeKey(fixture) : formatMinutes(start),
     window: start == null ? "Time TBC" : `${formatMinutes(start)}–${formatMinutes(end)}`,
-    official: getOfficialName(fixture) || "TBC",
+    official: getOfficialDisplayName(fixture),
     role: getOfficialRole(fixture),
     state,
     fixture,

@@ -1,5 +1,6 @@
 import { cleanName } from "../scheduler.js";
 import { contactForTeam } from "./contactModel.js";
+import { getOfficialDisplayName, isFixtureOfficialConfirmed } from "../engines/officialsEngine.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -77,7 +78,7 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
   const ko = String(fixture.koTime || fixture.kickOff || fixture.kickoff || "TBC").trim() || "TBC";
   const pitch = String(fixture.pitchLabel || fixture.pitch || fixture.pitchId || "TBC").trim() || "TBC";
   const format = String(fixture.cfg?.format || fixture.manualFormat || fixture.format || "TBC").trim() || "TBC";
-  const referee = String(fixture.referee || fixture.official || fixture.ref || "TBC").trim() || "TBC";
+  const referee = getOfficialDisplayName(fixture);
   const venue = String(
     fixture.venueName
       || fixture.venue
@@ -111,7 +112,7 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
 
   if (status === "scheduled" && ko === "TBC") issues.push("Kick-off time missing");
   if (status === "scheduled" && pitch === "TBC") issues.push("Pitch missing");
-  if (status === "scheduled" && (referee === "TBC" || !["confirmed", "accepted", "assigned"].includes(refereeStatus))) {
+  if (status === "scheduled" && !isFixtureOfficialConfirmed(fixture)) {
     issues.push(referee === "TBC" ? "Official not assigned" : "Official not confirmed");
   }
   if (!contact.receiveMatchdayMessages) issues.push("Matchday messages disabled");

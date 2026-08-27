@@ -2164,6 +2164,7 @@ function App() {
     setDbStatus,
     activeClubId,
     subscription,
+    workspaceRole: operationalWorkspaceAccess.role,
     canPublish: operationalWorkspaceAccess.canPublish,
     onSyncFailure: reportSyncFailure,
     onSyncSuccess: reportSyncSuccess,

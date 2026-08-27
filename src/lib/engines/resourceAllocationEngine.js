@@ -1,5 +1,5 @@
 import { buildClubConfiguration, getAvgCarsForFixture, getPitchForFixture, getSiteForFixture, getTeamForFixture } from "./configurationEngine.js";
-import { isFixtureOfficialConfirmed } from "./officialsEngine.js";
+import { getOfficialDisplayName, isFixtureOfficialConfirmed } from "./officialsEngine.js";
 
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
@@ -95,7 +95,7 @@ export function calculateResourceAllocation({ fixtures = [], club = {}, teamCfg 
         pitch: pitch ? { status: pitch.closed || closedPitchSet.has(pitch.id) ? "danger" : "success", label: pitch.label || pitch.id } : { status: "danger", label: "Missing" },
         site: site ? { status: "success", label: site.name } : { status: "warning", label: "Missing" },
         parking: site ? { status: toNumber(site.carParkSpaces, 0) ? "success" : "warning", label: `${cars} cars` } : { status: "warning", label: "Unknown" },
-        officials: { status: isFixtureOfficialConfirmed(fixture) ? "success" : "warning", label: fixture.referee || fixture.official || "TBC" },
+        officials: { status: isFixtureOfficialConfirmed(fixture) ? "success" : "warning", label: getOfficialDisplayName(fixture) },
       },
     };
   });

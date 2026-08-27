@@ -14,6 +14,7 @@ import {
   getOfficialStatus,
 } from "../../../lib/operationsEngine.js";
 import StatusChip from "@/ui/StatusChip.jsx";
+import { getOfficialDisplayName } from "../../../lib/engines/officialsEngine.js";
 
 export default function MatchFixtureCard({
   fixture,
@@ -28,7 +29,7 @@ export default function MatchFixtureCard({
     fixture.cfg?.format || fixture.manualFormat || fixture.format || "Fixture";
 
   const pitchLabel = fixture.pitchLabel || fixture.pitchId || "TBC";
-  const official = fixture.referee || "TBC";
+  const official = getOfficialDisplayName(fixture);
   const officialStatus = getOfficialStatus(fixture);
   const fixtureHealth = getFixtureHealth(fixture);
 

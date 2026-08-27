@@ -12,6 +12,7 @@ import {
   PLAN_CODES,
   hasEntitlement,
 } from "../../src/lib/subscriptions/entitlements.js";
+import { createWorkspaceAccess } from "../../src/lib/security/permissions.js";
 const migration = readFileSync("supabase/migrations/202607150004_coach_hub_team_contacts_requests.sql", "utf8");
 const app = readFileSync("src/AppCore.jsx", "utf8");
 const coachPage = readFileSync("src/pages/CoachHubPage.jsx", "utf8");
@@ -23,7 +24,6 @@ const communications = readFileSync("src/pages/CommunicationsPage.jsx", "utf8");
 const invitationApi = readFileSync("server-api/coach/invite.js", "utf8");
 const calendarApi = readFileSync("server-api/coach/calendar.js", "utf8");
 const invitationServer = readFileSync("server/coach/invitations.js", "utf8");
-const permissions = readFileSync("src/lib/security/permissions.js", "utf8");
 
 function subscription(planCode, overrides = {}) {
   return {
@@ -69,8 +69,8 @@ describe("Daxora Ground Control v3.10.1 Coach Hub, contacts and requests", () =>
   });
 
   it("provides a dedicated coach-only application shell and team-scoped role", () => {
-    expect(permissions).toContain('coach: new Set([\n    WORKSPACE_PERMISSIONS.READ_WORKSPACE,');
-    expect(permissions).toContain('membership?.accessMode === "coach"');
+    const access = createWorkspaceAccess({ role: "viewer", accessMode: "coach", roles: [{ role: "coach", scopeType: "team", scopeId: "team-1" }] }, { teamId: "team-1" });
+    expect(access).toMatchObject({ isCoach: true, isCoachOnly: true, canRead: true, canOperate: false });
     expect(app).toContain("<CoachHubPage");
     expect(app).toContain('roleWorkspaceAccess.isCoachOnly');
     expect(coachPage).toContain("My Team Planner");
