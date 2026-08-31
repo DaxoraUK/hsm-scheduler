@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureIdentityCollisions, partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -1750,7 +1750,9 @@ function App() {
   const runSat = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...satManual], satOverrides));
+      const applied = applyFixtureOverrides([...baseFx, ...satManual], satOverrides);
+      if (getFixtureIdentityCollisions(applied).length) { toast.error("Schedule rebuild stopped", { description: "Source fixture identities collided; no fixture was discarded." }); return false; }
+      const all = deduplicateFixtureSet(applied);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,
@@ -1831,7 +1833,9 @@ function App() {
   const runSun = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...sunManual], sunOverrides));
+      const applied = applyFixtureOverrides([...baseFx, ...sunManual], sunOverrides);
+      if (getFixtureIdentityCollisions(applied).length) { toast.error("Schedule rebuild stopped", { description: "Source fixture identities collided; no fixture was discarded." }); return false; }
+      const all = deduplicateFixtureSet(applied);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSun(
         fixtureFlow.home,
@@ -1900,7 +1904,9 @@ function App() {
   const runMidweek = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...midweekManual], midweekOverrides));
+      const applied = applyFixtureOverrides([...baseFx, ...midweekManual], midweekOverrides);
+      if (getFixtureIdentityCollisions(applied).length) { toast.error("Schedule rebuild stopped", { description: "Source fixture identities collided; no fixture was discarded." }); return false; }
+      const all = deduplicateFixtureSet(applied);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,

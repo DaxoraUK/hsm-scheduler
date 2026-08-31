@@ -9,7 +9,7 @@ import {
   LANCASHIRE_AMATEUR_FIXTURE_FEEDS,
   normaliseFullTimeFeedId,
 } from "../../src/lib/fullTimeFeed.js";
-import { applyFixtureOverrides } from "../../src/lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, getFixtureFlowIdentity, getFixtureIdentityCollisions } from "../../src/lib/domain/fixtureVenueFlow.js";
 
 describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () => {
   test("accepts numeric IDs and official code-snippet URLs only", () => {
@@ -74,6 +74,48 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     const result = reconcileFullTimeFixtureSnapshot(previous, incoming, "2026-08-19");
     expect(result.snapshot).toHaveLength(1);
     expect(result.snapshot[0]).toMatchObject({ kickOff: "09:00", sourceFixtureUrl: previous[0].sourceFixtureUrl });
+    expect(getFixtureFlowIdentity({ ...previous[0], kickOff: "09:00", pitchId: "P1" })).toBe(getFixtureFlowIdentity({ ...previous[0], kickOff: "13:00", pitchId: "P4" }));
+  });
+
+  test("same-age source rows keep distinct canonical identities and all named fixtures survive", () => {
+    const fixtures = [
+      ["knights", "U15 Knights", "AFC Egerton U15"],
+      ["cobras", "U15 Cobras", "Moss Bank Junior U15 Greens"],
+      ["crusaders", "U15 Crusaders", "Visitors U15"],
+      ["repeat-a", "U15 Knights", "AFC Egerton U15"],
+    ].map(([id, homeTeam, awayTeam], index) => ({
+      sourceFixtureUrl: `https://fulltime.thefa.com/displayFixture.html?id=${id}`,
+      sourceId: "lal-division-three",
+      date: "2026-09-05",
+      homeTeam,
+      awayTeam,
+      kickOff: `${10 + index}:00`,
+      pitchId: `P${index + 1}`,
+    }));
+    const result = reconcileFullTimeFixtureSnapshot([], fixtures, "2026-08-19");
+    expect(result.safe).toBe(true);
+    expect(result.snapshot).toHaveLength(4);
+    expect(result.snapshot.filter((fixture) => fixture.homeTeam === "U15 Knights")).toHaveLength(2);
+    expect(result.snapshot.some((fixture) => fixture.homeTeam === "U15 Cobras")).toBe(true);
+    expect(result.snapshot.some((fixture) => fixture.homeTeam === "U15 Crusaders")).toBe(true);
+  });
+
+  test("ambiguous legacy rows abort reconciliation instead of silently losing a fixture", () => {
+    const previous = [
+      { sourceFixtureKey: "legacy-a", date: "2026-09-05", homeTeam: "U15 Crusaders", awayTeam: "Visitors U15", kickOff: "10:00" },
+      { sourceFixtureKey: "legacy-b", date: "2026-09-05", homeTeam: "U15 Crusaders", awayTeam: "Visitors U15", kickOff: "12:00" },
+    ];
+    const incoming = [{ sourceRowIndex: 4, sourceId: "lal-division-three", date: "2026-09-05", homeTeam: "U15 Crusaders", awayTeam: "Visitors U15", kickOff: "11:00" }];
+    const result = reconcileFullTimeFixtureSnapshot(previous, incoming, "2026-08-19");
+    expect(result.safe).toBe(false);
+    expect(result.collisions).toHaveLength(1);
+  });
+
+  test("identity safety reports conflicting records instead of allowing a silent merge", () => {
+    expect(getFixtureIdentityCollisions([
+      { sourceFixtureKey: "row-1", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "A" },
+      { sourceFixtureKey: "row-1", date: "2026-09-05", homeTeam: "U15 Cobras", awayTeam: "B" },
+    ])).toHaveLength(1);
   });
 
   test("upserts duplicate imported rows by source identity without collapsing legitimate repeats", () => {

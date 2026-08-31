@@ -50,6 +50,19 @@ export function deduplicateFixtureSet(fixtures = []) {
   return output;
 }
 
+export function getFixtureIdentityCollisions(fixtures = []) {
+  const groups = new Map();
+  fixtures.forEach((fixture) => {
+    const identity = getFixtureFlowIdentity(fixture);
+    if (!identity) return;
+    if (!groups.has(identity)) groups.set(identity, []);
+    groups.get(identity).push(fixture);
+  });
+  return [...groups.entries()]
+    .filter(([, records]) => new Set(records.map((fixture) => [fixture.date, fixture.homeTeam, fixture.awayTeam, fixture.type || ""].join("|").toLowerCase())).size > 1)
+    .map(([identity, records]) => ({ identity, fixtures: records }));
+}
+
 export function prepareAwayFixture(fixture = {}) {
   const koTime = fixture.koTime || fixture.kickOff || "";
   return {
