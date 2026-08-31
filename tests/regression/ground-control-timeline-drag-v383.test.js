@@ -128,6 +128,17 @@ describe("Ground Control Timeline v2 drag assurance", () => {
     expect(candidate.patch).toMatchObject({ pitchId: "P2", koMins: 570 });
   });
 
+  it("uses a Full-Time source key when an imported fixture has no internal id", () => {
+    const imported = { ...fixture, id: "", sourceFixtureKey: "2026-09-05|u14 spartans|visitors|09:30" };
+    const matchDate = "2026-09-05";
+    const syncedBooking = matchdayFixtureToAnnualBooking(imported, { date: matchDate, pitchCfg: pitches });
+    const candidate = buildTimelineMoveCandidate({
+      fixtures: [imported], fixtureIndex: 0, pitchCfg: pitches, closedPitches: [], club,
+      pitchId: "P2", koMins: 570, start: 510, end: 990, matchDate, resourceBookings: [syncedBooking],
+    });
+    expect(candidate).toMatchObject({ ok: true, blocked: false });
+  });
+
   it("blocks a drop that creates a same-pitch overlap", () => {
     const adultFixture = {
       ...fixture,

@@ -1639,6 +1639,7 @@ export default function MatchdayPage({
         pitchCfg={props.pitchCfg}
         closedPitches={props.closedPitches}
         onOverride={editableOverride}
+        operatorIdentity={props.operatorIdentity}
         readOnly={isLocked}
         onClose={() => setSelectedFixtureIndex(null)}
       />

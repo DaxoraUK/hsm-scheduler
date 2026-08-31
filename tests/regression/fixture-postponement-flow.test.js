@@ -40,9 +40,9 @@ describe("fixture postponement lifecycle", () => {
 
   it("restores the original allocation without deleting postponement history", () => {
     const postponed = postponeFixture(fixture, { reason: "weather", now: "2026-09-04T18:00:00.000Z" });
-    const restored = restoreFixture(postponed, { now: "2026-09-05T07:00:00.000Z" });
+    const restored = restoreFixture(postponed, { actor: "Club owner", now: "2026-09-05T07:00:00.000Z" });
 
     expect(restored).toMatchObject({ status: "active", pitchId: "P1", koMins: 600 });
-    expect(restored.postponement).toMatchObject({ restoredAt: "2026-09-05T07:00:00.000Z" });
+    expect(restored.postponement).toMatchObject({ restoredAt: "2026-09-05T07:00:00.000Z", restoredBy: "Club owner" });
   });
 });

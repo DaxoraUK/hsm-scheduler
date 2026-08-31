@@ -52,6 +52,7 @@ export default function FixtureDrawer({
   pitchCfg = [],
   closedPitches = [],
   onOverride,
+  operatorIdentity = "",
   readOnly = false,
   onClose,
 }) {
@@ -161,12 +162,13 @@ export default function FixtureDrawer({
       const postponed = postponeFixture(displayFixture, {
         reason: displayFixture.postponement?.reason || "weather",
         note: displayFixture.postponement?.note || "",
+        actor: operatorIdentity,
       });
       applyFixturePatch({ status: postponed.status, postponement: postponed.postponement });
       return;
     }
     if (status === "active" && displayFixture.status === "postponed") {
-      const restored = restoreFixture(displayFixture);
+      const restored = restoreFixture(displayFixture, { actor: operatorIdentity });
       applyFixturePatch({
         status: restored.status,
         date: restored.date,
@@ -182,7 +184,7 @@ export default function FixtureDrawer({
   };
 
   const reverseToHome = () => {
-    const reversed = reverseAwayFixture(displayFixture);
+    const reversed = reverseAwayFixture(displayFixture, { actor: operatorIdentity });
     applyFixturePatch({
       homeTeam: reversed.homeTeam,
       awayTeam: reversed.awayTeam,

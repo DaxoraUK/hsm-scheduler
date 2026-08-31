@@ -37,7 +37,7 @@ export function postponeFixture(fixture = {}, { reason, note = "", actor = "", n
   };
 }
 
-export function restoreFixture(fixture = {}, { now } = {}) {
+export function restoreFixture(fixture = {}, { actor = "", now } = {}) {
   const postponement = fixture.postponement || {};
   return {
     ...fixture,
@@ -50,6 +50,7 @@ export function restoreFixture(fixture = {}, { now } = {}) {
     postponement: {
       ...postponement,
       restoredAt: timestamp(now),
+      restoredBy: String(actor || "").trim(),
     },
   };
 }

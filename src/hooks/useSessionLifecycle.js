@@ -5,6 +5,8 @@ import {
   INACTIVITY_ACTIVITY_KEY,
   INACTIVITY_WARNING_MS,
   INACTIVITY_LOGOUT_MS,
+  parseActivity,
+  serialiseActivity,
 } from "../lib/security/inactivityPolicy.js";
 
 const REFRESH_BUFFER_MS = 2 * 60 * 1000;
@@ -22,6 +24,7 @@ export function useSessionLifecycle({ session, onSession, onExpired, onInactivit
   const inactivityTimersRef = useRef({ warning: null, logout: null });
   const lastActivityWriteRef = useRef(0);
   const warningShownRef = useRef(false);
+  const wasAuthenticatedRef = useRef(Boolean(session?.access_token));
 
   const expire = useCallback((message = "Your secure session has expired. Sign in again to continue.") => {
     Auth.clearSession();
@@ -120,7 +123,13 @@ export function useSessionLifecycle({ session, onSession, onExpired, onInactivit
   }, [expire, onSession, refresh, session]);
 
   useEffect(() => {
-    if (!session?.access_token || typeof window === "undefined") return undefined;
+    if (!session?.access_token || typeof window === "undefined") {
+      wasAuthenticatedRef.current = false;
+      return undefined;
+    }
+    const userId = String(session?.user?.id || "");
+    const freshLogin = !wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = true;
     const activityEvents = ["pointerdown", "keydown", "touchstart", "scroll"];
 
     const clearTimers = () => {
@@ -145,15 +154,23 @@ export function useSessionLifecycle({ session, onSession, onExpired, onInactivit
       scheduleInactivity(now);
       if (now - lastActivityWriteRef.current < 1000) return;
       lastActivityWriteRef.current = now;
-      try { window.localStorage.setItem(INACTIVITY_ACTIVITY_KEY, String(now)); } catch { /* optional cross-tab sync */ }
+      try { window.localStorage.setItem(INACTIVITY_ACTIVITY_KEY, serialiseActivity(userId, now)); } catch { /* optional cross-tab sync */ }
     };
     const syncActivity = (event) => {
       if (event.key !== INACTIVITY_ACTIVITY_KEY) return;
-      const recordedAt = Number(event.newValue);
-      if (Number.isFinite(recordedAt)) scheduleInactivity(recordedAt);
+      const recordedAt = parseActivity(event.newValue, userId);
+      if (recordedAt != null) scheduleInactivity(recordedAt);
     };
 
-    scheduleInactivity(Date.now());
+    let initialActivityAt = Date.now();
+    if (!freshLogin) {
+      try {
+        initialActivityAt = parseActivity(window.localStorage.getItem(INACTIVITY_ACTIVITY_KEY), userId) ?? initialActivityAt;
+      } catch { /* storage is optional */ }
+    } else {
+      try { window.localStorage.setItem(INACTIVITY_ACTIVITY_KEY, serialiseActivity(userId, initialActivityAt)); } catch { /* storage is optional */ }
+    }
+    scheduleInactivity(initialActivityAt);
     activityEvents.forEach((event) => window.addEventListener(event, recordActivity, { passive: true }));
     window.addEventListener("storage", syncActivity);
     return () => {
@@ -161,7 +178,7 @@ export function useSessionLifecycle({ session, onSession, onExpired, onInactivit
       activityEvents.forEach((event) => window.removeEventListener(event, recordActivity));
       window.removeEventListener("storage", syncActivity);
     };
-  }, [expire, onInactivityWarning, session?.access_token]);
+  }, [expire, onInactivityWarning, session?.access_token, session?.user?.id]);
 
   return { status, refresh };
 }

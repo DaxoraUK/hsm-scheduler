@@ -2803,6 +2803,7 @@ function App() {
                     mode={mode}
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
+                    operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     testSat={testSat}
                     useAstro={useAstro}
@@ -2884,6 +2885,7 @@ function App() {
                     mode={mode}
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
+                    operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     sunDate={sunDate}
                     satDateLabel={satDateLabel}
@@ -2952,6 +2954,7 @@ function App() {
                     mode={mode}
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
+                    operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     midweekDate={midweekDate}
                     setMidweekDate={setMidweekDate}

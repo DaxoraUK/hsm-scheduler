@@ -6,7 +6,7 @@ import {
   isPitchSuitableForFixture,
 } from "../intelligence/pitch/pitchService.js";
 import { formatTimelineTime } from "./timelineEngine.js";
-import { detectAnnualPlannerConflicts, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
+import { detectAnnualPlannerConflicts, getMatchdayFixtureSourceId, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
 
 export const TIMELINE_SNAP_MINUTES = 15;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
@@ -203,7 +203,7 @@ export function buildTimelineMoveCandidate({
     startTime: patch.koTime,
     endTime: patch.endTime,
     sourceType: "matchday_candidate",
-    sourceId: fixture.id || fixture.fixtureId || "",
+    sourceId: getMatchdayFixtureSourceId(fixture, { date: matchDate }),
   });
   const resourceConflicts = matchDate
     ? detectAnnualPlannerConflicts(resourceCandidate, {
