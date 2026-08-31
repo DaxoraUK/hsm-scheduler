@@ -62,6 +62,7 @@ import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
+import { createRebuildAction } from "../lib/domain/rebuildAction.js";
 
 const WORKSPACES = [
   {
@@ -524,6 +525,25 @@ export default function MatchdayPage({
     },
     [final, isLocked, onOverride],
   );
+  const buildSchedule = props.mode === "test"
+    ? (runTest || (isSunday ? props.runSunTest : props.runSatTest))
+    : (runLive || (isSunday ? props.runSunLive : props.runSatLive));
+  const rebuildAction = useMemo(() => createRebuildAction(buildSchedule), [buildSchedule]);
+  const [rebuildBusy, setRebuildBusy] = useState(false);
+  const runRebuild = useCallback(async () => {
+    if (rebuildBusy) return;
+    setRebuildBusy(true);
+    try {
+      const result = await rebuildAction();
+      if (result !== false && !result?.skipped) toast.success(`${day} schedule rebuilt`, { description: "The current day was refreshed without duplicating fixtures." });
+      return result;
+    } catch (error) {
+      toast.error(`${day} schedule could not be rebuilt`, { description: error?.message || "The existing schedule was left unchanged." });
+      return false;
+    } finally {
+      setRebuildBusy(false);
+    }
+  }, [day, rebuildAction, rebuildBusy]);
   const currentSnapshotHash = useMemo(() => buildMatchdaySnapshotHash(final), [final]);
   const approvalStale = Boolean(isLocked && lockInfo.snapshot_hash && lockInfo.snapshot_hash !== currentSnapshotHash);
 
@@ -1500,6 +1520,8 @@ export default function MatchdayPage({
           refWarnings={refWarnings}
           runTest={runTest || (isSunday ? props.runSunTest : props.runSatTest)}
           runLive={runLive || (isSunday ? props.runSunLive : props.runSatLive)}
+          onRebuild={runRebuild}
+          rebuildBusy={rebuildBusy}
           saveWeek={props.saveWeek}
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}

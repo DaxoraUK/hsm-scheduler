@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
-import { deduplicateFullTimeFixtures, parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
+import { parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
 import { loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
+import { deduplicateFixtureSet as deduplicateBySourceIdentity } from "../lib/domain/fixtureVenueFlow.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -11,30 +12,56 @@ function matchupIdentity(fixture = {}) {
   return [clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase()].join("|");
 }
 
+function sourceFixtureIdentity(fixture = {}) {
+  const value = fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id;
+  return value == null || !clean(value) ? "" : clean(value);
+}
+
+function mergeFixtureRecords(current = {}, incoming = {}) {
+  const merged = { ...current };
+  Object.entries(incoming).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") merged[key] = value;
+  });
+  return merged;
+}
+
+export const deduplicateFixtureSet = deduplicateBySourceIdentity;
+
 const REVIEW_FIELDS = Object.freeze(["date", "kickOff", "venue", "referee", "status"]);
 
 export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10), ignoredKeys = []) {
   const retained = previous.filter((fixture) => fixture?.date >= today);
-  const byMatchup = new Map(retained.map((fixture) => [matchupIdentity(fixture), fixture]));
   const ignored = new Set(ignoredKeys);
   const changes = [];
+  const snapshot = retained.slice();
   incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => {
+    const sourceIdentity = sourceFixtureIdentity(fixture);
+    let currentIndex = sourceIdentity
+      ? snapshot.findIndex((candidate) => sourceFixtureIdentity(candidate) === sourceIdentity)
+      : -1;
     const matchup = matchupIdentity(fixture);
-    const current = byMatchup.get(matchup);
+    if (currentIndex < 0) {
+      const candidates = snapshot
+        .map((candidate, index) => ({ candidate, index }))
+        .filter(({ candidate }) => matchupIdentity(candidate) === matchup);
+      currentIndex = candidates.length === 1 ? candidates[0].index : -1;
+    }
+    const current = currentIndex >= 0 ? snapshot[currentIndex] : null;
     if (!current) {
-      byMatchup.set(matchup, fixture);
+      snapshot.push(fixture);
       return;
     }
     const fields = REVIEW_FIELDS.filter((field) => clean(current[field]) !== clean(fixture[field]));
     if (!fields.length) {
-      byMatchup.set(matchup, fixture);
+      snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
       return;
     }
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
     if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
+    else snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
   });
   return {
-    snapshot: deduplicateFullTimeFixtures([...byMatchup.values()]).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
+    snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
     changes,
   };
 }
@@ -151,7 +178,7 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
 
     return {
       statuses,
-      fixtures: deduplicateFullTimeFixtures(results.flatMap((result) => result.fixtures)),
+      fixtures: deduplicateBySourceIdentity(results.flatMap((result) => result.fixtures)),
       snapshots: results.filter((result) => result.status.ok).map((result) => ({ id: result.source.id, fixtures: result.snapshot })),
       changes: results.filter((result) => result.status.ok && result.changes.length).map((result) => ({ id: result.source.id, changes: result.changes })),
       skipped: false,

@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, Check, Lock, LockOpen, MapPinned, Play, Printer, Save, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Lock, LockOpen, MapPinned, Play, Printer, RefreshCw, Save, Send, Sparkles } from "lucide-react";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
 import SecondaryButton from "@/ui/SecondaryButton.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
@@ -34,6 +34,7 @@ export default function MatchweekCommandBar({
   isLocked = false, onToggleLock, onPrint, onPublish, onReview, onResolve, onOptimise, optimisationCount = 0,
   canToggleLock = true, lockBusy = false,
   approvalStale = false,
+  onRebuild, rebuildBusy = false,
 }) {
   const state = workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const buildSchedule = mode === "test" ? runTest : runLive;
@@ -91,6 +92,7 @@ export default function MatchweekCommandBar({
         <div className="mt-5 flex flex-wrap items-center gap-3">
           {typeof setAllowArtificial === "function" ? <label className={`flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={isLocked} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
+          {hasRun ? <SecondaryButton onClick={onRebuild} disabled={isLocked || rebuildBusy}><RefreshCw size={17} className={rebuildBusy ? "animate-spin" : undefined} />{rebuildBusy ? "Rebuilding…" : "Rebuild Schedule"}</SecondaryButton> : null}
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
           <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked || approvalStale} title={approvalStale ? "The schedule changed after approval. Unlock, review and lock it again." : undefined}><Send size={17} />Review & publish</SecondaryButton>
           <SecondaryButton onClick={onToggleLock} disabled={lockBusy || !canToggleLock || (!isLocked && (!hasRun || fixtureCount === 0))} title={!canToggleLock ? "Your role can view this schedule but cannot change its approval lock" : isLocked ? "Unlock this schedule for editing" : !hasRun || fixtureCount === 0 ? "Build a fixture schedule before locking it" : "Lock the approved schedule"}>{isLocked ? <LockOpen size={17} /> : <Lock size={17} />}{lockBusy ? "Updating…" : isLocked ? "Unlock" : "Lock"}</SecondaryButton>

@@ -135,7 +135,6 @@ function resolveTeamConfig(fixture, cfgList) {
 function isAdultTeamConfig(cfg, fixture = {}) {
   const type = String(cfg?.teamType || "").toLowerCase();
   if (["adult", "veterans", "women"].includes(type)) return true;
-  if (cfg?.format === "11v11") return true;
   return isAdult(cfg?.name || fixture.homeTeam);
 }
 

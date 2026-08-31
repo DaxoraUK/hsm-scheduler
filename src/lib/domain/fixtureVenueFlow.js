@@ -29,6 +29,27 @@ export function applyFixtureOverrides(fixtures = [], overrides = {}) {
   });
 }
 
+export function deduplicateFixtureSet(fixtures = []) {
+  const output = [];
+  const indexes = new Map();
+  fixtures.forEach((fixture) => {
+    const identity = fixture?.sourceFixtureKey || fixture?.fixtureId || fixture?.fullTimeId || fixture?.id;
+    const key = identity == null ? "" : String(identity).trim();
+    if (!key || !indexes.has(key)) {
+      if (key) indexes.set(key, output.length);
+      output.push(fixture);
+      return;
+    }
+    const index = indexes.get(key);
+    const merged = { ...output[index] };
+    Object.entries(fixture || {}).forEach(([field, value]) => {
+      if (value !== undefined && value !== null && value !== "") merged[field] = value;
+    });
+    output[index] = merged;
+  });
+  return output;
+}
+
 export function prepareAwayFixture(fixture = {}) {
   const koTime = fixture.koTime || fixture.kickOff || "";
   return {

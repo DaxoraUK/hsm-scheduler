@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test } from "vitest";
-import { getConfiguredFixtureSources, reconcileFullTimeFixtureSnapshot } from "../../src/hooks/useFixtureFetcher.js";
+import { deduplicateFixtureSet, getConfiguredFixtureSources, reconcileFullTimeFixtureSnapshot } from "../../src/hooks/useFixtureFetcher.js";
 import { parseFullTimeDate, parseFullTimeHtml } from "../../src/lib/fullTimeParser.js";
 import {
   buildFullTimeFeedDocument,
@@ -9,6 +9,7 @@ import {
   LANCASHIRE_AMATEUR_FIXTURE_FEEDS,
   normaliseFullTimeFeedId,
 } from "../../src/lib/fullTimeFeed.js";
+import { applyFixtureOverrides } from "../../src/lib/domain/fixtureVenueFlow.js";
 
 describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () => {
   test("accepts numeric IDs and official code-snippet URLs only", () => {
@@ -46,6 +47,59 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
       expect.objectContaining({ date: "2026-10-03", awayTeam: "B" }),
     ]);
     expect(result.changes).toEqual([expect.objectContaining({ fields: ["kickOff"] })]);
+  });
+
+  test("repeated source rebuilds are idempotent by stable fixture identity", () => {
+    const fixture = {
+      sourceFixtureKey: "2026-09-05|hsm u15 knights|afc egerton u15|10:00",
+      date: "2026-09-05",
+      homeTeam: "HSM U15 Knights",
+      awayTeam: "AFC Egerton U15",
+      kickOff: "10:00",
+    };
+    const once = reconcileFullTimeFixtureSnapshot([], [fixture], "2026-08-19").snapshot;
+    const twice = reconcileFullTimeFixtureSnapshot(once, [fixture], "2026-08-19").snapshot;
+    const twenty = Array.from({ length: 20 }).reduce(
+      (snapshot) => reconcileFullTimeFixtureSnapshot(snapshot, [fixture], "2026-08-19").snapshot,
+      [],
+    );
+    expect(once).toHaveLength(1);
+    expect(twice).toHaveLength(1);
+    expect(twenty).toHaveLength(1);
+  });
+
+  test("upserts duplicate imported rows by source identity without collapsing legitimate repeats", () => {
+    const duplicate = { sourceFixtureKey: "source-row-1", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "10:00" };
+    const legitimateRepeat = { sourceFixtureKey: "source-row-2", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "12:00" };
+    expect(deduplicateFixtureSet([duplicate, { ...duplicate, venue: "Updated" }, legitimateRepeat])).toEqual([
+      expect.objectContaining({ sourceFixtureKey: "source-row-1", venue: "Updated" }),
+      legitimateRepeat,
+    ]);
+  });
+
+  test("keeps reversed home metadata when the same source fixture is rebuilt", () => {
+    const source = {
+      sourceFixtureKey: "reverse-1",
+      date: "2026-09-05",
+      homeTeam: "Hosts",
+      awayTeam: "HSM U15 Crusaders",
+      kickOff: "10:00",
+      venueRole: "home",
+      isAwayFixture: false,
+      requiresScheduling: true,
+      venueReversal: { originalHomeTeam: "HSM U15 Crusaders", originalAwayTeam: "Hosts" },
+    };
+    const fixture = applyFixtureOverrides([{ ...source, venueRole: "away", isAwayFixture: true, requiresScheduling: false }], {
+      0: {
+        fixtureIdentity: "reverse-1",
+        venueRole: "home",
+        isAwayFixture: false,
+        requiresScheduling: true,
+        venueReversal: source.venueReversal,
+      },
+    });
+    expect(fixture).toHaveLength(1);
+    expect(fixture[0]).toMatchObject({ venueRole: "home", isAwayFixture: false, requiresScheduling: true });
   });
 
   test("normalises feed sources without requiring a legacy page URL", () => {

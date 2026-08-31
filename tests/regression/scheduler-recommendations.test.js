@@ -91,6 +91,40 @@ describe("fixture scheduling regressions", () => {
     expect(result.scheduled[0].fixedKO).toBe(true);
   });
 
+  test("U17 remains youth even when its format is generic 11v11", () => {
+    const teams = [{ name: "U17 Lisbon", teamType: "youth", format: "11v11", defaultPitch: "P1", altPitch: "P4", ageOrder: 10, gameMins: 80 }];
+    const result = scheduleSat(
+      [{ homeTeam: "U17 Lisbon", awayTeam: "Ringley Park Rangers U17", status: "active", kickOff: "09:00" }],
+      false,
+      [],
+      teams,
+      { "11v11": 30 },
+      8 * 60 + 30,
+      11 * 60 + 30,
+      clonePitches(),
+      3,
+    );
+    expect(result.unresolved).toHaveLength(0);
+    expect(result.scheduled[0]).toMatchObject({ pitchId: "P1" });
+    expect(result.scheduled[0].fixedKO).not.toBe(true);
+  });
+
+  test("genuine adult fixtures continue to use adult scheduling", () => {
+    const result = scheduleSat(
+      [{ homeTeam: "Senior XI", awayTeam: "Visitors", status: "active" }],
+      false,
+      [],
+      [{ name: "Senior XI", teamType: "adult", format: "11v11", defaultPitch: "P1", altPitch: "P2", ageOrder: 11, gameMins: 90 }],
+      { "11v11": 30 },
+      8 * 60 + 30,
+      16 * 60,
+      clonePitches(),
+      3,
+    );
+    expect(result.unresolved).toHaveLength(0);
+    expect(result.scheduled[0]).toMatchObject({ koTime: "14:00", fixedKO: true });
+  });
+
   test("midweek adult scheduling uses the selected evening window instead of the weekend fixed time", () => {
     const result = scheduleFixtureDay({
       dayKey: "midweek",
