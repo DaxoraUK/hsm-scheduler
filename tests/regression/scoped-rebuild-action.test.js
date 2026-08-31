@@ -26,6 +26,6 @@ describe("scoped scheduling rebuild action", () => {
       expect(readFileSync(`src/pages/${page}`, "utf8")).toContain("MatchdayPage");
     }
     const app = readFileSync("src/AppCore.jsx", "utf8");
-    expect(app.match(/getFixtureIdentityCollisions\(applied\)/g)?.length).toBe(3);
+    expect(app.match(/deduplicateFixtureSet\(applyFixtureOverrides/g)?.length).toBe(3);
   });
 });

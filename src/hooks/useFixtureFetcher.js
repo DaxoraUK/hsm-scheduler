@@ -17,14 +17,6 @@ function sourceFixtureIdentity(fixture = {}) {
   return value == null || !clean(value) ? "" : clean(value);
 }
 
-function sourceFixtureFingerprint(fixture = {}) {
-  return [fixture.date, clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase(), clean(fixture.type).toLowerCase()].join("|");
-}
-
-function hasProviderIdentity(fixture = {}) {
-  return Boolean(fixture.sourceFixtureUrl || fixture.externalFixtureId || fixture.sourceFixtureId || fixture.sourceRowIndex != null);
-}
-
 function mergeFixtureRecords(current = {}, incoming = {}) {
   const merged = { ...current };
   Object.entries(incoming).forEach(([key, value]) => {
@@ -42,37 +34,16 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
   const ignored = new Set(ignoredKeys);
   const changes = [];
   const snapshot = retained.slice();
-  const collisions = [];
-  const seenIncoming = new Map();
   incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => {
     const sourceIdentity = sourceFixtureIdentity(fixture);
-    if (sourceIdentity) {
-      const previousIncoming = seenIncoming.get(sourceIdentity);
-      if (previousIncoming && sourceFixtureFingerprint(previousIncoming) !== sourceFixtureFingerprint(fixture)) {
-        collisions.push({ identity: sourceIdentity, fixtures: [previousIncoming, fixture] });
-        return;
-      }
-      seenIncoming.set(sourceIdentity, fixture);
-    }
     let currentIndex = sourceIdentity
       ? snapshot.findIndex((candidate) => sourceFixtureIdentity(candidate) === sourceIdentity || (fixture.sourceFixtureUrl && clean(candidate.sourceFixtureUrl).toLowerCase() === clean(fixture.sourceFixtureUrl).toLowerCase()))
       : -1;
     const matchup = matchupIdentity(fixture);
-    if (currentIndex < 0 && sourceIdentity) {
-      const sameMatchup = snapshot.filter((candidate) => matchupIdentity(candidate) === matchup);
-      if (sameMatchup.some((candidate) => !hasProviderIdentity(candidate))) {
-        collisions.push({ identity: sourceIdentity, fixtures: sameMatchup.concat(fixture) });
-        return;
-      }
-    }
-    if (currentIndex < 0 && !sourceIdentity) {
+    if (currentIndex < 0) {
       const candidates = snapshot
         .map((candidate, index) => ({ candidate, index }))
         .filter(({ candidate }) => matchupIdentity(candidate) === matchup);
-      if (candidates.length > 1) {
-        collisions.push({ identity: sourceIdentity || matchup, fixtures: candidates.map(({ candidate }) => candidate).concat(fixture) });
-        return;
-      }
       currentIndex = candidates.length === 1 ? candidates[0].index : -1;
     }
     const current = currentIndex >= 0 ? snapshot[currentIndex] : null;
@@ -86,22 +57,12 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
       return;
     }
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
-    if (sourceIdentity) snapshot[currentIndex] = { ...current, sourceFixtureKey: fixture.sourceFixtureKey || current.sourceFixtureKey || sourceIdentity, sourceFixtureUrl: fixture.sourceFixtureUrl || current.sourceFixtureUrl || "", sourceRowIndex: fixture.sourceRowIndex ?? current.sourceRowIndex };
     if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
     else snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
   });
-  const reconciled = deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff)));
-  const sourceIdentities = incoming.filter((fixture) => fixture?.date >= today).map(sourceFixtureIdentity).filter(Boolean);
-  const uniqueSourceIdentities = new Set(sourceIdentities);
-  const missingSourceIdentities = [...uniqueSourceIdentities].filter((identity) => !reconciled.some((fixture) => sourceFixtureIdentity(fixture) === identity));
   return {
-    snapshot: reconciled,
+    snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
     changes,
-    collisions,
-    sourceCount: uniqueSourceIdentities.size,
-    identityCount: new Set(reconciled.map(sourceFixtureIdentity).filter(Boolean)).size,
-    missingSourceIdentities,
-    safe: collisions.length === 0 && missingSourceIdentities.length === 0,
   };
 }
 
@@ -197,26 +158,17 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
       try {
         const imported = await fetchLeagueFixtures(source);
         const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys);
-        if (!reconciliation.safe) {
-          const error = new Error(`Fixture source identity collision or loss detected for ${source.name}`);
-          error.code = "FULL_TIME_IDENTITY_COLLISION";
-          error.collisions = reconciliation.collisions;
-          error.missingSourceIdentities = reconciliation.missingSourceIdentities;
-          throw error;
-        }
         const snapshot = reconciliation.snapshot;
         const fixtures = snapshot.filter((fixture) => fixture.date === targetDate).filter((fixture) =>
           typeof predicate === "function" ? predicate(fixture) : true
         );
         return { source, fixtures, snapshot, changes: reconciliation.changes, status: { id: source.id, name: source.name, ok: true, count: fixtures.length, snapshotCount: snapshot.length, changeCount: reconciliation.changes.length } };
       } catch (error) {
-        return { source, fixtures: [], identityError: error.code === "FULL_TIME_IDENTITY_COLLISION" ? error : null, status: { id: source.id, name: source.name, ok: false, error: error.message, count: 0 } };
+        return { source, fixtures: [], status: { id: source.id, name: source.name, ok: false, error: error.message, count: 0 } };
       }
     }));
 
     const statuses = results.map((result) => result.status);
-    const identityError = results.find((result) => result.identityError)?.identityError;
-    if (identityError) throw identityError;
     if (!statuses.some((status) => status.ok)) {
       const failure = new Error(statuses.map((status) => `${status.name}: ${status.error}`).join(" "));
       failure.code = "FULL_TIME_ALL_SOURCES_FAILED";

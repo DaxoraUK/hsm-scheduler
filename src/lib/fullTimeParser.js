@@ -91,13 +91,7 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
 
 export function getFullTimeFixtureKey(fixture = {}) {
   if (fixture.sourceFixtureUrl) return `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}`;
-  if (fixture.externalFixtureId || fixture.sourceFixtureId) {
-    return `source:${String(fixture.sourceId || fixture.sourceName || "full-time").trim().toLowerCase()}:${String(fixture.externalFixtureId || fixture.sourceFixtureId).trim()}`;
-  }
-  if (fixture.sourceRowIndex != null) {
-    return `row:${String(fixture.sourceId || fixture.sourceName || "full-time").trim().toLowerCase()}:${fixture.sourceRowIndex}`;
-  }
-  return `fallback:${String(fixture.sourceId || fixture.sourceName || "full-time").trim().toLowerCase()}:${fixture.date}|${normalise(fixture.homeTeam)}|${normalise(fixture.awayTeam)}|${String(fixture.type || "").trim().toLowerCase()}`;
+  return [fixture.date, normalise(fixture.homeTeam), normalise(fixture.awayTeam), fixture.kickOff].join("|");
 }
 
 export function deduplicateFullTimeFixtures(fixtures = []) {
@@ -123,7 +117,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
       venueIndex: headers.findIndex((header) => /venue|ground/.test(header)),
       refereeIndex: headers.findIndex((header) => /referee|match official|official/.test(header)),
     };
-    table.querySelectorAll("tr").forEach((row, sourceRowIndex) => {
+    table.querySelectorAll("tr").forEach((row) => {
       const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
       const rowText = clean(row.textContent);
       if (cells.length <= 1 && parseFullTimeDate(rowText)) {
@@ -145,7 +139,6 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         sourceName: options.sourceName || "Full-Time FA",
         sourceUrl: options.sourceUrl || "",
         sourceFixtureUrl: fullTimeFixtureUrl(row),
-        sourceRowIndex,
         venueRole: isHomeFixture ? "home" : "away",
         isAwayFixture: !isHomeFixture,
         requiresScheduling: isHomeFixture,
