@@ -61,6 +61,7 @@ import {
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
+import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 
 const WORKSPACES = [
   {
@@ -516,7 +517,13 @@ export default function MatchdayPage({
     [active, clubWithTiming, props.closedPitches, props.pitchCfg],
   );
 
-  const editableOverride = isLocked ? undefined : onOverride;
+  const editableOverride = useCallback(
+    (index, field, value) => {
+      if (isLocked || typeof onOverride !== "function") return;
+      onOverride(index, field, value, getFixtureFlowIdentity(final[index] || {}));
+    },
+    [final, isLocked, onOverride],
+  );
   const currentSnapshotHash = useMemo(() => buildMatchdaySnapshotHash(final), [final]);
   const approvalStale = Boolean(isLocked && lockInfo.snapshot_hash && lockInfo.snapshot_hash !== currentSnapshotHash);
 

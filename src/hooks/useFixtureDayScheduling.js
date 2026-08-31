@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
+import { applyFixtureOverrides } from "../lib/domain/fixtureVenueFlow.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -46,13 +47,7 @@ export function useFixtureDayScheduling({
 
   const final = useMemo(
     () =>
-      decorateFixturesForDay(
-        scheduled.map((game, index) => ({
-          ...game,
-          ...(overrides[index] || {}),
-        })),
-        key
-      ),
+      decorateFixturesForDay(applyFixtureOverrides(scheduled, overrides), key),
     [scheduled, overrides, key]
   );
 

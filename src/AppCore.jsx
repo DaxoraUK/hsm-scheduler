@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -1750,8 +1750,7 @@ function App() {
   const runSat = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      setSatOverrides({});
-      const all = [...baseFx, ...satManual];
+      const all = applyFixtureOverrides([...baseFx, ...satManual], satOverrides);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,
@@ -1771,6 +1770,7 @@ function App() {
     },
     [
       satManual,
+      satOverrides,
       useAstro,
       satClosedPitches,
       teamCfg,
@@ -1831,8 +1831,7 @@ function App() {
   const runSun = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      setSunOverrides({});
-      const all = [...baseFx, ...sunManual];
+      const all = applyFixtureOverrides([...baseFx, ...sunManual], sunOverrides);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSun(
         fixtureFlow.home,
@@ -1852,6 +1851,7 @@ function App() {
     },
     [
       sunManual,
+      sunOverrides,
       useAstro,
       sunClosedPitches,
       teamCfg,
@@ -1900,8 +1900,7 @@ function App() {
   const runMidweek = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      setMidweekOverrides({});
-      const all = [...baseFx, ...midweekManual];
+      const all = applyFixtureOverrides([...baseFx, ...midweekManual], midweekOverrides);
       const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,
@@ -1922,6 +1921,7 @@ function App() {
     },
     [
       midweekManual,
+      midweekOverrides,
       useAstro,
       midweekClosedPitches,
       teamCfg,
@@ -1983,12 +1983,12 @@ function App() {
     }
   };
 
-  const satOv = (i, k, v) =>
-    setSatOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v } }));
-  const sunOv = (i, k, v) =>
-    setSunOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v } }));
-  const midweekOv = (i, k, v) =>
-    setMidweekOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v } }));
+  const satOv = (i, k, v, fixtureIdentity = "") =>
+    setSatOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+  const sunOv = (i, k, v, fixtureIdentity = "") =>
+    setSunOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+  const midweekOv = (i, k, v, fixtureIdentity = "") =>
+    setMidweekOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
   const {
     satFinal,
     satActive,
