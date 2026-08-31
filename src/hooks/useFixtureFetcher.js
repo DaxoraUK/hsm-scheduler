@@ -13,7 +13,7 @@ function matchupIdentity(fixture = {}) {
 }
 
 function sourceFixtureIdentity(fixture = {}) {
-  const value = fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id;
+  const value = fixture.sourceFixtureUrl ? `url:${clean(fixture.sourceFixtureUrl).toLowerCase()}` : (fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id);
   return value == null || !clean(value) ? "" : clean(value);
 }
 
@@ -37,7 +37,7 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
   incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => {
     const sourceIdentity = sourceFixtureIdentity(fixture);
     let currentIndex = sourceIdentity
-      ? snapshot.findIndex((candidate) => sourceFixtureIdentity(candidate) === sourceIdentity)
+      ? snapshot.findIndex((candidate) => sourceFixtureIdentity(candidate) === sourceIdentity || (fixture.sourceFixtureUrl && clean(candidate.sourceFixtureUrl).toLowerCase() === clean(fixture.sourceFixtureUrl).toLowerCase()))
       : -1;
     const matchup = matchupIdentity(fixture);
     if (currentIndex < 0) {

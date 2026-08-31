@@ -90,13 +90,14 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
 }
 
 export function getFullTimeFixtureKey(fixture = {}) {
+  if (fixture.sourceFixtureUrl) return `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}`;
   return [fixture.date, normalise(fixture.homeTeam), normalise(fixture.awayTeam), fixture.kickOff].join("|");
 }
 
 export function deduplicateFullTimeFixtures(fixtures = []) {
   const seen = new Set();
   return fixtures.filter((fixture) => {
-    const key = fixture.sourceFixtureKey || getFullTimeFixtureKey(fixture);
+    const key = fixture.sourceFixtureUrl ? `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}` : (fixture.sourceFixtureKey || getFullTimeFixtureKey(fixture));
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;

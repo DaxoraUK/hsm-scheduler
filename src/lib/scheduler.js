@@ -133,6 +133,8 @@ function resolveTeamConfig(fixture, cfgList) {
 }
 
 function isAdultTeamConfig(cfg, fixture = {}) {
+  const teamName = String(cfg?.name || fixture.homeTeam || "").toLowerCase();
+  if (/\bu\s?\d{1,2}\b/.test(teamName)) return false;
   const type = String(cfg?.teamType || "").toLowerCase();
   if (["adult", "veterans", "women"].includes(type)) return true;
   return isAdult(cfg?.name || fixture.homeTeam);
@@ -256,7 +258,7 @@ function scheduleFixtureDayCore(
     ? options.fixedAdultKickOffMins
     : 14 * 60;
   const importedKickOffMins = (fixture) => {
-    const value = String(fixture.kickOff || fixture.koTime || "").trim();
+    const value = String(fixture.koTime || fixture.kickOff || "").trim();
     const match = value.match(/^(\d{1,2}):(\d{2})$/);
     if (!match) return null;
     const hours = Number(match[1]);
@@ -378,11 +380,16 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-    const adultKickOffMins = importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
+  const adultKickOffMins = importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
     if (isAdultTeamConfig(cfg, fixture) && Number.isFinite(adultKickOffMins)) {
       let placed = false;
 
-      for (const pitchId of [cfg.defaultPitch, cfg.altPitch].filter(Boolean)) {
+      const requestedPitch = fixture.manualOverrideApplied ? String(fixture.pitchId || "").trim() : "";
+      const requestedPitches = requestedPitch ? [requestedPitch] : [];
+      const adultPitchOrder = [...requestedPitches, cfg.defaultPitch, cfg.altPitch, ...configuredSuitablePitches.map((pitch) => pitch.id)]
+        .filter(Boolean)
+        .filter((pitchId, index, values) => values.indexOf(pitchId) === index);
+      for (const pitchId of adultPitchOrder) {
         if (!(pitchId in slots)) continue;
 
         const pitch = getPitch(pitchCfg, pitchId);
@@ -402,6 +409,7 @@ function scheduleFixtureDayCore(
             usingAstro: isArtificialPitch(pitchCfg, pitchId),
             usingFallback: false,
             fixedKO: true,
+            manualAllocationApplied: requestedPitch === pitchId,
           });
 
           placed = true;
@@ -479,21 +487,33 @@ function scheduleFixtureDayCore(
 
     const best = findBest(candidatePitches, duration, cfg.format === "3v3");
 
-    if (best) {
-      book(best.pitchId, best.time, best.time + duration);
+    const requestedPitch = fixture.manualOverrideApplied ? String(fixture.pitchId || "").trim() : "";
+    const requestedTime = fixture.manualOverrideApplied
+      ? importedKickOffMins(fixture)
+      : null;
+    const requestedValid = requestedPitch && candidatePitches.includes(requestedPitch) && Number.isFinite(requestedTime)
+      && requestedTime >= startMins && requestedTime + duration <= endMins
+      && free(requestedPitch, requestedTime, requestedTime + duration);
+    const allocation = requestedValid
+      ? { pitchId: requestedPitch, time: requestedTime }
+      : best;
+
+    if (allocation) {
+      book(allocation.pitchId, allocation.time, allocation.time + duration);
 
       scheduled.push({
         ...fixture,
-        pitchId: best.pitchId,
-        koTime: t2s(best.time),
-        koMins: best.time,
-        endMins: best.time + duration,
+        pitchId: allocation.pitchId,
+        koTime: t2s(allocation.time),
+        koMins: allocation.time,
+        endMins: allocation.time + duration,
         cfg,
         usingAlt:
-          best.pitchId !== cfg.defaultPitch &&
-          preferredOptions.includes(best.pitchId),
-        usingAstro: isArtificialPitch(pitchCfg, best.pitchId),
-        usingFallback: !options.includes(best.pitchId),
+          allocation.pitchId !== cfg.defaultPitch &&
+          preferredOptions.includes(allocation.pitchId),
+        usingAstro: isArtificialPitch(pitchCfg, allocation.pitchId),
+        usingFallback: !options.includes(allocation.pitchId),
+        manualAllocationApplied: Boolean(requestedValid),
       });
     } else {
       const diagnostics = [];

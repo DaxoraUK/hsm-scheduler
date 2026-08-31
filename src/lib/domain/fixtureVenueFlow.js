@@ -4,7 +4,7 @@ function clockToMinutes(value) {
 }
 
 export function getFixtureFlowIdentity(fixture = {}) {
-  const explicit = fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id;
+  const explicit = fixture.sourceFixtureUrl ? `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}` : (fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id);
   if (explicit != null && String(explicit).trim()) return String(explicit).trim();
   return [
     fixture.date || fixture.fixtureDate || "",
@@ -25,7 +25,7 @@ export function applyFixtureOverrides(fixtures = [], overrides = {}) {
     const stable = stableOverrides.get(getFixtureFlowIdentity(fixture));
     const legacy = stable ? {} : overrides?.[index] || {};
     const { fixtureIdentity: _fixtureIdentity, ...patch } = { ...legacy, ...(stable || {}) };
-    return { ...fixture, ...patch };
+    return { ...fixture, ...patch, ...(Object.keys(patch).length ? { manualOverrideApplied: true } : {}) };
   });
 }
 
@@ -33,7 +33,7 @@ export function deduplicateFixtureSet(fixtures = []) {
   const output = [];
   const indexes = new Map();
   fixtures.forEach((fixture) => {
-    const identity = fixture?.sourceFixtureKey || fixture?.fixtureId || fixture?.fullTimeId || fixture?.id;
+    const identity = fixture?.sourceFixtureUrl ? `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}` : (fixture?.sourceFixtureKey || fixture?.fixtureId || fixture?.fullTimeId || fixture?.id);
     const key = identity == null ? "" : String(identity).trim();
     if (!key || !indexes.has(key)) {
       if (key) indexes.set(key, output.length);

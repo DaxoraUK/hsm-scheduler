@@ -6,6 +6,7 @@ import {
   getValidatedFixRecommendations,
 } from "../../src/lib/engines/recommendationEngine.js";
 import { TEAM_CONFIG_DEFAULT } from "../../src/lib/constants.js";
+import { normaliseTeams } from "../../src/lib/engines/configurationEngine.js";
 import { clonePitches, makeClub, makeFixture } from "./fixtures.js";
 
 const buffers = {
@@ -107,6 +108,10 @@ describe("fixture scheduling regressions", () => {
     expect(result.unresolved).toHaveLength(0);
     expect(result.scheduled[0]).toMatchObject({ pitchId: "P1" });
     expect(result.scheduled[0].fixedKO).not.toBe(true);
+  });
+
+  test("team configuration infers U17 as youth before considering its generic format", () => {
+    expect(normaliseTeams([{ name: "U17 Lisbon", format: "11v11", teamType: "adult" }])[0].teamType).toBe("youth");
   });
 
   test("genuine adult fixtures continue to use adult scheduling", () => {

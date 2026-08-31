@@ -68,6 +68,14 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     expect(twenty).toHaveLength(1);
   });
 
+  test("provider kick-off changes upsert the same source row when its fixture URL is stable", () => {
+    const previous = [{ sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=42", sourceFixtureKey: "old-key", date: "2026-09-05", homeTeam: "U10 Avengers", awayTeam: "Visitors", kickOff: "09:00" }];
+    const incoming = [{ sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=42", sourceFixtureKey: "new-key", date: "2026-09-05", homeTeam: "U10 Avengers", awayTeam: "Visitors", kickOff: "10:00" }];
+    const result = reconcileFullTimeFixtureSnapshot(previous, incoming, "2026-08-19");
+    expect(result.snapshot).toHaveLength(1);
+    expect(result.snapshot[0]).toMatchObject({ kickOff: "09:00", sourceFixtureUrl: previous[0].sourceFixtureUrl });
+  });
+
   test("upserts duplicate imported rows by source identity without collapsing legitimate repeats", () => {
     const duplicate = { sourceFixtureKey: "source-row-1", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "10:00" };
     const legitimateRepeat = { sourceFixtureKey: "source-row-2", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "12:00" };

@@ -27,6 +27,11 @@ function toNumber(value, fallback = 0) {
 }
 
 export function inferTeamType(team = {}) {
+  const name = key(team.name || team.teamName || team.label || team.homeTeam || team.awayTeam);
+  // Age-banded teams are always youth, even when legacy configuration stored
+  // an adult type or a generic 11v11 format alongside the name.
+  if (/\bu\s?\d{1,2}\b/.test(name)) return "youth";
+
   const explicit = key(team.teamType || team.type || team.category);
   if (["adult", "open-age", "open age", "senior", "seniors", "veteran", "veterans", "vets"].includes(explicit)) {
     return "adult";
@@ -35,8 +40,6 @@ export function inferTeamType(team = {}) {
     return "youth";
   }
 
-  const name = key(team.name || team.teamName || team.label || team.homeTeam || team.awayTeam);
-  if (/\bu\s?\d{1,2}\b/.test(name)) return "youth";
   if (
     name.includes("1st team") ||
     name.includes("first team") ||

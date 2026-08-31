@@ -1763,8 +1763,8 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSatScheduled([...s, ...fixtureFlow.away]);
-      setSatUnresolved(u);
+      setSatScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setSatUnresolved(deduplicateFixtureSet(u));
       setSatHasRun(true);
       return true;
     },
@@ -1844,8 +1844,8 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSunScheduled([...s, ...fixtureFlow.away]);
-      setSunUnresolved(u);
+      setSunScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setSunUnresolved(deduplicateFixtureSet(u));
       setSunHasRun(true);
       return true;
     },
@@ -1914,8 +1914,8 @@ function App() {
         club.maxConcurrent || 3,
         { fixedAdultKickOffMins: null },
       );
-      setMidweekScheduled([...s, ...fixtureFlow.away]);
-      setMidweekUnresolved(u);
+      setMidweekScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setMidweekUnresolved(deduplicateFixtureSet(u));
       setMidweekHasRun(true);
       return true;
     },
@@ -2116,20 +2116,20 @@ function App() {
       }
       if (midweek.date) setMidweekDateState(midweek.date);
 
-      setSatScheduled(saturday.fixtures);
+      setSatScheduled(deduplicateFixtureSet(saturday.fixtures));
       setSatUnresolved([]);
       setSatOverrides({});
       setSatManual([]);
       setSatFetchStatus([]);
       setSatHasRun(saturday.hasRun);
 
-      setSunScheduled(sunday.fixtures);
+      setSunScheduled(deduplicateFixtureSet(sunday.fixtures));
       setSunUnresolved([]);
       setSunOverrides({});
       setSunManual([]);
       setSunHasRun(sunday.hasRun);
 
-      setMidweekScheduled(midweek.fixtures);
+      setMidweekScheduled(deduplicateFixtureSet(midweek.fixtures));
       setMidweekUnresolved([]);
       setMidweekOverrides({});
       setMidweekManual([]);
