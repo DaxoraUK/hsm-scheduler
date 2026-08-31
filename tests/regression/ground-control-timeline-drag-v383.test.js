@@ -5,6 +5,7 @@ import {
   rankTimelinePitches,
   snapTimelineMinutes,
 } from "../../src/lib/engines/timelineDragEngine.js";
+import { matchdayFixtureToAnnualBooking } from "../../src/lib/planning/annualPlannerEngine.js";
 
 const pitches = [
   { id: "P1", label: "Pitch 1", format: "11v11", surface: "grass" },
@@ -98,6 +99,33 @@ describe("Ground Control Timeline v2 drag assurance", () => {
       endTime: "11:40",
     });
     expect(candidate.previousPatch).toMatchObject({ pitchId: "P4", koMins: 570 });
+  });
+
+  it("ignores the selected fixture's own synced annual-planner booking", () => {
+    const matchDate = "2026-09-05";
+    const syncedBooking = matchdayFixtureToAnnualBooking(fixture, {
+      date: matchDate,
+      pitchCfg: pitches,
+      sourceType: "matchday_saturday",
+    });
+
+    const candidate = buildTimelineMoveCandidate({
+      fixtures: [fixture],
+      fixtureIndex: 0,
+      pitchCfg: pitches,
+      closedPitches: [],
+      club,
+      pitchId: "P2",
+      koMins: 570,
+      start: 510,
+      end: 990,
+      matchDate,
+      resourceBookings: [syncedBooking],
+    });
+
+    expect(candidate.ok).toBe(true);
+    expect(candidate.blocked).toBe(false);
+    expect(candidate.patch).toMatchObject({ pitchId: "P2", koMins: 570 });
   });
 
   it("blocks a drop that creates a same-pitch overlap", () => {

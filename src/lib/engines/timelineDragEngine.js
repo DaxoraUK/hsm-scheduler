@@ -203,11 +203,13 @@ export function buildTimelineMoveCandidate({
     startTime: patch.koTime,
     endTime: patch.endTime,
     sourceType: "matchday_candidate",
+    sourceId: fixture.id || fixture.fixtureId || "",
   });
   const resourceConflicts = matchDate
     ? detectAnnualPlannerConflicts(resourceCandidate, {
         bookings: resourceBookings,
         blackouts: resourceBlackouts,
+        ignoreSourceId: resourceCandidate.sourceId,
       })
     : [];
 
@@ -217,6 +219,7 @@ export function buildTimelineMoveCandidate({
       .filter((item) => !detectAnnualPlannerConflicts({ ...resourceCandidate, pitchId: item.pitch.id, pitchName: item.pitch.label || item.pitch.id }, {
         bookings: resourceBookings,
         blackouts: resourceBlackouts,
+        ignoreSourceId: resourceCandidate.sourceId,
       }).length)
       .slice(0, 3);
     return {

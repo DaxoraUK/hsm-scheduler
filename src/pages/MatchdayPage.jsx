@@ -383,7 +383,7 @@ export default function MatchdayPage({
   );
 
   const active = useMemo(
-    () => final.filter((fixture) => fixture.status !== "postponed"),
+    () => final.filter((fixture) => !["postponed", "cancelled", "away"].includes(fixture.status) && !fixture.isAwayFixture),
     [final],
   );
 
@@ -430,20 +430,23 @@ export default function MatchdayPage({
       final.filter(
         (fixture) =>
           fixture.status !== "postponed" &&
+          fixture.status !== "cancelled" &&
+          fixture.status !== "away" &&
+          !fixture.isAwayFixture &&
           !isFixtureOfficialConfirmed(fixture),
       ).length,
     [final],
   );
 
   const officialConflicts = useMemo(
-    () => findOfficialConflicts(final, props.refs || []),
-    [final, props.refs],
+    () => findOfficialConflicts(active, props.refs || []),
+    [active, props.refs],
   );
 
   const officialsIntelligence = useMemo(
     () =>
       calculateOfficialsReadiness({
-        fixtures: final,
+        fixtures: active,
         active,
         officialConflicts,
         refWarnings,
@@ -482,7 +485,7 @@ export default function MatchdayPage({
   const competitionRules = useMemo(
     () =>
       calculateCompetitionRules({
-        fixtures: final,
+        fixtures: active,
         active,
         pitchCfg: props.pitchCfg || [],
         teamCfg: props.teamCfg || [],
@@ -493,7 +496,6 @@ export default function MatchdayPage({
     [
       active,
       clubWithTiming,
-      final,
       props.closedPitches,
       props.pitchCfg,
       props.teamCfg,
@@ -504,14 +506,14 @@ export default function MatchdayPage({
   const dayOptimisation = useMemo(
     () =>
       calculateDayOptimisation({
-        fixtures: final,
+        fixtures: active,
         pitchCfg: props.pitchCfg || [],
         closedPitches: props.closedPitches || [],
         club: clubWithTiming,
         start: clubWithTiming.startTime,
         end: clubWithTiming.endTime,
       }),
-    [clubWithTiming, final, props.closedPitches, props.pitchCfg],
+    [active, clubWithTiming, props.closedPitches, props.pitchCfg],
   );
 
   const editableOverride = isLocked ? undefined : onOverride;
@@ -793,7 +795,7 @@ export default function MatchdayPage({
     () =>
       calculateWeatherIntelligence({
         club: clubWithTiming,
-        fixtures: final,
+        fixtures: active,
         dateLabel,
         forecastSource: liveWeather.data,
         connectionStatus: liveWeather.status,
@@ -802,7 +804,7 @@ export default function MatchdayPage({
     [
       clubWithTiming,
       dateLabel,
-      final,
+      active,
       liveWeather.data,
       liveWeather.error,
       liveWeather.status,
@@ -831,7 +833,7 @@ export default function MatchdayPage({
   const recommendationCentre = useMemo(
     () =>
       buildRecommendationCentre({
-        fixtures: final,
+        fixtures: active,
         active,
         unresolved,
         conflicts,
@@ -865,7 +867,7 @@ export default function MatchdayPage({
   const operationsIntelligence = useMemo(
     () =>
       calculateOperationsIntelligence({
-        fixtures: final,
+        fixtures: active,
         active,
         unresolved,
         conflicts,
@@ -1021,7 +1023,7 @@ export default function MatchdayPage({
           <MatchdayTimelineCard
             title={`${day} Timeline`}
             subtitle={`Pitch usage and kick-off flow for ${day.toLowerCase()} fixtures.`}
-            games={final}
+            games={active}
             pitchCfg={props.pitchCfg}
             closedPitches={props.closedPitches}
             club={clubWithTiming}
@@ -1106,7 +1108,7 @@ export default function MatchdayPage({
             day={day}
             satHasRun={hasRun}
             satActive={active}
-            satFinal={final}
+            satFinal={active}
             satOverrides={overrides}
           />
         ),

@@ -1,4 +1,4 @@
-import { tenantGetJson, tenantSetJson } from "../storage/tenantStorage.js";
+import { tenantSetJson } from "../storage/tenantStorage.js";
 
 const WEEKEND_STORAGE_KEY = "matchWeekend";
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -81,27 +81,10 @@ export function getCurrentMatchWeekend(now = new Date()) {
 }
 
 export function getInitialMatchWeekend(now = new Date()) {
-  const current = getCurrentMatchWeekend(now);
-  if (typeof window === "undefined") return current;
-
-  try {
-    const saved = tenantGetJson(WEEKEND_STORAGE_KEY, null);
-    const savedSaturday = parseLocalDate(saved?.saturday);
-    const savedSunday = parseLocalDate(saved?.sunday);
-    const today = startOfLocalDay(now);
-
-    if (!savedSaturday || !savedSunday || !today) return current;
-
-    // Never reopen the app on a completed weekend. Future selected weekends remain selected.
-    if (savedSunday < today) return current;
-
-    return {
-      saturday: toDateInputValue(savedSaturday),
-      sunday: toDateInputValue(savedSunday),
-    };
-  } catch (error) {
-    return current;
-  }
+  // A new authenticated app session always starts at the operational weekend.
+  // Explicit date navigation remains available and is persisted only within the
+  // running session, so an old/future inspection cannot strand the next login.
+  return getCurrentMatchWeekend(now);
 }
 
 export function persistMatchWeekend(weekend) {
@@ -113,7 +96,7 @@ export function persistMatchWeekend(weekend) {
       saturday: weekend.saturday,
       sunday: weekend.sunday,
     });
-  } catch (error) {
+  } catch {
     // Calendar persistence is a convenience only.
   }
 }

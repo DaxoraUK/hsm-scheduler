@@ -322,7 +322,7 @@ function bookingInterval(booking = {}, { buffered = false } = {}) {
   return { start, end };
 }
 
-export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], resources = [], ignoreId = "" } = {}) {
+export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], resources = [], ignoreId = "", ignoreSourceId = "" } = {}) {
   const normalised = normaliseAnnualBooking(candidate);
   const interval = bookingInterval(normalised);
   const facilityInterval = bookingInterval(normalised, { buffered: true });
@@ -333,7 +333,9 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
   const conflicts = [];
   const activeBookings = [...bookings, ...matchdayBookings]
     .map(normaliseAnnualBooking)
-    .filter((booking) => booking.id !== ignoreId && activeBooking(booking));
+    .filter((booking) => booking.id !== ignoreId
+      && (!ignoreSourceId || booking.sourceId !== ignoreSourceId)
+      && activeBooking(booking));
 
   const overlapping = activeBookings.filter((booking) => {
     const existing = bookingInterval(booking, { buffered: true });

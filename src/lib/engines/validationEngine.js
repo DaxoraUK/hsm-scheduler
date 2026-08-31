@@ -11,7 +11,11 @@ export function normaliseStatus(value = "") {
 
 export function isFixtureActive(fixture = {}) {
   const status = normaliseStatus(fixture.status || "active");
-  return status !== "postponed" && status !== "cancelled";
+  return status !== "postponed"
+    && status !== "cancelled"
+    && status !== "away"
+    && fixture.isAwayFixture !== true
+    && fixture.requiresScheduling !== false;
 }
 
 export function timeToMinutes(time) {

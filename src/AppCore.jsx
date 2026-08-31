@@ -73,6 +73,8 @@ import { cleanName, scheduleSat, scheduleSun } from "./lib/scheduler.js";
 import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
+import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
+import { partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -286,6 +288,7 @@ function App() {
   const [matchWeekend, setMatchWeekend] = useState(() =>
     getInitialMatchWeekend(),
   );
+  const matchWeekendSessionRef = useRef("");
   const satDate = matchWeekend.saturday;
   const sunDate = matchWeekend.sunday;
   const [midweekDateState, setMidweekDateState] = useState(() =>
@@ -452,6 +455,17 @@ function App() {
   const [workspaceSecurityError, setWorkspaceSecurityError] = useState("");
   const closureSyncRef = useRef({ clubId: "", snapshot: "" });
 
+  useEffect(() => {
+    const userId = String(authSession?.user?.id || "");
+    if (!userId) {
+      matchWeekendSessionRef.current = "";
+      return;
+    }
+    if (matchWeekendSessionRef.current === userId) return;
+    matchWeekendSessionRef.current = userId;
+    setMatchWeekend(getCurrentMatchWeekend());
+  }, [authSession?.user?.id]);
+
   const reportSyncSuccess = useCallback(() => {
     retrySyncRef.current = null;
     setSyncRetryAvailable(false);
@@ -505,10 +519,17 @@ function App() {
     });
   }, []);
 
+  const handleInactivityWarning = useCallback(() => {
+    toast.warning("Still working?", {
+      description: "For security, you will be signed out in 5 minutes unless you continue using Ground Control.",
+    });
+  }, []);
+
   const { status: sessionStatus } = useSessionLifecycle({
     session: authSession,
     onSession: setAuthSession,
     onExpired: handleSessionExpired,
+    onInactivityWarning: handleInactivityWarning,
   });
 
   const {
@@ -1731,8 +1752,9 @@ function App() {
       if (!requirePlanCompliance()) return false;
       setSatOverrides({});
       const all = [...baseFx, ...satManual];
+      const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
-        all,
+        fixtureFlow.home,
         useAstro,
         satClosedPitches,
         teamCfg,
@@ -1742,7 +1764,7 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSatScheduled(s);
+      setSatScheduled([...s, ...fixtureFlow.away]);
       setSatUnresolved(u);
       setSatHasRun(true);
       return true;
@@ -1811,8 +1833,9 @@ function App() {
       if (!requirePlanCompliance()) return false;
       setSunOverrides({});
       const all = [...baseFx, ...sunManual];
+      const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSun(
-        all,
+        fixtureFlow.home,
         useAstro,
         sunClosedPitches,
         teamCfg,
@@ -1822,7 +1845,7 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSunScheduled(s);
+      setSunScheduled([...s, ...fixtureFlow.away]);
       setSunUnresolved(u);
       setSunHasRun(true);
       return true;
@@ -1879,8 +1902,9 @@ function App() {
       if (!requirePlanCompliance()) return false;
       setMidweekOverrides({});
       const all = [...baseFx, ...midweekManual];
+      const fixtureFlow = partitionFixturesForScheduling(all);
       const { scheduled: s, unresolved: u } = scheduleSat(
-        all,
+        fixtureFlow.home,
         useAstro,
         midweekClosedPitches,
         teamCfg,
@@ -1891,7 +1915,7 @@ function App() {
         club.maxConcurrent || 3,
         { fixedAdultKickOffMins: null },
       );
-      setMidweekScheduled(s);
+      setMidweekScheduled([...s, ...fixtureFlow.away]);
       setMidweekUnresolved(u);
       setMidweekHasRun(true);
       return true;
@@ -2599,20 +2623,7 @@ function App() {
       >
         <style
           dangerouslySetInnerHTML={{
-            __html: `
-         @media print {
-           .np { display: none !important; }
-           body[data-print-target="reports"] * { visibility: hidden !important; }
-           body[data-print-target="reports"] #ground-control-report-print,
-           body[data-print-target="reports"] #ground-control-report-print * { visibility: visible !important; }
-           body[data-print-target="reports"] #ground-control-report-print {
-             position: absolute;
-             inset: 0;
-             width: 100%;
-           }
-           @page { size: A4 landscape; margin: 12mm; }
-         }
-       `,
+            __html: REPORT_PRINT_STYLES,
           }}
         />
 

@@ -26,7 +26,7 @@ describe("FA Full-Time fixture parsing", () => {
     expect(isHSMHome("Another Club")).toBe(false);
   });
 
-  test("returns only home fixtures on the requested date", () => {
+  test("returns home and away club fixtures on the requested date", () => {
     const html = `
       <table>
         <tr><td>03/07/2026</td><td>10:00</td><td>Horwich St Mary's U14 Spartans</td><td>-</td><td>Visitors A</td></tr>
@@ -37,12 +37,21 @@ describe("FA Full-Time fixture parsing", () => {
 
     const fixtures = parseFullTimeHtml(html, "2026-07-03");
 
-    expect(fixtures).toHaveLength(1);
+    expect(fixtures).toHaveLength(2);
     expect(fixtures[0]).toMatchObject({
       homeTeam: "Horwich St Mary's U14 Spartans",
       awayTeam: "Visitors A",
       status: "active",
       refStatus: "TBC",
+      venueRole: "home",
+      requiresScheduling: true,
+    });
+    expect(fixtures[1]).toMatchObject({
+      homeTeam: "Another Club",
+      awayTeam: "Horwich St Mary's U15",
+      venueRole: "away",
+      isAwayFixture: true,
+      requiresScheduling: false,
     });
   });
 

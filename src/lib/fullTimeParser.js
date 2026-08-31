@@ -37,6 +37,10 @@ export function isHSMHome(teamName, clubAliases = DEFAULT_CLUB_ALIASES) {
   return aliases(clubAliases).some((keyword) => candidate.includes(keyword));
 }
 
+export function isClubFixture(fixture = {}, clubAliases = DEFAULT_CLUB_ALIASES) {
+  return isHSMHome(fixture.homeTeam, clubAliases) || isHSMHome(fixture.awayTeam, clubAliases);
+}
+
 export function parseFullTimeDate(value) {
   const text = clean(value);
   const match = text.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
@@ -120,7 +124,9 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         return;
       }
       const parsed = rowFixture(cells, groupedDate, columns);
-      if (!parsed || (target && parsed.date !== target) || !isHSMHome(parsed.homeTeam, clubAliases)) return;
+      if (!parsed || (target && parsed.date !== target) || !isClubFixture(parsed, clubAliases)) return;
+
+      const isHomeFixture = isHSMHome(parsed.homeTeam, clubAliases);
 
       const fixture = {
         ...parsed,
@@ -132,6 +138,10 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         sourceName: options.sourceName || "Full-Time FA",
         sourceUrl: options.sourceUrl || "",
         sourceFixtureUrl: fullTimeFixtureUrl(row),
+        venueRole: isHomeFixture ? "home" : "away",
+        isAwayFixture: !isHomeFixture,
+        requiresScheduling: isHomeFixture,
+        clubTeamName: isHomeFixture ? parsed.homeTeam : parsed.awayTeam,
       };
       fixture.sourceFixtureKey = getFullTimeFixtureKey(fixture);
       out.push(fixture);
