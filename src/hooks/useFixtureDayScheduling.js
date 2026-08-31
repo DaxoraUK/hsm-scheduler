@@ -59,7 +59,7 @@ export function useFixtureDayScheduling({
   const active = useMemo(
     () =>
       final.filter(
-        (game) => game.status !== "postponed" && game.status !== "cancelled"
+        (game) => game.status !== "postponed" && game.status !== "cancelled" && game.status !== "away" && !game.isAwayFixture
       ),
     [final]
   );
@@ -75,6 +75,8 @@ export function useFixtureDayScheduling({
         (game) =>
           game.status !== "postponed" &&
           game.status !== "cancelled" &&
+          game.status !== "away" &&
+          !game.isAwayFixture &&
           !isFixtureOfficialConfirmed(game)
       ).length,
     [final]

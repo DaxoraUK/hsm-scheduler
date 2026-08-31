@@ -322,7 +322,7 @@ function bookingInterval(booking = {}, { buffered = false } = {}) {
   return { start, end };
 }
 
-export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], resources = [], ignoreId = "" } = {}) {
+export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], blackouts = [], matchdayBookings = [], pitches = [], resources = [], ignoreId = "", ignoreSourceId = "" } = {}) {
   const normalised = normaliseAnnualBooking(candidate);
   const interval = bookingInterval(normalised);
   const facilityInterval = bookingInterval(normalised, { buffered: true });
@@ -333,7 +333,9 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
   const conflicts = [];
   const activeBookings = [...bookings, ...matchdayBookings]
     .map(normaliseAnnualBooking)
-    .filter((booking) => booking.id !== ignoreId && activeBooking(booking));
+    .filter((booking) => booking.id !== ignoreId
+      && (!ignoreSourceId || booking.sourceId !== ignoreSourceId)
+      && activeBooking(booking));
 
   const overlapping = activeBookings.filter((booking) => {
     const existing = bookingInterval(booking, { buffered: true });
@@ -468,6 +470,13 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
   return conflicts;
 }
 
+export function getMatchdayFixtureSourceId(fixture = {}, { date = "" } = {}) {
+  const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
+  const startMinutes = finite(fixture.koMins, timeToMinutes(fixture.koTime || fixture.ko || fixture.kickOff || "09:00"));
+  return clean(fixture.id || fixture.fixtureId || fixture.sourceFixtureKey || fixture.fullTimeId
+    || `${dateKey}_${fixture.pitchId}_${startMinutes}_${fixture.homeTeam || fixture.team || "home"}`);
+}
+
 export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchCfg = [], sourceType = "matchday" } = {}) {
   const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
   if (!dateKey) return null;
@@ -479,7 +488,7 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
   const endAt = localDateTime(dateKey, `${pad(Math.floor(endMinutes / 60) % 24)}:${pad(endMinutes % 60)}`);
   if (!startAt || !endAt) return null;
   if (endMinutes >= 24 * 60) endAt.setDate(endAt.getDate() + 1);
-  const stableSourceId = clean(fixture.id || fixture.fixtureId || `${dateKey}_${fixture.pitchId}_${startMinutes}_${fixture.homeTeam || fixture.team || "home"}`);
+  const stableSourceId = getMatchdayFixtureSourceId(fixture, { date: dateKey });
   return normaliseAnnualBooking({
     id: `matchday_${stableSourceId}`,
     title: `${fixture.homeTeam || fixture.team || "Home"} vs ${fixture.awayTeam || "TBC"}`,

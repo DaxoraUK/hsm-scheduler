@@ -54,7 +54,9 @@ function buildExceptions(evidence) {
         detail:
           row.status === "unresolved"
             ? "No validated pitch and kick-off allocation is currently recorded."
-            : `${row.statusLabel} fixture retained in the operational record.`,
+            : row.status === "postponed" && row.postponementReasonLabel
+              ? `${row.postponementReasonLabel}${row.postponementNote ? ` — ${row.postponementNote}` : ""}. Original allocation retained in the operational record.`
+              : `${row.statusLabel} fixture retained in the operational record.`,
       });
     }
 
@@ -249,6 +251,7 @@ export function buildReportsModel({
     evidence,
     fixtures: evidence.rows,
     activeFixtures: evidence.delivered,
+    awayFixtures: evidence.away,
     pitchRows: evidence.pitchStats,
     teamRows: evidence.teamStats,
     formatRows: evidence.formatStats,

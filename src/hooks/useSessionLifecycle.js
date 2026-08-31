@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Auth } from "../lib/supabase.js";
 import { getSessionRefreshDelay } from "../lib/errors/recovery.js";
+import {
+  INACTIVITY_ACTIVITY_KEY,
+  INACTIVITY_WARNING_MS,
+  INACTIVITY_LOGOUT_MS,
+  parseActivity,
+  serialiseActivity,
+} from "../lib/security/inactivityPolicy.js";
 
 const REFRESH_BUFFER_MS = 2 * 60 * 1000;
 const FALLBACK_CHECK_MS = 60 * 1000;
@@ -10,10 +17,14 @@ function sessionExpiryMs(session) {
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
 }
 
-export function useSessionLifecycle({ session, onSession, onExpired }) {
+export function useSessionLifecycle({ session, onSession, onExpired, onInactivityWarning }) {
   const [status, setStatus] = useState(session?.access_token ? "active" : "signed-out");
   const timerRef = useRef(null);
   const refreshingRef = useRef(false);
+  const inactivityTimersRef = useRef({ warning: null, logout: null });
+  const lastActivityWriteRef = useRef(0);
+  const warningShownRef = useRef(false);
+  const wasAuthenticatedRef = useRef(Boolean(session?.access_token));
 
   const expire = useCallback((message = "Your secure session has expired. Sign in again to continue.") => {
     Auth.clearSession();
@@ -110,6 +121,64 @@ export function useSessionLifecycle({ session, onSession, onExpired }) {
       document.removeEventListener("visibilitychange", verifyVisibleSession);
     };
   }, [expire, onSession, refresh, session]);
+
+  useEffect(() => {
+    if (!session?.access_token || typeof window === "undefined") {
+      wasAuthenticatedRef.current = false;
+      return undefined;
+    }
+    const userId = String(session?.user?.id || "");
+    const freshLogin = !wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = true;
+    const activityEvents = ["pointerdown", "keydown", "touchstart", "scroll"];
+
+    const clearTimers = () => {
+      window.clearTimeout(inactivityTimersRef.current.warning);
+      window.clearTimeout(inactivityTimersRef.current.logout);
+    };
+    const scheduleInactivity = (lastActivityAt = Date.now()) => {
+      clearTimers();
+      warningShownRef.current = false;
+      const elapsed = Math.max(0, Date.now() - lastActivityAt);
+      inactivityTimersRef.current.warning = window.setTimeout(() => {
+        if (warningShownRef.current) return;
+        warningShownRef.current = true;
+        onInactivityWarning?.(INACTIVITY_LOGOUT_MS - INACTIVITY_WARNING_MS);
+      }, Math.max(0, INACTIVITY_WARNING_MS - elapsed));
+      inactivityTimersRef.current.logout = window.setTimeout(() => {
+        expire("You were signed out after 30 minutes without activity.");
+      }, Math.max(0, INACTIVITY_LOGOUT_MS - elapsed));
+    };
+    const recordActivity = () => {
+      const now = Date.now();
+      scheduleInactivity(now);
+      if (now - lastActivityWriteRef.current < 1000) return;
+      lastActivityWriteRef.current = now;
+      try { window.localStorage.setItem(INACTIVITY_ACTIVITY_KEY, serialiseActivity(userId, now)); } catch { /* optional cross-tab sync */ }
+    };
+    const syncActivity = (event) => {
+      if (event.key !== INACTIVITY_ACTIVITY_KEY) return;
+      const recordedAt = parseActivity(event.newValue, userId);
+      if (recordedAt != null) scheduleInactivity(recordedAt);
+    };
+
+    let initialActivityAt = Date.now();
+    if (!freshLogin) {
+      try {
+        initialActivityAt = parseActivity(window.localStorage.getItem(INACTIVITY_ACTIVITY_KEY), userId) ?? initialActivityAt;
+      } catch { /* storage is optional */ }
+    } else {
+      try { window.localStorage.setItem(INACTIVITY_ACTIVITY_KEY, serialiseActivity(userId, initialActivityAt)); } catch { /* storage is optional */ }
+    }
+    scheduleInactivity(initialActivityAt);
+    activityEvents.forEach((event) => window.addEventListener(event, recordActivity, { passive: true }));
+    window.addEventListener("storage", syncActivity);
+    return () => {
+      clearTimers();
+      activityEvents.forEach((event) => window.removeEventListener(event, recordActivity));
+      window.removeEventListener("storage", syncActivity);
+    };
+  }, [expire, onInactivityWarning, session?.access_token, session?.user?.id]);
 
   return { status, refresh };
 }

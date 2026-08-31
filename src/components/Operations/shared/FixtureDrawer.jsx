@@ -28,6 +28,12 @@ import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.j
 import StatusChip from "@/ui/StatusChip.jsx";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
 import { toast } from "../../../lib/notifications/daxoraNotifications.js";
+import {
+  POSTPONEMENT_REASONS,
+  postponeFixture,
+  restoreFixture,
+} from "../../../lib/domain/fixtureLifecycle.js";
+import { reverseAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
 
 const PARKING_ADVISORY_TYPES = new Set([
   "parking_capacity",
@@ -46,6 +52,7 @@ export default function FixtureDrawer({
   pitchCfg = [],
   closedPitches = [],
   onOverride,
+  operatorIdentity = "",
   readOnly = false,
   onClose,
 }) {
@@ -148,6 +155,50 @@ export default function FixtureDrawer({
   const updateFixture = (field, value) => {
     const patch = buildPatch(field, value);
     updateFixturePatch(patch);
+  };
+
+  const updateFixtureStatus = (status) => {
+    if (status === "postponed") {
+      const postponed = postponeFixture(displayFixture, {
+        reason: displayFixture.postponement?.reason || "weather",
+        note: displayFixture.postponement?.note || "",
+        actor: operatorIdentity,
+      });
+      applyFixturePatch({ status: postponed.status, postponement: postponed.postponement });
+      return;
+    }
+    if (status === "active" && displayFixture.status === "postponed") {
+      const restored = restoreFixture(displayFixture, { actor: operatorIdentity });
+      applyFixturePatch({
+        status: restored.status,
+        date: restored.date,
+        pitchId: restored.pitchId,
+        pitchLabel: restored.pitchLabel,
+        koMins: restored.koMins,
+        koTime: restored.koTime,
+        postponement: restored.postponement,
+      });
+      return;
+    }
+    updateFixture("status", status);
+  };
+
+  const reverseToHome = () => {
+    const reversed = reverseAwayFixture(displayFixture, { actor: operatorIdentity });
+    applyFixturePatch({
+      homeTeam: reversed.homeTeam,
+      awayTeam: reversed.awayTeam,
+      status: reversed.status,
+      venueRole: reversed.venueRole,
+      isAwayFixture: reversed.isAwayFixture,
+      requiresScheduling: reversed.requiresScheduling,
+      pitchId: reversed.pitchId,
+      pitchLabel: reversed.pitchLabel,
+      venueReversal: reversed.venueReversal,
+    });
+    toast.success("Fixture reversed to home", {
+      description: "It is now part of the home schedule. Choose and validate its pitch and kick-off allocation.",
+    });
   };
 
   const assignOfficial = (rawValue) => {
@@ -303,6 +354,7 @@ Good luck!`;
 
               {fixture.isCup && <StatusChip variant="warning">Cup</StatusChip>}
               {fixture.manual && <StatusChip variant="info">Manual</StatusChip>}
+              {displayFixture.isAwayFixture && <StatusChip variant="info">Away fixture</StatusChip>}
             </div>
           </div>
 
@@ -328,6 +380,17 @@ Good luck!`;
         </div>
 
         <div className="space-y-6 p-6">
+          {displayFixture.isAwayFixture ? (
+            <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 text-sky-950">
+              <div className="text-sm font-black">Away fixture — no club pitch allocation required</div>
+              <p className="mt-1 text-sm font-semibold text-sky-800">This stays in the complete fixture list but is excluded from pitch, parking and officials scheduling.</p>
+              {canEdit ? (
+                <button type="button" onClick={reverseToHome} className="mt-4 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white">
+                  Reverse to home
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {activeTab === "overview" && (
             <>
               <DrawerSection
@@ -438,12 +501,11 @@ Good luck!`;
                     {canEdit ? (
                       <select
                         value={displayFixture.status || "active"}
-                        onChange={(e) =>
-                          updateFixture("status", e.target.value)
-                        }
+                        onChange={(e) => updateFixtureStatus(e.target.value)}
                         className="control-input"
                       >
                         <option value="active">Active</option>
+                        {displayFixture.isAwayFixture ? <option value="away">Away fixture</option> : null}
                         <option value="postponed">Postponed</option>
                         <option value="cancelled">Cancelled</option>
                       </select>
@@ -453,6 +515,40 @@ Good luck!`;
                       />
                     )}
                   </ControlRow>
+
+                  {displayFixture.status === "postponed" ? (
+                    <ControlRow icon={AlertTriangle} label="Postponement record">
+                      {canEdit ? (
+                        <div className="grid gap-2">
+                          <select
+                            value={displayFixture.postponement?.reason || "weather"}
+                            onChange={(event) => applyFixturePatch({
+                              postponement: {
+                                ...(displayFixture.postponement || {}),
+                                reason: event.target.value,
+                                reasonLabel: POSTPONEMENT_REASONS[event.target.value],
+                              },
+                            })}
+                            className="control-input"
+                          >
+                            {Object.entries(POSTPONEMENT_REASONS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                          <input
+                            value={displayFixture.postponement?.note || ""}
+                            onChange={(event) => applyFixturePatch({
+                              postponement: { ...(displayFixture.postponement || {}), note: event.target.value },
+                            })}
+                            className="control-input"
+                            placeholder="Optional postponement note"
+                          />
+                        </div>
+                      ) : (
+                        <ReadOnlyValue value={displayFixture.postponement?.reasonLabel || "Postponed"} />
+                      )}
+                    </ControlRow>
+                  ) : null}
 
                   <ControlRow icon={Clock} label="Kick off">
                     {canEdit ? (

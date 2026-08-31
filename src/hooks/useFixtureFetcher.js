@@ -115,8 +115,8 @@ async function fetchLeagueFixtures(source) {
 }
 
 function isSundayTeam(fixture = {}) {
-  const homeTeam = clean(fixture.homeTeam).toLowerCase();
-  return SUN_TEAMS.some((keyword) => homeTeam.includes(keyword));
+  const clubTeam = clean(fixture.clubTeamName || fixture.homeTeam).toLowerCase();
+  return SUN_TEAMS.some((keyword) => clubTeam.includes(keyword));
 }
 
 export function useFixtureFetcher(fixtureSourceConfig = {}) {

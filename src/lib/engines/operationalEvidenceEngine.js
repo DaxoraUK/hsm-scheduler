@@ -5,7 +5,7 @@ import { getParkingCapacity, getPrimarySite } from "../domain/clubDomain.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
 
 const DAY_ORDER = ["midweek", "saturday", "sunday"];
-const STATUS_RANK = { delivered: 1, unresolved: 2, postponed: 3, cancelled: 4 };
+const STATUS_RANK = { delivered: 1, away: 1, unresolved: 2, postponed: 3, cancelled: 4 };
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -135,6 +135,7 @@ function fixtureStatus(fixture = {}, forcedStatus = "") {
   const value = normaliseText(fixture.status || fixture.fixtureStatus || fixture.outcome);
   if (value.includes("cancel")) return "cancelled";
   if (value.includes("postpone")) return "postponed";
+  if (value === "away" || fixture.isAwayFixture) return "away";
   if (value.includes("unresolved") || value.includes("unassigned")) return "unresolved";
   return "delivered";
 }
@@ -241,6 +242,8 @@ function normaliseFixture({ fixture = {}, status = "", day = {}, entry = {}, clu
         : resolvedStatus.charAt(0).toUpperCase() + resolvedStatus.slice(1),
     homeTeam,
     awayTeam,
+    clubTeamName: String(fixture.clubTeamName || (fixture.isAwayFixture ? awayTeam : homeTeam)).trim(),
+    isAwayFixture: Boolean(fixture.isAwayFixture || resolvedStatus === "away"),
     fixtureLabel: awayTeam ? `${homeTeam} vs ${awayTeam}` : homeTeam,
     format,
     pitchId,
@@ -258,6 +261,9 @@ function normaliseFixture({ fixture = {}, status = "", day = {}, entry = {}, clu
     officialConfirmed: Boolean(referee) && refStatus === "confirmed",
     estimatedCars,
     weatherRisk: weatherRisk(fixture),
+    postponementReason: String(fixture.postponement?.reason || fixture.postponementReason || "").trim(),
+    postponementReasonLabel: String(fixture.postponement?.reasonLabel || fixture.postponementReasonLabel || "").trim(),
+    postponementNote: String(fixture.postponement?.note || fixture.postponementNote || "").trim(),
     isCup: Boolean(fixture.isCup || fixture.cup || fixture.competitionType === "cup"),
     siteId: fixture.siteId || fixture.venueId || fixture.groundId || club.primarySiteId || "primary",
   };
@@ -519,7 +525,7 @@ function buildWeekly(entries, entryDays, club, pitchCfg) {
   return entries.map((entry) => {
     const days = entryDays.get(entry.id) || [];
     const rows = days.flatMap((day) => day.rows);
-    const outcomes = rows.filter((row) => row.status !== "unresolved");
+    const outcomes = rows.filter((row) => ["delivered", "postponed", "cancelled"].includes(row.status));
     const delivered = rows.filter((row) => row.status === "delivered");
     const postponed = rows.filter((row) => row.status === "postponed");
     const cancelled = rows.filter((row) => row.status === "cancelled");
@@ -591,15 +597,17 @@ export function buildOperationalEvidence({
     (entryDays.get(entry.id) || []).flatMap((day) => day.rows)
   );
   const rows = applyFixtureFilters(unfilteredRows, filters);
-  const outcomes = rows.filter((row) => row.status !== "unresolved");
+  const operationalRows = rows.filter((row) => row.status !== "away");
+  const outcomes = operationalRows.filter((row) => row.status !== "unresolved");
   const delivered = rows.filter((row) => row.status === "delivered");
+  const away = rows.filter((row) => row.status === "away");
   const postponed = rows.filter((row) => row.status === "postponed");
   const cancelled = rows.filter((row) => row.status === "cancelled");
   const unresolved = rows.filter((row) => row.status === "unresolved");
   const weekly = buildWeekly(entries, entryDays, club, pitchCfg).map((week) => {
     const filteredWeekRows = applyFixtureFilters(week.rows, filters);
     if (filteredWeekRows.length === week.rows.length) return week;
-    const filteredOutcomes = filteredWeekRows.filter((row) => row.status !== "unresolved");
+    const filteredOutcomes = filteredWeekRows.filter((row) => ["delivered", "postponed", "cancelled"].includes(row.status));
     const filteredDelivered = filteredWeekRows.filter((row) => row.status === "delivered");
     const filteredPostponed = filteredWeekRows.filter((row) => row.status === "postponed");
     const filteredCancelled = filteredWeekRows.filter((row) => row.status === "cancelled");
@@ -640,17 +648,17 @@ export function buildOperationalEvidence({
       matchdays: new Set(),
     },
   }));
-  const pitchStats = groupStats(rows, (row) => row.pitchId || "unassigned", pitchSeed)
+  const pitchStats = groupStats(operationalRows, (row) => row.pitchId || "unassigned", pitchSeed)
     .map((item) => ({
       ...item,
       pitchId: item.pitchId || item.key,
       label: item.label || (item.key === "unassigned" ? "Unassigned" : item.key),
-      share: rows.length ? Math.round((item.total / rows.length) * 100) : 0,
+      share: operationalRows.length ? Math.round((item.total / operationalRows.length) * 100) : 0,
     }))
     .filter((item) => item.total > 0 || (item.pitchId !== "unassigned" && asArray(pitchCfg).length > 0))
     .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
 
-  const teamStats = groupStats(rows, (row) => normaliseText(row.homeTeam))
+  const teamStats = groupStats(operationalRows, (row) => normaliseText(row.homeTeam))
     .map((item) => ({
       ...item,
       teamKey: item.key,
@@ -658,7 +666,7 @@ export function buildOperationalEvidence({
     }))
     .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
 
-  const formatStats = groupStats(rows, (row) => row.format)
+  const formatStats = groupStats(operationalRows, (row) => row.format)
     .map((item) => ({ ...item, format: item.key, label: item.key }))
     .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
 
@@ -733,6 +741,7 @@ export function buildOperationalEvidence({
     rows,
     outcomes,
     delivered,
+    away,
     scheduled: delivered,
     postponed,
     cancelled,
@@ -749,6 +758,7 @@ export function buildOperationalEvidence({
       total: outcomes.length,
       totalWithUnresolved: rows.length,
       delivered: delivered.length,
+      away: away.length,
       scheduled: delivered.length,
       postponed: postponed.length,
       cancelled: cancelled.length,

@@ -156,7 +156,7 @@ function OperationsPack({ model, club }) {
 }
 
 function FixtureReport({ model }) {
-  return <Table columns={[{ key: "dayLabel", label: "Day" }, { key: "dateLabel", label: "Date" }, ...fixtureColumns]} rows={model.fixtures} />;
+  return <Table columns={[{ key: "dayLabel", label: "Day" }, { key: "dateLabel", label: "Date" }, ...fixtureColumns]} rows={model.activeFixtures} />;
 }
 
 function PitchReport({ model }) {

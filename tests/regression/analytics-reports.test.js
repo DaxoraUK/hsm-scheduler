@@ -7,6 +7,7 @@ import { buildAnalyticsVisualisationModel } from "../../src/lib/engines/analytic
 import { buildReportsModel } from "../../src/lib/reports/reportingEngine.js";
 import { buildReportCsv, escapeCsv } from "../../src/lib/reports/csvExport.js";
 import { captureWeatherSnapshots } from "../../src/hooks/useWeekPersistence.js";
+import { REPORT_PRINT_STYLES } from "../../src/lib/reports/printLayout.js";
 import { clonePitches, makeClub, makeFixture } from "./fixtures.js";
 
 function savedEntry({
@@ -180,6 +181,30 @@ describe("analytics and reports v1", () => {
 
     expect(csv).toContain('"HSM, ""First"""');
     expect(csv.split("\r\n")).toHaveLength(2);
+  });
+
+  test("fixture allocation print keeps every active fixture and uses a paginating layout", () => {
+    const fixtures = Array.from({ length: 8 }, (_, index) => makeFixture({
+      id: `fixture-${index + 1}`,
+      homeTeam: `Team ${index + 1}`,
+      koMins: 540 + index * 30,
+    }));
+    const model = buildReportsModel({
+      reportType: "fixtures",
+      scope: "saturday",
+      current: {
+        satFinal: [...fixtures, makeFixture({ id: "postponed", status: "postponed" })],
+        satHasRun: true,
+        satDate: "2026-09-05",
+        midweekEnabled: false,
+      },
+      club: makeClub(),
+      pitchCfg: clonePitches(),
+    });
+
+    expect(model.activeFixtures).toHaveLength(8);
+    expect(REPORT_PRINT_STYLES).toContain("position: static");
+    expect(REPORT_PRINT_STYLES).not.toContain("position: absolute");
   });
 
   test("publishing captures fixture weather exposure but never blocks a save when unavailable", async () => {

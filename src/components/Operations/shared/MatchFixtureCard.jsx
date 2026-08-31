@@ -35,7 +35,8 @@ export default function MatchFixtureCard({
 
   const isPostponed = fixture.status === "postponed";
   const isCancelled = fixture.status === "cancelled";
-  const isInactive = isPostponed || isCancelled;
+  const isAway = fixture.status === "away" || fixture.isAwayFixture;
+  const isInactive = isPostponed || isCancelled || isAway;
 
   const cardTone = isInactive
     ? "border-slate-200 bg-slate-50 opacity-75"
@@ -54,7 +55,7 @@ export default function MatchFixtureCard({
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusChip
               variant={
-                isPostponed || isCancelled
+                isPostponed || isCancelled || isAway
                   ? "neutral"
                   : fixtureHealth.score >= 75
                   ? "success"
@@ -65,6 +66,8 @@ export default function MatchFixtureCard({
                 ? "Postponed"
                 : isCancelled
                 ? "Cancelled"
+                : isAway
+                ? "Away — no pitch required"
                 : "Scheduled"}
             </StatusChip>
 
