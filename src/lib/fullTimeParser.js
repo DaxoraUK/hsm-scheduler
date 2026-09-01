@@ -91,6 +91,10 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
 
 export function getFullTimeFixtureKey(fixture = {}) {
   if (fixture.sourceFixtureUrl) return `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}`;
+  if (fixture.sourceRowIndex != null && String(fixture.sourceRowIndex).trim()) {
+    const source = String(fixture.sourceId || fixture.sourceName || "full-time").trim().toLowerCase();
+    return `row:${source}:${String(fixture.sourceRowIndex).trim()}`;
+  }
   return [fixture.date, normalise(fixture.homeTeam), normalise(fixture.awayTeam), fixture.kickOff].join("|");
 }
 
@@ -110,14 +114,14 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
   const clubAliases = options.clubAliases || options.teamAliases || DEFAULT_CLUB_ALIASES;
   const out = [];
 
-  doc.querySelectorAll("table").forEach((table) => {
+  doc.querySelectorAll("table").forEach((table, tableIndex) => {
     let groupedDate = "";
     const headers = [...table.querySelectorAll("tr th")].map((cell) => clean(cell.textContent).toLowerCase());
     const columns = {
       venueIndex: headers.findIndex((header) => /venue|ground/.test(header)),
       refereeIndex: headers.findIndex((header) => /referee|match official|official/.test(header)),
     };
-    table.querySelectorAll("tr").forEach((row) => {
+    table.querySelectorAll("tr").forEach((row, rowIndex) => {
       const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
       const rowText = clean(row.textContent);
       if (cells.length <= 1 && parseFullTimeDate(rowText)) {
@@ -139,6 +143,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         sourceName: options.sourceName || "Full-Time FA",
         sourceUrl: options.sourceUrl || "",
         sourceFixtureUrl: fullTimeFixtureUrl(row),
+        sourceRowIndex: `${tableIndex}:${rowIndex}`,
         venueRole: isHomeFixture ? "home" : "away",
         isAwayFixture: !isHomeFixture,
         requiresScheduling: isHomeFixture,

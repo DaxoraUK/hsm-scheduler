@@ -9,9 +9,86 @@ import {
   LANCASHIRE_AMATEUR_FIXTURE_FEEDS,
   normaliseFullTimeFeedId,
 } from "../../src/lib/fullTimeFeed.js";
-import { applyFixtureOverrides } from "../../src/lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, partitionFixturesForScheduling } from "../../src/lib/domain/fixtureVenueFlow.js";
+import { scheduleSat } from "../../src/lib/scheduler.js";
+import { PITCHES, TEAM_CONFIG_DEFAULT } from "../../src/lib/constants.js";
 
 describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () => {
+  test("keeps Cobras, Avengers and Knights on one canonical source identity when Full-Time changes KO without a fixture URL", () => {
+    const options = { sourceId: "bolton-youth-league", teamAliases: ["Horwich St. Mary's"] };
+    const sourceHtml = (times) => `<table><tbody>
+      <tr><td colspan="5">Sat 05 Sept 2026</td></tr>
+      <tr><td></td><td>Horwich St. Mary's U10 Cobras</td><td>v</td><td>Hindley Town U10 Valkyries</td><td>${times[0]}</td></tr>
+      <tr><td></td><td>Horwich St. Mary's U10 Avengers</td><td>v</td><td>Turton U10 Turton Tigers</td><td>${times[1]}</td></tr>
+      <tr><td></td><td>Horwich St. Mary's U15 Knights</td><td>v</td><td>AFC Egerton U15 AFC Egerton</td><td>${times[2]}</td></tr>
+    </tbody></table>`;
+
+    const before = parseFullTimeHtml(sourceHtml(["09:00", "09:15", "10:30"]), "2026-09-05", options);
+    const after = parseFullTimeHtml(sourceHtml(["10:00", "10:45", "11:15"]), "2026-09-05", options);
+
+    expect(before).toHaveLength(3);
+    expect(after).toHaveLength(3);
+    expect(after.map((fixture) => fixture.sourceFixtureKey)).toEqual(before.map((fixture) => fixture.sourceFixtureKey));
+
+    const once = reconcileFullTimeFixtureSnapshot([], before, "2026-08-01").snapshot;
+    const refreshed = reconcileFullTimeFixtureSnapshot(once, after, "2026-08-01");
+    const repeated = Array.from({ length: 20 }).reduce(
+      (snapshot) => reconcileFullTimeFixtureSnapshot(snapshot, after, "2026-08-01").snapshot,
+      once,
+    );
+    const flow = partitionFixturesForScheduling(repeated);
+    const scheduled = scheduleSat(
+      flow.home,
+      false,
+      [],
+      TEAM_CONFIG_DEFAULT,
+      { "7v7": 15, "11v11-youth": 15 },
+      8 * 60 + 30,
+      13 * 60,
+      PITCHES,
+      3,
+    );
+
+    expect(refreshed.changes).toHaveLength(3);
+    expect(repeated).toHaveLength(3);
+    expect(new Set(repeated.map((fixture) => fixture.sourceFixtureKey))).toEqual(new Set(before.map((fixture) => fixture.sourceFixtureKey)));
+    expect(flow.home).toHaveLength(3);
+    expect(flow.away).toHaveLength(0);
+    expect(scheduled.scheduled).toHaveLength(3);
+    expect(scheduled.scheduled.map((fixture) => fixture.homeTeam)).toEqual(["U10 Cobras", "U10 Avengers", "U15 Knights"]);
+  });
+
+  test("stops a rebuild with duplicated legacy snapshot rows instead of appending generated fixtures", () => {
+    const namedFixtures = [
+      ["U10 Cobras", "Hindley Town U10 Valkyries", "0:1"],
+      ["U10 Avengers", "Turton U10 Turton Tigers", "0:2"],
+      ["U15 Knights", "AFC Egerton U15 AFC Egerton", "0:3"],
+    ];
+    const legacy = namedFixtures.flatMap(([homeTeam, awayTeam]) => ["09:00", "10:00"].map((kickOff) => ({
+      date: "2026-09-05",
+      homeTeam,
+      awayTeam,
+      kickOff,
+      sourceFixtureKey: `2026-09-05|${homeTeam.toLowerCase()}|${awayTeam.toLowerCase()}|${kickOff}`,
+    })));
+    const incoming = namedFixtures.map(([homeTeam, awayTeam, sourceRowIndex]) => ({
+      date: "2026-09-05",
+      homeTeam,
+      awayTeam,
+      kickOff: "11:15",
+      sourceRowIndex,
+      sourceId: "bolton-youth-league",
+      sourceFixtureKey: `row:bolton-youth-league:${sourceRowIndex}`,
+    }));
+
+    const result = reconcileFullTimeFixtureSnapshot(legacy, incoming, "2026-08-01");
+
+    expect(result.safe).toBe(false);
+    expect(result.snapshot).toHaveLength(6);
+    expect(result.collisions).toHaveLength(3);
+    expect(result.collisions.map((collision) => collision.incoming.homeTeam)).toEqual(["U10 Cobras", "U10 Avengers", "U15 Knights"]);
+  });
+
   test("accepts numeric IDs and official code-snippet URLs only", () => {
     expect(normaliseFullTimeFeedId("694052039")).toBe("694052039");
     expect(normaliseFullTimeFeedId("https://fulltime.thefa.com/js/cs1.html?cs=694052039")).toBe("694052039");

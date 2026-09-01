@@ -12,6 +12,10 @@ function matchupIdentity(fixture = {}) {
   return [clean(fixture.homeTeam).toLowerCase(), clean(fixture.awayTeam).toLowerCase()].join("|");
 }
 
+function fixtureFingerprint(fixture = {}) {
+  return [clean(fixture.date), matchupIdentity(fixture), clean(fixture.type).toLowerCase()].join("|");
+}
+
 function sourceFixtureIdentity(fixture = {}) {
   const value = fixture.sourceFixtureUrl ? `url:${clean(fixture.sourceFixtureUrl).toLowerCase()}` : (fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id);
   return value == null || !clean(value) ? "" : clean(value);
@@ -33,6 +37,7 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
   const retained = previous.filter((fixture) => fixture?.date >= today);
   const ignored = new Set(ignoredKeys);
   const changes = [];
+  const collisions = [];
   const snapshot = retained.slice();
   incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => {
     const sourceIdentity = sourceFixtureIdentity(fixture);
@@ -43,7 +48,15 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
     if (currentIndex < 0) {
       const candidates = snapshot
         .map((candidate, index) => ({ candidate, index }))
-        .filter(({ candidate }) => matchupIdentity(candidate) === matchup);
+        .filter(({ candidate }) => fixtureFingerprint(candidate) === fixtureFingerprint(fixture));
+      if (candidates.length > 1) {
+        collisions.push({
+          fingerprint: fixtureFingerprint(fixture),
+          incoming: fixture,
+          existing: candidates.map(({ candidate }) => candidate),
+        });
+        return;
+      }
       currentIndex = candidates.length === 1 ? candidates[0].index : -1;
     }
     const current = currentIndex >= 0 ? snapshot[currentIndex] : null;
@@ -63,6 +76,8 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
   return {
     snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
     changes,
+    collisions,
+    safe: collisions.length === 0,
   };
 }
 
@@ -158,17 +173,30 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
       try {
         const imported = await fetchLeagueFixtures(source);
         const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys);
+        if (!reconciliation.safe) {
+          const error = new Error(`Full-Time source ${source.name} has ambiguous legacy fixture records. Rebuild stopped before adding another operational fixture.`);
+          error.code = "FULL_TIME_IDENTITY_COLLISION";
+          error.collisions = reconciliation.collisions;
+          throw error;
+        }
         const snapshot = reconciliation.snapshot;
         const fixtures = snapshot.filter((fixture) => fixture.date === targetDate).filter((fixture) =>
           typeof predicate === "function" ? predicate(fixture) : true
         );
         return { source, fixtures, snapshot, changes: reconciliation.changes, status: { id: source.id, name: source.name, ok: true, count: fixtures.length, snapshotCount: snapshot.length, changeCount: reconciliation.changes.length } };
       } catch (error) {
-        return { source, fixtures: [], status: { id: source.id, name: source.name, ok: false, error: error.message, count: 0 } };
+        return {
+          source,
+          fixtures: [],
+          identityError: error.code === "FULL_TIME_IDENTITY_COLLISION" ? error : null,
+          status: { id: source.id, name: source.name, ok: false, error: error.message, count: 0 },
+        };
       }
     }));
 
     const statuses = results.map((result) => result.status);
+    const identityError = results.find((result) => result.identityError)?.identityError;
+    if (identityError) throw identityError;
     if (!statuses.some((status) => status.ok)) {
       const failure = new Error(statuses.map((status) => `${status.name}: ${status.error}`).join(" "));
       failure.code = "FULL_TIME_ALL_SOURCES_FAILED";

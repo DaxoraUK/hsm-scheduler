@@ -22,9 +22,9 @@ describe("home and away fixture flow", () => {
 
   it("keeps a reversed home override when the imported source is rebuilt", () => {
     const imported = {
-      sourceFixtureKey: "full-time:away-1",
-      homeTeam: "Hosts",
-      awayTeam: "Club U15",
+      sourceFixtureKey: "row:bolton-youth-league:0:1",
+      homeTeam: "Hindley Town U10 Valkyries",
+      awayTeam: "Horwich St. Mary's U10 Cobras",
       status: "away",
       isAwayFixture: true,
       requiresScheduling: false,
@@ -32,7 +32,7 @@ describe("home and away fixture flow", () => {
     const reversed = reverseAwayFixture(imported, { actor: "Club owner", now: "2026-09-01T12:00:00.000Z" });
     const overrides = {
       0: {
-        fixtureIdentity: "full-time:away-1",
+        fixtureIdentity: "row:bolton-youth-league:0:1",
         homeTeam: reversed.homeTeam,
         awayTeam: reversed.awayTeam,
         status: reversed.status,
@@ -46,7 +46,7 @@ describe("home and away fixture flow", () => {
     const rebuilt = applyFixtureOverrides([imported], overrides);
     const flow = partitionFixturesForScheduling(rebuilt);
     expect(flow.home).toHaveLength(1);
-    expect(flow.home[0]).toMatchObject({ homeTeam: "Club U15", awayTeam: "Hosts", requiresScheduling: true });
+    expect(flow.home[0]).toMatchObject({ homeTeam: "Horwich St. Mary's U10 Cobras", awayTeam: "Hindley Town U10 Valkyries", requiresScheduling: true });
     expect(flow.away).toHaveLength(0);
   });
 
