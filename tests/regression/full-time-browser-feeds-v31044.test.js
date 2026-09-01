@@ -126,6 +126,142 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     expect(result.changes).toEqual([expect.objectContaining({ fields: ["kickOff"] })]);
   });
 
+  test("removes the stale Crusaders away fixture when a successful provider feed covers 5 September without it", () => {
+    const staleAway = {
+      date: "2026-09-05",
+      homeTeam: "Moss Bank Junior U15 Greens",
+      awayTeam: "Horwich St. Mary's U15 Crusaders",
+      kickOff: "09:00",
+      sourceFixtureKey: "2026-09-05|moss bank junior u15 greens|horwich st marys u15 crusaders|09:00",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664551",
+    };
+    const freshHome = {
+      date: "2026-09-05",
+      homeTeam: "Horwich St. Mary's U15 Crusaders",
+      awayTeam: "Moss Bank Junior U15 Greens",
+      kickOff: "09:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664589",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664589",
+    };
+    const laterProviderFixture = {
+      date: "2026-09-12",
+      homeTeam: "Another Home Team",
+      awayTeam: "Another Away Team",
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664600",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664600",
+    };
+
+    const result = reconcileFullTimeFixtureSnapshot(
+      [staleAway],
+      [freshHome, laterProviderFixture],
+      "2026-09-01",
+      [],
+      { requestedDate: "2026-09-05" },
+    );
+    const repeated = Array.from({ length: 10 }).reduce(
+      (snapshot) => reconcileFullTimeFixtureSnapshot(snapshot, [freshHome, laterProviderFixture], "2026-09-01", [], { requestedDate: "2026-09-05" }).snapshot,
+      result.snapshot,
+    );
+
+    expect(result.snapshot).not.toContainEqual(expect.objectContaining({ sourceFixtureUrl: staleAway.sourceFixtureUrl }));
+    expect(result.snapshot).toContainEqual(expect.objectContaining({ sourceFixtureUrl: freshHome.sourceFixtureUrl }));
+    expect(repeated).toEqual(result.snapshot);
+  });
+
+  test("moves the canonical Crusaders provider record to December instead of retaining a September copy", () => {
+    const previous = {
+      date: "2026-09-05",
+      homeTeam: "Moss Bank Junior U15 Greens",
+      awayTeam: "Horwich St. Mary's U15 Crusaders",
+      kickOff: "09:00",
+      sourceFixtureKey: "2026-09-05|moss bank junior u15 greens|horwich st marys u15 crusaders|09:00",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664551",
+    };
+    const moved = {
+      ...previous,
+      date: "2026-12-05",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664551",
+    };
+    const laterProviderFixture = {
+      date: "2026-09-12",
+      homeTeam: "Another Home Team",
+      awayTeam: "Another Away Team",
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664600",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664600",
+    };
+
+    const result = reconcileFullTimeFixtureSnapshot(
+      [previous],
+      [moved, laterProviderFixture],
+      "2026-09-01",
+      [],
+      { requestedDate: "2026-09-05" },
+    );
+
+    const canonical = result.snapshot.filter((fixture) => fixture.sourceFixtureUrl === previous.sourceFixtureUrl);
+    expect(canonical).toEqual([expect.objectContaining({ date: "2026-12-05", sourceFixtureKey: moved.sourceFixtureKey })]);
+  });
+
+  test("preserves a cached future fixture when the refreshed feed does not cover its requested date", () => {
+    const future = {
+      date: "2026-12-05",
+      homeTeam: "Moss Bank Junior U15 Greens",
+      awayTeam: "Horwich St. Mary's U15 Crusaders",
+      kickOff: "09:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664551",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664551",
+    };
+    const shortRollingFeed = [{
+      date: "2026-09-12",
+      homeTeam: "Another Home Team",
+      awayTeam: "Another Away Team",
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664600",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664600",
+    }];
+
+    const result = reconcileFullTimeFixtureSnapshot(
+      [future],
+      shortRollingFeed,
+      "2026-09-01",
+      [],
+      { requestedDate: "2026-12-05" },
+    );
+
+    expect(result.snapshot).toContainEqual(expect.objectContaining({ sourceFixtureUrl: future.sourceFixtureUrl }));
+  });
+
+  test("does not remove a requested-date fixture when the rolling feed starts after that date", () => {
+    const cachedFixture = {
+      date: "2026-09-05",
+      homeTeam: "Moss Bank Junior U15 Greens",
+      awayTeam: "Horwich St. Mary's U15 Crusaders",
+      kickOff: "09:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664551",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664551",
+    };
+    const laterRollingFeed = [{
+      date: "2026-09-12",
+      homeTeam: "Another Home Team",
+      awayTeam: "Another Away Team",
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30664600",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30664600",
+    }];
+
+    const result = reconcileFullTimeFixtureSnapshot(
+      [cachedFixture],
+      laterRollingFeed,
+      "2026-09-01",
+      [],
+      { requestedDate: "2026-09-05" },
+    );
+
+    expect(result.snapshot).toContainEqual(expect.objectContaining({ sourceFixtureUrl: cachedFixture.sourceFixtureUrl }));
+  });
+
   test("repeated source rebuilds are idempotent by stable fixture identity", () => {
     const fixture = {
       sourceFixtureKey: "2026-09-05|hsm u15 knights|afc egerton u15|10:00",

@@ -33,13 +33,27 @@ export const deduplicateFixtureSet = deduplicateBySourceIdentity;
 
 const REVIEW_FIELDS = Object.freeze(["date", "kickOff", "venue", "referee", "status"]);
 
-export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10), ignoredKeys = []) {
-  const retained = previous.filter((fixture) => fixture?.date >= today);
+function sourceFeedCoversDate(fixtures = [], date = "", today = "") {
+  if (!date) return false;
+  const dates = fixtures.map((fixture) => fixture?.date).filter((fixtureDate) => fixtureDate >= today);
+  return dates.some((fixtureDate) => fixtureDate <= date) && dates.some((fixtureDate) => fixtureDate >= date);
+}
+
+export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10), ignoredKeys = [], { requestedDate = "" } = {}) {
+  const incomingFixtures = incoming.filter((fixture) => fixture?.date >= today);
+  const replaceRequestedDate = sourceFeedCoversDate(incomingFixtures, requestedDate, today);
+  const incomingIdentities = new Set(incomingFixtures.map(sourceFixtureIdentity).filter(Boolean));
+  const retained = previous.filter((fixture) => {
+    if (fixture?.date < today) return false;
+    if (!replaceRequestedDate || fixture?.date !== requestedDate) return true;
+    const identity = sourceFixtureIdentity(fixture);
+    return !identity || incomingIdentities.has(identity);
+  });
   const ignored = new Set(ignoredKeys);
   const changes = [];
   const collisions = [];
   const snapshot = retained.slice();
-  incoming.filter((fixture) => fixture?.date >= today).forEach((fixture) => {
+  incomingFixtures.forEach((fixture) => {
     const sourceIdentity = sourceFixtureIdentity(fixture);
     let currentIndex = sourceIdentity
       ? snapshot.findIndex((candidate) => sourceFixtureIdentity(candidate) === sourceIdentity || (fixture.sourceFixtureUrl && clean(candidate.sourceFixtureUrl).toLowerCase() === clean(fixture.sourceFixtureUrl).toLowerCase()))
@@ -71,7 +85,7 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
     }
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
     if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
-    else snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
+    if (fields.includes("date") || ignored.has(key)) snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
   });
   return {
     snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
@@ -172,7 +186,7 @@ export function useFixtureFetcher(fixtureSourceConfig = {}) {
     const results = await Promise.all(fixtureSources.map(async (source) => {
       try {
         const imported = await fetchLeagueFixtures(source);
-        const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys);
+        const reconciliation = reconcileFullTimeFixtureSnapshot(source.fixtureSnapshot, imported, undefined, source.ignoredChangeKeys, { requestedDate: targetDate });
         if (!reconciliation.safe) {
           const error = new Error(`Full-Time source ${source.name} has ambiguous legacy fixture records. Rebuild stopped before adding another operational fixture.`);
           error.code = "FULL_TIME_IDENTITY_COLLISION";
