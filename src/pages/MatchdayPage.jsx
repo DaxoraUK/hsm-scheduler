@@ -1668,6 +1668,12 @@ export default function MatchdayPage({
         pitchCfg={props.pitchCfg}
         closedPitches={props.closedPitches}
         onOverride={editableOverride}
+        onReverseToHome={typeof props.onReverseAwayToHome === "function"
+          ? (fixture, details) => props.onReverseAwayToHome(fixture, {
+            ...details,
+            dayKey: day.toLowerCase(),
+          })
+          : undefined}
         operatorIdentity={props.operatorIdentity}
         readOnly={isLocked}
         onClose={() => setSelectedFixtureIndex(null)}

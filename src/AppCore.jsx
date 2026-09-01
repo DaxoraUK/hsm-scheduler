@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureFlowIdentity, partitionFixturesForScheduling, reverseAwayFixture, validateSchedulingFixtureInput } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -751,6 +751,7 @@ function App() {
   ]);
 
   const [club, setClub] = useState(DEFAULT_CLUB);
+  const fullTimeVenueOverrides = club.integrations?.fullTimeFa?.venueOverrides || {};
   const midweekEnabled = isMidweekEnabled(club);
   const advancedOperationsEnabled = hasEntitlement(
     subscription,
@@ -1750,8 +1751,21 @@ function App() {
   const runSat = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...satManual], satOverrides));
+      const effective = applyFixtureOverrides(
+        applyFixtureOverrides([...baseFx, ...satManual], fullTimeVenueOverrides),
+        satOverrides,
+      );
+      const inputValidation = validateSchedulingFixtureInput(effective);
+      if (!inputValidation.safe) {
+        toast.error("Saturday rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+        return false;
+      }
+      const all = deduplicateFixtureSet(effective);
       const fixtureFlow = partitionFixturesForScheduling(all);
+      if (!fixtureFlow.safe) {
+        toast.error("Saturday rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
+        return false;
+      }
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,
         useAstro,
@@ -1763,14 +1777,23 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSatScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
-      setSatUnresolved(deduplicateFixtureSet(u));
+      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
+      const nextUnresolved = deduplicateFixtureSet(u);
+      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
+      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
+      if (sharedIdentities.length) {
+        toast.error("Saturday rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
+        return false;
+      }
+      setSatScheduled(nextScheduled);
+      setSatUnresolved(nextUnresolved);
       setSatHasRun(true);
       return true;
     },
     [
       satManual,
       satOverrides,
+      fullTimeVenueOverrides,
       useAstro,
       satClosedPitches,
       teamCfg,
@@ -1814,10 +1837,7 @@ function App() {
       setSatFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
-      setSatHasRun(false);
-      setSatScheduled([]);
-      setSatUnresolved([]);
-      runSat(fixtures);
+      if (!runSat(fixtures)) return false;
       if (!fixtures.length) toast.info("No Saturday home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
       return true;
     } catch (error) {
@@ -1831,8 +1851,21 @@ function App() {
   const runSun = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...sunManual], sunOverrides));
+      const effective = applyFixtureOverrides(
+        applyFixtureOverrides([...baseFx, ...sunManual], fullTimeVenueOverrides),
+        sunOverrides,
+      );
+      const inputValidation = validateSchedulingFixtureInput(effective);
+      if (!inputValidation.safe) {
+        toast.error("Sunday rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+        return false;
+      }
+      const all = deduplicateFixtureSet(effective);
       const fixtureFlow = partitionFixturesForScheduling(all);
+      if (!fixtureFlow.safe) {
+        toast.error("Sunday rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
+        return false;
+      }
       const { scheduled: s, unresolved: u } = scheduleSun(
         fixtureFlow.home,
         useAstro,
@@ -1844,14 +1877,23 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSunScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
-      setSunUnresolved(deduplicateFixtureSet(u));
+      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
+      const nextUnresolved = deduplicateFixtureSet(u);
+      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
+      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
+      if (sharedIdentities.length) {
+        toast.error("Sunday rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
+        return false;
+      }
+      setSunScheduled(nextScheduled);
+      setSunUnresolved(nextUnresolved);
       setSunHasRun(true);
       return true;
     },
     [
       sunManual,
       sunOverrides,
+      fullTimeVenueOverrides,
       useAstro,
       sunClosedPitches,
       teamCfg,
@@ -1887,7 +1929,7 @@ function App() {
       }
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
-      runSun(fixtures);
+      if (!runSun(fixtures)) return false;
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
     } catch (error) {
@@ -1900,8 +1942,21 @@ function App() {
   const runMidweek = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...midweekManual], midweekOverrides));
+      const effective = applyFixtureOverrides(
+        applyFixtureOverrides([...baseFx, ...midweekManual], fullTimeVenueOverrides),
+        midweekOverrides,
+      );
+      const inputValidation = validateSchedulingFixtureInput(effective);
+      if (!inputValidation.safe) {
+        toast.error("Midweek rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+        return false;
+      }
+      const all = deduplicateFixtureSet(effective);
       const fixtureFlow = partitionFixturesForScheduling(all);
+      if (!fixtureFlow.safe) {
+        toast.error("Midweek rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
+        return false;
+      }
       const { scheduled: s, unresolved: u } = scheduleSat(
         fixtureFlow.home,
         useAstro,
@@ -1914,14 +1969,23 @@ function App() {
         club.maxConcurrent || 3,
         { fixedAdultKickOffMins: null },
       );
-      setMidweekScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
-      setMidweekUnresolved(deduplicateFixtureSet(u));
+      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
+      const nextUnresolved = deduplicateFixtureSet(u);
+      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
+      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
+      if (sharedIdentities.length) {
+        toast.error("Midweek rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
+        return false;
+      }
+      setMidweekScheduled(nextScheduled);
+      setMidweekUnresolved(nextUnresolved);
       setMidweekHasRun(true);
       return true;
     },
     [
       midweekManual,
       midweekOverrides,
+      fullTimeVenueOverrides,
       useAstro,
       midweekClosedPitches,
       teamCfg,
@@ -1969,10 +2033,7 @@ function App() {
       setMidweekFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
-      setMidweekHasRun(false);
-      setMidweekScheduled([]);
-      setMidweekUnresolved([]);
-      runMidweek(fixtures);
+      if (!runMidweek(fixtures)) return false;
       if (!fixtures.length) toast.info("No midweek home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
       return true;
     } catch (error) {
@@ -2241,6 +2302,73 @@ function App() {
       console.warn("Full-Time source health could not be persisted.", error);
     }
   }, [activeClubId, club]);
+
+  const persistVenueReversal = useCallback(async (fixture, { actor = "", dayKey = "saturday" } = {}) => {
+    const reversed = reverseAwayFixture(fixture, { actor });
+    const canonicalFixtureIdentity = reversed.venueReversal?.canonicalFixtureIdentity || "";
+    if (!canonicalFixtureIdentity) {
+      toast.error("Fixture reversal blocked", { description: "Only a provider-identified fixture can be reversed to home." });
+      return false;
+    }
+
+    const reversalOverride = {
+      fixtureIdentity: canonicalFixtureIdentity,
+      venueRole: "home",
+      isAwayFixture: false,
+      requiresScheduling: true,
+      status: "active",
+      pitchId: "",
+      pitchLabel: "",
+      venueReversal: reversed.venueReversal,
+    };
+    const fullTime = club.integrations?.fullTimeFa || {};
+    const nextClub = {
+      ...club,
+      integrations: {
+        ...(club.integrations || {}),
+        fullTimeFa: {
+          ...fullTime,
+          venueOverrides: { ...(fullTime.venueOverrides || {}), [canonicalFixtureIdentity]: reversalOverride },
+        },
+      },
+    };
+
+    const previousSessionOverrides = dayKey === "sunday"
+      ? sunOverrides
+      : dayKey === "midweek"
+        ? midweekOverrides
+        : satOverrides;
+    const matchingSessionEntries = Object.entries(previousSessionOverrides)
+      .filter(([, candidate]) => candidate?.fixtureIdentity === canonicalFixtureIdentity);
+    const override = {
+      ...matchingSessionEntries.reduce((merged, [, candidate]) => ({ ...merged, ...candidate }), {}),
+      ...reversalOverride,
+    };
+    const nextSessionOverrides = Object.fromEntries(
+      Object.entries(previousSessionOverrides)
+        .filter(([, candidate]) => candidate?.fixtureIdentity !== canonicalFixtureIdentity),
+    );
+    nextSessionOverrides[canonicalFixtureIdentity] = override;
+    const setDaySessionOverrides = dayKey === "sunday"
+      ? setSunOverrides
+      : dayKey === "midweek"
+        ? setMidweekOverrides
+        : setSatOverrides;
+
+    setClub(nextClub);
+    setDaySessionOverrides(nextSessionOverrides);
+
+    try {
+      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
+      else tenantSetJson("club", nextClub);
+      return true;
+    } catch (error) {
+      setClub(club);
+      setDaySessionOverrides(previousSessionOverrides);
+      toast.error("Fixture reversal could not be saved", { description: error?.message || "The fixture was left unchanged." });
+      return false;
+    }
+  }, [activeClubId, club, midweekOverrides, satOverrides, sunOverrides]);
 
   const { resetAll } = useOperationsActions({
     setSatScheduled,
@@ -2804,6 +2932,7 @@ function App() {
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
                     operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
+                    onReverseAwayToHome={persistVenueReversal}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     testSat={testSat}
                     useAstro={useAstro}
@@ -2886,6 +3015,7 @@ function App() {
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
                     operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
+                    onReverseAwayToHome={persistVenueReversal}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     sunDate={sunDate}
                     satDateLabel={satDateLabel}
@@ -2955,6 +3085,7 @@ function App() {
                     subscription={subscription}
                     workspaceAccess={operationalWorkspaceAccess}
                     operatorIdentity={authSession.user.user_metadata?.full_name || authSession.user.email || authSession.user.id}
+                    onReverseAwayToHome={persistVenueReversal}
                     advancedOperationsEnabled={advancedOperationsEnabled}
                     midweekDate={midweekDate}
                     setMidweekDate={setMidweekDate}

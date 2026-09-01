@@ -89,6 +89,173 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     expect(result.collisions.map((collision) => collision.incoming.homeTeam)).toEqual(["U10 Cobras", "U10 Avengers", "U15 Knights"]);
   });
 
+  test("collapses a legacy and URL representation before a reversed provider fixture is scheduled", () => {
+    const providerUrl = "https://fulltime.thefa.com/displayFixture.html?id=30782776";
+    const legacy = {
+      date: "2026-09-05",
+      homeTeam: "Hindley Town U10 Valkyries",
+      awayTeam: "Horwich St. Mary's U10 Cobras",
+      kickOff: "09:00",
+      sourceFixtureKey: "2026-09-05|hindley town u10 valkyries|horwich st marys u10 cobras|09:00",
+      isAwayFixture: true,
+      requiresScheduling: false,
+    };
+    const urlRecord = {
+      ...legacy,
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30782776",
+      sourceFixtureUrl: providerUrl,
+    };
+    const refreshed = {
+      ...urlRecord,
+      kickOff: "10:00",
+    };
+
+    const result = reconcileFullTimeFixtureSnapshot([legacy, urlRecord], [refreshed], "2026-09-01");
+
+    expect(result.safe).toBe(true);
+    expect(result.snapshot).toHaveLength(1);
+    expect(result.snapshot[0]).toMatchObject({
+      sourceFixtureUrl: providerUrl,
+      canonicalFixtureIdentity: "url:https://fulltime.thefa.com/displayfixture.html?id=30782776",
+    });
+  });
+
+  test("blocks ambiguous legacy aliases instead of guessing which duplicate belongs to a provider URL", () => {
+    const provider = {
+      date: "2026-09-05",
+      homeTeam: "Hindley Town U10 Valkyries",
+      awayTeam: "Horwich St. Mary's U10 Cobras",
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30782776",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30782776",
+    };
+    const legacy = (key) => ({
+      ...provider,
+      sourceFixtureUrl: "",
+      sourceFixtureKey: key,
+    });
+
+    const result = reconcileFullTimeFixtureSnapshot([provider, legacy("legacy:one"), legacy("legacy:two")], [provider], "2026-09-01");
+
+    expect(result.safe).toBe(false);
+    expect(result.collisions).toEqual([expect.objectContaining({
+      incoming: expect.objectContaining({ sourceFixtureUrl: provider.sourceFixtureUrl }),
+      existing: expect.arrayContaining([
+        expect.objectContaining({ sourceFixtureKey: "legacy:one" }),
+        expect.objectContaining({ sourceFixtureKey: "legacy:two" }),
+      ]),
+    })]);
+  });
+
+  test("keeps one reversed provider fixture through ten refresh and rebuild cycles including a provider KO change", () => {
+    const providerUrl = "https://fulltime.thefa.com/displayFixture.html?id=30782770";
+    const importedAway = {
+      date: "2026-09-05",
+      homeTeam: "Turton U10 Turton Tigers",
+      awayTeam: "Horwich St. Mary's U10 Avengers",
+      kickOff: "09:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30782770",
+      sourceFixtureUrl: providerUrl,
+      teamId: "U10 Avengers",
+      isAwayFixture: true,
+      requiresScheduling: false,
+    };
+    let snapshot = reconcileFullTimeFixtureSnapshot([], [importedAway], "2026-09-01").snapshot;
+    const canonicalIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=30782770";
+    const persistentReversal = {
+      [canonicalIdentity]: {
+        fixtureIdentity: canonicalIdentity,
+        venueRole: "home",
+        isAwayFixture: false,
+        requiresScheduling: true,
+        status: "active",
+        venueReversal: {
+          canonicalFixtureIdentity: canonicalIdentity,
+          originalHomeTeam: "Turton U10 Turton Tigers",
+          originalAwayTeam: "Horwich St. Mary's U10 Avengers",
+        },
+      },
+    };
+
+    for (let refresh = 0; refresh < 10; refresh += 1) {
+      snapshot = reconcileFullTimeFixtureSnapshot(snapshot, [{
+        ...importedAway,
+        kickOff: refresh === 5 ? "10:00" : "09:00",
+      }], "2026-09-01").snapshot;
+      const flow = partitionFixturesForScheduling(applyFixtureOverrides(snapshot, persistentReversal));
+      const result = scheduleSat(
+        flow.home,
+        false,
+        [],
+        TEAM_CONFIG_DEFAULT,
+        { "7v7": 15, "11v11-youth": 15 },
+        8 * 60 + 30,
+        13 * 60,
+        PITCHES,
+        3,
+      );
+
+      expect(snapshot).toHaveLength(1);
+      expect(snapshot.map((fixture) => fixture.canonicalFixtureIdentity)).toEqual([canonicalIdentity]);
+      expect(flow.home).toHaveLength(1);
+      expect(flow.away).toHaveLength(0);
+      expect([...result.scheduled, ...flow.away]).toHaveLength(1);
+      expect(result.unresolved).toEqual([]);
+    }
+  });
+
+  test("migrates a unique legacy fixture to the provider URL when its KO changes", () => {
+    const legacy = {
+      date: "2026-09-05",
+      homeTeam: "Turton U10 Turton Tigers",
+      awayTeam: "Horwich St. Mary's U10 Avengers",
+      kickOff: "09:00",
+      sourceFixtureKey: "legacy:avengers:0900",
+    };
+    const provider = {
+      ...legacy,
+      kickOff: "10:00",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30782770",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30782770",
+    };
+
+    const result = reconcileFullTimeFixtureSnapshot([legacy], [provider], "2026-09-01");
+
+    expect(result.safe).toBe(true);
+    expect(result.snapshot).toEqual([expect.objectContaining({
+      sourceFixtureUrl: provider.sourceFixtureUrl,
+      canonicalFixtureIdentity: "url:https://fulltime.thefa.com/displayfixture.html?id=30782770",
+      legacyFixtureIdentities: [legacy.sourceFixtureKey],
+    })]);
+  });
+
+  test("moves a unique legacy fixture to its provider URL date without retaining the old date", () => {
+    const legacy = {
+      date: "2026-09-05",
+      homeTeam: "AFC Egerton U15 AFC Egerton",
+      awayTeam: "Horwich St. Mary's U15 Knights",
+      kickOff: "09:00",
+      sourceFixtureKey: "legacy:knights:september",
+    };
+    const provider = {
+      ...legacy,
+      date: "2026-12-05",
+      sourceId: "bolton-youth-league",
+      sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30661695",
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30661695",
+    };
+
+    const result = reconcileFullTimeFixtureSnapshot([legacy], [provider], "2026-09-01");
+
+    expect(result.safe).toBe(true);
+    expect(result.snapshot).toEqual([expect.objectContaining({
+      date: "2026-12-05",
+      sourceFixtureUrl: provider.sourceFixtureUrl,
+      canonicalFixtureIdentity: "url:https://fulltime.thefa.com/displayfixture.html?id=30661695",
+      legacyFixtureIdentities: [legacy.sourceFixtureKey],
+    })]);
+  });
+
   test("accepts numeric IDs and official code-snippet URLs only", () => {
     expect(normaliseFullTimeFeedId("694052039")).toBe("694052039");
     expect(normaliseFullTimeFeedId("https://fulltime.thefa.com/js/cs1.html?cs=694052039")).toBe("694052039");

@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { getFixtureDayDefinition, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { parseFullTimeHtml, SUN_TEAMS } from "../lib/fullTimeParser.js";
 import { loadFullTimeFeedHtml, normaliseFullTimeFeedId } from "../lib/fullTimeFeed.js";
-import { deduplicateFixtureSet as deduplicateBySourceIdentity } from "../lib/domain/fixtureVenueFlow.js";
+import { deduplicateFixtureSet as deduplicateBySourceIdentity, getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -16,9 +16,30 @@ function fixtureFingerprint(fixture = {}) {
   return [clean(fixture.date), matchupIdentity(fixture), clean(fixture.type).toLowerCase()].join("|");
 }
 
+function providerMigrationFingerprint(fixture = {}) {
+  return [
+    matchupIdentity(fixture),
+    clean(fixture.type).toLowerCase(),
+  ].join("|");
+}
+
+function isCompatibleProviderMigrationSource(legacy = {}, provider = {}) {
+  const legacySourceId = clean(legacy.sourceId).toLowerCase();
+  const providerSourceId = clean(provider.sourceId).toLowerCase();
+  return !legacySourceId || !providerSourceId || legacySourceId === providerSourceId;
+}
+
 function sourceFixtureIdentity(fixture = {}) {
   const value = fixture.sourceFixtureUrl ? `url:${clean(fixture.sourceFixtureUrl).toLowerCase()}` : (fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id);
   return value == null || !clean(value) ? "" : clean(value);
+}
+
+function canonicaliseProviderFixture(fixture = {}) {
+  const providerIdentity = fixture.sourceFixtureUrl ? `url:${clean(fixture.sourceFixtureUrl).toLowerCase()}` : "";
+  return {
+    ...fixture,
+    ...(providerIdentity ? { canonicalFixtureIdentity: providerIdentity } : {}),
+  };
 }
 
 function mergeFixtureRecords(current = {}, incoming = {}) {
@@ -37,6 +58,49 @@ function sourceFeedCoversDate(fixtures = [], date = "", today = "") {
   if (!date) return false;
   const dates = fixtures.map((fixture) => fixture?.date).filter((fixtureDate) => fixtureDate >= today);
   return dates.some((fixtureDate) => fixtureDate <= date) && dates.some((fixtureDate) => fixtureDate >= date);
+}
+
+function mergeLegacyFixtureIntoProviderRecord(legacy = {}, provider = {}) {
+  return canonicaliseProviderFixture({
+    ...mergeFixtureRecords(legacy, provider),
+    legacyFixtureIdentities: [...new Set([
+      ...(Array.isArray(legacy.legacyFixtureIdentities) ? legacy.legacyFixtureIdentities : []),
+      ...(Array.isArray(provider.legacyFixtureIdentities) ? provider.legacyFixtureIdentities : []),
+      ...[legacy.sourceFixtureKey, legacy.fixtureId, legacy.fullTimeId, legacy.id].filter(Boolean),
+    ])],
+  });
+}
+
+function collapseProvenLegacyAliases(fixtures = []) {
+  const canonical = deduplicateBySourceIdentity(fixtures).map(canonicaliseProviderFixture);
+  const collisions = [];
+  const byFingerprint = new Map();
+  canonical.forEach((fixture, index) => {
+    const fingerprint = fixtureFingerprint(fixture);
+    if (!byFingerprint.has(fingerprint)) byFingerprint.set(fingerprint, []);
+    byFingerprint.get(fingerprint).push({ fixture, index });
+  });
+
+  const removals = new Set();
+  byFingerprint.forEach((group) => {
+    const providerRecords = group.filter(({ fixture }) => Boolean(fixture.sourceFixtureUrl));
+    const legacyRecords = group.filter(({ fixture }) => !fixture.sourceFixtureUrl && getFixtureFlowIdentity(fixture));
+    if (providerRecords.length === 1 && legacyRecords.length > 1) {
+      collisions.push({
+        fingerprint: fixtureFingerprint(providerRecords[0].fixture),
+        incoming: providerRecords[0].fixture,
+        existing: legacyRecords.map(({ fixture }) => fixture),
+      });
+      return;
+    }
+    if (providerRecords.length !== 1 || legacyRecords.length !== 1) return;
+    const provider = providerRecords[0];
+    const legacy = legacyRecords[0];
+    canonical[provider.index] = mergeLegacyFixtureIntoProviderRecord(legacy.fixture, provider.fixture);
+    removals.add(legacy.index);
+  });
+
+  return { snapshot: canonical.filter((_, index) => !removals.has(index)), collisions };
 }
 
 export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10), ignoredKeys = [], { requestedDate = "" } = {}) {
@@ -72,6 +136,22 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
         return;
       }
       currentIndex = candidates.length === 1 ? candidates[0].index : -1;
+      if (currentIndex < 0 && fixture.sourceFixtureUrl) {
+        const legacyCandidates = snapshot
+          .map((candidate, index) => ({ candidate, index }))
+          .filter(({ candidate }) => !candidate.sourceFixtureUrl)
+          .filter(({ candidate }) => providerMigrationFingerprint(candidate) === providerMigrationFingerprint(fixture))
+          .filter(({ candidate }) => isCompatibleProviderMigrationSource(candidate, fixture));
+        if (legacyCandidates.length > 1) {
+          collisions.push({
+            fingerprint: providerMigrationFingerprint(fixture),
+            incoming: fixture,
+            existing: legacyCandidates.map(({ candidate }) => candidate),
+          });
+          return;
+        }
+        currentIndex = legacyCandidates.length === 1 ? legacyCandidates[0].index : -1;
+      }
     }
     const current = currentIndex >= 0 ? snapshot[currentIndex] : null;
     if (!current) {
@@ -79,16 +159,21 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
       return;
     }
     const fields = REVIEW_FIELDS.filter((field) => clean(current[field]) !== clean(fixture[field]));
-    if (!fields.length) {
-      snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
+    const isLegacyProviderMigration = Boolean(fixture.sourceFixtureUrl && !current.sourceFixtureUrl);
+    if (!fields.length || isLegacyProviderMigration) {
+      snapshot[currentIndex] = isLegacyProviderMigration
+        ? mergeLegacyFixtureIntoProviderRecord(current, fixture)
+        : mergeFixtureRecords(current, fixture);
       return;
     }
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
     if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
     if (fields.includes("date") || ignored.has(key)) snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
   });
+  const canonicalised = collapseProvenLegacyAliases(snapshot);
+  collisions.push(...canonicalised.collisions);
   return {
-    snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
+    snapshot: canonicalised.snapshot.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),
     changes,
     collisions,
     safe: collisions.length === 0,

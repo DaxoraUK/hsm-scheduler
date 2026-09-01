@@ -52,6 +52,7 @@ export default function FixtureDrawer({
   pitchCfg = [],
   closedPitches = [],
   onOverride,
+  onReverseToHome,
   operatorIdentity = "",
   readOnly = false,
   onClose,
@@ -183,7 +184,15 @@ export default function FixtureDrawer({
     updateFixture("status", status);
   };
 
-  const reverseToHome = () => {
+  const reverseToHome = async () => {
+    if (typeof onReverseToHome === "function") {
+      const persisted = await onReverseToHome(displayFixture, { actor: operatorIdentity });
+      if (persisted === false) return;
+      toast.success("Fixture reversed to home", {
+        description: "It is now part of the home schedule. Choose and validate its pitch and kick-off allocation.",
+      });
+      return;
+    }
     const reversed = reverseAwayFixture(displayFixture, { actor: operatorIdentity });
     applyFixturePatch({
       homeTeam: reversed.homeTeam,

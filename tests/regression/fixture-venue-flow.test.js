@@ -50,6 +50,72 @@ describe("home and away fixture flow", () => {
     expect(flow.away).toHaveLength(0);
   });
 
+  it("derives one effective home fixture from a canonical provider record without changing its identity", () => {
+    const canonicalIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=30782776";
+    const canonical = {
+      canonicalFixtureIdentity: canonicalIdentity,
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30782776",
+      homeTeam: "Hindley Town U10 Valkyries",
+      awayTeam: "Horwich St. Mary's U10 Cobras",
+      isAwayFixture: true,
+      requiresScheduling: false,
+    };
+    const override = {
+      fixtureIdentity: canonicalIdentity,
+      venueRole: "home",
+      isAwayFixture: false,
+      requiresScheduling: true,
+      venueReversal: {
+        originalHomeTeam: "Hindley Town U10 Valkyries",
+        originalAwayTeam: "Horwich St. Mary's U10 Cobras",
+      },
+    };
+
+    const effective = applyFixtureOverrides([canonical], { [canonicalIdentity]: override });
+    const flow = partitionFixturesForScheduling(effective);
+
+    expect(effective).toHaveLength(1);
+    expect(effective[0]).toMatchObject({
+      canonicalFixtureIdentity: canonicalIdentity,
+      homeTeam: "Horwich St. Mary's U10 Cobras",
+      awayTeam: "Hindley Town U10 Valkyries",
+    });
+    expect(flow.home).toHaveLength(1);
+    expect(flow.away).toHaveLength(0);
+  });
+
+  it("blocks scheduling when the canonical input contains the same provider fixture twice", () => {
+    const duplicatedIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=30661695";
+    const duplicated = [
+      { canonicalFixtureIdentity: duplicatedIdentity, homeTeam: "HSM U15 Knights", awayTeam: "AFC Egerton U15", requiresScheduling: true },
+      { canonicalFixtureIdentity: duplicatedIdentity, homeTeam: "HSM U15 Knights", awayTeam: "AFC Egerton U15", requiresScheduling: true },
+    ];
+
+    const flow = partitionFixturesForScheduling(duplicated);
+
+    expect(flow.safe).toBe(false);
+    expect(flow.home).toEqual([]);
+    expect(flow.away).toEqual([]);
+    expect(flow.diagnostics).toEqual([expect.objectContaining({ canonicalFixtureIdentity: duplicatedIdentity, count: 2 })]);
+  });
+
+  it("records a provider reversal against the immutable canonical identity", () => {
+    const canonicalIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=30782770";
+    const reversed = reverseAwayFixture({
+      canonicalFixtureIdentity: canonicalIdentity,
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30782770",
+      homeTeam: "Turton U10 Turton Tigers",
+      awayTeam: "Horwich St. Mary's U10 Avengers",
+      isAwayFixture: true,
+    }, { actor: "Club owner", now: "2026-09-01T12:00:00.000Z" });
+
+    expect(reversed.venueReversal).toMatchObject({
+      canonicalFixtureIdentity: canonicalIdentity,
+      originalHomeTeam: "Turton U10 Turton Tigers",
+      originalAwayTeam: "Horwich St. Mary's U10 Avengers",
+    });
+  });
+
   it("keeps an ordinary away fixture away when no override exists", () => {
     const imported = {
       sourceFixtureKey: "full-time:away-2",
