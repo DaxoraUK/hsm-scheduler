@@ -262,6 +262,7 @@ export default function MatchdayPage({
   runTest,
   runLive,
   rebuildDay,
+  refreshFixtures,
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
@@ -1523,6 +1524,7 @@ export default function MatchdayPage({
           refWarnings={refWarnings}
           runTest={runTest || (isSunday ? props.runSunTest : props.runSatTest)}
           runLive={runLive || (isSunday ? props.runSunLive : props.runSatLive)}
+          onRefresh={refreshFixtures}
           onRebuild={runRebuild}
           rebuildBusy={rebuildBusy}
           saveWeek={props.saveWeek}

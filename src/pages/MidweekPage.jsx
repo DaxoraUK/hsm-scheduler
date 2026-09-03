@@ -130,6 +130,7 @@ export default function MidweekPage(props) {
         runTest={props.runMidweekTest}
         runLive={props.runMidweekLive}
         rebuildDay={props.rebuildMidweek}
+        refreshFixtures={props.refreshMidweekFixtures}
         dateLabel={props.midweekDateLabel}
       />
     </div>

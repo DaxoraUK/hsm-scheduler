@@ -37,6 +37,7 @@ export default function SundayPage(props) {
         runTest={props.runSunTest}
         runLive={props.runSunLive}
         rebuildDay={props.rebuildSun}
+        refreshFixtures={props.refreshSunFixtures}
         dateLabel={props.sunDateLabel}
         ManualFixtures={SundayManualFixtures}
         ScheduleCard={(pageProps) => (

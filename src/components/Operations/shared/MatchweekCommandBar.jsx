@@ -35,6 +35,7 @@ export default function MatchweekCommandBar({
   canToggleLock = true, lockBusy = false,
   approvalStale = false,
   onRebuild, rebuildBusy = false,
+  onRefresh,
 }) {
   const state = workflowState({ hasRun, unresolvedCount, refWarnings, closedPitches, isLocked });
   const buildSchedule = mode === "test" ? runTest : runLive;
@@ -92,6 +93,7 @@ export default function MatchweekCommandBar({
         <div className="mt-5 flex flex-wrap items-center gap-3">
           {typeof setAllowArtificial === "function" ? <label className={`flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={isLocked} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
           <SecondaryButton onClick={saveWeek} disabled={!hasRun}><Save size={17} />Save</SecondaryButton>
+          <SecondaryButton onClick={onRefresh} disabled={isLocked || typeof onRefresh !== "function"}><RefreshCw size={17} />Refresh Fixtures</SecondaryButton>
           <SecondaryButton onClick={onRebuild} disabled={isLocked || rebuildBusy || typeof onRebuild !== "function"}><RefreshCw size={17} className={rebuildBusy ? "animate-spin" : undefined} />{rebuildBusy ? "Rebuilding…" : "Rebuild Schedule"}</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
           <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !isLocked || approvalStale} title={approvalStale ? "The schedule changed after approval. Unlock, review and lock it again." : undefined}><Send size={17} />Review & publish</SecondaryButton>

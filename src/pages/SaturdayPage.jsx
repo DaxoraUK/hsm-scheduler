@@ -35,6 +35,7 @@ export default function SaturdayPage(props) {
         runTest={props.runSatTest}
         runLive={props.runSatLive}
         rebuildDay={props.rebuildSat}
+        refreshFixtures={props.refreshSatFixtures}
         dateLabel={props.satDateLabel}
       />
     </div>

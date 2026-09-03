@@ -1894,6 +1894,23 @@ function App() {
     }
   };
 
+  const refreshSatFixtures = async () => {
+    if (!requirePlanCompliance() || !satDate) return false;
+    try {
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSaturdayFixtures(satDate);
+      if (skipped) return false;
+      setSatFetchStatus(statuses);
+      setSatProviderFixtures(fixtures);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
+      toast.success("Saturday fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
+      return true;
+    } catch (error) {
+      toast.error("Full-Time refresh failed", { description: error?.message || "The existing schedule was not changed." });
+      return false;
+    }
+  };
+
   const runSun = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
@@ -1974,6 +1991,22 @@ function App() {
     } catch (error) {
       if (error?.statuses) await persistFullTimeImportEvidence(error.statuses);
       toast.error("Full-Time import failed", { description: error?.message || "The existing Sunday schedule was left unchanged." });
+      return false;
+    }
+  };
+
+  const refreshSunFixtures = async () => {
+    if (!requirePlanCompliance() || !sunDate) return false;
+    try {
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSundayFixtures(sunDate);
+      if (skipped) return false;
+      setSunProviderFixtures(fixtures);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
+      toast.success("Sunday fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
+      return true;
+    } catch (error) {
+      toast.error("Full-Time refresh failed", { description: error?.message || "The existing schedule was not changed." });
       return false;
     }
   };
@@ -2072,6 +2105,23 @@ function App() {
       if (error?.statuses) setMidweekFetchStatus(error.statuses);
       if (error?.statuses) await persistFullTimeImportEvidence(error.statuses);
       toast.error("Full-Time import failed", { description: error?.message || "The existing midweek schedule was left unchanged." });
+      return false;
+    }
+  };
+
+  const refreshMidweekFixtures = async () => {
+    if (!requirePlanCompliance() || !midweekDate) return false;
+    try {
+      const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchMidweekFixtures(midweekDate);
+      if (skipped) return false;
+      setMidweekFetchStatus(statuses);
+      setMidweekProviderFixtures(fixtures);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
+      toast.success("Midweek fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
+      return true;
+    } catch (error) {
+      toast.error("Full-Time refresh failed", { description: error?.message || "The existing schedule was not changed." });
       return false;
     }
   };
@@ -3039,6 +3089,7 @@ function App() {
                     useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSatTest={runSatTest}
                     runSatLive={runSatLive}
+                    refreshSatFixtures={refreshSatFixtures}
                     rebuildSat={rebuildSat}
                     onPrintReport={() =>
                       openCurrentReport({
@@ -3120,6 +3171,7 @@ function App() {
                     useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSunTest={runSunTest}
                     runSunLive={runSunLive}
+                    refreshSunFixtures={refreshSunFixtures}
                     rebuildSun={rebuildSun}
                     onPrintReport={() =>
                       openCurrentReport({
@@ -3196,6 +3248,7 @@ function App() {
                     useCurrentMidweekDate={useCurrentMidweekDate}
                     runMidweekTest={runMidweekTest}
                     runMidweekLive={runMidweekLive}
+                    refreshMidweekFixtures={refreshMidweekFixtures}
                     rebuildMidweek={rebuildMidweek}
                     onPrintReport={() =>
                       openCurrentReport({
