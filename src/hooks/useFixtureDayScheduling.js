@@ -3,6 +3,7 @@ import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fi
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
 import { applyFixtureOverrides } from "../lib/domain/fixtureVenueFlow.js";
+import { toFixturePresentationOverrides } from "../lib/domain/schedulingState.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -44,11 +45,15 @@ export function useFixtureDayScheduling({
   club = {},
 } = {}) {
   const key = normaliseFixtureDayKey(dayKey);
+  const presentationOverrides = useMemo(
+    () => toFixturePresentationOverrides(overrides),
+    [overrides],
+  );
 
   const final = useMemo(
     () =>
-      decorateFixturesForDay(applyFixtureOverrides(scheduled, overrides), key),
-    [scheduled, overrides, key]
+      decorateFixturesForDay(applyFixtureOverrides(scheduled, presentationOverrides), key),
+    [scheduled, presentationOverrides, key]
   );
 
   const active = useMemo(

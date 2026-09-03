@@ -140,6 +140,23 @@ function isAdultTeamConfig(cfg, fixture = {}) {
   return isAdult(cfg?.name || fixture.homeTeam);
 }
 
+function requestedAllocationPitch(fixture = {}) {
+  return String(
+    fixture?.lockedAllocation?.pitchId ||
+    (fixture.manualOverrideApplied ? fixture.pitchId : "") ||
+    "",
+  ).trim();
+}
+
+function requestedAllocationTime(fixture = {}) {
+  if (fixture?.lockedAllocation) {
+    const lockedMins = fixture.lockedAllocation.koMins;
+    if (Number.isFinite(lockedMins)) return lockedMins;
+    return importedKickOffMins({ ...fixture, koTime: fixture.lockedAllocation.koTime });
+  }
+  return fixture.manualOverrideApplied ? importedKickOffMins(fixture) : null;
+}
+
 function formatCanUsePitch(teamFormat, pitch, fixture = {}) {
   if (!pitch) return false;
 
@@ -384,7 +401,7 @@ function scheduleFixtureDayCore(
     if (isAdultTeamConfig(cfg, fixture) && Number.isFinite(adultKickOffMins)) {
       let placed = false;
 
-      const requestedPitch = fixture.manualOverrideApplied ? String(fixture.pitchId || "").trim() : "";
+      const requestedPitch = requestedAllocationPitch(fixture);
       const requestedPitches = requestedPitch ? [requestedPitch] : [];
       const adultPitchOrder = [...requestedPitches, cfg.defaultPitch, cfg.altPitch, ...configuredSuitablePitches.map((pitch) => pitch.id)]
         .filter(Boolean)
@@ -487,10 +504,8 @@ function scheduleFixtureDayCore(
 
     const best = findBest(candidatePitches, duration, cfg.format === "3v3");
 
-    const requestedPitch = fixture.manualOverrideApplied ? String(fixture.pitchId || "").trim() : "";
-    const requestedTime = fixture.manualOverrideApplied
-      ? importedKickOffMins(fixture)
-      : null;
+    const requestedPitch = requestedAllocationPitch(fixture);
+    const requestedTime = requestedAllocationTime(fixture);
     const requestedValid = requestedPitch && candidatePitches.includes(requestedPitch) && Number.isFinite(requestedTime)
       && requestedTime >= startMins && requestedTime + duration <= endMins
       && free(requestedPitch, requestedTime, requestedTime + duration);

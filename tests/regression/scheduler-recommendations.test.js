@@ -74,6 +74,28 @@ describe("fixture scheduling regressions", () => {
     expect(result.scheduled[0].pitchId).not.toBe("P3a");
   });
 
+  test("an explicit locked allocation intent is honoured without a legacy manual override flag", () => {
+    const result = scheduleSat(
+      [{
+        homeTeam: "U10 Wanderers",
+        awayTeam: "Visitors",
+        status: "active",
+        lockedAllocation: { pitchId: "P3a", koTime: "10:00", koMins: 600, endMins: 660 },
+      }],
+      false,
+      [],
+      TEAM_CONFIG_DEFAULT,
+      buffers,
+      8 * 60 + 30,
+      11 * 60 + 30,
+      clonePitches(),
+      3,
+    );
+
+    expect(result.unresolved).toHaveLength(0);
+    expect(result.scheduled[0]).toMatchObject({ pitchId: "P3a", koTime: "10:00", manualAllocationApplied: true });
+  });
+
   test("weekend adult fixtures retain the fixed 14:00 rule", () => {
     const result = scheduleSat(
       [{ homeTeam: "HSM 1st Team", awayTeam: "Visitors", status: "active" }],

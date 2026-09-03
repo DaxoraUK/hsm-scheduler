@@ -15,6 +15,7 @@ function cloneIntent(intent = {}) {
     ...(intent.exclusion ? { exclusion: { ...intent.exclusion } } : {}),
     ...(intent.official ? { official: { ...intent.official } } : {}),
     ...(intent.lifecycle ? { lifecycle: { ...intent.lifecycle } } : {}),
+    ...(intent.fields ? { fields: { ...intent.fields } } : {}),
   };
 }
 
@@ -66,6 +67,7 @@ function applyIntent(fixture = {}, intent = {}) {
       status: lifecycle.status || "away",
     } : {}),
     ...(lifecycle.status ? { status: lifecycle.status } : {}),
+    ...(intent?.fields && typeof intent.fields === "object" ? intent.fields : {}),
     ...(Object.keys(official).length ? official : {}),
     ...(lockedAllocation ? { lockedAllocation } : {}),
     ...(intent?.exclusion ? { excludedFromGroundControl: true, exclusion: { ...intent.exclusion } } : {}),
@@ -96,7 +98,7 @@ export function mergeFixtureIntent(intents = {}, fixtureIdentity, patch = {}) {
     ...patch,
     fixtureIdentity: identity,
   };
-  ["venue", "allocation", "exclusion", "official", "lifecycle"].forEach((key) => {
+  ["venue", "allocation", "exclusion", "official", "lifecycle", "fields"].forEach((key) => {
     const merged = mergeNested(current, patch, key);
     if (merged === undefined) delete next[key];
     else next[key] = merged;
@@ -173,4 +175,26 @@ export function buildSchedulingState({
 export function selectEffectiveAllocation(build = {}, fixtureIdentity) {
   const result = build?.resultsByIdentity?.get?.(cleanIdentity(fixtureIdentity));
   return result?.status === "scheduled" ? result.fixture : null;
+}
+
+// Compatibility projection for existing presentation consumers. This is never
+// used as scheduler input: only an explicit locked allocation is projected.
+export function toFixturePresentationOverrides(intents = {}) {
+  return Object.entries(intents || {}).reduce((overrides, [identity, intent]) => {
+    const patch = { fixtureIdentity: identity };
+    const allocation = intent?.allocation || {};
+    if (allocation.mode === "locked") {
+      if (allocation.pitchId) {
+        patch.pitchId = allocation.pitchId;
+        patch.pitchLabel = allocation.pitchLabel || allocation.pitchId;
+      }
+      if (allocation.koTime) patch.koTime = allocation.koTime;
+      if (allocation.koMins != null) patch.koMins = allocation.koMins;
+      if (allocation.endMins != null) patch.endMins = allocation.endMins;
+    }
+    if (intent?.official && typeof intent.official === "object") Object.assign(patch, intent.official);
+    if (intent?.lifecycle && typeof intent.lifecycle === "object") Object.assign(patch, intent.lifecycle);
+    if (intent?.fields && typeof intent.fields === "object") Object.assign(patch, intent.fields);
+    return { ...overrides, [identity]: patch };
+  }, {});
 }

@@ -223,6 +223,7 @@ export default function MatchdayUnresolvedCard({
   scheduled = [],
   setScheduled,
   setUnresolved,
+  onResolveFixture,
   readOnly = false,
 }) {
   const [pendingOverride, setPendingOverride] = useState(null);
@@ -237,24 +238,13 @@ export default function MatchdayUnresolvedCard({
     const endMins =
       patch.endMins != null ? patch.endMins : koMins != null ? koMins + duration : null;
 
-    const resolved = {
-      ...fixture,
+    onResolveFixture?.(fixture, {
       ...patch,
       koMins,
       endMins,
       cfg,
-      manual: true,
       overridden,
-    };
-
-    setScheduled((previous) =>
-      [...previous, resolved].sort((a, b) => (a.koMins || 0) - (b.koMins || 0))
-    );
-
-    const fixtureIdentity = getFixtureFlowIdentity(fixture);
-    setUnresolved((previous) => previous.filter(
-      (candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity,
-    ));
+    });
   };
 
   const completeManualAssignment = ({ fixture, ov, cfg, koMins, endMins, clash = null }) => {

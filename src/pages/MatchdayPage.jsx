@@ -261,6 +261,7 @@ export default function MatchdayPage({
   conflicts: suppliedConflicts,
   runTest,
   runLive,
+  rebuildDay,
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
@@ -543,7 +544,7 @@ export default function MatchdayPage({
   const buildSchedule = props.mode === "test"
     ? (runTest || (isSunday ? props.runSunTest : props.runSatTest))
     : (runLive || (isSunday ? props.runSunLive : props.runSatLive));
-  const rebuildAction = useMemo(() => createRebuildAction(buildSchedule), [buildSchedule]);
+  const rebuildAction = useMemo(() => createRebuildAction(rebuildDay || buildSchedule), [buildSchedule, rebuildDay]);
   const [rebuildBusy, setRebuildBusy] = useState(false);
   const runRebuild = useCallback(async () => {
     if (rebuildBusy) return;
@@ -957,6 +958,10 @@ export default function MatchdayPage({
     officialConflicts,
     refWarnings,
     onFixtureClick: openFixture,
+    onResolveFixture: (fixture, patch) => {
+      editableOverride(fixture, patch);
+      window.setTimeout(() => runRebuild(), 0);
+    },
   };
 
   const selectedFixtureRecord = selectedFixtureIdentity

@@ -129,6 +129,7 @@ export default function MidweekPage(props) {
         conflicts={props.midweekConflicts || []}
         runTest={props.runMidweekTest}
         runLive={props.runMidweekLive}
+        rebuildDay={props.rebuildMidweek}
         dateLabel={props.midweekDateLabel}
       />
     </div>

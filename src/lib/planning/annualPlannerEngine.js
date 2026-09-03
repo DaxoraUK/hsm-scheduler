@@ -473,7 +473,7 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
 export function getMatchdayFixtureSourceId(fixture = {}, { date = "" } = {}) {
   const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
   const startMinutes = finite(fixture.koMins, timeToMinutes(fixture.koTime || fixture.ko || fixture.kickOff || "09:00"));
-  return clean(fixture.id || fixture.fixtureId || fixture.sourceFixtureKey || fixture.fullTimeId
+  return clean(fixture.canonicalFixtureIdentity || fixture.id || fixture.fixtureId || fixture.sourceFixtureKey || fixture.fullTimeId
     || `${dateKey}_${fixture.pitchId}_${startMinutes}_${fixture.homeTeam || fixture.team || "home"}`);
 }
 

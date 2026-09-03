@@ -34,6 +34,7 @@ export default function SaturdayPage(props) {
         conflicts={props.satConflicts || []}
         runTest={props.runSatTest}
         runLive={props.runSatLive}
+        rebuildDay={props.rebuildSat}
         dateLabel={props.satDateLabel}
       />
     </div>

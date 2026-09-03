@@ -75,6 +75,11 @@ import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
 import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureFlowIdentity, mergeFixtureOverride, partitionFixturesForScheduling, reverseAwayFixture, validateSchedulingFixtureInput } from "./lib/domain/fixtureVenueFlow.js";
+import {
+  buildSchedulingState,
+  mergeFixtureIntent,
+  toFixturePresentationOverrides,
+} from "./lib/domain/schedulingState.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -186,6 +191,48 @@ function initialAuthView() {
   if (path === "/signup") return "signup";
   if (path === "/signin" || getDaxoraSurface() === "app") return "signin";
   return "landing";
+}
+
+function mergeFixtureIntentCollections(...collections) {
+  return collections.filter(Boolean).reduce((merged, collection) =>
+    Object.entries(collection || {}).reduce(
+      (next, [identity, intent]) => mergeFixtureIntent(next, identity, intent),
+      merged,
+    ),
+  {});
+}
+
+function venueOverridesToFixtureIntents(overrides = {}) {
+  return Object.entries(overrides || {}).reduce((intents, [identity, override]) => {
+    if (!identity || !override) return intents;
+    return mergeFixtureIntent(intents, identity, {
+      venue: { role: override.venueRole || "home" },
+      lifecycle: override.status ? { status: override.status } : undefined,
+    });
+  }, {});
+}
+
+function fixturePatchToIntent(patch = {}) {
+  const nextPatch = { ...(patch || {}) };
+  const allocationFields = ["pitchId", "pitchLabel", "koTime", "koMins", "endMins"];
+  const officialFields = ["referee", "refPhone", "refStatus", "officialId", "officialName"];
+  const lifecycleFields = ["status", "postponement"];
+  const allocation = Object.fromEntries(allocationFields
+    .filter((field) => field in nextPatch)
+    .map((field) => [field, nextPatch[field]]));
+  const official = Object.fromEntries(officialFields
+    .filter((field) => field in nextPatch)
+    .map((field) => [field, nextPatch[field]]));
+  const lifecycle = Object.fromEntries(lifecycleFields
+    .filter((field) => field in nextPatch)
+    .map((field) => [field, nextPatch[field]]));
+  [...allocationFields, ...officialFields, ...lifecycleFields, "fixtureIdentity"].forEach((field) => delete nextPatch[field]);
+  return {
+    ...(Object.keys(allocation).length ? { allocation: { mode: "locked", ...allocation } } : {}),
+    ...(Object.keys(official).length ? { official } : {}),
+    ...(Object.keys(lifecycle).length ? { lifecycle } : {}),
+    ...(Object.keys(nextPatch).length ? { fields: nextPatch } : {}),
+  };
 }
 
 
@@ -311,6 +358,7 @@ function App() {
   const [satScheduled, setSatScheduled] = useState([]);
   const [satUnresolved, setSatUnresolved] = useState([]);
   const [satOverrides, setSatOverrides] = useState({});
+  const [satProviderFixtures, setSatProviderFixtures] = useState([]);
   const [satManual, setSatManual] = useState([]);
   const [satFetchStatus, setSatFetchStatus] = useState([]);
   const [satHasRun, setSatHasRun] = useState(false);
@@ -319,6 +367,7 @@ function App() {
   const [sunScheduled, setSunScheduled] = useState([]);
   const [sunUnresolved, setSunUnresolved] = useState([]);
   const [sunOverrides, setSunOverrides] = useState({});
+  const [sunProviderFixtures, setSunProviderFixtures] = useState([]);
   const [sunManual, setSunManual] = useState([]);
   const [sunHasRun, setSunHasRun] = useState(false);
 
@@ -326,6 +375,7 @@ function App() {
   const [midweekScheduled, setMidweekScheduled] = useState([]);
   const [midweekUnresolved, setMidweekUnresolved] = useState([]);
   const [midweekOverrides, setMidweekOverrides] = useState({});
+  const [midweekProviderFixtures, setMidweekProviderFixtures] = useState([]);
   const [midweekManual, setMidweekManual] = useState([]);
   const [midweekFetchStatus, setMidweekFetchStatus] = useState([]);
   const [midweekHasRun, setMidweekHasRun] = useState(false);
@@ -347,12 +397,14 @@ function App() {
     setSatScheduled([]);
     setSatUnresolved([]);
     setSatOverrides({});
+    setSatProviderFixtures([]);
     setSatManual([]);
     setSatFetchStatus([]);
     setSatHasRun(false);
     setSunScheduled([]);
     setSunUnresolved([]);
     setSunOverrides({});
+    setSunProviderFixtures([]);
     setSunManual([]);
     setSunHasRun(false);
     setShowManual(false);
@@ -363,6 +415,7 @@ function App() {
     setMidweekScheduled([]);
     setMidweekUnresolved([]);
     setMidweekOverrides({});
+    setMidweekProviderFixtures([]);
     setMidweekManual([]);
     setMidweekFetchStatus([]);
     setMidweekHasRun(false);
@@ -1751,42 +1804,33 @@ function App() {
   const runSat = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const effective = applyFixtureOverrides(
-        applyFixtureOverrides([...baseFx, ...satManual], fullTimeVenueOverrides),
+      const intents = mergeFixtureIntentCollections(
+        venueOverridesToFixtureIntents(fullTimeVenueOverrides),
         satOverrides,
       );
-      const inputValidation = validateSchedulingFixtureInput(effective);
-      if (!inputValidation.safe) {
-        toast.error("Saturday rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+      const build = buildSchedulingState({
+        providerFixtures: baseFx,
+        manualFixtures: satManual,
+        intents,
+        scheduler: (fixtures) => scheduleSat(
+          fixtures,
+          useAstro,
+          satClosedPitches,
+          teamCfg,
+          getBufMap(),
+          getStartMins(),
+          getEndMins(),
+          pitchCfg,
+          club.maxConcurrent || 3,
+        ),
+      });
+      if (!build.safe) {
+        toast.error("Saturday rebuild blocked by fixture integrity", { description: build.diagnostics.map((item) => item.canonicalFixtureIdentity).filter(Boolean).join(", ") || "The schedule input is invalid." });
         return false;
       }
-      const all = deduplicateFixtureSet(effective);
-      const fixtureFlow = partitionFixturesForScheduling(all);
-      if (!fixtureFlow.safe) {
-        toast.error("Saturday rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
-        return false;
-      }
-      const { scheduled: s, unresolved: u } = scheduleSat(
-        fixtureFlow.home,
-        useAstro,
-        satClosedPitches,
-        teamCfg,
-        getBufMap(),
-        getStartMins(),
-        getEndMins(),
-        pitchCfg,
-        club.maxConcurrent || 3,
-      );
-      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
-      const nextUnresolved = deduplicateFixtureSet(u);
-      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
-      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
-      if (sharedIdentities.length) {
-        toast.error("Saturday rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
-        return false;
-      }
-      setSatScheduled(nextScheduled);
-      setSatUnresolved(nextUnresolved);
+      const away = partitionFixturesForScheduling(build.effective.included).away;
+      setSatScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
+      setSatUnresolved(build.unresolved);
       setSatHasRun(true);
       return true;
     },
@@ -1818,6 +1862,7 @@ function App() {
         count: testSat.length,
       },
     ]);
+    setSatProviderFixtures(testSat);
     runSat(testSat);
   };
 
@@ -1836,6 +1881,7 @@ function App() {
       }
       setSatFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setSatProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       if (!runSat(fixtures)) return false;
       if (!fixtures.length) toast.info("No Saturday home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
@@ -1851,42 +1897,33 @@ function App() {
   const runSun = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const effective = applyFixtureOverrides(
-        applyFixtureOverrides([...baseFx, ...sunManual], fullTimeVenueOverrides),
+      const intents = mergeFixtureIntentCollections(
+        venueOverridesToFixtureIntents(fullTimeVenueOverrides),
         sunOverrides,
       );
-      const inputValidation = validateSchedulingFixtureInput(effective);
-      if (!inputValidation.safe) {
-        toast.error("Sunday rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+      const build = buildSchedulingState({
+        providerFixtures: baseFx,
+        manualFixtures: sunManual,
+        intents,
+        scheduler: (fixtures) => scheduleSun(
+          fixtures,
+          useAstro,
+          sunClosedPitches,
+          teamCfg,
+          getBufMap(),
+          getStartMins(),
+          getEndMins(),
+          pitchCfg,
+          club.maxConcurrent || 3,
+        ),
+      });
+      if (!build.safe) {
+        toast.error("Sunday rebuild blocked by fixture integrity", { description: build.diagnostics.map((item) => item.canonicalFixtureIdentity).filter(Boolean).join(", ") || "The schedule input is invalid." });
         return false;
       }
-      const all = deduplicateFixtureSet(effective);
-      const fixtureFlow = partitionFixturesForScheduling(all);
-      if (!fixtureFlow.safe) {
-        toast.error("Sunday rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
-        return false;
-      }
-      const { scheduled: s, unresolved: u } = scheduleSun(
-        fixtureFlow.home,
-        useAstro,
-        sunClosedPitches,
-        teamCfg,
-        getBufMap(),
-        getStartMins(),
-        getEndMins(),
-        pitchCfg,
-        club.maxConcurrent || 3,
-      );
-      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
-      const nextUnresolved = deduplicateFixtureSet(u);
-      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
-      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
-      if (sharedIdentities.length) {
-        toast.error("Sunday rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
-        return false;
-      }
-      setSunScheduled(nextScheduled);
-      setSunUnresolved(nextUnresolved);
+      const away = partitionFixturesForScheduling(build.effective.included).away;
+      setSunScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
+      setSunUnresolved(build.unresolved);
       setSunHasRun(true);
       return true;
     },
@@ -1911,6 +1948,7 @@ function App() {
 
   const runSunTest = () => {
     if (!requirePlanCompliance()) return false;
+    setSunProviderFixtures(testSun);
     return runSun(testSun);
   };
 
@@ -1928,6 +1966,7 @@ function App() {
         return false;
       }
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setSunProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
       if (!runSun(fixtures)) return false;
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
@@ -1942,43 +1981,34 @@ function App() {
   const runMidweek = useCallback(
     (baseFx) => {
       if (!requirePlanCompliance()) return false;
-      const effective = applyFixtureOverrides(
-        applyFixtureOverrides([...baseFx, ...midweekManual], fullTimeVenueOverrides),
+      const intents = mergeFixtureIntentCollections(
+        venueOverridesToFixtureIntents(fullTimeVenueOverrides),
         midweekOverrides,
       );
-      const inputValidation = validateSchedulingFixtureInput(effective);
-      if (!inputValidation.safe) {
-        toast.error("Midweek rebuild blocked by fixture integrity", { description: `Duplicate canonical fixtures: ${inputValidation.diagnostics.map((item) => item.canonicalFixtureIdentity).join(", ")}` });
+      const build = buildSchedulingState({
+        providerFixtures: baseFx,
+        manualFixtures: midweekManual,
+        intents,
+        scheduler: (fixtures) => scheduleSat(
+          fixtures,
+          useAstro,
+          midweekClosedPitches,
+          teamCfg,
+          getBufMap(),
+          midweekStartMins,
+          midweekEndMins,
+          pitchCfg,
+          club.maxConcurrent || 3,
+          { fixedAdultKickOffMins: null },
+        ),
+      });
+      if (!build.safe) {
+        toast.error("Midweek rebuild blocked by fixture integrity", { description: build.diagnostics.map((item) => item.canonicalFixtureIdentity).filter(Boolean).join(", ") || "The schedule input is invalid." });
         return false;
       }
-      const all = deduplicateFixtureSet(effective);
-      const fixtureFlow = partitionFixturesForScheduling(all);
-      if (!fixtureFlow.safe) {
-        toast.error("Midweek rebuild blocked by fixture integrity", { description: "The schedule input contains duplicate canonical fixtures." });
-        return false;
-      }
-      const { scheduled: s, unresolved: u } = scheduleSat(
-        fixtureFlow.home,
-        useAstro,
-        midweekClosedPitches,
-        teamCfg,
-        getBufMap(),
-        midweekStartMins,
-        midweekEndMins,
-        pitchCfg,
-        club.maxConcurrent || 3,
-        { fixedAdultKickOffMins: null },
-      );
-      const nextScheduled = deduplicateFixtureSet([...s, ...fixtureFlow.away]);
-      const nextUnresolved = deduplicateFixtureSet(u);
-      const unresolvedIdentities = new Set(nextUnresolved.map(getFixtureFlowIdentity));
-      const sharedIdentities = nextScheduled.map(getFixtureFlowIdentity).filter((identity) => unresolvedIdentities.has(identity));
-      if (sharedIdentities.length) {
-        toast.error("Midweek rebuild blocked by fixture integrity", { description: `Fixtures cannot be both scheduled and unresolved: ${[...new Set(sharedIdentities)].join(", ")}` });
-        return false;
-      }
-      setMidweekScheduled(nextScheduled);
-      setMidweekUnresolved(nextUnresolved);
+      const away = partitionFixturesForScheduling(build.effective.included).away;
+      setMidweekScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
+      setMidweekUnresolved(build.unresolved);
       setMidweekHasRun(true);
       return true;
     },
@@ -2009,6 +2039,7 @@ function App() {
         count: testMidweek.length,
       },
     ]);
+    setMidweekProviderFixtures(testMidweek);
     runMidweek(testMidweek);
   };
 
@@ -2032,6 +2063,7 @@ function App() {
       }
       setMidweekFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setMidweekProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       if (!runMidweek(fixtures)) return false;
       if (!fixtures.length) toast.info("No midweek home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
@@ -2044,7 +2076,43 @@ function App() {
     }
   };
 
-  const writeFixtureOverride = (setOverrides, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
+  const persistScopedFixtureIntents = useCallback(async (scope, date, intents) => {
+    if (!date) return;
+    const fullTime = club.integrations?.fullTimeFa || {};
+    const schedulingIntents = fullTime.schedulingIntents || {};
+    const nextClub = {
+      ...club,
+      integrations: {
+        ...(club.integrations || {}),
+        fullTimeFa: {
+          ...fullTime,
+          schedulingIntents: {
+            ...schedulingIntents,
+            [scope]: { ...(schedulingIntents[scope] || {}), [date]: intents },
+          },
+        },
+      },
+    };
+    setClub(nextClub);
+    try {
+      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
+      else tenantSetJson("club", nextClub);
+    } catch (error) {
+      toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
+    }
+  }, [activeClubId, club]);
+
+  useEffect(() => {
+    const scoped = club.integrations?.fullTimeFa?.schedulingIntents || {};
+    const synchronise = (setter, value) => setter((current) =>
+      JSON.stringify(current) === JSON.stringify(value || {}) ? current : (value || {}),
+    );
+    synchronise(setSatOverrides, scoped.saturday?.[satDate]);
+    synchronise(setSunOverrides, scoped.sunday?.[sunDate]);
+    synchronise(setMidweekOverrides, scoped.midweek?.[midweekDate]);
+  }, [club.integrations?.fullTimeFa?.schedulingIntents, midweekDate, satDate, sunDate]);
+
+  const writeFixtureOverride = (setOverrides, persistIntent, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
     const fixtureIdentity = String(
       typeof target === "string" ? target : legacyFixtureIdentity || "",
     ).trim();
@@ -2055,25 +2123,31 @@ function App() {
         : {};
 
     if (fixtureIdentity) {
-      setOverrides((current) => mergeFixtureOverride(current, fixtureIdentity, patch));
+      setOverrides((current) => {
+        const next = mergeFixtureIntent(current, fixtureIdentity, fixturePatchToIntent(patch));
+        void persistIntent(next);
+        return next;
+      });
       return;
     }
-
-    // Compatibility for older non-Control-Centre surfaces. New operational
-    // mutations always arrive above with a canonical fixture identity.
-    if (typeof target === "number" && typeof fieldOrPatch === "string") {
-      setOverrides((current) => ({
-        ...current,
-        [target]: { ...(current[target] || {}), [fieldOrPatch]: value },
-      }));
-    }
+    toast.error("Fixture update blocked", { description: "This operation did not provide a canonical fixture identity." });
   };
+
+  const rebuildSat = useCallback(() => runSat(satProviderFixtures), [runSat, satProviderFixtures]);
+  const rebuildSun = useCallback(() => runSun(sunProviderFixtures), [runSun, sunProviderFixtures]);
+  const rebuildMidweek = useCallback(
+    () => runMidweek(midweekProviderFixtures),
+    [midweekProviderFixtures, runMidweek],
+  );
+  const satPresentationOverrides = useMemo(() => toFixturePresentationOverrides(satOverrides), [satOverrides]);
+  const sunPresentationOverrides = useMemo(() => toFixturePresentationOverrides(sunOverrides), [sunOverrides]);
+  const midweekPresentationOverrides = useMemo(() => toFixturePresentationOverrides(midweekOverrides), [midweekOverrides]);
   const satOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSatOverrides, target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSatOverrides, (intents) => persistScopedFixtureIntents("saturday", satDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const sunOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSunOverrides, target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setMidweekOverrides, target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setMidweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const {
     satFinal,
     satActive,
@@ -2362,10 +2436,14 @@ function App() {
       : dayKey === "midweek"
         ? midweekOverrides
         : satOverrides;
-    const nextSessionOverrides = mergeFixtureOverride(
+    const nextSessionOverrides = mergeFixtureIntent(
       previousSessionOverrides,
       canonicalFixtureIdentity,
-      reversalOverride,
+      {
+        venue: { role: "home" },
+        lifecycle: { status: "active" },
+        allocation: { mode: "unlocked" },
+      },
     );
     const setDaySessionOverrides = dayKey === "sunday"
       ? setSunOverrides
@@ -2961,6 +3039,7 @@ function App() {
                     useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSatTest={runSatTest}
                     runSatLive={runSatLive}
+                    rebuildSat={rebuildSat}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "saturday",
@@ -2989,7 +3068,7 @@ function App() {
                     setTeamCfg={setTeamCfg}
                     setPitchCfg={setPitchCfg}
                     pitchCfg={pitchCfg}
-                    satOverrides={satOverrides}
+                    satOverrides={satPresentationOverrides}
                     satOv={satOv}
                     satScheduled={satScheduled}
                     setSatScheduled={setSatScheduled}
@@ -3041,6 +3120,7 @@ function App() {
                     useCurrentMatchWeekend={useCurrentMatchWeekend}
                     runSunTest={runSunTest}
                     runSunLive={runSunLive}
+                    rebuildSun={rebuildSun}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "sunday",
@@ -3071,7 +3151,7 @@ function App() {
                     reopenPitchClosures={reopenPitchClosures}
                     closeAllPitches={() => closeAllPitches(sunDate)}
                     reopenAllPitches={() => reopenAllPitches(sunDate)}
-                    sunOverrides={sunOverrides}
+                    sunOverrides={sunPresentationOverrides}
                     startHour={startHour}
                     startMin={startMin}
                     endHour={endHour}
@@ -3116,6 +3196,7 @@ function App() {
                     useCurrentMidweekDate={useCurrentMidweekDate}
                     runMidweekTest={runMidweekTest}
                     runMidweekLive={runMidweekLive}
+                    rebuildMidweek={rebuildMidweek}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "midweek",
@@ -3146,7 +3227,7 @@ function App() {
                     reopenPitchClosures={reopenPitchClosures}
                     closeAllPitches={() => closeAllPitches(midweekDate)}
                     reopenAllPitches={() => reopenAllPitches(midweekDate)}
-                    midweekOverrides={midweekOverrides}
+                    midweekOverrides={midweekPresentationOverrides}
                     midweekScheduled={midweekScheduled}
                     setMidweekScheduled={setMidweekScheduled}
                     setMidweekUnresolved={setMidweekUnresolved}

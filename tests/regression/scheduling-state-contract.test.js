@@ -5,7 +5,9 @@ import {
   materialiseEffectiveFixtures,
   mergeFixtureIntent,
   selectEffectiveAllocation,
+  toFixturePresentationOverrides,
 } from "../../src/lib/domain/schedulingState.js";
+import { getMatchdayFixtureSourceId } from "../../src/lib/planning/annualPlannerEngine.js";
 
 const awayIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=away-17";
 const homeIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=home-10";
@@ -132,5 +134,31 @@ describe("canonical scheduling state contract", () => {
   test("manual fixtures receive a stable canonical identity", () => {
     const fixture = createManualFixture({ homeTeam: "HSM U12", awayTeam: "Visitors" }, { id: "cup-final" });
     expect(fixture.canonicalFixtureIdentity).toBe("manual:cup-final");
+  });
+
+  test("presentation patches expose locked user intent without storing generated allocations", () => {
+    const intents = mergeFixtureIntent({}, homeIdentity, {
+      allocation: { mode: "locked", pitchId: "P5", koTime: "11:00", koMins: 660 },
+      official: { referee: "Canonical Ref" },
+    });
+
+    expect(toFixturePresentationOverrides(intents)).toEqual({
+      [homeIdentity]: {
+        fixtureIdentity: homeIdentity,
+        pitchId: "P5",
+        pitchLabel: "P5",
+        koTime: "11:00",
+        koMins: 660,
+        referee: "Canonical Ref",
+      },
+    });
+  });
+
+  test("calendar synchronisation uses the canonical fixture identity rather than a mutable source key", () => {
+    expect(getMatchdayFixtureSourceId({
+      canonicalFixtureIdentity: homeIdentity,
+      sourceFixtureKey: "old-feed-key",
+      date: "2026-09-05",
+    })).toBe(homeIdentity);
   });
 });

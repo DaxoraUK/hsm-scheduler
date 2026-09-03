@@ -36,6 +36,7 @@ export default function SundayPage(props) {
         conflicts={props.sunConflicts || []}
         runTest={props.runSunTest}
         runLive={props.runSunLive}
+        rebuildDay={props.rebuildSun}
         dateLabel={props.sunDateLabel}
         ManualFixtures={SundayManualFixtures}
         ScheduleCard={(pageProps) => (

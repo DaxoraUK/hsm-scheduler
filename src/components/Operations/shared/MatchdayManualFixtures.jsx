@@ -4,6 +4,7 @@ import ManualForm from "../../ManualForm.jsx";
 import Card from "@/ui/Card.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 import SecondaryButton from "@/ui/SecondaryButton.jsx";
+import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 
 export default function MatchdayManualFixtures({
   club,
@@ -77,9 +78,9 @@ export default function MatchdayManualFixtures({
 
       {manualFixtures.length > 0 && (
         <div className="mt-5 space-y-3">
-          {manualFixtures.map((fixture, index) => (
+          {manualFixtures.map((fixture) => (
             <div
-              key={`${fixture.homeTeam}-${index}`}
+              key={getFixtureFlowIdentity(fixture)}
               className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
             >
               <div className="min-w-0 flex-1">
@@ -97,7 +98,7 @@ export default function MatchdayManualFixtures({
                 disabled={readOnly}
                 onClick={() =>
                   setManualFixtures((previous) =>
-                    previous.filter((_, itemIndex) => itemIndex !== index)
+                    previous.filter((candidate) => getFixtureFlowIdentity(candidate) !== getFixtureFlowIdentity(fixture))
                   )
                 }
               >
