@@ -20,6 +20,7 @@ import {
   getSuggestionWindowForFixture,
   isKickOffAllowedForFixture,
 } from "../../../lib/intelligence/scheduling/kickOffRules.js";
+import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 
 function timeToMinutes(time) {
   const [hours, minutes] = String(time || "").split(":").map(Number);
@@ -228,7 +229,7 @@ export default function MatchdayUnresolvedCard({
 
   if (unresolved.length === 0) return null;
 
-  const resolveFixture = ({ fixture, index, patch, cfg, overridden = false }) => {
+  const resolveFixture = ({ fixture, patch, cfg, overridden = false }) => {
     if (readOnly) return;
     const koMins =
       patch.koMins != null ? patch.koMins : timeToMinutes(patch.koTime);
@@ -250,15 +251,17 @@ export default function MatchdayUnresolvedCard({
       [...previous, resolved].sort((a, b) => (a.koMins || 0) - (b.koMins || 0))
     );
 
-    setUnresolved((previous) => previous.filter((_, fixtureIndex) => fixtureIndex !== index));
+    const fixtureIdentity = getFixtureFlowIdentity(fixture);
+    setUnresolved((previous) => previous.filter(
+      (candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity,
+    ));
   };
 
-  const completeManualAssignment = ({ fixture, index, ov, cfg, koMins, endMins, clash = null }) => {
+  const completeManualAssignment = ({ fixture, ov, cfg, koMins, endMins, clash = null }) => {
     const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
 
     resolveFixture({
       fixture,
-      index,
       cfg,
       overridden: Boolean(clash),
       patch: {
@@ -280,7 +283,7 @@ export default function MatchdayUnresolvedCard({
 
   const confirmManualAssignment = ({ fixture, index }) => {
     if (readOnly) return;
-    const ov = overrides[9000 + index] || {};
+    const ov = overrides[getFixtureFlowIdentity(fixture)] || {};
 
     if (!ov.pitchId) {
       toast.error("Select a pitch first", {
@@ -344,7 +347,7 @@ export default function MatchdayUnresolvedCard({
       return;
     }
 
-    completeManualAssignment({ fixture, index, ov, cfg, koMins, endMins });
+    completeManualAssignment({ fixture, ov, cfg, koMins, endMins });
   };
 
   return (
@@ -521,7 +524,7 @@ export default function MatchdayUnresolvedCard({
                     <select
                       disabled={readOnly}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      onChange={(event) => onOverride(9000 + index, "pitchId", event.target.value)}
+                      onChange={(event) => onOverride(getFixtureFlowIdentity(fixture), "pitchId", event.target.value)}
                     >
                       <option value="">Select pitch...</option>
                       {suitablePitches.map((pitch) => (
@@ -541,7 +544,7 @@ export default function MatchdayUnresolvedCard({
                       type="time"
                       disabled={readOnly}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      onChange={(event) => onOverride(9000 + index, "koTime", event.target.value)}
+                      onChange={(event) => onOverride(getFixtureFlowIdentity(fixture), "koTime", event.target.value)}
                     />
                   </div>
 

@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureFlowIdentity, partitionFixturesForScheduling, reverseAwayFixture, validateSchedulingFixtureInput } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureFlowIdentity, mergeFixtureOverride, partitionFixturesForScheduling, reverseAwayFixture, validateSchedulingFixtureInput } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -2044,12 +2044,36 @@ function App() {
     }
   };
 
-  const satOv = (i, k, v, fixtureIdentity = "") =>
-    setSatOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
-  const sunOv = (i, k, v, fixtureIdentity = "") =>
-    setSunOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
-  const midweekOv = (i, k, v, fixtureIdentity = "") =>
-    setMidweekOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+  const writeFixtureOverride = (setOverrides, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
+    const fixtureIdentity = String(
+      typeof target === "string" ? target : legacyFixtureIdentity || "",
+    ).trim();
+    const patch = fieldOrPatch && typeof fieldOrPatch === "object"
+      ? fieldOrPatch
+      : typeof fieldOrPatch === "string"
+        ? { [fieldOrPatch]: value }
+        : {};
+
+    if (fixtureIdentity) {
+      setOverrides((current) => mergeFixtureOverride(current, fixtureIdentity, patch));
+      return;
+    }
+
+    // Compatibility for older non-Control-Centre surfaces. New operational
+    // mutations always arrive above with a canonical fixture identity.
+    if (typeof target === "number" && typeof fieldOrPatch === "string") {
+      setOverrides((current) => ({
+        ...current,
+        [target]: { ...(current[target] || {}), [fieldOrPatch]: value },
+      }));
+    }
+  };
+  const satOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
+    writeFixtureOverride(setSatOverrides, target, fieldOrPatch, value, fixtureIdentity);
+  const sunOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
+    writeFixtureOverride(setSunOverrides, target, fieldOrPatch, value, fixtureIdentity);
+  const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
+    writeFixtureOverride(setMidweekOverrides, target, fieldOrPatch, value, fixtureIdentity);
   const {
     satFinal,
     satActive,
@@ -2338,17 +2362,11 @@ function App() {
       : dayKey === "midweek"
         ? midweekOverrides
         : satOverrides;
-    const matchingSessionEntries = Object.entries(previousSessionOverrides)
-      .filter(([, candidate]) => candidate?.fixtureIdentity === canonicalFixtureIdentity);
-    const override = {
-      ...matchingSessionEntries.reduce((merged, [, candidate]) => ({ ...merged, ...candidate }), {}),
-      ...reversalOverride,
-    };
-    const nextSessionOverrides = Object.fromEntries(
-      Object.entries(previousSessionOverrides)
-        .filter(([, candidate]) => candidate?.fixtureIdentity !== canonicalFixtureIdentity),
+    const nextSessionOverrides = mergeFixtureOverride(
+      previousSessionOverrides,
+      canonicalFixtureIdentity,
+      reversalOverride,
     );
-    nextSessionOverrides[canonicalFixtureIdentity] = override;
     const setDaySessionOverrides = dayKey === "sunday"
       ? setSunOverrides
       : dayKey === "midweek"

@@ -269,7 +269,7 @@ export default function MatchdayPage({
   navigationTarget = null,
   clearNavigationTarget,
 }) {
-  const [selectedFixtureIndex, setSelectedFixtureIndex] = useState(null);
+  const [selectedFixtureIdentity, setSelectedFixtureIdentity] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("fixtures");
   const [sectionQuery, setSectionQuery] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -519,9 +519,24 @@ export default function MatchdayPage({
   );
 
   const editableOverride = useCallback(
-    (index, field, value) => {
+    (target, fieldOrPatch, value) => {
       if (isLocked || typeof onOverride !== "function") return;
-      onOverride(index, field, value, getFixtureFlowIdentity(final[index] || {}));
+      const fixture = typeof target === "number"
+        ? final[target]
+        : target && typeof target === "object"
+          ? target
+          : null;
+      const fixtureIdentity = typeof target === "string"
+        ? target
+        : getFixtureFlowIdentity(fixture || {});
+      const patch = fieldOrPatch && typeof fieldOrPatch === "object"
+        ? fieldOrPatch
+        : typeof fieldOrPatch === "string"
+          ? { [fieldOrPatch]: value }
+          : {};
+
+      if (!fixtureIdentity || !Object.keys(patch).length) return;
+      onOverride(fixtureIdentity, patch);
     },
     [final, isLocked, onOverride],
   );
@@ -647,15 +662,13 @@ export default function MatchdayPage({
   const applyOptimisationMove = useCallback(
     (move) => {
       if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
-      Object.entries(move.patch).forEach(([field, value]) =>
-        onOverride(move.fixtureIndex, field, value),
-      );
+      editableOverride(move.fixtureIdentity, move.patch);
       toast.success("Validated fixture move applied", {
         description:
           move.summary || move.fixtureTitle || "The schedule has been updated.",
       });
     },
-    [isLocked, onOverride],
+    [editableOverride, final, isLocked, onOverride],
   );
 
   const applyAllValidatedMoves = useCallback(() => {
@@ -663,16 +676,14 @@ export default function MatchdayPage({
     if (!moves.length || isLocked || typeof onOverride !== "function") return;
 
     moves.forEach((move) => {
-      Object.entries(move.patch || {}).forEach(([field, value]) =>
-        onOverride(move.fixtureIndex, field, value),
-      );
+      editableOverride(move.fixtureIdentity, move.patch || {});
     });
 
     setPendingConfirmation(null);
     toast.success("Schedule improvements applied", {
       description: `${moves.length} validated move${moves.length === 1 ? "" : "s"} applied.`,
     });
-  }, [dayOptimisation.moves, isLocked, onOverride]);
+  }, [dayOptimisation.moves, editableOverride, final, isLocked, onOverride]);
 
   const applyAllOptimisationMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
@@ -700,7 +711,7 @@ export default function MatchdayPage({
         (fixture, fixtureIndex) =>
           getPlannerFixtureIdentity(fixture, fixtureIndex) === record?.fixtureId,
       );
-      return matchedIndex >= 0 ? matchedIndex : record?.fixtureIndex;
+      return matchedIndex;
     },
     [final],
   );
@@ -710,11 +721,9 @@ export default function MatchdayPage({
       if (typeof onOverride !== "function" || !record || !patch) return;
       const fixtureIndex = getTimelineRecordIndex(record);
       if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
-      Object.entries(patch).forEach(([field, value]) =>
-        onOverride(fixtureIndex, field, value),
-      );
+      editableOverride(final[fixtureIndex], patch);
     },
-    [getTimelineRecordIndex, onOverride],
+    [editableOverride, final, getTimelineRecordIndex, onOverride],
   );
 
   const undoTimelineMove = useCallback(() => {
@@ -763,9 +772,7 @@ export default function MatchdayPage({
     (candidate) => {
       if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
 
-      Object.entries(candidate.patch).forEach(([field, value]) =>
-        onOverride(candidate.fixtureIndex, field, value),
-      );
+      editableOverride(candidate.fixture, candidate.patch);
       const record = buildPlannerChangeRecord(candidate);
       if (record) setTimelineHistory((current) => [...current, record]);
       setTimelineRedoHistory([]);
@@ -776,7 +783,7 @@ export default function MatchdayPage({
         description: getTimelineCandidateSummary(candidate),
       });
     },
-    [isLocked, onOverride],
+    [editableOverride, final, isLocked, onOverride],
   );
 
   const requestTimelineMove = useCallback(
@@ -952,26 +959,17 @@ export default function MatchdayPage({
     onFixtureClick: openFixture,
   };
 
-  const selectedFixture =
-    typeof selectedFixtureIndex === "number" && final[selectedFixtureIndex]
-      ? {
-          ...final[selectedFixtureIndex],
-          __index: selectedFixtureIndex,
-          __day: day,
-        }
-      : null;
+  const selectedFixtureRecord = selectedFixtureIdentity
+    ? final.find((fixture) => getFixtureFlowIdentity(fixture) === selectedFixtureIdentity)
+    : null;
+  const selectedFixture = selectedFixtureRecord
+    ? { ...selectedFixtureRecord, __day: day }
+    : null;
 
   function openFixture(fixture, index) {
-    if (typeof index === "number") {
-      setSelectedFixtureIndex(index);
-      return;
-    }
-
-    const fixtureIndex = final.findIndex((item) => item === fixture);
-
-    if (fixtureIndex >= 0) {
-      setSelectedFixtureIndex(fixtureIndex);
-    }
+    const selected = fixture || (typeof index === "number" ? final[index] : null);
+    const fixtureIdentity = getFixtureFlowIdentity(selected || {});
+    if (fixtureIdentity) setSelectedFixtureIdentity(fixtureIdentity);
   }
 
   const sections = useMemo(() => {
@@ -1676,7 +1674,7 @@ export default function MatchdayPage({
           : undefined}
         operatorIdentity={props.operatorIdentity}
         readOnly={isLocked}
-        onClose={() => setSelectedFixtureIndex(null)}
+        onClose={() => setSelectedFixtureIdentity("")}
       />
 
       <ConfirmDialog

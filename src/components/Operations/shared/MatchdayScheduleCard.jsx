@@ -1,5 +1,6 @@
 import React from "react";
 import { cleanName } from "../../../lib/scheduler.js";
+import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 import MatchFixtureCard from "./MatchFixtureCard.jsx";
 
 export default function MatchdayScheduleCard({
@@ -110,11 +111,7 @@ export default function MatchdayScheduleCard({
 
             return (
               <MatchFixtureCard
-                key={
-                  fixture.id ||
-                  fixture.fixtureId ||
-                  `${fixture.homeTeam}-${index}`
-                }
+                key={getFixtureFlowIdentity(fixture)}
                 fixture={fixture}
                 index={index}
                 club={club}

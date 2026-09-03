@@ -1,6 +1,7 @@
 import { getValidatedFixRecommendations } from "./recommendationEngine.js";
 import { validateFixtureUpdate } from "./validationEngine.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
+import { getFixtureFlowIdentity } from "../domain/fixtureVenueFlow.js";
 
 function getFixtureTitle(fixture = {}) {
   return [fixture.homeTeam || fixture.team || fixture.fixture, fixture.awayTeam]
@@ -128,6 +129,7 @@ export function calculateDayOptimisation({
 
     accepted.push({
       ...candidate,
+      fixtureIdentity: getFixtureFlowIdentity(fixture),
       fixtureTitle: candidate.fixtureTitle || getFixtureTitle(fixture),
       summary: getMoveSummary(fixture, candidate.patch),
     });

@@ -33,7 +33,7 @@ import {
   postponeFixture,
   restoreFixture,
 } from "../../../lib/domain/fixtureLifecycle.js";
-import { reverseAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
+import { getFixtureFlowIdentity, reverseAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
 
 const PARKING_ADVISORY_TYPES = new Set([
   "parking_capacity",
@@ -63,7 +63,7 @@ export default function FixtureDrawer({
   useEffect(() => {
     setBlockedMove(null);
     setActiveTab("overview");
-  }, [fixture?.__index]);
+  }, [fixture ? getFixtureFlowIdentity(fixture) : ""]);
 
   if (!fixture) return null;
 
@@ -78,9 +78,11 @@ export default function FixtureDrawer({
   const format =
     fixture.cfg?.format || fixture.manualFormat || fixture.format || "Fixture";
 
-  const fixtureIndex =
-    typeof fixture.__index === "number" ? fixture.__index : 0;
-  const canEdit = !readOnly && typeof onOverride === "function";
+  const fixtureIdentity = getFixtureFlowIdentity(fixture);
+  const fixtureIndex = fixtures.findIndex(
+    (candidate) => getFixtureFlowIdentity(candidate) === fixtureIdentity,
+  );
+  const canEdit = !readOnly && Boolean(fixtureIdentity) && typeof onOverride === "function";
 
   const closeDrawer = () => {
     setBlockedMove(null);
@@ -88,9 +90,7 @@ export default function FixtureDrawer({
   };
 
   const applyFixturePatch = (patch) => {
-    Object.entries(patch).forEach(([field, value]) => {
-      onOverride(fixtureIndex, field, value);
-    });
+    onOverride(fixtureIdentity, patch);
   };
 
   const buildPatch = (field, value) => {

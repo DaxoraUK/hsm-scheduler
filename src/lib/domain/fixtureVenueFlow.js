@@ -27,6 +27,40 @@ export function getFixtureIdentityAliases(fixture = {}) {
   return [...new Set(aliases)];
 }
 
+// Operational edits and venue reversals are patches on one immutable provider
+// fixture. Normalise every new write to that fixture's canonical identity so a
+// later edit cannot compete with (or overwrite) the persisted venue override.
+export function mergeFixtureOverride(overrides = {}, fixtureIdentity, patch = {}) {
+  const canonicalFixtureIdentity = String(fixtureIdentity || "").trim();
+  const sourceOverrides = overrides && typeof overrides === "object" ? overrides : {};
+  if (!canonicalFixtureIdentity) return { ...sourceOverrides };
+
+  const entries = Object.entries(sourceOverrides);
+  const matchingEntries = entries.filter(([key, candidate]) =>
+    key === canonicalFixtureIdentity ||
+    String(candidate?.fixtureIdentity || "").trim() === canonicalFixtureIdentity,
+  );
+  const existing = matchingEntries.reduce(
+    (merged, [, candidate]) => ({ ...merged, ...candidate }),
+    {},
+  );
+  const remaining = Object.fromEntries(
+    entries.filter(([key, candidate]) =>
+      key !== canonicalFixtureIdentity &&
+      String(candidate?.fixtureIdentity || "").trim() !== canonicalFixtureIdentity,
+    ),
+  );
+
+  return {
+    ...remaining,
+    [canonicalFixtureIdentity]: {
+      ...existing,
+      ...patch,
+      fixtureIdentity: canonicalFixtureIdentity,
+    },
+  };
+}
+
 export function applyFixtureOverrides(fixtures = [], overrides = {}) {
   const stableOverrides = new Map(
     Object.values(overrides || {})

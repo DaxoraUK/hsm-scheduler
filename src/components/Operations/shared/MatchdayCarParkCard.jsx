@@ -6,6 +6,7 @@ import {
   getParkingSnapshot,
 } from "../../../lib/engines/parkingEngine.js";
 import { getValidatedFixRecommendations } from "../../../lib/engines/recommendationEngine.js";
+import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number(value) || 0));
@@ -630,34 +631,31 @@ function ParkingOperationsPlan({ plan }) {
 function applyParkingRecommendation(recommendation, onOverride) {
   if (!recommendation || typeof onOverride !== "function") return;
 
-  const index = recommendation.fixtureIndex;
-
-  if (typeof index !== "number" || index < 0) return;
+  const fixtureIdentity = String(recommendation.fixtureIdentity || "").trim();
+  if (!fixtureIdentity) return;
 
   if (recommendation.patch && typeof recommendation.patch === "object") {
-    Object.entries(recommendation.patch).forEach(([field, value]) => {
-      onOverride(index, field, value);
-    });
+    onOverride(fixtureIdentity, recommendation.patch);
     return;
   }
 
   if (recommendation.type === "time" && recommendation.koTime) {
-    onOverride(index, "koTime", recommendation.koTime);
+    onOverride(fixtureIdentity, "koTime", recommendation.koTime);
 
     if (typeof recommendation.koMins === "number") {
-      onOverride(index, "koMins", recommendation.koMins);
+      onOverride(fixtureIdentity, "koMins", recommendation.koMins);
     }
 
     if (typeof recommendation.endMins === "number") {
-      onOverride(index, "endMins", recommendation.endMins);
+      onOverride(fixtureIdentity, "endMins", recommendation.endMins);
     }
 
     return;
   }
 
   if (recommendation.type === "pitch" && recommendation.pitchId) {
-    onOverride(index, "pitchId", recommendation.pitchId);
-    onOverride(index, "pitchLabel", recommendation.pitchLabel || recommendation.pitchId);
+    onOverride(fixtureIdentity, "pitchId", recommendation.pitchId);
+    onOverride(fixtureIdentity, "pitchLabel", recommendation.pitchLabel || recommendation.pitchId);
   }
 }
 export default function MatchdayCarParkCard({
@@ -748,6 +746,7 @@ export default function MatchdayCarParkCard({
           ...fix,
           type: "validated",
           fixtureIndex,
+          fixtureIdentity: getFixtureFlowIdentity(fixture),
           reduction: Math.max(0, Number(fix.reduction || 0)),
         });
       });

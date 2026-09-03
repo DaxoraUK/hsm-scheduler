@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFixtureOverrides,
+  mergeFixtureOverride,
   partitionFixturesForScheduling,
   reverseAwayFixture,
 } from "../../src/lib/domain/fixtureVenueFlow.js";
@@ -114,6 +115,98 @@ describe("home and away fixture flow", () => {
       originalHomeTeam: "Turton U10 Turton Tigers",
       originalAwayTeam: "Horwich St. Mary's U10 Avengers",
     });
+  });
+
+  it("merges Control Centre changes into the same canonical override as an Away-to-Home reversal", () => {
+    const canonicalIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=30782776";
+    const imported = {
+      canonicalFixtureIdentity: canonicalIdentity,
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=30782776",
+      homeTeam: "Hindley Town U10 Valkyries",
+      awayTeam: "Horwich St. Mary's U10 Cobras",
+      status: "away",
+      isAwayFixture: true,
+      requiresScheduling: false,
+    };
+    const reversal = {
+      fixtureIdentity: canonicalIdentity,
+      homeTeam: "Horwich St. Mary's U10 Cobras",
+      awayTeam: "Hindley Town U10 Valkyries",
+      status: "active",
+      venueRole: "home",
+      isAwayFixture: false,
+      requiresScheduling: true,
+      venueReversal: { canonicalFixtureIdentity: canonicalIdentity },
+    };
+
+    const withKo = mergeFixtureOverride({ [canonicalIdentity]: reversal }, canonicalIdentity, {
+      koTime: "10:00",
+      koMins: 600,
+      endMins: 660,
+    });
+    const withPitch = mergeFixtureOverride(withKo, canonicalIdentity, {
+      pitchId: "P3a",
+      pitchLabel: "Pitch 3A",
+    });
+    const overrides = mergeFixtureOverride(withPitch, canonicalIdentity, {
+      referee: "Alex Ref",
+      refStatus: "Assigned",
+    });
+
+    const [effective] = applyFixtureOverrides([imported], overrides);
+    const flow = partitionFixturesForScheduling([effective]);
+
+    expect(Object.keys(overrides)).toEqual([canonicalIdentity]);
+    expect(effective).toMatchObject({
+      canonicalFixtureIdentity: canonicalIdentity,
+      homeTeam: "Horwich St. Mary's U10 Cobras",
+      awayTeam: "Hindley Town U10 Valkyries",
+      venueRole: "home",
+      isAwayFixture: false,
+      requiresScheduling: true,
+      koTime: "10:00",
+      koMins: 600,
+      pitchId: "P3a",
+      pitchLabel: "Pitch 3A",
+      referee: "Alex Ref",
+      refStatus: "Assigned",
+    });
+    expect(flow.home).toHaveLength(1);
+    expect(flow.away).toHaveLength(0);
+  });
+
+  it("uses the same canonical patch path for native and reversed Home fixtures without increasing fixture count", () => {
+    const nativeIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=home-1";
+    const reversedIdentity = "url:https://fulltime.thefa.com/displayfixture.html?id=away-1";
+    const imported = [
+      { canonicalFixtureIdentity: nativeIdentity, homeTeam: "Club U12", awayTeam: "Visitors", requiresScheduling: true },
+      { canonicalFixtureIdentity: reversedIdentity, homeTeam: "Hosts", awayTeam: "Club U13", isAwayFixture: true, requiresScheduling: false },
+    ];
+    let overrides = {
+      1: {
+        fixtureIdentity: reversedIdentity,
+        venueRole: "home",
+        isAwayFixture: false,
+        requiresScheduling: true,
+        venueReversal: { canonicalFixtureIdentity: reversedIdentity },
+      },
+    };
+
+    overrides = mergeFixtureOverride(overrides, nativeIdentity, { koTime: "09:30", pitchId: "P2", referee: "Native Ref" });
+    overrides = mergeFixtureOverride(overrides, reversedIdentity, { koTime: "10:00", pitchId: "P3a", referee: "Reversed Ref" });
+
+    expect(Object.keys(overrides).sort()).toEqual([nativeIdentity, reversedIdentity].sort());
+    for (let rebuild = 0; rebuild < 10; rebuild += 1) {
+      const effective = applyFixtureOverrides(imported, overrides);
+      const flow = partitionFixturesForScheduling(effective);
+
+      expect(effective).toHaveLength(2);
+      expect(new Set(effective.map((fixture) => fixture.canonicalFixtureIdentity)).size).toBe(2);
+      expect(flow.home).toHaveLength(2);
+      expect(flow.away).toHaveLength(0);
+      expect(flow.home.find((fixture) => fixture.canonicalFixtureIdentity === nativeIdentity)).toMatchObject({ koTime: "09:30", pitchId: "P2", referee: "Native Ref" });
+      expect(flow.home.find((fixture) => fixture.canonicalFixtureIdentity === reversedIdentity)).toMatchObject({ koTime: "10:00", pitchId: "P3a", referee: "Reversed Ref", venueRole: "home" });
+    }
   });
 
   it("keeps an ordinary away fixture away when no override exists", () => {
