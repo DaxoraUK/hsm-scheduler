@@ -6,6 +6,17 @@ import { resolveEffectiveAllocation } from "./effectiveAllocation.js";
 
 export { getFixtureOccupancy } from "./fixtureOccupancy.js";
 export { resolveEffectiveAllocation } from "./effectiveAllocation.js";
+export {
+  appendScheduleMutation,
+  createScheduleTransaction,
+  discardScheduleTransaction,
+  getProposedSchedule,
+  getScheduleTransactionPatches,
+  isScheduleTransactionDirty,
+  redoScheduleMutation,
+  undoScheduleMutation,
+  validateProposedSchedule,
+} from "./scheduleTransaction.js";
 
 function cleanIdentity(value) {
   return String(value || "").trim();
