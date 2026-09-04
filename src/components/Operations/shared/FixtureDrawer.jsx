@@ -581,6 +581,7 @@ Good luck!`;
                     {canEdit ? (
                       <input
                         type="time"
+                        step="300"
                         value={displayFixture.koTime || ""}
                         onChange={(e) =>
                           updateFixture("koTime", e.target.value)

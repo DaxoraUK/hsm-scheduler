@@ -7,8 +7,9 @@ import {
 } from "../intelligence/pitch/pitchService.js";
 import { formatTimelineTime } from "./timelineEngine.js";
 import { detectAnnualPlannerConflicts, getMatchdayFixtureSourceId, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
-export const TIMELINE_SNAP_MINUTES = 15;
+export const TIMELINE_SNAP_MINUTES = SCHEDULING_TIME_INCREMENT_MINS;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
 
 function asClosedPitchSet(closedPitches = []) {

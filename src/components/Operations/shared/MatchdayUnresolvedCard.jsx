@@ -21,6 +21,7 @@ import {
   isKickOffAllowedForFixture,
 } from "../../../lib/intelligence/scheduling/kickOffRules.js";
 import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
+import { getFixtureOccupancy, SCHEDULING_TIME_INCREMENT_MINS } from "../../../lib/domain/fixtureOccupancy.js";
 
 function timeToMinutes(time) {
   const [hours, minutes] = String(time || "").split(":").map(Number);
@@ -37,12 +38,8 @@ function minutesToTime(totalMins) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function getDuration(cfg = {}) {
-  const format = cfg.format || "";
-  const gameMins = cfg.gameMins || 70;
-  const bufferMins = String(format).includes("11") ? 30 : 15;
-
-  return gameMins + bufferMins;
+function getDuration(fixture = {}, cfg = {}, timing = {}) {
+  return getFixtureOccupancy({ fixture: { ...fixture, cfg }, timing }).occupancyMins;
 }
 
 function getBlockedPitchIds(pitchId, pitchCfg = []) {
@@ -138,7 +135,7 @@ function buildResolutionSuggestions({
   limit = 3,
 } = {}) {
   const cfg = resolveFixtureTeam(fixture, teamCfg);
-  const duration = getDuration(cfg);
+  const duration = getDuration(fixture, cfg, club?.timingSettings || {});
   const suitablePitches = getSuitablePitches({ fixture, cfg, pitchCfg, closedPitches });
   const maxConcurrent = Number(club.maxConcurrent || 3);
   const fixtureWithCfg = { ...fixture, cfg };
@@ -148,7 +145,7 @@ function buildResolutionSuggestions({
   const suggestions = [];
 
   suitablePitches.forEach((pitch) => {
-    for (let koMins = startMins; koMins <= endMins; koMins += 15) {
+    for (let koMins = startMins; koMins <= endMins; koMins += SCHEDULING_TIME_INCREMENT_MINS) {
       const koTime = minutesToTime(koMins);
 
       if (!isKickOffAllowedForFixture({ fixture: fixtureWithCfg, koTime, club })) continue;
@@ -179,7 +176,7 @@ function buildResolutionSuggestions({
       const score =
         (isDefault ? 100 : 0) +
         (isAlt ? 80 : 0) -
-        Math.abs(koMins - startMins) / 15 -
+        Math.abs(koMins - startMins) / SCHEDULING_TIME_INCREMENT_MINS -
         concurrentCount * 4;
 
       suggestions.push({

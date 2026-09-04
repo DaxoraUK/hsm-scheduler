@@ -11,6 +11,7 @@ import {
 import { getFixtureParkingImpact, getMatchdayParkingImpact } from "./parkingEngine.js";
 import { getSuggestionWindowForFixture } from "../intelligence/scheduling/kickOffRules.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
 function getTimeSortScore(time, currentTime) {
   const timeMins = timeToMinutes(time);
@@ -188,7 +189,7 @@ function scoreRecommendation({ current = {}, patch = {}, parking = {}, pitchCfg 
   if (gameDelta > 0) score += gameDelta * 8;
   if (carDelta > 0) score += Math.round(carDelta / 2);
 
-  if (patch.koTime) score -= Math.round(getTimeSortScore(patch.koTime, current.koTime) / 15);
+  if (patch.koTime) score -= Math.round(getTimeSortScore(patch.koTime, current.koTime) / SCHEDULING_TIME_INCREMENT_MINS);
 
   const pitch = pitchCfg.find((item) => item.id === patch.pitchId);
   if (pitch?.affectsParking === false) score += 15;
@@ -411,7 +412,7 @@ export function getNextAvailableTimes({
   next = {},
   start,
   end,
-  interval = 15,
+  interval = SCHEDULING_TIME_INCREMENT_MINS,
   limit = 8,
   closedPitches = [],
   club = {},
@@ -470,7 +471,7 @@ export function getValidatedFixRecommendations({
   basePatch = {},
   start,
   end,
-  interval = 15,
+  interval = SCHEDULING_TIME_INCREMENT_MINS,
   limit = 5,
   allowParkingImprovement = false,
   minimumCarReduction = 1,
@@ -676,7 +677,7 @@ export function getOperationsImpact({
     next,
     start,
     end,
-    interval: 15,
+    interval: SCHEDULING_TIME_INCREMENT_MINS,
     limit: 8,
     closedPitches,
     club,
@@ -691,7 +692,7 @@ export function getOperationsImpact({
     basePatch: patch,
     start,
     end,
-    interval: 15,
+    interval: SCHEDULING_TIME_INCREMENT_MINS,
     limit: 5,
   });
 

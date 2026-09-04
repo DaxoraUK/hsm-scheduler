@@ -7,6 +7,7 @@ import {
 } from "../../../lib/engines/parkingEngine.js";
 import { getValidatedFixRecommendations } from "../../../lib/engines/recommendationEngine.js";
 import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../../../lib/domain/fixtureOccupancy.js";
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number(value) || 0));
@@ -194,7 +195,7 @@ function formatPressureWindows(slots = []) {
   const sorted = [...slots].sort(
     (a, b) => Number(a.mins || 0) - Number(b.mins || 0)
   );
-  const interval = 15;
+  const interval = SCHEDULING_TIME_INCREMENT_MINS;
   const groups = [];
 
   sorted.forEach((slot) => {
@@ -731,7 +732,7 @@ export default function MatchdayCarParkCard({
         club,
         start: `${String(startHour).padStart(2, "0")}:${String(startMin).padStart(2, "0")}`,
         end: recommendationEndTime,
-        interval: 15,
+        interval: SCHEDULING_TIME_INCREMENT_MINS,
         limit: 3,
         allowParkingImprovement: true,
         minimumCarReduction: 1,

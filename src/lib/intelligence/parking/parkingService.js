@@ -6,6 +6,7 @@ import {
   isFixtureActive,
   timeToMinutes,
 } from "../../engines/validationEngine.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../../domain/fixtureOccupancy.js";
 function numberOrFallback(value, fallback) {
   if (value === null || value === undefined || value === "") {
     return fallback;
@@ -215,7 +216,7 @@ export function getParkingLoad({
 function getScheduleBounds(
   fixtures = [],
   fallbackStartMins = 8 * 60,
-  slotMins = 15
+  slotMins = SCHEDULING_TIME_INCREMENT_MINS
 ) {
   const activeWindows = fixtures
     .filter(isFixtureActive)
@@ -244,9 +245,9 @@ export function analyseParkingPressure({
   club = {},
   pitchCfg = [],
   startMins = 8 * 60,
-  slotMins = 15,
+  slotMins = SCHEDULING_TIME_INCREMENT_MINS,
 } = {}) {
-  const safeSlotMins = Math.max(5, nonNegativeNumber(slotMins, 15));
+  const safeSlotMins = Math.max(SCHEDULING_TIME_INCREMENT_MINS, nonNegativeNumber(slotMins, SCHEDULING_TIME_INCREMENT_MINS));
   const settings = getParkingSettings(club);
   const bounds = getScheduleBounds(fixtures, startMins, safeSlotMins);
   const activeFixtures = fixtures.filter(isFixtureActive);

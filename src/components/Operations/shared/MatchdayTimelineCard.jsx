@@ -48,6 +48,7 @@ import {
 } from "../../../lib/engines/matchdayPlannerEngine.js";
 import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";
 import { DB, isSupaConfigured } from "../../../lib/supabase.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../../../lib/domain/fixtureOccupancy.js";
 
 const PITCH_COLUMN_WIDTH = 184;
 const EDGE_SCROLL_DISTANCE = 68;
@@ -107,7 +108,7 @@ export default function MatchdayTimelineCard({
 
   const slots = useMemo(() => buildPlannerSlots(timeline.start, timeline.end, 15), [timeline.end, timeline.start]);
   const overlayMetrics = useMemo(
-    () => buildPlannerOverlayMetrics({ fixtures: games, club, start: timeline.start, end: timeline.end, interval: 15 }),
+    () => buildPlannerOverlayMetrics({ fixtures: games, club, start: timeline.start, end: timeline.end, interval: SCHEDULING_TIME_INCREMENT_MINS }),
     [club, games, timeline.end, timeline.start],
   );
   const groups = useMemo(() => buildPlannerPitchGroups(timeline.rows), [timeline.rows]);

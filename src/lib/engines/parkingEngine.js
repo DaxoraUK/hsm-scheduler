@@ -5,6 +5,7 @@ import {
   getParkingSettings,
   pitchAffectsParking,
 } from "../intelligence/parking/parkingService.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
 function toNumber(value, fallback = 0) {
   const number = Number(value);
@@ -434,7 +435,7 @@ function getParkingFixtureName(fixture = {}) {
   return fixture.homeTeam || fixture.team || fixture.fixture || fixture.title || "Fixture";
 }
 
-function groupContiguousSlots(slots = [], slotMins = 15) {
+function groupContiguousSlots(slots = [], slotMins = SCHEDULING_TIME_INCREMENT_MINS) {
   if (!slots.length) return [];
 
   const sorted = [...slots].sort((a, b) => a.mins - b.mins);
@@ -484,7 +485,7 @@ export function buildParkingArrivalForecast({
   fixtures = [],
   club = {},
   pitchCfg = [],
-  slotMins = 15,
+  slotMins = SCHEDULING_TIME_INCREMENT_MINS,
 } = {}) {
   const capacity = Math.max(0, Number(getParkingSettings(club).carParkSpaces || 0));
   const activeFixtures = (fixtures || [])

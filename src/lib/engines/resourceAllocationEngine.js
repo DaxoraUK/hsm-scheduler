@@ -1,5 +1,6 @@
 import { buildClubConfiguration, getAvgCarsForFixture, getPitchForFixture, getSiteForFixture, getTeamForFixture } from "./configurationEngine.js";
 import { getOfficialDisplayName, isFixtureOfficialConfirmed } from "./officialsEngine.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
@@ -28,9 +29,9 @@ function getSlotRange(fixture = {}) {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
 
   const slots = [];
-  const slotStart = Math.floor(start / 15) * 15;
-  const slotEnd = Math.ceil(end / 15) * 15;
-  for (let mins = slotStart; mins < slotEnd; mins += 15) slots.push(mins);
+  const slotStart = Math.floor(start / SCHEDULING_TIME_INCREMENT_MINS) * SCHEDULING_TIME_INCREMENT_MINS;
+  const slotEnd = Math.ceil(end / SCHEDULING_TIME_INCREMENT_MINS) * SCHEDULING_TIME_INCREMENT_MINS;
+  for (let mins = slotStart; mins < slotEnd; mins += SCHEDULING_TIME_INCREMENT_MINS) slots.push(mins);
   return slots;
 }
 

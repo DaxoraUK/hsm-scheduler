@@ -2,6 +2,7 @@ import { getValidatedFixRecommendations } from "./recommendationEngine.js";
 import { validateFixtureUpdate } from "./validationEngine.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
 import { getFixtureFlowIdentity } from "../domain/fixtureVenueFlow.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
 function getFixtureTitle(fixture = {}) {
   return [fixture.homeTeam || fixture.team || fixture.fixture, fixture.awayTeam]
@@ -49,7 +50,7 @@ export function calculateDayOptimisation({
   club = {},
   start,
   end,
-  interval = 15,
+  interval = SCHEDULING_TIME_INCREMENT_MINS,
   maxMoves = 4,
 } = {}) {
   const activeFixtures = fixtures.filter((fixture) => fixture?.status !== "postponed");

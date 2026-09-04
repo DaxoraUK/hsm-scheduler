@@ -9,7 +9,7 @@ import {
 } from "./constants.js";
 import { isPitchSuitableForFixture } from "./intelligence/pitch/pitchService.js";
 import { createPitchRegistry, normalisePitchRegistry } from "./registry/pitchRegistry.js";
-import { getFixtureOccupancy } from "./domain/fixtureOccupancy.js";
+import { getFixtureOccupancy, SCHEDULING_TIME_INCREMENT_MINS } from "./domain/fixtureOccupancy.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -358,7 +358,7 @@ function scheduleFixtureDayCore(
 
     const firstTime = Number.isFinite(exactTime) ? exactTime : startMins;
     const lastTime = Number.isFinite(exactTime) ? exactTime : endMins;
-    for (let time = firstTime; time <= lastTime; time += 15) {
+    for (let time = firstTime; time <= lastTime; time += SCHEDULING_TIME_INCREMENT_MINS) {
       if (
         !onlyIndependent &&
         concurrentCount(time, time + 1) >= maxConcurrentAllowed
@@ -407,7 +407,7 @@ function scheduleFixtureDayCore(
       fixture: fixtureWithCfg,
       timing: {
         halfTimeMins: cfg.halfTimeMins,
-        turnaroundMins: bufMap[cfg.format] ?? 15,
+        turnaroundMins: bufMap[cfg.format] ?? SCHEDULING_TIME_INCREMENT_MINS,
       },
     }).occupancyMins;
     const configuredSuitablePitches = pitchCfg.filter((pitch) =>
@@ -597,7 +597,7 @@ function scheduleFixtureDayCore(
         let concurrentBlocked = 0;
         let slotBlocked = 0;
 
-        for (let time = startMins; time <= endMins; time += 15) {
+        for (let time = startMins; time <= endMins; time += SCHEDULING_TIME_INCREMENT_MINS) {
           if (
             !isIndependentPitch(pitchCfg, pitchId) &&
             concurrentCount(time, time + 1) >= maxConcurrentAllowed

@@ -24,7 +24,7 @@ describe("shared fixture occupancy and allocation", () => {
     });
 
     expect(schedulingState.getFixtureOccupancy({
-      fixture: { gameMins: 90, format: "11v11", koMins: 840 },
+      fixture: { gameMins: 90, format: "11v11", teamType: "open_age", koMins: 840 },
       timing: { adultTurnaroundMins: 30 },
     })).toMatchObject({
       playingMins: 90,

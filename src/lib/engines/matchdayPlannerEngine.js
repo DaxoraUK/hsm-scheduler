@@ -1,6 +1,7 @@
 import { formatTimelineTime } from "./timelineEngine.js";
 import { snapTimelineMinutes, TIMELINE_SNAP_MINUTES } from "./timelineDragEngine.js";
 import { getFixtureFlowIdentity } from "../domain/fixtureVenueFlow.js";
+import { SCHEDULING_TIME_INCREMENT_MINS } from "../domain/fixtureOccupancy.js";
 
 export const MATCHDAY_PLANNER_ZOOM = Object.freeze({
   fit: { id: "fit", label: "Fit day", slotMinutes: 15, slotWidth: 0 },
@@ -148,7 +149,7 @@ export function buildPlannerPitchGroups(rows = []) {
   return Array.from(groups.values()).sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id));
 }
 
-export function buildPlannerOverlayMetrics({ fixtures = [], club = {}, start, end, interval = 15 } = {}) {
+export function buildPlannerOverlayMetrics({ fixtures = [], club = {}, start, end, interval = SCHEDULING_TIME_INCREMENT_MINS } = {}) {
   const slots = buildPlannerSlots(start, end, interval);
   const parkingCapacity = Number(club.carCapacity || club.parkingCapacity || club.carCap || 0);
 
