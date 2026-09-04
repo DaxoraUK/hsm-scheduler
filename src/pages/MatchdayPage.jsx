@@ -56,7 +56,6 @@ import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { getTimelineCandidateSummary } from "../lib/engines/timelineDragEngine.js";
 import {
   buildPlannerChangeRecord,
-  getPlannerFixtureIdentity,
 } from "../lib/engines/matchdayPlannerEngine.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
 import { DB, isSupaConfigured } from "../lib/supabase.js";
@@ -857,7 +856,8 @@ export default function MatchdayPage({
         patches: getScheduleTransactionPatches(timelineTransaction),
       });
       if (saved !== false) {
-        await props.saveWeek?.();
+        const published = await props.saveWeek?.();
+        if (published === false) return false;
         setTimelineTransaction(createScheduleTransaction({ baseFixtures: proposed, timing: schedulingTiming }));
         setTimelineDirty(false);
         setTimelineHistory([]);

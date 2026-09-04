@@ -9,6 +9,10 @@ import { getParkingCapacity } from "../lib/domain/clubDomain.js";
 import { getParkingSettings } from "../lib/intelligence/parking/parkingService.js";
 import { weatherService } from "../lib/services/weatherService.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
+import {
+  buildMatchweekApprovalKey,
+  buildMatchweekApprovalSnapshot,
+} from "../lib/elite/eliteApprovalSnapshots.js";
 export function shouldCheckMatchweekApproval() {
   // Matchweek publication is a direct scheduling action. Other approval domains
   // retain their own policies; this compatibility export is deliberately false.
@@ -231,6 +235,10 @@ export function useWeekPersistence({
     const snapshots = await captureWeatherSnapshots(baseSnapshots, club);
     const publishedDays = snapshots.filter((day) => day.hasRun);
     if (!publishedDays.length) return;
+    // Keep an immutable content fingerprint in the audit record. It is no
+    // longer an approval request key: authorised schedulers publish directly.
+    const approvalSnapshot = buildMatchweekApprovalSnapshot(publishedDays);
+    const approvalEntityKey = buildMatchweekApprovalKey(approvalSnapshot);
 
     const byKey = Object.fromEntries(snapshots.map((day) => [day.key, day]));
     const saturday = byKey.saturday || {
@@ -264,6 +272,8 @@ export function useWeekPersistence({
           ? satDate || undefined
           : midweekDate || undefined,
       savedAt: new Date().toISOString(),
+      approvalEntityKey,
+      approvalSnapshotHash: approvalSnapshot.contentHash,
       carParkSpaces: parkingCapacity,
       parking: {
         enabled: parkingSettings.enabled,

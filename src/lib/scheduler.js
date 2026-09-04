@@ -148,7 +148,11 @@ function isAdultTeamConfig(cfg, fixture = {}) {
   const type = String(cfg?.teamType || fixture.teamType || fixture.ageCategory || "")
     .toLowerCase()
     .replace(/[_-]+/g, " ");
-  return ["adult", "open age", "veterans", "women"].includes(type);
+  return ["adult", "open age", "veterans", "women"].includes(type) ||
+    // Compatibility for existing saved team rows created before teamType was
+    // required. This is an explicit senior-team identity fallback, never a
+    // format, pitch or generic 11v11 inference.
+    isAdult(cfg?.name || fixture.homeTeam);
 }
 
 function requestedAllocationPitch(fixture = {}) {

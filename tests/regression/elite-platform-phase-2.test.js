@@ -128,6 +128,6 @@ describe("Elite organisation governance and approvals phase 2", () => {
     expect(controlWorkspace).toContain("Communication controls");
     expect(dispatch).toContain('userRpc(token, "assert_elite_communication_approval"');
     expect(persistence).toContain("approvalEntityKey");
-    expect(persistence).toContain("Elite approval required");
+    expect(persistence).not.toContain("Elite approval required");
   });
 });

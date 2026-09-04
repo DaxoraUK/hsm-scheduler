@@ -146,6 +146,8 @@ describe("canonical Calendar schedule transactions", () => {
 
     expect(matchdayPage).toContain("createScheduleTransaction");
     expect(matchdayPage).toContain("commitScheduleTransaction");
+    expect(matchdayPage).toContain("const published = await props.saveWeek?.();");
+    expect(matchdayPage).toContain("if (published === false) return false;");
     expect(matchdayPage).not.toContain("editableOverride(candidate.fixture, candidate.patch)");
     expect(appCore).toContain("commitFixtureIntentBatch");
     expect(appCore).toContain("mergeFixtureAllocationBatch");
