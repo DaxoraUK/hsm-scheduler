@@ -62,12 +62,12 @@ describe("combined operational UX corrections", () => {
     expect(readMatchdayLock(identity)).toBe(false);
   });
 
-  test("wires lock and optimiser actions instead of inert buttons", () => {
-    expect(actionBarSource).toContain("onToggleLock");
+  test("wires direct schedule actions and optimiser actions instead of inert buttons", () => {
+    expect(matchdaySource).toContain("saveCurrentSchedule");
     expect(actionBarSource).toContain("onOptimise");
     expect(actionBarSource).toContain("onPrint");
     expect(actionBarSource).not.toContain("window.print()");
-    expect(matchdaySource).toContain("toggleScheduleLock");
+    expect(matchdaySource).toContain("saveCurrentSchedule");
     expect(matchdaySource).toContain("applyOptimisationMove");
     expect(matchdaySource).toContain("applyAllOptimisationMoves");
     expect(optimiserSource).toContain("Apply this move");
@@ -76,7 +76,7 @@ describe("combined operational UX corrections", () => {
 
   test("uses Ground Control confirmation dialogs instead of native browser popups", () => {
     expect(matchdaySource).toContain("<ConfirmDialog");
-    expect(matchdaySource).toContain('eyebrow="Schedule approval"');
+    expect(matchdaySource).not.toContain('eyebrow="Schedule approval"');
     expect(matchdaySource).toContain('eyebrow="Validated improvements"');
     expect(unresolvedSource).toContain(
       'title="Assign despite pitch conflict?"',

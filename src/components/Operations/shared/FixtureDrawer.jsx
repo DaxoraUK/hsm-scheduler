@@ -237,7 +237,8 @@ export default function FixtureDrawer({
     updateFixturePatch({
       referee: value,
       officialRole: selectedRef?.role || (value ? "league_referee" : ""),
-      refStatus: value ? "Assigned" : "TBC",
+      refStatus: value ? "Pending" : "TBC",
+      officialSource: value ? (selectedRef ? "Internal" : "Unknown") : "Unknown",
       refPhone:
         selectedRef?.phone ||
         selectedRef?.mobile ||
@@ -708,15 +709,32 @@ Good luck!`;
                         className="control-input"
                       >
                         <option value="TBC">TBC</option>
-                        <option value="Assigned">League appointed</option>
-                        <option value="Awaiting">Awaiting confirmation</option>
+                        <option value="Pending">Pending confirmation</option>
                         <option value="Confirmed">Confirmed</option>
                         <option value="Declined">Declined / unavailable</option>
+                        <option value="Replaced">Replaced</option>
                       </select>
                     ) : (
                       <ReadOnlyValue
                         value={displayFixture.refStatus || "TBC"}
                       />
+                    )}
+                  </ControlRow>
+
+                  <ControlRow icon={ShieldCheck} label="Appointment source">
+                    {canEdit ? (
+                      <select
+                        value={displayFixture.officialSource || "Unknown"}
+                        onChange={(e) => updateFixture("officialSource", e.target.value)}
+                        className="control-input"
+                      >
+                        <option value="League-appointed">League-appointed</option>
+                        <option value="Club-appointed">Club-appointed</option>
+                        <option value="Internal">Internal</option>
+                        <option value="Unknown">Unknown / TBC</option>
+                      </select>
+                    ) : (
+                      <ReadOnlyValue value={displayFixture.officialSource || "Unknown"} />
                     )}
                   </ControlRow>
 

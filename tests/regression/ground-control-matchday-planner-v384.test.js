@@ -28,19 +28,31 @@ const fixture = {
 };
 
 describe("Ground Control v3.8.4 Matchday Planner", () => {
-  it("builds exact 15-minute planning slots and responsive zoom widths", () => {
+  it("builds exact five-minute planning slots and responsive zoom widths", () => {
     expect(buildPlannerSlots(510, 600).map((slot) => slot.label)).toEqual([
       "08:30",
+      "08:35",
+      "08:40",
       "08:45",
+      "08:50",
+      "08:55",
       "09:00",
+      "09:05",
+      "09:10",
       "09:15",
+      "09:20",
+      "09:25",
       "09:30",
+      "09:35",
+      "09:40",
       "09:45",
+      "09:50",
+      "09:55",
       "10:00",
     ]);
     expect(getPlannerCanvasWidth({ start: 510, end: 990, zoom: "fit", viewportWidth: 860 })).toBe(860);
     expect(getPlannerCanvasWidth({ start: 510, end: 990, zoom: "quarter" })).toBe(1536);
-    expect(normalisePlannerTimeInput("10:07", 570)).toBe(600);
+    expect(normalisePlannerTimeInput("10:07", 570)).toBe(605);
   });
 
   it("creates auditable change records for batch review, undo and redo", () => {

@@ -36,9 +36,9 @@ const club = {
 };
 
 describe("Ground Control Timeline v2 drag assurance", () => {
-  it("snaps drag positions to 15-minute intervals", () => {
-    expect(snapTimelineMinutes(577)).toBe(570);
-    expect(snapTimelineMinutes(578)).toBe(585);
+  it("snaps drag positions to five-minute intervals", () => {
+    expect(snapTimelineMinutes(577)).toBe(575);
+    expect(snapTimelineMinutes(578)).toBe(580);
   });
 
   it("blocks closed and unsuitable pitches before a move is applied", () => {
@@ -93,10 +93,10 @@ describe("Ground Control Timeline v2 drag assurance", () => {
     expect(candidate.blocked).toBe(false);
     expect(candidate.patch).toMatchObject({
       pitchId: "P2",
-      koMins: 600,
-      koTime: "10:00",
-      endMins: 685,
-      endTime: "11:25",
+      koMins: 605,
+      koTime: "10:05",
+      endMins: 690,
+      endTime: "11:30",
     });
     expect(candidate.previousPatch).toMatchObject({ pitchId: "P4", koMins: 570 });
   });

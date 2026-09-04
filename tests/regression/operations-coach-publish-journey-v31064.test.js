@@ -14,12 +14,12 @@ describe("approved matchweek to Coach Hub journey", () => {
     expect(communications).toContain("openQueueWithRows(readyRows");
   });
 
-  test("requires a lock before the publish handoff while keeping advisories visible", () => {
-    expect(command).toContain('if (isLocked) return "publish"');
+  test("permits authorised direct publication while keeping advisories visible", () => {
+    expect(command).not.toContain('if (isLocked) return "publish"');
     expect(command).toContain("blockingCount = unresolvedCount");
     expect(command).toContain("warningCount = refWarnings + closedPitches.length");
-    expect(command).toContain("Lock approved schedule");
-    expect(command).toContain("Review and publish");
+    expect(command).toContain("Publish schedule");
+    expect(command).toContain("!canPublish");
   });
 
   test("enforces publisher authority in both interface and database", () => {

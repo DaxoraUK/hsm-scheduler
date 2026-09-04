@@ -3,12 +3,12 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync("src/components/Operations/shared/MatchweekCommandBar.jsx", "utf8");
 
-describe("matchweek unlock control", () => {
-  it("always permits unlock when a persisted day is locked", () => {
-    expect(source).toContain("(!isLocked && (!hasRun || fixtureCount === 0))");
+describe("direct matchweek publication control", () => {
+  it("does not expose an obsolete scheduling lock", () => {
+    expect(source).not.toContain("isLocked");
   });
 
-  it("keeps lock unavailable until a non-empty schedule is built", () => {
-    expect(source).toContain('"Build a fixture schedule before locking it"');
+  it("keeps publication unavailable until a non-empty schedule is built", () => {
+    expect(source).toContain("disabled={!hasRun || blockingCount > 0 || !canPublish}");
   });
 });

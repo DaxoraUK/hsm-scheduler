@@ -42,15 +42,15 @@ export function getPitchCapacity({ pitchCfg = [], closedPitches = [] } = {}) {
 export function getOfficialStatus(fixture = {}) {
   const status = String(fixture.refStatus || "TBC").trim().toLowerCase();
 
-  if (["confirmed", "accepted", "assigned", "yes", "ok", "ready"].includes(status)) {
+  if (["confirmed", "accepted", "yes", "ok", "ready"].includes(status)) {
     return {
-      label: status === "assigned" ? "League appointed" : "Confirmed",
+      label: "Confirmed",
       variant: "success",
       ok: true,
     };
   }
 
-  if (status === "awaiting" || status === "pending") {
+  if (["assigned", "awaiting", "pending"].includes(status)) {
     return {
       label: "Awaiting",
       variant: "warning",

@@ -144,9 +144,20 @@ function officialStatus(fixture = {}) {
   const status = normaliseText(
     fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || fixture.assignmentStatus
   );
-  if (["confirmed", "accepted", "assigned"].includes(status)) return "confirmed";
+  if (["confirmed", "accepted"].includes(status)) return "confirmed";
+  if (["assigned", "awaiting", "pending"].includes(status)) return "pending";
   if (["declined", "cancelled", "unavailable"].includes(status)) return "declined";
   return status || "unconfirmed";
+}
+
+function officialSource(fixture = {}) {
+  const source = normaliseText(
+    fixture.officialSource || fixture.refereeSource || fixture.appointmentSource || fixture.appointmentType,
+  );
+  if (source.includes("league")) return "League-appointed";
+  if (source.includes("club")) return "Club-appointed";
+  if (source.includes("internal") || source.includes("in house")) return "Internal";
+  return "Unknown/TBC";
 }
 
 function officialName(fixture = {}) {
@@ -221,6 +232,7 @@ function normaliseFixture({ fixture = {}, status = "", day = {}, entry = {}, clu
   const pitch = pitchMap.get(pitchId);
   const referee = officialName(fixture);
   const refStatus = officialStatus(fixture);
+  const refereeSource = officialSource(fixture);
   const format = fixtureFormat(fixture);
   const explicitCars = finiteNumber(fixture.carEstimate, null);
   const estimatedCars = Math.max(0, explicitCars ?? finiteNumber(club?.avgCars?.[format] ?? AVG_CARS[format], 8));
@@ -258,6 +270,7 @@ function normaliseFixture({ fixture = {}, status = "", day = {}, entry = {}, clu
     refPhone: String(fixture.refPhone || fixture.officialPhone || "").trim(),
     refEmail: String(fixture.refEmail || fixture.officialEmail || "").trim(),
     officialStatus: refStatus,
+    refereeSource,
     officialConfirmed: Boolean(referee) && refStatus === "confirmed",
     estimatedCars,
     weatherRisk: weatherRisk(fixture),

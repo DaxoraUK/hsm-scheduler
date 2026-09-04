@@ -14,16 +14,16 @@ describe("shared matchday schedule locks", () => {
     expect(migration).toContain("revoke all on table public.matchday_locks from public, anon, authenticated");
   });
 
-  it("reads and writes the shared state through authenticated RPCs", () => {
-    expect(database).toContain('"rpc/get_matchday_lock"');
-    expect(database).toContain('"rpc/set_matchday_lock"');
-    expect(page).toContain("DB.getMatchdayLock");
-    expect(page).toContain("DB.setMatchdayLock");
+  it("uses authenticated revisioned scheduling-state RPCs rather than a shared lock", () => {
+    expect(database).toContain('"rpc/load_matchday_scheduling_state"');
+    expect(database).toContain('"rpc/save_matchday_scheduling_state"');
+    expect(page).not.toContain("DB.getMatchdayLock");
+    expect(page).not.toContain("DB.setMatchdayLock");
   });
 
-  it("keeps viewers read-only and reports an in-progress shared update", () => {
-    expect(page).toContain("props.workspaceAccess?.canPublish !== false");
-    expect(command).toContain("!canToggleLock");
-    expect(command).toContain('lockBusy ? "Updating…"');
+  it("keeps users without scheduling capability blocked without restoring an approval lock", () => {
+    expect(command).toContain("!canOperate");
+    expect(command).toContain("!canPublish");
+    expect(command).not.toContain("canToggleLock");
   });
 });

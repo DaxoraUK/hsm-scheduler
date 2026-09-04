@@ -3,16 +3,15 @@ import { readFileSync } from "node:fs";
 
 const page = readFileSync("src/pages/MatchdayPage.jsx", "utf8");
 
-describe("live shared matchday lock synchronisation", () => {
-  it("refreshes the shared approval while the operator remains on the page", () => {
-    expect(page).toContain("window.setInterval(refreshSharedLock, 20000)");
-    expect(page).toContain('window.addEventListener("focus", refreshOnFocus)');
-    expect(page).toContain('window.removeEventListener("focus", refreshOnFocus)');
+describe("retired shared matchday lock synchronisation", () => {
+  it("does not poll a shared approval lock for scheduling", () => {
+    expect(page).not.toContain("window.setInterval(refreshSharedLock, 20000)");
+    expect(page).not.toContain('window.addEventListener("focus", refreshOnFocus)');
   });
 
-  it("immediately applies remote lock changes and tells the operator", () => {
-    expect(page).toContain("setIsLocked(sharedLocked)");
-    expect(page).toContain("Editing has been disabled");
-    expect(page).toContain("remoteLockRevisionRef.current");
+  it("leaves scheduling editable to users holding the operate capability", () => {
+    expect(page).not.toContain("setIsLocked(sharedLocked)");
+    expect(page).not.toContain("Editing has been disabled");
+    expect(page).not.toContain("remoteLockRevisionRef.current");
   });
 });

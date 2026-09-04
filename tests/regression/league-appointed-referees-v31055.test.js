@@ -11,7 +11,8 @@ describe("league-appointed referee workflow", () => {
     expect(drawer).toContain("Select from referee pool...");
     expect(drawer).toContain('placeholder="Or type the league-appointed referee"');
     expect(drawer).toContain('officialRole: selectedRef?.role || (value ? "league_referee" : "")');
-    expect(drawer).toContain('refStatus: value ? "Assigned" : "TBC"');
+    expect(drawer).toContain('refStatus: value ? "Pending" : "TBC"');
+    expect(drawer).toContain('officialSource: value ? (selectedRef ? "Internal" : "Unknown") : "Unknown"');
     expect(drawer).toContain("{canEdit ? (");
   });
 

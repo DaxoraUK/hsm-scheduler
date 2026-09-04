@@ -194,6 +194,7 @@ function OfficialsReport({ model }) {
     { key: "fixtureLabel", label: "Fixture", className: "font-black text-slate-950" },
     { key: "pitchLabel", label: "Pitch" },
     { key: "referee", label: "Official", render: (row) => row.referee || "TBC" },
+    { key: "refereeSource", label: "Source" },
     { key: "contact", label: "Contact", render: (row) => row.contact || "—" },
     { key: "officialStatus", label: "Status", render: (row) => <StatusChip status={row.officialConfirmed ? "success" : "warning"}>{row.officialConfirmed ? "Confirmed" : "Outstanding"}</StatusChip> },
   ]} rows={model.officialRows} />;

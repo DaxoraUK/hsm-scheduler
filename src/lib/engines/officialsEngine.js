@@ -44,15 +44,34 @@ function getOfficialStatus(fixture = {}) {
   return clean(fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || fixture.matchOfficialStatus);
 }
 
-export function getOfficialAssignmentState(fixture = {}) {
+export function getOfficialAppointmentSource(fixture = {}) {
+  const source = normalise(
+    fixture.officialSource || fixture.refereeSource || fixture.appointmentSource || fixture.appointmentType,
+  ).replace(/[\s-]+/g, "_");
+  if (["league", "league_appointed", "league_appointment"].includes(source)) return "league_appointed";
+  if (["club", "club_appointed", "club_appointment"].includes(source)) return "club_appointed";
+  if (["internal", "in_house", "inhouse"].includes(source)) return "internal";
+  return "unknown";
+}
+
+export function getOfficialAppointmentStatus(fixture = {}) {
   const status = getOfficialStatus(fixture);
+  if (["confirmed", "accepted", "yes", "ok", "ready"].includes(status)) return "confirmed";
+  if (["declined", "unavailable", "no", "rejected"].includes(status)) return "declined";
+  if (["replaced", "replacement"].includes(status)) return "replaced";
+  if (["assigned", "awaiting", "pending"].includes(status)) return "pending";
+  return "unassigned";
+}
+
+export function getOfficialAssignmentState(fixture = {}) {
+  const status = getOfficialAppointmentStatus(fixture);
   const official = normalise(getOfficialName(fixture));
   const hasOfficial = Boolean(official) && !["tbc", "none", "unassigned", "missing"].includes(official);
 
-  if (["declined", "unavailable", "no", "rejected"].includes(status)) return "declined";
-  if (["confirmed", "accepted", "yes", "ok", "ready"].includes(status)) return "confirmed";
+  if (status === "declined") return "declined";
+  if (status === "confirmed") return "confirmed";
   if (!hasOfficial) return "unassigned";
-  if (["assigned"].includes(status)) return "assigned";
+  if (status === "replaced") return "replaced";
   return "awaiting";
 }
 
@@ -105,11 +124,11 @@ export function shouldEnforceOfficialClashes(fixture = {}, refs = []) {
 }
 
 export function isFixtureOfficialConfirmed(fixture = {}) {
-  const status = getOfficialStatus(fixture);
+  const status = getOfficialAppointmentStatus(fixture);
   const official = normalise(getOfficialName(fixture));
 
-  if (["confirmed", "accepted", "assigned", "yes", "ok", "ready"].includes(status)) return true;
-  if (["tbc", "unassigned", "missing", "none", "no", "pending", "awaiting", "declined", "unavailable", "rejected"].includes(status)) return false;
+  if (status === "confirmed") return true;
+  if (["unassigned", "pending", "declined", "replaced"].includes(status)) return false;
   if (!official || ["tbc", "none", "unassigned", "missing"].includes(official)) return false;
 
   return Boolean(official);

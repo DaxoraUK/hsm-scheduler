@@ -5,12 +5,12 @@ const command = readFileSync("src/components/Operations/shared/MatchweekCommandB
 const page = readFileSync("src/pages/MatchdayPage.jsx", "utf8");
 
 describe("guided matchweek command workflow", () => {
-  test("presents one six-stage route through matchweek operations", () => {
-    ["Import", "Review", "Allocate", "Check", "Lock", "Publish"].forEach((stage) => {
+  test("presents one direct five-stage route through matchweek operations", () => {
+    ["Import", "Review", "Allocate", "Check", "Publish"].forEach((stage) => {
       expect(command).toContain(`title: "${stage}"`);
     });
     expect(command).toContain("Next action");
-    expect(command).toContain('if (isLocked) return "publish"');
+    expect(command).not.toContain('if (isLocked) return "publish"');
   });
 
   test("routes primary actions to their owning specialist sections", () => {

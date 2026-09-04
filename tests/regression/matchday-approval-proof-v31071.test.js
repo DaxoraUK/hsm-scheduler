@@ -18,8 +18,8 @@ describe("matchday approval proof", () => {
     expect(migration).toContain("locked_by_label");
   });
 
-  it("shows approval provenance and blocks stale publication", () => {
-    expect(page).toContain("lockInfo.locked_by_label");
-    expect(page).toContain("approvalStale");
+  it("does not let a stale historic approval gate direct scheduling publication", () => {
+    expect(page).not.toContain("lockInfo.locked_by_label");
+    expect(page).not.toContain("approvalStale");
   });
 });

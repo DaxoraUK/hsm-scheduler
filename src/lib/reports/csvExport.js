@@ -24,6 +24,7 @@ function fixtureColumns() {
     { label: "Format", value: "format" },
     { label: "Status", value: "statusLabel" },
     { label: "Official", value: (row) => row.referee || "TBC" },
+    { label: "Official source", value: "refereeSource" },
     { label: "Official status", value: "officialStatus" },
     { label: "Estimated cars", value: "estimatedCars" },
   ];

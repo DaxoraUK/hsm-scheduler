@@ -3,14 +3,18 @@ import { getOfficialStatus } from "../../src/lib/operationsEngine.js";
 import { isFixtureOfficialConfirmed } from "../../src/lib/engines/officialsEngine.js";
 
 describe("league-appointed referee readiness", () => {
-  test("treats a named league appointment as operationally confirmed", () => {
-    const fixture = { referee: "Ivor Altdorf", refStatus: "Assigned" };
+  test("keeps league appointment source separate from confirmation status", () => {
+    const fixture = {
+      referee: "Ivor Altdorf",
+      officialSource: "League-appointed",
+      refStatus: "Pending",
+    };
     expect(getOfficialStatus(fixture)).toEqual({
-      label: "League appointed",
-      variant: "success",
-      ok: true,
+      label: "Awaiting",
+      variant: "warning",
+      ok: false,
     });
-    expect(isFixtureOfficialConfirmed(fixture)).toBe(true);
+    expect(isFixtureOfficialConfirmed(fixture)).toBe(false);
   });
 
   test("keeps missing and awaiting appointments outstanding", () => {

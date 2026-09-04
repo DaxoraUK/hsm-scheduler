@@ -2,37 +2,7 @@ import { useMemo } from "react";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
-
-function buildPitchConflicts(active = [], pitchCfg = []) {
-  const conflicts = [];
-  const games = active.filter(
-    (game) => game.koMins != null && game.endMins != null
-  );
-
-  for (let a = 0; a < games.length; a += 1) {
-    for (let b = a + 1; b < games.length; b += 1) {
-      const first = games[a];
-      const second = games[b];
-      const firstPitch = pitchCfg.find((pitch) => pitch.id === first.pitchId);
-      const secondPitch = pitchCfg.find((pitch) => pitch.id === second.pitchId);
-
-      const linked =
-        first.pitchId === second.pitchId ||
-        firstPitch?.innerOf === second.pitchId ||
-        secondPitch?.innerOf === first.pitchId;
-
-      if (
-        linked &&
-        first.koMins < second.endMins &&
-        second.koMins < first.endMins
-      ) {
-        conflicts.push({ a: first, b: second });
-      }
-    }
-  }
-
-  return conflicts;
-}
+import { findEffectiveAllocationConflicts } from "../lib/domain/allocationConflicts.js";
 
 export function useFixtureDayScheduling({
   dayKey = "saturday",
@@ -79,7 +49,7 @@ export function useFixtureDayScheduling({
   );
 
   const conflicts = useMemo(
-    () => buildPitchConflicts(active, pitchCfg),
+    () => findEffectiveAllocationConflicts({ fixtures: active, pitchCfg }),
     [active, pitchCfg]
   );
 
