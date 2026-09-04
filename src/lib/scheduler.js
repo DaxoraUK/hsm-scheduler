@@ -16,6 +16,15 @@ export const t2s = (m) =>
     "0"
   )}`;
 
+function parseKickOffMins(fixture = {}) {
+  const value = String(fixture.koTime || fixture.kickOff || "").trim();
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
+}
+
 export const cleanName = (n, clubName = "HSM") => {
   const escaped = clubName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -152,9 +161,9 @@ function requestedAllocationTime(fixture = {}) {
   if (fixture?.lockedAllocation) {
     const lockedMins = fixture.lockedAllocation.koMins;
     if (Number.isFinite(lockedMins)) return lockedMins;
-    return importedKickOffMins({ ...fixture, koTime: fixture.lockedAllocation.koTime });
+    return parseKickOffMins({ ...fixture, koTime: fixture.lockedAllocation.koTime });
   }
-  return fixture.manualOverrideApplied ? importedKickOffMins(fixture) : null;
+  return fixture.manualOverrideApplied ? parseKickOffMins(fixture) : null;
 }
 
 function formatCanUsePitch(teamFormat, pitch, fixture = {}) {
@@ -232,11 +241,14 @@ function scheduleFixtureDayCore(
     };
   });
 
-  const sorted = [...active].sort(
-    (a, b) =>
-      (resolveTeamConfig(a, cfgList)?.ageOrder || 99) -
-      (resolveTeamConfig(b, cfgList)?.ageOrder || 99)
-  );
+  const sorted = [...active].sort((a, b) => {
+    const aLocked = Boolean(a.lockedAllocation);
+    const bLocked = Boolean(b.lockedAllocation);
+    if (aLocked !== bLocked) return aLocked ? -1 : 1;
+
+    return (resolveTeamConfig(a, cfgList)?.ageOrder || 99) -
+      (resolveTeamConfig(b, cfgList)?.ageOrder || 99);
+  });
 
   const slots = {};
   const innerPitchMap = {};
@@ -274,14 +286,7 @@ function scheduleFixtureDayCore(
   )
     ? options.fixedAdultKickOffMins
     : 14 * 60;
-  const importedKickOffMins = (fixture) => {
-    const value = String(fixture.koTime || fixture.kickOff || "").trim();
-    const match = value.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) return null;
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
-    return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
-  };
+  const importedKickOffMins = parseKickOffMins;
 
   const free = (pitchId, start, end) => {
     if (!(pitchId in slots)) return false;
@@ -329,7 +334,7 @@ function scheduleFixtureDayCore(
     ...pitchIds.filter((pitchId) => innerPitches.includes(pitchId)),
   ];
 
-  const findBest = (pitchIds, duration, earlyFirst) => {
+  const findBest = (pitchIds, duration, earlyFirst, exactTime = null) => {
     let best = null;
 
     const onlyIndependent = pitchIds.every((pitchId) =>
@@ -338,7 +343,9 @@ function scheduleFixtureDayCore(
 
     const ordered = sortOptions(pitchIds);
 
-    for (let time = startMins; time <= endMins; time += 15) {
+    const firstTime = Number.isFinite(exactTime) ? exactTime : startMins;
+    const lastTime = Number.isFinite(exactTime) ? exactTime : endMins;
+    for (let time = firstTime; time <= lastTime; time += 15) {
       if (
         !onlyIndependent &&
         concurrentCount(time, time + 1) >= maxConcurrentAllowed
@@ -397,13 +404,19 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-  const adultKickOffMins = importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
+    const hasLockedAllocation = Boolean(fixture.lockedAllocation);
+    const requestedPitch = requestedAllocationPitch(fixture);
+    const requestedTime = requestedAllocationTime(fixture);
+    const adultKickOffMins = hasLockedAllocation && Number.isFinite(requestedTime)
+      ? requestedTime
+      : importedKickOffMins(fixture) ?? fixedAdultKickOffMins;
     if (isAdultTeamConfig(cfg, fixture) && Number.isFinite(adultKickOffMins)) {
       let placed = false;
 
-      const requestedPitch = requestedAllocationPitch(fixture);
       const requestedPitches = requestedPitch ? [requestedPitch] : [];
-      const adultPitchOrder = [...requestedPitches, cfg.defaultPitch, cfg.altPitch, ...configuredSuitablePitches.map((pitch) => pitch.id)]
+      const adultPitchOrder = (hasLockedAllocation
+        ? [...requestedPitches, ...(requestedPitch ? [] : configuredSuitablePitches.map((pitch) => pitch.id))]
+        : [...requestedPitches, cfg.defaultPitch, cfg.altPitch, ...configuredSuitablePitches.map((pitch) => pitch.id)])
         .filter(Boolean)
         .filter((pitchId, index, values) => values.indexOf(pitchId) === index);
       for (const pitchId of adultPitchOrder) {
@@ -426,7 +439,7 @@ function scheduleFixtureDayCore(
             usingAstro: isArtificialPitch(pitchCfg, pitchId),
             usingFallback: false,
             fixedKO: true,
-            manualAllocationApplied: requestedPitch === pitchId,
+            manualAllocationApplied: hasLockedAllocation || requestedPitch === pitchId,
           });
 
           placed = true;
@@ -437,7 +450,9 @@ function scheduleFixtureDayCore(
       if (!placed) {
         unresolved.push({
           ...fixture,
-          reason: `No valid adult ${t2s(adultKickOffMins)} slot. Preferred pitches may be closed, wrong surface, or already occupied.`,
+          reason: hasLockedAllocation
+            ? `Locked allocation cannot be honoured at ${t2s(adultKickOffMins)}. The requested pitch or time is unavailable.`
+            : `No valid adult ${t2s(adultKickOffMins)} slot. Preferred pitches may be closed, wrong surface, or already occupied.`,
         });
       }
 
@@ -502,14 +517,22 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-    const best = findBest(candidatePitches, duration, cfg.format === "3v3");
+    const lockedCandidatePitches = hasLockedAllocation && requestedPitch
+      ? [requestedPitch]
+      : candidatePitches;
+    const best = findBest(
+      lockedCandidatePitches,
+      duration,
+      cfg.format === "3v3",
+      hasLockedAllocation ? requestedTime : null,
+    );
 
-    const requestedPitch = requestedAllocationPitch(fixture);
-    const requestedTime = requestedAllocationTime(fixture);
     const requestedValid = requestedPitch && candidatePitches.includes(requestedPitch) && Number.isFinite(requestedTime)
       && requestedTime >= startMins && requestedTime + duration <= endMins
       && free(requestedPitch, requestedTime, requestedTime + duration);
-    const allocation = requestedValid
+    const allocation = hasLockedAllocation
+      ? best
+      : requestedValid
       ? { pitchId: requestedPitch, time: requestedTime }
       : best;
 
@@ -528,9 +551,17 @@ function scheduleFixtureDayCore(
           preferredOptions.includes(allocation.pitchId),
         usingAstro: isArtificialPitch(pitchCfg, allocation.pitchId),
         usingFallback: !options.includes(allocation.pitchId),
-        manualAllocationApplied: Boolean(requestedValid),
+        manualAllocationApplied: hasLockedAllocation || Boolean(requestedValid),
       });
     } else {
+      if (hasLockedAllocation) {
+        unresolved.push({
+          ...fixture,
+          reason: "Locked allocation cannot be honoured. The requested pitch or kick-off conflicts with the current matchday constraints.",
+        });
+        continue;
+      }
+
       const diagnostics = [];
 
       candidatePitches.forEach((pitchId) => {

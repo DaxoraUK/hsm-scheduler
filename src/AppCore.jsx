@@ -74,10 +74,17 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, getFixtureFlowIdentity, mergeFixtureOverride, partitionFixturesForScheduling, reverseAwayFixture, validateSchedulingFixtureInput } from "./lib/domain/fixtureVenueFlow.js";
+import {
+  deduplicateFixtureSet,
+  getFixtureFlowIdentity,
+  partitionFixturesForScheduling,
+  reverseAwayFixture,
+} from "./lib/domain/fixtureVenueFlow.js";
 import {
   buildSchedulingState,
+  materialiseEffectiveFixtures,
   mergeFixtureIntent,
+  removeFixtureIntent,
   toFixturePresentationOverrides,
 } from "./lib/domain/schedulingState.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
@@ -226,11 +233,15 @@ function fixturePatchToIntent(patch = {}) {
   const lifecycle = Object.fromEntries(lifecycleFields
     .filter((field) => field in nextPatch)
     .map((field) => [field, nextPatch[field]]));
-  [...allocationFields, ...officialFields, ...lifecycleFields, "fixtureIdentity"].forEach((field) => delete nextPatch[field]);
+  const exclusion = Object.prototype.hasOwnProperty.call(nextPatch, "exclusion")
+    ? nextPatch.exclusion
+    : undefined;
+  [...allocationFields, ...officialFields, ...lifecycleFields, "fixtureIdentity", "exclusion"].forEach((field) => delete nextPatch[field]);
   return {
     ...(Object.keys(allocation).length ? { allocation: { mode: "locked", ...allocation } } : {}),
     ...(Object.keys(official).length ? { official } : {}),
     ...(Object.keys(lifecycle).length ? { lifecycle } : {}),
+    ...(exclusion !== undefined ? { exclusion } : {}),
     ...(Object.keys(nextPatch).length ? { fields: nextPatch } : {}),
   };
 }
@@ -2192,12 +2203,45 @@ function App() {
   const satPresentationOverrides = useMemo(() => toFixturePresentationOverrides(satOverrides), [satOverrides]);
   const sunPresentationOverrides = useMemo(() => toFixturePresentationOverrides(sunOverrides), [sunOverrides]);
   const midweekPresentationOverrides = useMemo(() => toFixturePresentationOverrides(midweekOverrides), [midweekOverrides]);
+  const satExcludedFixtures = useMemo(() => materialiseEffectiveFixtures({
+    providerFixtures: satProviderFixtures,
+    manualFixtures: satManual,
+    intents: mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), satOverrides),
+  }).excluded, [fullTimeVenueOverrides, satManual, satOverrides, satProviderFixtures]);
+  const sunExcludedFixtures = useMemo(() => materialiseEffectiveFixtures({
+    providerFixtures: sunProviderFixtures,
+    manualFixtures: sunManual,
+    intents: mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), sunOverrides),
+  }).excluded, [fullTimeVenueOverrides, sunManual, sunOverrides, sunProviderFixtures]);
+  const midweekExcludedFixtures = useMemo(() => materialiseEffectiveFixtures({
+    providerFixtures: midweekProviderFixtures,
+    manualFixtures: midweekManual,
+    intents: mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), midweekOverrides),
+  }).excluded, [fullTimeVenueOverrides, midweekManual, midweekOverrides, midweekProviderFixtures]);
   const satOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
     writeFixtureOverride(setSatOverrides, (intents) => persistScopedFixtureIntents("saturday", satDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const sunOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
     writeFixtureOverride(setSunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
     writeFixtureOverride(setMidweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents), target, fieldOrPatch, value, fixtureIdentity);
+  const removeManualFixture = (setManualFixtures, setOverrides, scope, date, fixture) => {
+    const fixtureIdentity = getFixtureFlowIdentity(fixture);
+    if (!fixtureIdentity) return;
+    setManualFixtures((current) => current.filter(
+      (candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity,
+    ));
+    setOverrides((current) => {
+      const next = removeFixtureIntent(current, fixtureIdentity);
+      void persistScopedFixtureIntents(scope, date, next);
+      return next;
+    });
+  };
+  const removeSatManualFixture = (fixture) =>
+    removeManualFixture(setSatManual, setSatOverrides, "saturday", satDate, fixture);
+  const removeSunManualFixture = (fixture) =>
+    removeManualFixture(setSunManual, setSunOverrides, "sunday", sunDate, fixture);
+  const removeMidweekManualFixture = (fixture) =>
+    removeManualFixture(setMidweekManual, setMidweekOverrides, "midweek", midweekDate, fixture);
   const {
     satFinal,
     satActive,
@@ -3103,6 +3147,8 @@ function App() {
                     setShowManual={setShowManual}
                     satManual={satManual}
                     setSatManual={setSatManual}
+                    onRemoveManualFixture={removeSatManualFixture}
+                    excludedFixtures={satExcludedFixtures}
                     teamCfg={teamCfg}
                     cleanName={cleanName}
                     satFetchStatus={satFetchStatus}
@@ -3185,6 +3231,8 @@ function App() {
                     setShowSunManual={setShowSunManual}
                     sunManual={sunManual}
                     setSunManual={setSunManual}
+                    onRemoveManualFixture={removeSunManualFixture}
+                    excludedFixtures={sunExcludedFixtures}
                     teamCfg={teamCfg}
                     sunUnresolved={sunUnresolved}
                     sunDateLabel={sunDateLabel}
@@ -3262,6 +3310,8 @@ function App() {
                     setShowMidweekManual={setShowMidweekManual}
                     midweekManual={midweekManual}
                     setMidweekManual={setMidweekManual}
+                    onRemoveManualFixture={removeMidweekManualFixture}
+                    excludedFixtures={midweekExcludedFixtures}
                     midweekFetchStatus={midweekFetchStatus}
                     teamCfg={teamCfg}
                     midweekUnresolved={midweekUnresolved}

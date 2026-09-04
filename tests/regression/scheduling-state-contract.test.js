@@ -4,6 +4,7 @@ import {
   createManualFixture,
   materialiseEffectiveFixtures,
   mergeFixtureIntent,
+  removeFixtureIntent,
   selectEffectiveAllocation,
   toFixturePresentationOverrides,
 } from "../../src/lib/domain/schedulingState.js";
@@ -111,6 +112,25 @@ describe("canonical scheduling state contract", () => {
     expect(selectEffectiveAllocation(build, homeIdentity)).toBeNull();
   });
 
+  test("an exclusion is reversible without changing the canonical provider fixture", () => {
+    const providerFixtures = [{
+      canonicalFixtureIdentity: homeIdentity,
+      homeTeam: "HSM U10 Cobras",
+      awayTeam: "Visitors U10",
+      status: "active",
+    }];
+    const excluded = mergeFixtureIntent({}, homeIdentity, {
+      exclusion: { reason: "incorrect_fixture" },
+    });
+    const restored = mergeFixtureIntent(excluded, homeIdentity, { exclusion: null });
+
+    expect(buildSchedulingState({ providerFixtures, intents: excluded, scheduler: deterministicScheduler }).scheduled).toEqual([]);
+    expect(buildSchedulingState({ providerFixtures, intents: restored, scheduler: deterministicScheduler }).scheduled)
+      .toHaveLength(1);
+    expect(materialiseEffectiveFixtures({ providerFixtures, intents: restored }).fixtures[0].canonicalFixtureIdentity)
+      .toBe(homeIdentity);
+  });
+
   test("a canonical identity cannot be both scheduled and unresolved", () => {
     const fixture = {
       canonicalFixtureIdentity: homeIdentity,
@@ -134,6 +154,42 @@ describe("canonical scheduling state contract", () => {
   test("manual fixtures receive a stable canonical identity", () => {
     const fixture = createManualFixture({ homeTeam: "HSM U12", awayTeam: "Visitors" }, { id: "cup-final" });
     expect(fixture.canonicalFixtureIdentity).toBe("manual:cup-final");
+  });
+
+  test("deleting a manual fixture can clear only its canonical intent", () => {
+    const manual = createManualFixture({ homeTeam: "HSM U12", awayTeam: "Visitors" }, { id: "cup-final" });
+    const other = "manual:other-final";
+    const intents = mergeFixtureIntent(
+      mergeFixtureIntent({}, manual.canonicalFixtureIdentity, { allocation: { mode: "locked", pitchId: "P4" } }),
+      other,
+      { official: { referee: "Keep this" } },
+    );
+
+    expect(removeFixtureIntent(intents, manual.canonicalFixtureIdentity)).toEqual({
+      [other]: expect.objectContaining({ official: { referee: "Keep this" } }),
+    });
+  });
+
+  test("ten unchanged rebuilds preserve the fixture identities and generated result", () => {
+    const fixtures = [{
+      canonicalFixtureIdentity: homeIdentity,
+      homeTeam: "HSM U10 Cobras",
+      awayTeam: "Visitors U10",
+      status: "active",
+    }];
+    const results = Array.from({ length: 10 }, () =>
+      buildSchedulingState({ providerFixtures: fixtures, scheduler: deterministicScheduler }),
+    );
+
+    expect(results.map((build) => build.scheduled.map((fixture) => ({
+      id: fixture.canonicalFixtureIdentity,
+      pitchId: fixture.pitchId,
+      koTime: fixture.koTime,
+    })))).toEqual(Array.from({ length: 10 }, () => [{
+      id: homeIdentity,
+      pitchId: "P1",
+      koTime: "09:00",
+    }]));
   });
 
   test("presentation patches expose locked user intent without storing generated allocations", () => {

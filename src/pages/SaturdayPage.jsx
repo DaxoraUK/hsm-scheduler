@@ -29,6 +29,8 @@ export default function SaturdayPage(props) {
         setUnresolved={props.setSatUnresolved}
         manualFixtures={props.satManual || []}
         setManualFixtures={props.setSatManual}
+        onRemoveManualFixture={props.onRemoveManualFixture}
+        excludedFixtures={props.excludedFixtures || []}
         showManual={props.showManual}
         setShowManual={props.setShowManual}
         conflicts={props.satConflicts || []}

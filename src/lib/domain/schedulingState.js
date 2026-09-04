@@ -106,6 +106,16 @@ export function mergeFixtureIntent(intents = {}, fixtureIdentity, patch = {}) {
   return { ...(intents || {}), [identity]: next };
 }
 
+export function removeFixtureIntent(intents = {}, fixtureIdentity) {
+  const identity = cleanIdentity(fixtureIdentity);
+  if (!identity || !Object.prototype.hasOwnProperty.call(intents || {}, identity)) {
+    return { ...(intents || {}) };
+  }
+  const remaining = { ...(intents || {}) };
+  delete remaining[identity];
+  return remaining;
+}
+
 export function materialiseEffectiveFixtures({ providerFixtures = [], manualFixtures = [], intents = {} } = {}) {
   const fixtures = [...providerFixtures, ...manualFixtures].map((fixture) => {
     const identity = getFixtureFlowIdentity(fixture);

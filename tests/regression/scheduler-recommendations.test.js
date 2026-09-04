@@ -96,6 +96,61 @@ describe("fixture scheduling regressions", () => {
     expect(result.scheduled[0]).toMatchObject({ pitchId: "P3a", koTime: "10:00", manualAllocationApplied: true });
   });
 
+  test("a locked allocation is placed before flexible fixtures and is never silently moved", () => {
+    const pitches = [
+      { id: "P1", label: "Pitch 1", format: "7v7" },
+      { id: "P2", label: "Pitch 2", format: "7v7" },
+    ];
+    const teams = [
+      { name: "Flexible U10", teamType: "youth", format: "7v7", defaultPitch: "P1", altPitch: "P2", ageOrder: 1, gameMins: 50 },
+      { name: "Locked U10", teamType: "youth", format: "7v7", defaultPitch: "P1", altPitch: "P2", ageOrder: 2, gameMins: 50 },
+    ];
+    const result = scheduleSat(
+      [
+        { homeTeam: "Flexible U10", awayTeam: "Visitors", status: "active" },
+        { homeTeam: "Locked U10", awayTeam: "Visitors", status: "active", lockedAllocation: { pitchId: "P1", koTime: "09:00", koMins: 540 } },
+      ],
+      false,
+      [],
+      teams,
+      { "7v7": 15 },
+      9 * 60,
+      9 * 60,
+      pitches,
+      3,
+    );
+
+    expect(result.unresolved).toEqual([]);
+    expect(result.scheduled.find((fixture) => fixture.homeTeam === "Locked U10")).toMatchObject({ pitchId: "P1", koTime: "09:00", manualAllocationApplied: true });
+    expect(result.scheduled.find((fixture) => fixture.homeTeam === "Flexible U10")).toMatchObject({ pitchId: "P2" });
+  });
+
+  test("a conflicting locked allocation is unresolved instead of being silently changed", () => {
+    const pitches = [{ id: "P1", label: "Pitch 1", format: "7v7" }];
+    const teams = [
+      { name: "U10 A", teamType: "youth", format: "7v7", defaultPitch: "P1", ageOrder: 1, gameMins: 50 },
+      { name: "U10 B", teamType: "youth", format: "7v7", defaultPitch: "P1", ageOrder: 2, gameMins: 50 },
+    ];
+    const result = scheduleSat(
+      [
+        { homeTeam: "U10 A", awayTeam: "Visitors", status: "active", lockedAllocation: { pitchId: "P1", koTime: "09:00", koMins: 540 } },
+        { homeTeam: "U10 B", awayTeam: "Visitors", status: "active", lockedAllocation: { pitchId: "P1", koTime: "09:00", koMins: 540 } },
+      ],
+      false,
+      [],
+      teams,
+      { "7v7": 15 },
+      9 * 60,
+      9 * 60,
+      pitches,
+      3,
+    );
+
+    expect(result.scheduled).toHaveLength(1);
+    expect(result.unresolved).toHaveLength(1);
+    expect(result.unresolved[0].reason).toContain("Locked allocation");
+  });
+
   test("weekend adult fixtures retain the fixed 14:00 rule", () => {
     const result = scheduleSat(
       [{ homeTeam: "HSM 1st Team", awayTeam: "Visitors", status: "active" }],

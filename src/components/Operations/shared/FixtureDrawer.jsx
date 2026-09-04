@@ -27,6 +27,7 @@ import {
 import { getOperationsImpact } from "../../../lib/engines/recommendationEngine.js";
 import StatusChip from "@/ui/StatusChip.jsx";
 import PrimaryButton from "@/ui/PrimaryButton.jsx";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 import { toast } from "../../../lib/notifications/daxoraNotifications.js";
 import {
   POSTPONEMENT_REASONS,
@@ -59,6 +60,8 @@ export default function FixtureDrawer({
 }) {
   const [blockedMove, setBlockedMove] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [exclusionReason, setExclusionReason] = useState("incorrect_fixture");
+  const [exclusionConfirmOpen, setExclusionConfirmOpen] = useState(false);
 
   useEffect(() => {
     setBlockedMove(null);
@@ -182,6 +185,21 @@ export default function FixtureDrawer({
       return;
     }
     updateFixture("status", status);
+  };
+
+  const excludeFromGroundControl = () => {
+    if (!canEdit) return;
+    applyFixturePatch({
+      exclusion: {
+        reason: exclusionReason,
+        recordedAt: new Date().toISOString(),
+        actor: operatorIdentity || "operator",
+      },
+    });
+    toast.success("Fixture excluded", {
+      description: "The provider fixture remains intact and is no longer included in matchday operations.",
+    });
+    closeDrawer();
   };
 
   const reverseToHome = async () => {
@@ -603,6 +621,34 @@ Good luck!`;
                       <ReadOnlyValue value={pitchLabel} />
                     )}
                   </ControlRow>
+
+                  {fixture.sourceFixtureUrl && !fixture.manual ? (
+                    <ControlRow icon={AlertTriangle} label="Ground Control inclusion">
+                      {canEdit ? (
+                        <div className="grid gap-2">
+                          <select
+                            value={exclusionReason}
+                            onChange={(event) => setExclusionReason(event.target.value)}
+                            className="control-input"
+                          >
+                            <option value="incorrect_fixture">Incorrect fixture</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="duplicate">Duplicate</option>
+                            <option value="other">Other</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setExclusionConfirmOpen(true)}
+                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-left text-sm font-black text-red-800 transition hover:bg-red-100"
+                          >
+                            Exclude from Ground Control
+                          </button>
+                        </div>
+                      ) : (
+                        <ReadOnlyValue value="Included" />
+                      )}
+                    </ControlRow>
+                  ) : null}
                 </div>
               </DrawerSection>
 
@@ -799,6 +845,18 @@ Good luck!`;
           )}
         </div>
       </aside>
+      <ConfirmDialog
+        open={exclusionConfirmOpen}
+        eyebrow="Provider fixture"
+        title="Exclude from Ground Control?"
+        description="The official provider fixture remains intact. Ground Control will omit it from scheduling, timelines, parking, capacity and officials until it is restored."
+        confirmLabel="Exclude fixture"
+        cancelLabel="Keep included"
+        tone="warning"
+        initialFocus="cancel"
+        onCancel={() => setExclusionConfirmOpen(false)}
+        onConfirm={excludeFromGroundControl}
+      />
     </div>
   );
 }

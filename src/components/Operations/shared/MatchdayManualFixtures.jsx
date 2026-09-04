@@ -1,9 +1,10 @@
-import React from "react";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronDown, ChevronUp, Plus, RotateCcw, Trash2 } from "lucide-react";
 import ManualForm from "../../ManualForm.jsx";
 import Card from "@/ui/Card.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 import SecondaryButton from "@/ui/SecondaryButton.jsx";
+import ConfirmDialog from "@/ui/ConfirmDialog.jsx";
 import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 
 export default function MatchdayManualFixtures({
@@ -12,12 +13,31 @@ export default function MatchdayManualFixtures({
   setShowManual,
   manualFixtures = [],
   setManualFixtures,
+  onRemoveManualFixture,
+  excludedFixtures = [],
+  onRestoreExcludedFixture,
   readOnly = false,
   teamCfg,
   cleanName,
 }) {
+  const [pendingDeleteFixture, setPendingDeleteFixture] = useState(null);
+
+  const deleteManualFixture = () => {
+    if (!pendingDeleteFixture) return;
+    if (typeof onRemoveManualFixture === "function") {
+      onRemoveManualFixture(pendingDeleteFixture);
+    } else {
+      const fixtureIdentity = getFixtureFlowIdentity(pendingDeleteFixture);
+      setManualFixtures((previous) =>
+        previous.filter((candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity),
+      );
+    }
+    setPendingDeleteFixture(null);
+  };
+
   return (
-    <Card
+    <>
+      <Card
       eyebrow="Manual Fixtures"
       title="Friendlies, Cups & Rearrangements"
       subtitle="Add fixtures that are not coming from FA Full-Time."
@@ -96,11 +116,7 @@ export default function MatchdayManualFixtures({
 
               <SecondaryButton
                 disabled={readOnly}
-                onClick={() =>
-                  setManualFixtures((previous) =>
-                    previous.filter((candidate) => getFixtureFlowIdentity(candidate) !== getFixtureFlowIdentity(fixture))
-                  )
-                }
+                onClick={() => setPendingDeleteFixture(fixture)}
               >
                 <Trash2 size={16} />
                 Remove
@@ -109,6 +125,42 @@ export default function MatchdayManualFixtures({
           ))}
         </div>
       )}
-    </Card>
+
+      {excludedFixtures.length > 0 && (
+        <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+          <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-800">Excluded provider fixtures</div>
+          <p className="mt-1 text-sm font-semibold text-amber-900">These fixtures remain in the provider source and are excluded only from Ground Control. Restore them when they should be scheduled again.</p>
+          <div className="mt-3 space-y-2">
+            {excludedFixtures.map((fixture) => (
+              <div key={getFixtureFlowIdentity(fixture)} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white px-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black text-slate-900">{cleanName(fixture.homeTeam, club.name)} vs {fixture.awayTeam}</div>
+                  <div className="mt-1 text-xs font-bold text-amber-800">Reason: {fixture.exclusion?.reason || "Other"}</div>
+                </div>
+                <SecondaryButton
+                  disabled={readOnly || typeof onRestoreExcludedFixture !== "function"}
+                  onClick={() => onRestoreExcludedFixture(fixture)}
+                >
+                  <RotateCcw size={16} /> Restore
+                </SecondaryButton>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      </Card>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteFixture)}
+        eyebrow="Manual fixture"
+        title="Delete this manual fixture?"
+        description="Its manually recorded allocation, officials and related Ground Control state will be removed."
+        confirmLabel="Delete fixture"
+        cancelLabel="Keep fixture"
+        tone="danger"
+        initialFocus="cancel"
+        onCancel={() => setPendingDeleteFixture(null)}
+        onConfirm={deleteManualFixture}
+      />
+    </>
   );
 }

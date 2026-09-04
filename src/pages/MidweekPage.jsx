@@ -124,6 +124,8 @@ export default function MidweekPage(props) {
         setUnresolved={props.setMidweekUnresolved}
         manualFixtures={props.midweekManual || []}
         setManualFixtures={props.setMidweekManual}
+        onRemoveManualFixture={props.onRemoveManualFixture}
+        excludedFixtures={props.excludedFixtures || []}
         showManual={props.showMidweekManual}
         setShowManual={props.setShowMidweekManual}
         conflicts={props.midweekConflicts || []}

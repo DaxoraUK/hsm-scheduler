@@ -217,12 +217,10 @@ export default function MatchdayUnresolvedCard({
   teamCfg,
   pitchCfg,
   closedPitches = [],
+  scheduled = [],
   unresolved = [],
   overrides = {},
   onOverride,
-  scheduled = [],
-  setScheduled,
-  setUnresolved,
   onResolveFixture,
   readOnly = false,
 }) {

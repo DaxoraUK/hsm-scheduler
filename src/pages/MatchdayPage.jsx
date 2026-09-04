@@ -256,6 +256,8 @@ export default function MatchdayPage({
   setUnresolved: suppliedSetUnresolved,
   manualFixtures: suppliedManualFixtures,
   setManualFixtures: suppliedSetManualFixtures,
+  onRemoveManualFixture,
+  excludedFixtures = [],
   showManual: suppliedShowManual,
   setShowManual: suppliedSetShowManual,
   conflicts: suppliedConflicts,
@@ -948,6 +950,8 @@ export default function MatchdayPage({
     setUnresolved,
     manualFixtures,
     setManualFixtures,
+    onRemoveManualFixture,
+    excludedFixtures,
     showManual,
     setShowManual,
     overrides,
@@ -961,6 +965,10 @@ export default function MatchdayPage({
     onFixtureClick: openFixture,
     onResolveFixture: (fixture, patch) => {
       editableOverride(fixture, patch);
+      window.setTimeout(() => runRebuild(), 0);
+    },
+    onRestoreExcludedFixture: (fixture) => {
+      editableOverride(fixture, { exclusion: null });
       window.setTimeout(() => runRebuild(), 0);
     },
   };
