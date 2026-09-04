@@ -222,30 +222,47 @@ export default function MatchdayUnresolvedCard({
   readOnly = false,
 }) {
   const [pendingOverride, setPendingOverride] = useState(null);
+  const [resolvingFixtureIdentity, setResolvingFixtureIdentity] = useState("");
 
   if (unresolved.length === 0) return null;
 
-  const resolveFixture = ({ fixture, patch, cfg, overridden = false }) => {
-    if (readOnly) return;
+  const resolveFixture = async ({ fixture, patch, cfg, overridden = false }) => {
+    if (readOnly) return false;
+    const fixtureIdentity = getFixtureFlowIdentity(fixture);
+    if (!fixtureIdentity || typeof onResolveFixture !== "function") return false;
     const koMins =
       patch.koMins != null ? patch.koMins : timeToMinutes(patch.koTime);
     const duration = getDuration(cfg);
     const endMins =
       patch.endMins != null ? patch.endMins : koMins != null ? koMins + duration : null;
 
-    onResolveFixture?.(fixture, {
-      ...patch,
-      koMins,
-      endMins,
-      cfg,
-      overridden,
-    });
+    setResolvingFixtureIdentity(fixtureIdentity);
+    try {
+      const scheduledFixture = await onResolveFixture(fixture, {
+        ...patch,
+        koMins,
+        endMins,
+        cfg,
+        overridden,
+      });
+      if (!scheduledFixture) {
+        throw new Error("Fixture remains unresolved after validation");
+      }
+      return scheduledFixture;
+    } catch (error) {
+      toast.error("Fixture assignment was not saved", {
+        description: error?.message || "Fixture remains unresolved after validation.",
+      });
+      return false;
+    } finally {
+      setResolvingFixtureIdentity("");
+    }
   };
 
-  const completeManualAssignment = ({ fixture, ov, cfg, koMins, endMins, clash = null }) => {
+  const completeManualAssignment = async ({ fixture, ov, cfg, koMins, endMins, clash = null }) => {
     const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
 
-    resolveFixture({
+    const scheduledFixture = await resolveFixture({
       fixture,
       cfg,
       overridden: Boolean(clash),
@@ -257,16 +274,22 @@ export default function MatchdayUnresolvedCard({
       },
     });
 
+    if (!scheduledFixture) return false;
     setPendingOverride(null);
 
     if (clash) {
       toast.success("Fixture assigned with override", {
         description: "The pitch conflict remains recorded for operational review.",
       });
+    } else {
+      toast.success("Fixture assigned", {
+        description: `${scheduledFixture.koTime || ov.koTime} on ${scheduledFixture.pitchLabel || selectedPitch?.label || ov.pitchId} is now in the operational schedule.`,
+      });
     }
+    return scheduledFixture;
   };
 
-  const confirmManualAssignment = ({ fixture, index }) => {
+  const confirmManualAssignment = async ({ fixture, index }) => {
     if (readOnly) return;
     const ov = overrides[getFixtureFlowIdentity(fixture)] || {};
 
@@ -332,7 +355,7 @@ export default function MatchdayUnresolvedCard({
       return;
     }
 
-    completeManualAssignment({ fixture, ov, cfg, koMins, endMins });
+    await completeManualAssignment({ fixture, ov, cfg, koMins, endMins });
   };
 
   return (
@@ -426,7 +449,7 @@ export default function MatchdayUnresolvedCard({
                         key={`${suggestion.pitchId}-${suggestion.koTime}`}
                         disabled={readOnly}
                         onClick={() =>
-                          resolveFixture({
+                          void resolveFixture({
                             fixture,
                             index,
                             cfg: suggestion.cfg,
@@ -535,8 +558,8 @@ export default function MatchdayUnresolvedCard({
 
                   <button
                     type="button"
-                    disabled={readOnly}
-                    onClick={() => confirmManualAssignment({ fixture, index })}
+                    disabled={readOnly || resolvingFixtureIdentity === getFixtureFlowIdentity(fixture)}
+                    onClick={() => void confirmManualAssignment({ fixture, index })}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <MapPin size={16} />
@@ -559,7 +582,7 @@ export default function MatchdayUnresolvedCard({
         tone="danger"
         initialFocus="cancel"
         onCancel={() => setPendingOverride(null)}
-        onConfirm={() => pendingOverride && completeManualAssignment(pendingOverride)}
+        onConfirm={() => pendingOverride && void completeManualAssignment(pendingOverride)}
       >
         <div className="grid gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm">
           <div className="flex items-center justify-between gap-4">

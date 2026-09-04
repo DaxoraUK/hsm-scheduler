@@ -47,10 +47,6 @@ import {
   isFixtureOfficialConfirmed,
 } from "../lib/engines/officialsEngine.js";
 import useLiveWeather from "../hooks/useLiveWeather.js";
-import {
-  readMatchdayLock,
-  writeMatchdayLock,
-} from "../lib/operations/matchdayLock.js";
 import { getParkingStats } from "../lib/dashboardStats.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import { getTimelineCandidateSummary } from "../lib/engines/timelineDragEngine.js";
@@ -58,8 +54,6 @@ import {
   buildPlannerChangeRecord,
 } from "../lib/engines/matchdayPlannerEngine.js";
 import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
-import { DB, isSupaConfigured } from "../lib/supabase.js";
-import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 import { createRebuildAction } from "../lib/domain/rebuildAction.js";
 import {
@@ -276,6 +270,7 @@ export default function MatchdayPage({
   rebuildDay,
   refreshFixtures,
   commitScheduleTransaction,
+  saveSchedule,
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
@@ -291,7 +286,6 @@ export default function MatchdayPage({
   const [openSections, setOpenSections] = useState({});
   const [highlightedSection, setHighlightedSection] = useState(null);
   const targetAppliedRef = useRef(null);
-  const remoteLockRevisionRef = useRef("");
 
   const isSunday = day === "Sunday";
   const matchdayDate =
@@ -309,17 +303,6 @@ export default function MatchdayPage({
     [props.bufferAdult, props.bufferYouth],
   );
 
-  const lockIdentity = useMemo(
-    () => ({
-      clubId: props.club?.id || props.club?.name || "club",
-      day: day.toLowerCase(),
-      date: matchdayDate || dateLabel || "undated",
-    }),
-    [dateLabel, day, matchdayDate, props.club?.id, props.club?.name],
-  );
-  const [isLocked, setIsLocked] = useState(false);
-  const [lockBusy, setLockBusy] = useState(false);
-  const [lockInfo, setLockInfo] = useState({});
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [timelineDirty, setTimelineDirty] = useState(false);
   const [timelineSaving, setTimelineSaving] = useState(false);
@@ -334,53 +317,6 @@ export default function MatchdayPage({
       : persistedFinal,
     [persistedFinal, timelineTransaction],
   );
-
-  useEffect(() => {
-    let active = true;
-    remoteLockRevisionRef.current = "";
-    const localLock = readMatchdayLock(lockIdentity);
-    setIsLocked(localLock);
-
-    const sharedClubId = props.activeClubId || props.club?.id || "";
-    if (!sharedClubId || !isSupaConfigured()) return () => { active = false; };
-
-    const refreshSharedLock = async () => {
-      try {
-        const result = await DB.getMatchdayLock(sharedClubId, {
-          dayScope: lockIdentity.day,
-          matchdayDate: lockIdentity.date,
-        });
-        if (!active) return;
-        const sharedLocked = Boolean(result?.locked);
-        const revision = String(result?.updated_at || "");
-        const previousRevision = remoteLockRevisionRef.current;
-        writeMatchdayLock(lockIdentity, sharedLocked);
-        setIsLocked(sharedLocked);
-        setLockInfo(result || {});
-        remoteLockRevisionRef.current = revision;
-        if (previousRevision && revision && previousRevision !== revision) {
-          toast.info(sharedLocked ? `${day} schedule was locked` : `${day} schedule was unlocked`, {
-            description: sharedLocked
-              ? `${result?.locked_by_label || "Another authorised operator"} approved this schedule. Editing has been disabled.`
-              : "The shared approval was removed by another authorised operator.",
-          });
-        }
-      } catch {
-        // The cached browser state keeps the page usable during a temporary connection fault.
-      }
-    };
-
-    refreshSharedLock();
-    const interval = window.setInterval(refreshSharedLock, 20000);
-    const refreshOnFocus = () => refreshSharedLock();
-    window.addEventListener("focus", refreshOnFocus);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refreshOnFocus);
-    };
-  }, [day, lockIdentity, props.activeClubId, props.club?.id]);
 
   useEffect(() => {
     setTimelineTransaction(createScheduleTransaction({
@@ -555,7 +491,7 @@ export default function MatchdayPage({
 
   const editableOverride = useCallback(
     (target, fieldOrPatch, value) => {
-      if (isLocked || typeof onOverride !== "function") return;
+      if (typeof onOverride !== "function") return;
       const fixture = typeof target === "number"
         ? final[target]
         : target && typeof target === "object"
@@ -570,10 +506,10 @@ export default function MatchdayPage({
           ? { [fieldOrPatch]: value }
           : {};
 
-      if (!fixtureIdentity || !Object.keys(patch).length) return;
-      onOverride(fixtureIdentity, patch);
+      if (!fixtureIdentity || !Object.keys(patch).length) return false;
+      return onOverride(fixtureIdentity, patch);
     },
-    [final, isLocked, onOverride],
+    [final, onOverride],
   );
   const buildSchedule = props.mode === "test"
     ? (runTest || (isSunday ? props.runSunTest : props.runSatTest))
@@ -594,121 +530,21 @@ export default function MatchdayPage({
       setRebuildBusy(false);
     }
   }, [day, rebuildAction, rebuildBusy]);
-  const currentSnapshotHash = useMemo(() => buildMatchdaySnapshotHash(final), [final]);
-  const approvalStale = Boolean(isLocked && lockInfo.snapshot_hash && lockInfo.snapshot_hash !== currentSnapshotHash);
-
-  const canChangeLock = props.workspaceAccess?.canPublish !== false;
-  const persistScheduleLock = useCallback(async (locked) => {
-    if (!canChangeLock || lockBusy) return false;
-    const sharedClubId = props.activeClubId || props.club?.id || "";
-    setLockBusy(true);
-    try {
-      if (sharedClubId && isSupaConfigured()) {
-        const result = await DB.setMatchdayLock(sharedClubId, {
-          dayScope: lockIdentity.day,
-          matchdayDate: lockIdentity.date,
-          locked,
-          snapshotHash: locked ? currentSnapshotHash : "",
-          fixtureCount: locked ? final.length : 0,
-        });
-        setLockInfo(result || {});
-        remoteLockRevisionRef.current = String(result?.updated_at || "");
-      }
-      writeMatchdayLock(lockIdentity, locked);
-      setIsLocked(locked);
-      return true;
-    } catch (error) {
-      toast.error(`Could not ${locked ? "lock" : "unlock"} the schedule`, {
-        description: error?.message || "The shared club lock was not changed. Please try again.",
-      });
-      return false;
-    } finally {
-      setLockBusy(false);
-    }
-  }, [canChangeLock, currentSnapshotHash, final.length, lockBusy, lockIdentity, props.activeClubId, props.club?.id]);
-
-  const lockSchedule = useCallback(async () => {
-    const saved = await persistScheduleLock(true);
-    if (!saved) return;
-    setPendingConfirmation(null);
-    toast.success(`${day} schedule locked`, {
-      description: "The approved plan is now protected for everyone in the club.",
-    });
-  }, [day, persistScheduleLock]);
-
-  const toggleScheduleLock = useCallback(async () => {
-    if (!canChangeLock) {
-      toast.error("Your role cannot change the schedule lock");
-      return;
-    }
-    if (isLocked) {
-      const saved = await persistScheduleLock(false);
-      if (!saved) return;
-      toast.success(`${day} schedule unlocked`, {
-        description:
-          "Fixture changes and validated optimiser moves are available again.",
-      });
-      return;
-    }
-
-    if (!hasRun || final.length === 0) {
-      toast.error("Build the schedule before locking it");
-      return;
-    }
-
-    const issues = [];
-    if (unresolved.length)
-      issues.push(
-        `${unresolved.length} unresolved fixture${unresolved.length === 1 ? "" : "s"}`,
-      );
-    if (conflicts.length)
-      issues.push(
-        `${conflicts.length} pitch conflict${conflicts.length === 1 ? "" : "s"}`,
-      );
-    if (officialConflicts.length)
-      issues.push(
-        `${officialConflicts.length} official clash${officialConflicts.length === 1 ? "" : "es"}`,
-      );
-    if (refWarnings)
-      issues.push(
-        `${refWarnings} official confirmation${refWarnings === 1 ? "" : "s"} outstanding`,
-      );
-
-    if (issues.length) {
-      setPendingConfirmation({ type: "lock", issues });
-      return;
-    }
-
-    lockSchedule();
-  }, [
-    conflicts.length,
-    canChangeLock,
-    day,
-    final.length,
-    hasRun,
-    isLocked,
-    lockSchedule,
-    officialConflicts.length,
-    refWarnings,
-    unresolved.length,
-    persistScheduleLock,
-  ]);
-
   const applyOptimisationMove = useCallback(
     (move) => {
-      if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
+      if (typeof onOverride !== "function" || !move?.patch) return;
       editableOverride(move.fixtureIdentity, move.patch);
       toast.success("Validated fixture move applied", {
         description:
           move.summary || move.fixtureTitle || "The schedule has been updated.",
       });
     },
-    [editableOverride, final, isLocked, onOverride],
+    [editableOverride, final, onOverride],
   );
 
   const applyAllValidatedMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
-    if (!moves.length || isLocked || typeof onOverride !== "function") return;
+    if (!moves.length || typeof onOverride !== "function") return;
 
     moves.forEach((move) => {
       editableOverride(move.fixtureIdentity, move.patch || {});
@@ -718,13 +554,13 @@ export default function MatchdayPage({
     toast.success("Schedule improvements applied", {
       description: `${moves.length} validated move${moves.length === 1 ? "" : "s"} applied.`,
     });
-  }, [dayOptimisation.moves, editableOverride, final, isLocked, onOverride]);
+  }, [dayOptimisation.moves, editableOverride, final, onOverride]);
 
   const applyAllOptimisationMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
-    if (!moves.length || isLocked || typeof onOverride !== "function") return;
+    if (!moves.length || typeof onOverride !== "function") return;
     setPendingConfirmation({ type: "optimise", count: moves.length });
-  }, [dayOptimisation.moves, isLocked, onOverride]);
+  }, [dayOptimisation.moves, onOverride]);
 
   const reviewOptimisation = useCallback(() => {
     setSectionQuery("");
@@ -742,7 +578,7 @@ export default function MatchdayPage({
 
   const undoTimelineMove = useCallback(() => {
     const record = timelineHistory.at(-1);
-    if (!record || isLocked) return;
+    if (!record) return;
     setTimelineTransaction((current) => undoScheduleMutation(current));
     setTimelineHistory((current) => current.slice(0, -1));
     setTimelineRedoHistory((current) => [...current, record]);
@@ -750,11 +586,11 @@ export default function MatchdayPage({
     toast.info("Planner change undone", {
       description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
     });
-  }, [isLocked, timelineHistory]);
+  }, [timelineHistory]);
 
   const redoTimelineMove = useCallback(() => {
     const record = timelineRedoHistory.at(-1);
-    if (!record || isLocked) return;
+    if (!record) return;
     setTimelineTransaction((current) => redoScheduleMutation(current));
     setTimelineRedoHistory((current) => current.slice(0, -1));
     setTimelineHistory((current) => [...current, record]);
@@ -762,10 +598,10 @@ export default function MatchdayPage({
     toast.success("Planner change reapplied", {
       description: record.summary || "The fixture move has been reapplied.",
     });
-  }, [isLocked, timelineRedoHistory]);
+  }, [timelineRedoHistory]);
 
   const discardTimelineChanges = useCallback(() => {
-    if (!timelineHistory.length || isLocked) return;
+    if (!timelineHistory.length) return;
     setTimelineTransaction((current) => discardScheduleTransaction(current));
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
@@ -773,16 +609,16 @@ export default function MatchdayPage({
     toast.info("Planner changes discarded", {
       description: "The matchday schedule has returned to its last saved state.",
     });
-  }, [isLocked, timelineHistory]);
+  }, [timelineHistory]);
 
   const requestDiscardTimelineChanges = useCallback(() => {
-    if (!timelineHistory.length || isLocked) return;
+    if (!timelineHistory.length) return;
     setPendingConfirmation({ type: "timeline-discard", count: timelineHistory.length });
-  }, [isLocked, timelineHistory.length]);
+  }, [timelineHistory.length]);
 
   const applyTimelineMove = useCallback(
     (candidate) => {
-      if (isLocked || !candidate?.patch) return;
+      if (!candidate?.patch) return;
 
       const fixtureIdentity = getFixtureFlowIdentity(candidate.fixture || {});
       if (!fixtureIdentity) return;
@@ -800,7 +636,7 @@ export default function MatchdayPage({
         description: getTimelineCandidateSummary(candidate),
       });
     },
-    [isLocked],
+    [],
   );
 
   const requestTimelineMove = useCallback(
@@ -856,8 +692,6 @@ export default function MatchdayPage({
         patches: getScheduleTransactionPatches(timelineTransaction),
       });
       if (saved !== false) {
-        const published = await props.saveWeek?.();
-        if (published === false) return false;
         setTimelineTransaction(createScheduleTransaction({ baseFixtures: proposed, timing: schedulingTiming }));
         setTimelineDirty(false);
         setTimelineHistory([]);
@@ -866,7 +700,21 @@ export default function MatchdayPage({
     } finally {
       setTimelineSaving(false);
     }
-  }, [commitScheduleTransaction, day, matchdayDate, props.closedPitches, props.pitchCfg, props.saveWeek, schedulingTiming, timelineSaving, timelineTransaction]);
+  }, [commitScheduleTransaction, day, matchdayDate, props.closedPitches, props.pitchCfg, schedulingTiming, timelineSaving, timelineTransaction]);
+
+  const saveCurrentSchedule = useCallback(
+    () => saveSchedule?.({ scope: day.toLowerCase(), date: matchdayDate }) ?? false,
+    [day, matchdayDate, saveSchedule],
+  );
+
+  const publishCurrentSchedule = useCallback(
+    () => props.onPublish?.({
+      scope: day.toLowerCase(),
+      date: matchdayDate,
+      canonicalIdentities: final.map((fixture) => getFixtureFlowIdentity(fixture)).filter(Boolean),
+    }) ?? false,
+    [day, final, matchdayDate, props],
+  );
 
   const weatherIntelligence = useMemo(
     () =>
@@ -995,16 +843,24 @@ export default function MatchdayPage({
     setShowManual,
     overrides,
     onOverride: editableOverride,
-    readOnly: isLocked,
+    readOnly: false,
     dateLabel,
     games: final,
     conflicts,
     officialConflicts,
     refWarnings,
     onFixtureClick: openFixture,
-    onResolveFixture: (fixture, patch) => {
-      editableOverride(fixture, patch);
-      window.setTimeout(() => runRebuild(), 0);
+    onResolveFixture: async (fixture, patch) => {
+      const fixtureIdentity = getFixtureFlowIdentity(fixture);
+      if (!fixtureIdentity || typeof commitScheduleTransaction !== "function") return false;
+      const result = await commitScheduleTransaction({
+        scope: day.toLowerCase(),
+        date: matchdayDate,
+        patches: { [fixtureIdentity]: patch },
+      });
+      const state = result?.build?.byIdentity?.get?.(fixtureIdentity);
+      if (result === false || state?.state !== "scheduled") return false;
+      return state.fixture;
     },
     onRestoreExcludedFixture: (fixture) => {
       editableOverride(fixture, { exclusion: null });
@@ -1105,7 +961,7 @@ export default function MatchdayPage({
             pitchCfg={props.pitchCfg}
             closedPitches={props.closedPitches}
             club={clubWithTiming}
-            readOnly={isLocked}
+            readOnly={false}
             dirty={timelineDirty}
             saving={timelineSaving}
             changeHistory={timelineHistory}
@@ -1114,7 +970,7 @@ export default function MatchdayPage({
             onUndo={undoTimelineMove}
             onRedo={redoTimelineMove}
             onDiscard={requestDiscardTimelineChanges}
-            onSave={props.saveWeek ? saveTimelineChanges : undefined}
+            onSave={commitScheduleTransaction ? saveTimelineChanges : undefined}
             onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
             matchDate={matchdayDate}
@@ -1245,7 +1101,7 @@ export default function MatchdayPage({
             render: () => (
               <DayOptimiserCard
                 optimisation={dayOptimisation}
-                readOnly={isLocked}
+                readOnly={false}
                 onApplyMove={applyOptimisationMove}
                 onApplyAll={applyAllOptimisationMoves}
               />
@@ -1357,7 +1213,6 @@ export default function MatchdayPage({
     dayOptimisation,
     final,
     hasRun,
-    isLocked,
     liveWeather.isLoading,
     liveWeather.refresh,
     manualFixtures.length,
@@ -1574,41 +1429,19 @@ export default function MatchdayPage({
           onRefresh={refreshFixtures}
           onRebuild={runRebuild}
           rebuildBusy={rebuildBusy}
-          saveWeek={props.saveWeek}
+          saveWeek={saveCurrentSchedule}
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}
-          isLocked={isLocked}
-          canToggleLock={canChangeLock}
-          lockBusy={lockBusy}
-          approvalStale={approvalStale}
-          onToggleLock={toggleScheduleLock}
+          canOperate={Boolean(props.workspaceAccess?.canOperate)}
+          canPublish={Boolean(props.workspaceAccess?.canPublish)}
           onPrint={props.onPrintReport}
-          onPublish={() => props.onPublish?.({ dayScope: lockIdentity.day, matchdayDate: lockIdentity.date, snapshotHash: currentSnapshotHash })}
+          onPublish={publishCurrentSchedule}
           onReview={() => openIntelligenceTarget("unresolved")}
           onResolve={() => openIntelligenceTarget(refWarnings > 0 ? "officialsIntelligence" : "pitchClosures")}
           onOptimise={reviewOptimisation}
           optimisationCount={dayOptimisation.metrics?.validatedMoves || 0}
         />
       </div>
-
-      {isLocked ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm font-black">Approved schedule locked</div>
-            <div className="mt-1 text-xs font-bold text-emerald-800">
-              {approvalStale ? "The fixture plan no longer matches the approved version. Unlock, review and lock it again before publishing." : `Approved${lockInfo.locked_by_label ? ` by ${lockInfo.locked_by_label}` : ""}${lockInfo.locked_at ? ` · ${new Date(lockInfo.locked_at).toLocaleString("en-GB")}` : ""}. Fixtures remain viewable and printable until unlocked.`}
-            </div>
-          </div>
-          {canChangeLock ? <button
-            type="button"
-            onClick={toggleScheduleLock}
-            disabled={lockBusy}
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
-          >
-            {lockBusy ? "Updating…" : "Unlock schedule"}
-          </button> : null}
-        </div>
-      ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="grid gap-2 sm:grid-cols-3">
@@ -1727,36 +1560,9 @@ export default function MatchdayPage({
           })
           : undefined}
         operatorIdentity={props.operatorIdentity}
-        readOnly={isLocked}
+        readOnly={false}
         onClose={() => setSelectedFixtureIdentity("")}
       />
-
-      <ConfirmDialog
-        open={pendingConfirmation?.type === "lock"}
-        eyebrow="Schedule approval"
-        title={`Lock ${day} schedule?`}
-        description="The plan will become read only until it is unlocked. Existing warnings stay visible so they can still be monitored and followed up."
-        confirmLabel="Lock schedule"
-        cancelLabel="Keep editing"
-        tone="warning"
-        initialFocus="cancel"
-        onCancel={() => setPendingConfirmation(null)}
-        onConfirm={lockSchedule}
-      >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-            Outstanding checks
-          </div>
-          <ul className="mt-2 space-y-1.5 text-sm font-bold text-amber-950">
-            {(pendingConfirmation?.issues || []).map((issue) => (
-              <li key={issue} className="flex items-start gap-2">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                <span>{issue}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </ConfirmDialog>
 
       <ConfirmDialog
         open={pendingConfirmation?.type === "timeline-warning"}

@@ -391,6 +391,10 @@ function App() {
   const [midweekManual, setMidweekManual] = useState([]);
   const [midweekFetchStatus, setMidweekFetchStatus] = useState([]);
   const [midweekHasRun, setMidweekHasRun] = useState(false);
+  // Revisions belong to persisted user intent, not the generated schedule.
+  // They let Calendar batches fail safely rather than silently overwriting a
+  // concurrent operator's canonical allocation decisions.
+  const schedulingStateRevisionsRef = useRef({});
 
   // Settings state
   const [startHour, setStartHour] = useState(8);
@@ -1814,11 +1818,11 @@ function App() {
   const getEndMins = () => endHour * 60 + endMin;
 
   const runSat = useCallback(
-    (baseFx) => {
+    (baseFx, scopedIntents = satOverrides) => {
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
-        satOverrides,
+        scopedIntents,
       );
       const build = buildSchedulingState({
         providerFixtures: baseFx,
@@ -1844,7 +1848,7 @@ function App() {
       setSatScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
       setSatUnresolved(build.unresolved);
       setSatHasRun(true);
-      return true;
+      return build;
     },
     [
       satManual,
@@ -1924,11 +1928,11 @@ function App() {
   };
 
   const runSun = useCallback(
-    (baseFx) => {
+    (baseFx, scopedIntents = sunOverrides) => {
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
-        sunOverrides,
+        scopedIntents,
       );
       const build = buildSchedulingState({
         providerFixtures: baseFx,
@@ -1954,7 +1958,7 @@ function App() {
       setSunScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
       setSunUnresolved(build.unresolved);
       setSunHasRun(true);
-      return true;
+      return build;
     },
     [
       sunManual,
@@ -2024,11 +2028,11 @@ function App() {
   };
 
   const runMidweek = useCallback(
-    (baseFx) => {
+    (baseFx, scopedIntents = midweekOverrides) => {
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
-        midweekOverrides,
+        scopedIntents,
       );
       const build = buildSchedulingState({
         providerFixtures: baseFx,
@@ -2055,7 +2059,7 @@ function App() {
       setMidweekScheduled(deduplicateFixtureSet([...build.scheduled, ...away]));
       setMidweekUnresolved(build.unresolved);
       setMidweekHasRun(true);
-      return true;
+      return build;
     },
     [
       midweekManual,
@@ -2138,8 +2142,45 @@ function App() {
     }
   };
 
-  const persistScopedFixtureIntents = useCallback(async (scope, date, intents) => {
+  const persistScopedFixtureIntents = useCallback(async (scope, date, intents, manualFixtures) => {
     if (!date) return false;
+    const scopeKey = `${scope}:${date}`;
+    const scopeManualFixtures = Array.isArray(manualFixtures)
+      ? manualFixtures
+      : scope === "sunday"
+        ? sunManual
+        : scope === "midweek"
+          ? midweekManual
+          : satManual;
+
+    // Authenticated workspaces write only the canonical scheduling-state
+    // record. The old club JSON is a local/offline compatibility store, never
+    // the cloud source from which generated allocations may reappear.
+    if (isSupaConfigured() && activeClubId) {
+      try {
+        let expectedRevision = schedulingStateRevisionsRef.current[scopeKey];
+        if (expectedRevision == null) {
+          const current = await DB.loadMatchdaySchedulingState(activeClubId, {
+            dayScope: scope,
+            matchdayDate: date,
+          });
+          expectedRevision = Number(current?.revision) || 0;
+        }
+        const saved = await DB.saveMatchdaySchedulingState(activeClubId, {
+          dayScope: scope,
+          matchdayDate: date,
+          expectedRevision,
+          intents,
+          manualFixtures: scopeManualFixtures,
+        });
+        schedulingStateRevisionsRef.current[scopeKey] = Number(saved?.revision) || expectedRevision + 1;
+        return saved || true;
+      } catch (error) {
+        toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
+        return false;
+      }
+    }
+
     const fullTime = club.integrations?.fullTimeFa || {};
     const schedulingIntents = fullTime.schedulingIntents || {};
     const nextClub = {
@@ -2157,14 +2198,40 @@ function App() {
     };
     setClub(nextClub);
     try {
-      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
-      else tenantSetJson("club", nextClub);
+      tenantSetJson("club", nextClub);
       return true;
     } catch (error) {
       toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
       return false;
     }
-  }, [activeClubId, club]);
+  }, [activeClubId, club, midweekManual, satManual, sunManual]);
+
+  useEffect(() => {
+    if (!isSupaConfigured() || !activeClubId) return undefined;
+    let active = true;
+    const scopes = [
+      { scope: "saturday", date: satDate, setIntents: setSatOverrides, setManual: setSatManual },
+      { scope: "sunday", date: sunDate, setIntents: setSunOverrides, setManual: setSunManual },
+      { scope: "midweek", date: midweekDate, setIntents: setMidweekOverrides, setManual: setMidweekManual },
+    ].filter(({ date }) => Boolean(date));
+
+    Promise.all(scopes.map(async ({ scope, date, setIntents, setManual }) => {
+      const state = await DB.loadMatchdaySchedulingState(activeClubId, {
+        dayScope: scope,
+        matchdayDate: date,
+      });
+      if (!active || !state || Number(state.revision) <= 0) return;
+      schedulingStateRevisionsRef.current[`${scope}:${date}`] = Number(state.revision) || 0;
+      setIntents(state.intents && typeof state.intents === "object" ? state.intents : {});
+      setManual(Array.isArray(state.manual_fixtures) ? state.manual_fixtures : []);
+    })).catch((error) => {
+      // Existing local state remains usable; persistence will surface a
+      // concrete error if an authorised operator next attempts to save.
+      console.warn("Could not load canonical matchday scheduling state", error);
+    });
+
+    return () => { active = false; };
+  }, [activeClubId, midweekDate, satDate, sunDate]);
 
   useEffect(() => {
     const scoped = club.integrations?.fullTimeFa?.schedulingIntents || {};
@@ -2176,7 +2243,7 @@ function App() {
     synchronise(setMidweekOverrides, scoped.midweek?.[midweekDate]);
   }, [club.integrations?.fullTimeFa?.schedulingIntents, midweekDate, satDate, sunDate]);
 
-  const writeFixtureOverride = (setOverrides, persistIntent, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
+  const writeFixtureOverride = (setOverrides, currentIntents, persistIntent, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
     const fixtureIdentity = String(
       typeof target === "string" ? target : legacyFixtureIdentity || "",
     ).trim();
@@ -2187,12 +2254,9 @@ function App() {
         : {};
 
     if (fixtureIdentity) {
-      setOverrides((current) => {
-        const next = mergeFixtureIntent(current, fixtureIdentity, fixturePatchToIntent(patch));
-        void persistIntent(next);
-        return next;
-      });
-      return;
+      const next = mergeFixtureIntent(currentIntents, fixtureIdentity, fixturePatchToIntent(patch));
+      setOverrides(next);
+      return persistIntent(next);
     }
     toast.error("Fixture update blocked", { description: "This operation did not provide a canonical fixture identity." });
   };
@@ -2222,11 +2286,31 @@ function App() {
     intents: mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), midweekOverrides),
   }).excluded, [fullTimeVenueOverrides, midweekManual, midweekOverrides, midweekProviderFixtures]);
   const satOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSatOverrides, (intents) => persistScopedFixtureIntents("saturday", satDate, intents), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSatOverrides, satOverrides, (intents) => persistScopedFixtureIntents("saturday", satDate, intents, satManual), target, fieldOrPatch, value, fixtureIdentity);
   const sunOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSunOverrides, sunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents, sunManual), target, fieldOrPatch, value, fixtureIdentity);
   const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setMidweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setMidweekOverrides, midweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents, midweekManual), target, fieldOrPatch, value, fixtureIdentity);
+
+  // A user-intent mutation is immediately re-materialised through the same
+  // canonical rebuild boundary as an optimiser run. This prevents cards,
+  // validators and timeline state retaining a pre-move allocation while the
+  // intent has already changed.
+  useEffect(() => {
+    if (satHasRun) runSat(satProviderFixtures);
+    // runSat is intentionally omitted: its identity changes with the intent
+    // it consumes, whereas the transition itself is driven by intent changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [satHasRun, satManual, satOverrides]);
+  useEffect(() => {
+    if (sunHasRun) runSun(sunProviderFixtures);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sunHasRun, sunManual, sunOverrides]);
+  useEffect(() => {
+    if (midweekHasRun) runMidweek(midweekProviderFixtures);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [midweekHasRun, midweekManual, midweekOverrides]);
+
   const commitFixtureIntentBatch = useCallback(async ({ scope, date, patches } = {}) => {
     const setOverrides = scope === "sunday"
       ? setSunOverrides
@@ -2240,26 +2324,87 @@ function App() {
         : satOverrides;
     const nextIntents = mergeFixtureAllocationBatch(currentIntents, patches);
     setOverrides(nextIntents);
-    return persistScopedFixtureIntents(scope, date, nextIntents);
-  }, [midweekOverrides, persistScopedFixtureIntents, satOverrides, sunOverrides]);
-  const removeManualFixture = (setManualFixtures, setOverrides, scope, date, fixture) => {
+    const manualFixtures = scope === "sunday"
+      ? sunManual
+      : scope === "midweek"
+        ? midweekManual
+        : satManual;
+    const saved = await persistScopedFixtureIntents(scope, date, nextIntents, manualFixtures);
+    if (saved === false) return false;
+    const build = scope === "sunday"
+      ? runSun(sunProviderFixtures, nextIntents)
+      : scope === "midweek"
+        ? runMidweek(midweekProviderFixtures, nextIntents)
+        : runSat(satProviderFixtures, nextIntents);
+    if (build === false) return false;
+    return { persisted: saved, build };
+  }, [midweekManual, midweekOverrides, midweekProviderFixtures, persistScopedFixtureIntents, runMidweek, runSat, runSun, satManual, satOverrides, satProviderFixtures, sunManual, sunOverrides, sunProviderFixtures]);
+  const saveMatchdaySchedule = useCallback(async ({ scope = "saturday", date } = {}) => {
+    if (!operationalWorkspaceAccess.canOperate) {
+      toast.error("Scheduling access required", { description: "Your workspace role cannot save matchday scheduling decisions." });
+      return false;
+    }
+    const intents = scope === "sunday"
+      ? sunOverrides
+      : scope === "midweek"
+        ? midweekOverrides
+        : satOverrides;
+    const manualFixtures = scope === "sunday"
+      ? sunManual
+      : scope === "midweek"
+        ? midweekManual
+        : satManual;
+    const saved = await persistScopedFixtureIntents(scope, date, intents, manualFixtures);
+    if (saved !== false) {
+      toast.success("Schedule saved", { description: "Canonical scheduling decisions are stored. Publishing remains a separate action." });
+    }
+    return saved;
+  }, [midweekManual, midweekOverrides, operationalWorkspaceAccess.canOperate, persistScopedFixtureIntents, satManual, satOverrides, sunManual, sunOverrides]);
+  const publishMatchdaySchedule = useCallback(async ({ scope = "saturday", date, canonicalIdentities = [] } = {}) => {
+    if (!operationalWorkspaceAccess.canPublish) {
+      toast.error("Publishing access required", { description: "Your workspace role can view this schedule but cannot publish it." });
+      return false;
+    }
+    const saved = await saveMatchdaySchedule({ scope, date });
+    if (saved === false) return false;
+    if (!isSupaConfigured() || !activeClubId) {
+      toast.error("Secure workspace unavailable", { description: "Publishing requires an authenticated club workspace." });
+      return false;
+    }
+    try {
+      const scopeKey = `${scope}:${date}`;
+      const expectedRevision = Number(schedulingStateRevisionsRef.current[scopeKey]) || Number(saved?.revision) || 0;
+      const published = await DB.publishMatchdaySchedulingState(activeClubId, {
+        dayScope: scope,
+        matchdayDate: date,
+        expectedRevision,
+        snapshot: { canonicalIdentities: [...new Set(canonicalIdentities)].sort() },
+      });
+      schedulingStateRevisionsRef.current[scopeKey] = Number(published?.revision) || expectedRevision;
+      toast.success("Schedule published", { description: "The saved matchday schedule was published directly under your workspace capability." });
+      return published || true;
+    } catch (error) {
+      toast.error("Schedule could not be published", { description: error?.message || "The schedule remains safely saved; retry publication when ready." });
+      return false;
+    }
+  }, [activeClubId, operationalWorkspaceAccess.canPublish, saveMatchdaySchedule]);
+  const removeManualFixture = (currentManualFixtures, currentIntents, setManualFixtures, setOverrides, scope, date, fixture) => {
     const fixtureIdentity = getFixtureFlowIdentity(fixture);
     if (!fixtureIdentity) return;
-    setManualFixtures((current) => current.filter(
+    const nextManualFixtures = currentManualFixtures.filter(
       (candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity,
-    ));
-    setOverrides((current) => {
-      const next = removeFixtureIntent(current, fixtureIdentity);
-      void persistScopedFixtureIntents(scope, date, next);
-      return next;
-    });
+    );
+    const nextIntents = removeFixtureIntent(currentIntents, fixtureIdentity);
+    setManualFixtures(nextManualFixtures);
+    setOverrides(nextIntents);
+    void persistScopedFixtureIntents(scope, date, nextIntents, nextManualFixtures);
   };
   const removeSatManualFixture = (fixture) =>
-    removeManualFixture(setSatManual, setSatOverrides, "saturday", satDate, fixture);
+    removeManualFixture(satManual, satOverrides, setSatManual, setSatOverrides, "saturday", satDate, fixture);
   const removeSunManualFixture = (fixture) =>
-    removeManualFixture(setSunManual, setSunOverrides, "sunday", sunDate, fixture);
+    removeManualFixture(sunManual, sunOverrides, setSunManual, setSunOverrides, "sunday", sunDate, fixture);
   const removeMidweekManualFixture = (fixture) =>
-    removeManualFixture(setMidweekManual, setMidweekOverrides, "midweek", midweekDate, fixture);
+    removeManualFixture(midweekManual, midweekOverrides, setMidweekManual, setMidweekOverrides, "midweek", midweekDate, fixture);
   const {
     satFinal,
     satActive,
@@ -3134,6 +3279,7 @@ function App() {
                     refreshSatFixtures={refreshSatFixtures}
                     rebuildSat={rebuildSat}
                     commitFixtureIntentBatch={commitFixtureIntentBatch}
+                    saveMatchdaySchedule={saveMatchdaySchedule}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "saturday",
@@ -3141,7 +3287,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={(approval) => openCoachMessages("saturday", approval)}
+                    onPublish={publishMatchdaySchedule}
                     showManual={showManual}
                     setShowManual={setShowManual}
                     satManual={satManual}
@@ -3219,6 +3365,7 @@ function App() {
                     refreshSunFixtures={refreshSunFixtures}
                     rebuildSun={rebuildSun}
                     commitFixtureIntentBatch={commitFixtureIntentBatch}
+                    saveMatchdaySchedule={saveMatchdaySchedule}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "sunday",
@@ -3226,7 +3373,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={(approval) => openCoachMessages("sunday", approval)}
+                    onPublish={publishMatchdaySchedule}
                     showSunManual={showSunManual}
                     setShowSunManual={setShowSunManual}
                     sunManual={sunManual}
@@ -3299,6 +3446,7 @@ function App() {
                     refreshMidweekFixtures={refreshMidweekFixtures}
                     rebuildMidweek={rebuildMidweek}
                     commitFixtureIntentBatch={commitFixtureIntentBatch}
+                    saveMatchdaySchedule={saveMatchdaySchedule}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "midweek",
@@ -3306,7 +3454,7 @@ function App() {
                         autoPrint: true,
                       })
                     }
-                    onPublish={(approval) => openCoachMessages("midweek", approval)}
+                    onPublish={publishMatchdaySchedule}
                     showMidweekManual={showMidweekManual}
                     setShowMidweekManual={setShowMidweekManual}
                     midweekManual={midweekManual}

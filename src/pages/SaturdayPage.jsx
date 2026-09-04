@@ -39,6 +39,7 @@ export default function SaturdayPage(props) {
         rebuildDay={props.rebuildSat}
         refreshFixtures={props.refreshSatFixtures}
         commitScheduleTransaction={props.commitFixtureIntentBatch}
+        saveSchedule={props.saveMatchdaySchedule}
         dateLabel={props.satDateLabel}
       />
     </div>

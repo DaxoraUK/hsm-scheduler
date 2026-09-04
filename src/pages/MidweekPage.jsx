@@ -134,6 +134,7 @@ export default function MidweekPage(props) {
         rebuildDay={props.rebuildMidweek}
         refreshFixtures={props.refreshMidweekFixtures}
         commitScheduleTransaction={props.commitFixtureIntentBatch}
+        saveSchedule={props.saveMatchdaySchedule}
         dateLabel={props.midweekDateLabel}
       />
     </div>
