@@ -10,6 +10,7 @@ import {
 import { isPitchSuitableForFixture } from "./intelligence/pitch/pitchService.js";
 import { createPitchRegistry, normalisePitchRegistry } from "./registry/pitchRegistry.js";
 import { getFixtureOccupancy, SCHEDULING_TIME_INCREMENT_MINS } from "./domain/fixtureOccupancy.js";
+import { getFixtureFlowIdentity } from "./domain/fixtureVenueFlow.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -259,8 +260,10 @@ function scheduleFixtureDayCore(
     const preferenceDifference = preferenceCount(a) - preferenceCount(b);
     if (preferenceDifference) return preferenceDifference;
 
-    return (resolveTeamConfig(a, cfgList)?.ageOrder || 99) -
+    const ageDifference = (resolveTeamConfig(a, cfgList)?.ageOrder || 99) -
       (resolveTeamConfig(b, cfgList)?.ageOrder || 99);
+    if (ageDifference) return ageDifference;
+    return getFixtureFlowIdentity(a).localeCompare(getFixtureFlowIdentity(b));
   });
 
   const slots = {};
