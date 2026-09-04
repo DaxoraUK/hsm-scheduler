@@ -2,8 +2,6 @@ import { useMemo } from "react";
 import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fixtureDay.js";
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
-import { applyFixtureOverrides } from "../lib/domain/fixtureVenueFlow.js";
-import { toFixturePresentationOverrides } from "../lib/domain/schedulingState.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -38,22 +36,20 @@ function buildPitchConflicts(active = [], pitchCfg = []) {
 
 export function useFixtureDayScheduling({
   dayKey = "saturday",
+  effectiveSchedule = null,
   scheduled = [],
-  overrides = {},
   unresolved = [],
   pitchCfg = [],
   club = {},
 } = {}) {
   const key = normaliseFixtureDayKey(dayKey);
-  const presentationOverrides = useMemo(
-    () => toFixturePresentationOverrides(overrides),
-    [overrides],
-  );
+  const effectiveScheduled = effectiveSchedule?.scheduled || scheduled;
+  const effectiveUnresolved = effectiveSchedule?.unresolved || unresolved;
 
   const final = useMemo(
     () =>
-      decorateFixturesForDay(applyFixtureOverrides(scheduled, presentationOverrides), key),
-    [scheduled, presentationOverrides, key]
+      decorateFixturesForDay(effectiveScheduled, key),
+    [effectiveScheduled, key]
   );
 
   const active = useMemo(
@@ -133,9 +129,9 @@ export function useFixtureDayScheduling({
       },
       {
         key: "unresolved",
-        ok: unresolved.length === 0,
+        ok: effectiveUnresolved.length === 0,
         okText: "All fixtures placed",
-        badText: `${unresolved.length} fixture${unresolved.length === 1 ? "" : "s"} need assignment`,
+        badText: `${effectiveUnresolved.length} fixture${effectiveUnresolved.length === 1 ? "" : "s"} need assignment`,
       },
     ];
 
@@ -154,11 +150,12 @@ export function useFixtureDayScheduling({
     peakCars,
     carCap,
     officialWarnings,
-    unresolved,
+    effectiveUnresolved,
   ]);
 
   return {
     dayKey: key,
+    effectiveSchedule,
     final,
     active,
     postponed,

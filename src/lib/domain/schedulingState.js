@@ -3,6 +3,7 @@ import {
   validateSchedulingFixtureInput,
 } from "./fixtureVenueFlow.js";
 import { resolveEffectiveAllocation } from "./effectiveAllocation.js";
+import { buildEffectiveMatchdaySchedule } from "./effectiveMatchdaySchedule.js";
 
 export { getFixtureOccupancy } from "./fixtureOccupancy.js";
 export { resolveEffectiveAllocation } from "./effectiveAllocation.js";
@@ -168,54 +169,29 @@ export function materialiseEffectiveFixtures({ providerFixtures = [], manualFixt
   };
 }
 
-function resultDiagnostics(scheduled = [], unresolved = []) {
-  const scheduledIdentities = new Set(scheduled.map(getFixtureFlowIdentity));
-  return unresolved
-    .map(getFixtureFlowIdentity)
-    .filter((identity) => scheduledIdentities.has(identity))
-    .map((canonicalFixtureIdentity) => ({
-      code: "SCHEDULED_AND_UNRESOLVED",
-      canonicalFixtureIdentity,
-    }));
-}
-
 export function buildSchedulingState({
   providerFixtures = [],
   manualFixtures = [],
   intents = {},
   scheduler,
+  timing = {},
+  revision = 0,
 } = {}) {
-  const effective = materialiseEffectiveFixtures({ providerFixtures, manualFixtures, intents });
-  if (!effective.safe) {
-    return { safe: false, diagnostics: effective.diagnostics, effective, scheduled: [], unresolved: [] };
-  }
-  const result = typeof scheduler === "function"
-    ? scheduler(effective.home)
-    : { scheduled: [], unresolved: effective.home.map((fixture) => ({ ...fixture, reason: "No scheduler configured" })) };
-  const scheduled = Array.isArray(result?.scheduled) ? result.scheduled : [];
-  const unresolved = Array.isArray(result?.unresolved) ? result.unresolved : [];
-  const diagnostics = resultDiagnostics(scheduled, unresolved);
-  const resultsByIdentity = new Map();
-  scheduled.forEach((fixture) => resultsByIdentity.set(getFixtureFlowIdentity(fixture), { status: "scheduled", fixture }));
-  unresolved.forEach((fixture) => resultsByIdentity.set(getFixtureFlowIdentity(fixture), { status: "unresolved", fixture }));
-
-  return {
-    safe: diagnostics.length === 0,
-    diagnostics,
-    effective,
-    scheduled: diagnostics.length ? [] : scheduled,
-    unresolved: diagnostics.length ? [] : unresolved,
-    resultsByIdentity,
-  };
+  const schedule = buildEffectiveMatchdaySchedule({
+    providerFixtures,
+    manualFixtures,
+    intents,
+    scheduler,
+    timing,
+    revision,
+  });
+  return { ...schedule, effective: schedule };
 }
 
 export function selectEffectiveAllocation(build = {}, fixtureIdentity) {
   const result = build?.resultsByIdentity?.get?.(cleanIdentity(fixtureIdentity));
-  return result?.status === "scheduled"
-    ? resolveEffectiveAllocation({
-      fixture: result.fixture,
-      derivedAllocation: result.fixture,
-    })
+  return result?.state === "scheduled"
+    ? resolveEffectiveAllocation({ fixture: result.fixture, derivedAllocation: result.allocation || result.fixture })
     : null;
 }
 
