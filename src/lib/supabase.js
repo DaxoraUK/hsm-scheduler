@@ -476,6 +476,49 @@ async function replaceCollection(clubId, collection, records) {
 }
 
 export const DB = {
+  async loadMatchdaySchedulingState(clubId, { dayScope, matchdayDate } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/load_matchday_scheduling_state", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+    });
+  },
+
+  async saveMatchdaySchedulingState(clubId, {
+    dayScope,
+    matchdayDate,
+    expectedRevision,
+    intents = {},
+    manualFixtures = [],
+  } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/save_matchday_scheduling_state", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+      expected_revision: Math.max(0, Number(expectedRevision) || 0),
+      intent_data: intents && typeof intents === "object" ? intents : {},
+      manual_fixture_data: Array.isArray(manualFixtures) ? manualFixtures : [],
+    });
+  },
+
+  async publishMatchdaySchedulingState(clubId, {
+    dayScope,
+    matchdayDate,
+    expectedRevision,
+    snapshot = {},
+  } = {}) {
+    const id = requireClubId(clubId);
+    return supaFetch("POST", "rpc/publish_matchday_scheduling_state", {
+      target_club_id: id,
+      target_day_scope: String(dayScope || "").trim(),
+      target_matchday_date: String(matchdayDate || "").trim(),
+      expected_revision: Math.max(0, Number(expectedRevision) || 0),
+      schedule_snapshot: snapshot && typeof snapshot === "object" ? snapshot : {},
+    });
+  },
+
   async getMatchdayLock(clubId, { dayScope, matchdayDate } = {}) {
     const id = requireClubId(clubId);
     const result = await supaFetch("POST", "rpc/get_matchday_lock", {
