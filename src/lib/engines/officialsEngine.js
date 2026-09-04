@@ -1,3 +1,5 @@
+import { getFixtureOccupancy } from "../domain/fixtureOccupancy.js";
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -131,12 +133,12 @@ function getKickOffMinutes(fixture = {}) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function getEndMinutes(fixture = {}) {
+function getEndMinutes(fixture = {}, timing = {}) {
   if (fixture.endMins != null) return toNumber(fixture.endMins, null);
-  const koMins = getKickOffMinutes(fixture);
-  if (koMins == null) return null;
-  const duration = toNumber(fixture.durationMins || fixture.duration || fixture.matchDuration, 60);
-  return koMins + Math.max(1, duration);
+  return getFixtureOccupancy({
+    fixture: { ...fixture, koMins: getKickOffMinutes(fixture) },
+    timing,
+  }).endMins;
 }
 
 function formatMinutes(value) {
@@ -172,18 +174,18 @@ function fixtureSummary(fixture = {}, index = 0) {
   };
 }
 
-export function fixturesOverlap(fixtureA = {}, fixtureB = {}) {
+export function fixturesOverlap(fixtureA = {}, fixtureB = {}, timing = {}) {
   const aStart = getKickOffMinutes(fixtureA);
   const bStart = getKickOffMinutes(fixtureB);
-  const aEnd = getEndMinutes(fixtureA);
-  const bEnd = getEndMinutes(fixtureB);
+  const aEnd = getEndMinutes(fixtureA, timing);
+  const bEnd = getEndMinutes(fixtureB, timing);
 
   if (aStart == null || bStart == null || aEnd == null || bEnd == null) return false;
 
   return aStart < bEnd && bStart < aEnd;
 }
 
-export function findOfficialConflicts(fixtures = [], refs = []) {
+export function findOfficialConflicts(fixtures = [], refs = [], timing = {}) {
   const activeFixtures = asArray(fixtures).filter(
     (fixture) =>
       !isPostponed(fixture) &&
@@ -202,7 +204,7 @@ export function findOfficialConflicts(fixtures = [], refs = []) {
 
       if (!firstOfficial || firstOfficial !== secondOfficial) continue;
       if (!shouldEnforceOfficialClashes(first, refs) || !shouldEnforceOfficialClashes(second, refs)) continue;
-      if (!fixturesOverlap(first, second)) continue;
+      if (!fixturesOverlap(first, second, timing)) continue;
 
       conflicts.push({
         id: `official-conflict-${getFixtureId(first, a)}-${getFixtureId(second, b)}`,

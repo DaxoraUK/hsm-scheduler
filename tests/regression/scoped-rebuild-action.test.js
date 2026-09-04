@@ -21,7 +21,7 @@ describe("scoped scheduling rebuild action", () => {
   it("exposes the same scoped rebuild control on every scheduling page", () => {
     const matchday = readFileSync("src/pages/MatchdayPage.jsx", "utf8");
     expect(matchday).toContain("onRebuild={runRebuild}");
-    expect(readFileSync("src/components/Operations/shared/MatchweekCommandBar.jsx", "utf8")).toContain("Rebuild Schedule");
+    expect(readFileSync("src/components/Operations/shared/MatchweekCommandBar.jsx", "utf8")).toContain("Optimise/Rebuild Day");
     for (const page of ["SaturdayPage.jsx", "SundayPage.jsx", "MidweekPage.jsx"]) {
       expect(readFileSync(`src/pages/${page}`, "utf8")).toContain("MatchdayPage");
     }

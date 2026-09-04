@@ -95,8 +95,8 @@ describe("Ground Control Timeline v2 drag assurance", () => {
       pitchId: "P2",
       koMins: 600,
       koTime: "10:00",
-      endMins: 700,
-      endTime: "11:40",
+      endMins: 685,
+      endTime: "11:25",
     });
     expect(candidate.previousPatch).toMatchObject({ pitchId: "P4", koMins: 570 });
   });

@@ -102,6 +102,7 @@ export function pitchClashRule({
   fixtureIndex,
   next = {},
   pitchCfg = [],
+  timing = {},
 } = {}) {
   if (!isFixtureActive(next)) {
     return null;
@@ -117,7 +118,7 @@ export function pitchClashRule({
     return null;
   }
 
-  const nextDuration = getFixtureDuration(next);
+  const nextDuration = getFixtureDuration(next, timing);
   const nextEnd = nextKo + nextDuration;
   const blockedPitchIds = getLinkedPitchIds(next.pitchId, pitchCfg);
 
@@ -133,7 +134,7 @@ export function pitchClashRule({
       fixture.endMins != null
         ? fixture.endMins
         : fixtureKo != null
-        ? fixtureKo + getFixtureDuration(fixture)
+        ? fixtureKo + getFixtureDuration(fixture, timing)
         : null;
 
     if (fixtureKo == null || fixtureEnd == null) return false;

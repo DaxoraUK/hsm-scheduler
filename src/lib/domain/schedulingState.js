@@ -2,6 +2,10 @@ import {
   getFixtureFlowIdentity,
   validateSchedulingFixtureInput,
 } from "./fixtureVenueFlow.js";
+import { resolveEffectiveAllocation } from "./effectiveAllocation.js";
+
+export { getFixtureOccupancy } from "./fixtureOccupancy.js";
+export { resolveEffectiveAllocation } from "./effectiveAllocation.js";
 
 function cleanIdentity(value) {
   return String(value || "").trim();
@@ -184,7 +188,12 @@ export function buildSchedulingState({
 
 export function selectEffectiveAllocation(build = {}, fixtureIdentity) {
   const result = build?.resultsByIdentity?.get?.(cleanIdentity(fixtureIdentity));
-  return result?.status === "scheduled" ? result.fixture : null;
+  return result?.status === "scheduled"
+    ? resolveEffectiveAllocation({
+      fixture: result.fixture,
+      derivedAllocation: result.fixture,
+    })
+    : null;
 }
 
 // Compatibility projection for existing presentation consumers. This is never

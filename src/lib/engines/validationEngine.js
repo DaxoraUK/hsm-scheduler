@@ -4,6 +4,7 @@ import {
   runRules,
 } from "./rulesEngine.js";
 import { createPitchRegistry } from "../registry/pitchRegistry.js";
+import { getFixtureOccupancy } from "../domain/fixtureOccupancy.js";
 
 export function normaliseStatus(value = "") {
   return String(value || "").trim().toLowerCase();
@@ -35,16 +36,8 @@ export function minutesToTime(totalMins) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-export function getFixtureDuration(fixture = {}) {
-  if (fixture.endMins != null && fixture.koMins != null) {
-    return fixture.endMins - fixture.koMins;
-  }
-
-  const gameMins = fixture.cfg?.gameMins || fixture.gameMins || 70;
-  const format = fixture.cfg?.format || fixture.format || "";
-  const bufferMins = String(format).includes("11") ? 30 : 15;
-
-  return gameMins + bufferMins;
+export function getFixtureDuration(fixture = {}, timing = {}) {
+  return getFixtureOccupancy({ fixture, timing }).occupancyMins;
 }
 
 export function getLinkedPitchIds(pitchId, pitchCfg = []) {

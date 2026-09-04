@@ -77,7 +77,13 @@ export function getScheduleRules({ fixtures = [], fixtureIndex, next = {}, pitch
       id: "pitch.clash",
       stage: "schedule",
       source: "fixturePlan",
-      run: () => pitchClashRule({ fixtures, fixtureIndex, next, pitchCfg }),
+      run: () => pitchClashRule({
+        fixtures,
+        fixtureIndex,
+        next,
+        pitchCfg,
+        timing: club.timingSettings || club.timing || club,
+      }),
     },
   ];
 }
