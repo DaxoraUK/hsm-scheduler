@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 import * as schedulingState from "../../src/lib/domain/schedulingState.js";
 
 const pitchCfg = [
@@ -113,5 +114,42 @@ describe("canonical Calendar schedule transactions", () => {
       fixtureA,
       fixtureB,
     ]);
+  });
+
+  test("turns the final transaction state into one locked canonical intent per fixture", () => {
+    expect(schedulingState).toMatchObject({
+      mergeFixtureAllocationBatch: expect.any(Function),
+    });
+
+    const nextIntents = schedulingState.mergeFixtureAllocationBatch({
+      [fixtureA.canonicalFixtureIdentity]: { venue: { role: "home" }, official: { referee: "Canonical Ref" } },
+    }, {
+      [fixtureA.canonicalFixtureIdentity]: { pitchId: "P3", pitchLabel: "Pitch 3", koTime: "10:00", koMins: 600, endMins: 675 },
+      [fixtureB.canonicalFixtureIdentity]: { pitchId: "P1", pitchLabel: "Pitch 1", koTime: "10:00", koMins: 600, endMins: 675 },
+    });
+
+    expect(nextIntents).toMatchObject({
+      [fixtureA.canonicalFixtureIdentity]: expect.objectContaining({
+        venue: { role: "home" },
+        official: { referee: "Canonical Ref" },
+        allocation: expect.objectContaining({ mode: "locked", pitchId: "P3", koMins: 600 }),
+      }),
+      [fixtureB.canonicalFixtureIdentity]: expect.objectContaining({
+        allocation: expect.objectContaining({ mode: "locked", pitchId: "P1", koMins: 600 }),
+      }),
+    });
+  });
+
+  test("stages Calendar moves and commits the final canonical batch once", () => {
+    const matchdayPage = readFileSync("src/pages/MatchdayPage.jsx", "utf8");
+    const appCore = readFileSync("src/AppCore.jsx", "utf8");
+
+    expect(matchdayPage).toContain("createScheduleTransaction");
+    expect(matchdayPage).toContain("commitScheduleTransaction");
+    expect(matchdayPage).not.toContain("editableOverride(candidate.fixture, candidate.patch)");
+    expect(appCore).toContain("commitFixtureIntentBatch");
+    expect(appCore).toContain("mergeFixtureAllocationBatch");
+    expect(appCore).toContain("const currentIntents = scope === \"sunday\"");
+    expect(appCore).not.toContain("let nextIntents = null");
   });
 });

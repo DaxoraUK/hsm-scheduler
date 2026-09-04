@@ -83,6 +83,7 @@ import {
 import {
   buildSchedulingState,
   materialiseEffectiveFixtures,
+  mergeFixtureAllocationBatch,
   mergeFixtureIntent,
   removeFixtureIntent,
   toFixturePresentationOverrides,
@@ -2138,7 +2139,7 @@ function App() {
   };
 
   const persistScopedFixtureIntents = useCallback(async (scope, date, intents) => {
-    if (!date) return;
+    if (!date) return false;
     const fullTime = club.integrations?.fullTimeFa || {};
     const schedulingIntents = fullTime.schedulingIntents || {};
     const nextClub = {
@@ -2158,8 +2159,10 @@ function App() {
     try {
       if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
       else tenantSetJson("club", nextClub);
+      return true;
     } catch (error) {
       toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
+      return false;
     }
   }, [activeClubId, club]);
 
@@ -2224,6 +2227,21 @@ function App() {
     writeFixtureOverride(setSunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents), target, fieldOrPatch, value, fixtureIdentity);
   const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
     writeFixtureOverride(setMidweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents), target, fieldOrPatch, value, fixtureIdentity);
+  const commitFixtureIntentBatch = useCallback(async ({ scope, date, patches } = {}) => {
+    const setOverrides = scope === "sunday"
+      ? setSunOverrides
+      : scope === "midweek"
+        ? setMidweekOverrides
+        : setSatOverrides;
+    const currentIntents = scope === "sunday"
+      ? sunOverrides
+      : scope === "midweek"
+        ? midweekOverrides
+        : satOverrides;
+    const nextIntents = mergeFixtureAllocationBatch(currentIntents, patches);
+    setOverrides(nextIntents);
+    return persistScopedFixtureIntents(scope, date, nextIntents);
+  }, [midweekOverrides, persistScopedFixtureIntents, satOverrides, sunOverrides]);
   const removeManualFixture = (setManualFixtures, setOverrides, scope, date, fixture) => {
     const fixtureIdentity = getFixtureFlowIdentity(fixture);
     if (!fixtureIdentity) return;
@@ -2369,26 +2387,6 @@ function App() {
       }
       if (midweek.date) setMidweekDateState(midweek.date);
 
-      setSatScheduled(deduplicateFixtureSet(saturday.fixtures));
-      setSatUnresolved([]);
-      setSatOverrides({});
-      setSatManual([]);
-      setSatFetchStatus([]);
-      setSatHasRun(saturday.hasRun);
-
-      setSunScheduled(deduplicateFixtureSet(sunday.fixtures));
-      setSunUnresolved([]);
-      setSunOverrides({});
-      setSunManual([]);
-      setSunHasRun(sunday.hasRun);
-
-      setMidweekScheduled(deduplicateFixtureSet(midweek.fixtures));
-      setMidweekUnresolved([]);
-      setMidweekOverrides({});
-      setMidweekManual([]);
-      setMidweekFetchStatus([]);
-      setMidweekHasRun(midweek.hasRun);
-
       const populatedDays = [saturday, sunday, midweek].filter(
         (day) => day.hasRun || day.fixtures.length > 0,
       );
@@ -2409,8 +2407,8 @@ function App() {
       setNavigationTarget(null);
       if (typeof window !== "undefined")
         window.scrollTo?.({ top: 0, behavior: "smooth" });
-      toast.success("Saved matchweek loaded", {
-        description: `${restored.label} restored across ${Math.max(populatedDays.length, 1)} operating day${populatedDays.length === 1 ? "" : "s"}.`,
+      toast.info("Saved matchweek opened as evidence", {
+        description: `${restored.label} remains an audit record. Current canonical fixtures and explicit intent were not overwritten.`,
       });
       return true;
     },
@@ -3135,6 +3133,7 @@ function App() {
                     runSatLive={runSatLive}
                     refreshSatFixtures={refreshSatFixtures}
                     rebuildSat={rebuildSat}
+                    commitFixtureIntentBatch={commitFixtureIntentBatch}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "saturday",
@@ -3219,6 +3218,7 @@ function App() {
                     runSunLive={runSunLive}
                     refreshSunFixtures={refreshSunFixtures}
                     rebuildSun={rebuildSun}
+                    commitFixtureIntentBatch={commitFixtureIntentBatch}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "sunday",
@@ -3298,6 +3298,7 @@ function App() {
                     runMidweekLive={runMidweekLive}
                     refreshMidweekFixtures={refreshMidweekFixtures}
                     rebuildMidweek={rebuildMidweek}
+                    commitFixtureIntentBatch={commitFixtureIntentBatch}
                     onPrintReport={() =>
                       openCurrentReport({
                         day: "midweek",

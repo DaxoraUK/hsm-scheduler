@@ -31,8 +31,8 @@ export function getFixtureOccupancy({ fixture = {}, timing = {} } = {}) {
   const turnaroundMins = Math.max(0, toFiniteNumber(
     timing.turnaroundMins ??
     (adult
-      ? timing.adultTurnaroundMins ?? timing.adultBuffer
-      : timing.youthTurnaroundMins ?? timing.youthBuffer),
+      ? timing.adultTurnaroundMins ?? timing.adultBuffer ?? timing.bufferAdult
+      : timing.youthTurnaroundMins ?? timing.youthBuffer ?? timing.bufferYouth),
   ) ?? (adult ? 30 : 15));
   const koMins = toFiniteNumber(fixture.koMins) ?? timeToMinutes(fixture.koTime);
   const occupancyMins = playingMins + halfTimeMins + turnaroundMins;

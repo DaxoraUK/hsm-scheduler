@@ -63,6 +63,17 @@ import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 import { createRebuildAction } from "../lib/domain/rebuildAction.js";
+import {
+  appendScheduleMutation,
+  createScheduleTransaction,
+  discardScheduleTransaction,
+  getProposedSchedule,
+  getScheduleTransactionPatches,
+  isScheduleTransactionDirty,
+  redoScheduleMutation,
+  undoScheduleMutation,
+  validateProposedSchedule,
+} from "../lib/domain/scheduleTransaction.js";
 
 const WORKSPACES = [
   {
@@ -248,7 +259,7 @@ export default function MatchdayPage({
   props,
   fixtureDay = null,
   hasRun,
-  final = [],
+  final: persistedFinal = [],
   overrides = {},
   unresolved: suppliedUnresolved,
   scheduled: suppliedScheduled,
@@ -265,6 +276,7 @@ export default function MatchdayPage({
   runLive,
   rebuildDay,
   refreshFixtures,
+  commitScheduleTransaction,
   dateLabel,
   onOverride,
   ManualFixtures = MatchdayManualFixtures,
@@ -290,6 +302,13 @@ export default function MatchdayPage({
       : day === "Midweek"
         ? props.midweekDate
         : props.satDate);
+  const schedulingTiming = useMemo(
+    () => ({
+      youthTurnaroundMins: props.bufferYouth,
+      adultTurnaroundMins: props.bufferAdult,
+    }),
+    [props.bufferAdult, props.bufferYouth],
+  );
 
   const lockIdentity = useMemo(
     () => ({
@@ -307,6 +326,15 @@ export default function MatchdayPage({
   const [timelineSaving, setTimelineSaving] = useState(false);
   const [timelineHistory, setTimelineHistory] = useState([]);
   const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
+  const [timelineTransaction, setTimelineTransaction] = useState(() =>
+    createScheduleTransaction({ baseFixtures: persistedFinal, timing: schedulingTiming }),
+  );
+  const final = useMemo(
+    () => isScheduleTransactionDirty(timelineTransaction)
+      ? getProposedSchedule(timelineTransaction)
+      : persistedFinal,
+    [persistedFinal, timelineTransaction],
+  );
 
   useEffect(() => {
     let active = true;
@@ -356,10 +384,14 @@ export default function MatchdayPage({
   }, [day, lockIdentity, props.activeClubId, props.club?.id]);
 
   useEffect(() => {
+    setTimelineTransaction(createScheduleTransaction({
+      baseFixtures: persistedFinal,
+      timing: schedulingTiming,
+    }));
     setTimelineDirty(false);
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
-  }, [day, matchdayDate]);
+  }, [day, matchdayDate, persistedFinal, schedulingTiming]);
 
   const clubWithTiming = useMemo(
     () => ({
@@ -709,63 +741,40 @@ export default function MatchdayPage({
     window.setTimeout(() => setHighlightedSection(null), 2200);
   }, []);
 
-  const getTimelineRecordIndex = useCallback(
-    (record) => {
-      const matchedIndex = final.findIndex(
-        (fixture, fixtureIndex) =>
-          getPlannerFixtureIdentity(fixture, fixtureIndex) === record?.fixtureId,
-      );
-      return matchedIndex;
-    },
-    [final],
-  );
-
-  const applyTimelineRecordPatch = useCallback(
-    (record, patch) => {
-      if (typeof onOverride !== "function" || !record || !patch) return;
-      const fixtureIndex = getTimelineRecordIndex(record);
-      if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
-      editableOverride(final[fixtureIndex], patch);
-    },
-    [editableOverride, final, getTimelineRecordIndex, onOverride],
-  );
-
   const undoTimelineMove = useCallback(() => {
     const record = timelineHistory.at(-1);
     if (!record || isLocked) return;
-    applyTimelineRecordPatch(record, record.previousPatch);
+    setTimelineTransaction((current) => undoScheduleMutation(current));
     setTimelineHistory((current) => current.slice(0, -1));
     setTimelineRedoHistory((current) => [...current, record]);
     setTimelineDirty(timelineHistory.length > 1);
     toast.info("Planner change undone", {
       description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+  }, [isLocked, timelineHistory]);
 
   const redoTimelineMove = useCallback(() => {
     const record = timelineRedoHistory.at(-1);
     if (!record || isLocked) return;
-    applyTimelineRecordPatch(record, record.patch);
+    setTimelineTransaction((current) => redoScheduleMutation(current));
     setTimelineRedoHistory((current) => current.slice(0, -1));
     setTimelineHistory((current) => [...current, record]);
     setTimelineDirty(true);
     toast.success("Planner change reapplied", {
       description: record.summary || "The fixture move has been reapplied.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineRedoHistory]);
+  }, [isLocked, timelineRedoHistory]);
 
   const discardTimelineChanges = useCallback(() => {
     if (!timelineHistory.length || isLocked) return;
-    [...timelineHistory].reverse().forEach((record) =>
-      applyTimelineRecordPatch(record, record.previousPatch),
-    );
+    setTimelineTransaction((current) => discardScheduleTransaction(current));
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
     setTimelineDirty(false);
     toast.info("Planner changes discarded", {
       description: "The matchday schedule has returned to its last saved state.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+  }, [isLocked, timelineHistory]);
 
   const requestDiscardTimelineChanges = useCallback(() => {
     if (!timelineHistory.length || isLocked) return;
@@ -774,9 +783,14 @@ export default function MatchdayPage({
 
   const applyTimelineMove = useCallback(
     (candidate) => {
-      if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
+      if (isLocked || !candidate?.patch) return;
 
-      editableOverride(candidate.fixture, candidate.patch);
+      const fixtureIdentity = getFixtureFlowIdentity(candidate.fixture || {});
+      if (!fixtureIdentity) return;
+      setTimelineTransaction((current) => appendScheduleMutation(current, {
+        fixtureIdentity,
+        patch: candidate.patch,
+      }));
       const record = buildPlannerChangeRecord(candidate);
       if (record) setTimelineHistory((current) => [...current, record]);
       setTimelineRedoHistory([]);
@@ -787,7 +801,7 @@ export default function MatchdayPage({
         description: getTimelineCandidateSummary(candidate),
       });
     },
-    [editableOverride, final, isLocked, onOverride],
+    [isLocked],
   );
 
   const requestTimelineMove = useCallback(
@@ -800,6 +814,10 @@ export default function MatchdayPage({
         return;
       }
       if (candidate.blocked) {
+        if (candidate.type === "pitch_clash") {
+          applyTimelineMove({ ...candidate, blocked: false, provisional: true });
+          return;
+        }
         toast.error(candidate.title || "Timeline move blocked", {
           description: candidate.message || "Choose a suitable pitch or a different kick-off time.",
         });
@@ -815,11 +833,32 @@ export default function MatchdayPage({
   );
 
   const saveTimelineChanges = useCallback(async () => {
-    if (typeof props.saveWeek !== "function" || timelineSaving) return;
+    if (typeof commitScheduleTransaction !== "function" || timelineSaving) return;
+    const proposed = getProposedSchedule(timelineTransaction);
+    const validation = validateProposedSchedule({
+      fixtures: proposed,
+      pitchCfg: props.pitchCfg || [],
+      timing: schedulingTiming,
+      closedPitches: props.closedPitches || [],
+      mutatedFixtureIdentities: (timelineTransaction.mutations || []).map((mutation) => mutation.fixtureIdentity),
+    });
+    if (validation.blocking.length || validation.provisional.length) {
+      toast.error("Resolve draft schedule conflicts", {
+        description: "Save Schedule is available once the proposed final pitch and kick-off allocation is conflict-free.",
+      });
+      return false;
+    }
     setTimelineSaving(true);
     try {
-      const saved = await props.saveWeek();
+      const saved = await commitScheduleTransaction({
+        scope: day.toLowerCase(),
+        date: matchdayDate,
+        baseRevision: timelineTransaction.baseRevision,
+        patches: getScheduleTransactionPatches(timelineTransaction),
+      });
       if (saved !== false) {
+        await props.saveWeek?.();
+        setTimelineTransaction(createScheduleTransaction({ baseFixtures: proposed, timing: schedulingTiming }));
         setTimelineDirty(false);
         setTimelineHistory([]);
         setTimelineRedoHistory([]);
@@ -827,7 +866,7 @@ export default function MatchdayPage({
     } finally {
       setTimelineSaving(false);
     }
-  }, [props.saveWeek, timelineSaving]);
+  }, [commitScheduleTransaction, day, matchdayDate, props.closedPitches, props.pitchCfg, props.saveWeek, schedulingTiming, timelineSaving, timelineTransaction]);
 
   const weatherIntelligence = useMemo(
     () =>

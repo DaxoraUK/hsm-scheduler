@@ -131,6 +131,18 @@ export function removeFixtureIntent(intents = {}, fixtureIdentity) {
   return remaining;
 }
 
+export function mergeFixtureAllocationBatch(intents = {}, patches = {}) {
+  return Object.entries(patches || {}).reduce((next, [fixtureIdentity, patch]) => {
+    const allocation = ["pitchId", "pitchLabel", "koTime", "koMins", "endMins"].reduce((value, field) => {
+      if (patch?.[field] != null && patch[field] !== "") value[field] = patch[field];
+      return value;
+    }, {});
+    return Object.keys(allocation).length
+      ? mergeFixtureIntent(next, fixtureIdentity, { allocation: { mode: "locked", ...allocation } })
+      : next;
+  }, intents);
+}
+
 export function materialiseEffectiveFixtures({ providerFixtures = [], manualFixtures = [], intents = {} } = {}) {
   const fixtures = [...providerFixtures, ...manualFixtures].map((fixture) => {
     const identity = getFixtureFlowIdentity(fixture);

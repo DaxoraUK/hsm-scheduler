@@ -133,6 +133,7 @@ export default function MidweekPage(props) {
         runLive={props.runMidweekLive}
         rebuildDay={props.rebuildMidweek}
         refreshFixtures={props.refreshMidweekFixtures}
+        commitScheduleTransaction={props.commitFixtureIntentBatch}
         dateLabel={props.midweekDateLabel}
       />
     </div>

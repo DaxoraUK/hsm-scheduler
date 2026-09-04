@@ -38,6 +38,7 @@ export default function SaturdayPage(props) {
         runLive={props.runSatLive}
         rebuildDay={props.rebuildSat}
         refreshFixtures={props.refreshSatFixtures}
+        commitScheduleTransaction={props.commitFixtureIntentBatch}
         dateLabel={props.satDateLabel}
       />
     </div>

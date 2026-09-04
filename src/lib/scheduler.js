@@ -9,6 +9,7 @@ import {
 } from "./constants.js";
 import { isPitchSuitableForFixture } from "./intelligence/pitch/pitchService.js";
 import { createPitchRegistry, normalisePitchRegistry } from "./registry/pitchRegistry.js";
+import { getFixtureOccupancy } from "./domain/fixtureOccupancy.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -144,9 +145,10 @@ function resolveTeamConfig(fixture, cfgList) {
 function isAdultTeamConfig(cfg, fixture = {}) {
   const teamName = String(cfg?.name || fixture.homeTeam || "").toLowerCase();
   if (/\bu\s?\d{1,2}\b/.test(teamName)) return false;
-  const type = String(cfg?.teamType || "").toLowerCase();
-  if (["adult", "veterans", "women"].includes(type)) return true;
-  return isAdult(cfg?.name || fixture.homeTeam);
+  const type = String(cfg?.teamType || fixture.teamType || fixture.ageCategory || "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  return ["adult", "open age", "veterans", "women"].includes(type);
 }
 
 function requestedAllocationPitch(fixture = {}) {
@@ -245,6 +247,13 @@ function scheduleFixtureDayCore(
     const aLocked = Boolean(a.lockedAllocation);
     const bLocked = Boolean(b.lockedAllocation);
     if (aLocked !== bLocked) return aLocked ? -1 : 1;
+
+    const preferenceCount = (fixture) => {
+      const cfg = resolveTeamConfig(fixture, cfgList);
+      return new Set([cfg?.defaultPitch, cfg?.altPitch].filter(Boolean)).size;
+    };
+    const preferenceDifference = preferenceCount(a) - preferenceCount(b);
+    if (preferenceDifference) return preferenceDifference;
 
     return (resolveTeamConfig(a, cfgList)?.ageOrder || 99) -
       (resolveTeamConfig(b, cfgList)?.ageOrder || 99);
@@ -389,9 +398,14 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-    const buffer = bufMap[cfg.format] || 15;
-    const duration = cfg.gameMins + buffer;
     const fixtureWithCfg = { ...fixture, cfg };
+    const duration = getFixtureOccupancy({
+      fixture: fixtureWithCfg,
+      timing: {
+        halfTimeMins: cfg.halfTimeMins,
+        turnaroundMins: bufMap[cfg.format] ?? 15,
+      },
+    }).occupancyMins;
     const configuredSuitablePitches = pitchCfg.filter((pitch) =>
       isPitchSuitableForFixture(pitch, fixtureWithCfg)
     );

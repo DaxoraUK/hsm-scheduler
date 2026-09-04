@@ -7,8 +7,8 @@ describe("scheduler matchweek publishing", () => {
     expect(shouldCheckMatchweekApproval({ subscription: elite, activeClubId: "club-1", workspaceRole: "scheduler" })).toBe(false);
   });
 
-  test("retains configured governance approval for other publishing roles", () => {
+  test("allows other authorised scheduling roles to publish without a matchweek approval request", () => {
     const elite = { features: ["approval_workflows"] };
-    expect(shouldCheckMatchweekApproval({ subscription: elite, activeClubId: "club-1", workspaceRole: "admin" })).toBe(true);
+    expect(shouldCheckMatchweekApproval({ subscription: elite, activeClubId: "club-1", workspaceRole: "admin" })).toBe(false);
   });
 });

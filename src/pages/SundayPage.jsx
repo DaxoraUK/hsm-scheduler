@@ -40,6 +40,7 @@ export default function SundayPage(props) {
         runLive={props.runSunLive}
         rebuildDay={props.rebuildSun}
         refreshFixtures={props.refreshSunFixtures}
+        commitScheduleTransaction={props.commitFixtureIntentBatch}
         dateLabel={props.sunDateLabel}
         ManualFixtures={SundayManualFixtures}
         ScheduleCard={(pageProps) => (

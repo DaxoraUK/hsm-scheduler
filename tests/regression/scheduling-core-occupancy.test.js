@@ -70,6 +70,18 @@ describe("shared fixture occupancy and allocation", () => {
     )).toBe(95);
   });
 
+  test("adapts the existing matchday youth and adult buffer settings as turnaround", () => {
+    expect(schedulingState.getFixtureOccupancy({
+      fixture: { homeTeam: "HSM U15 Knights", gameMins: 70, koMins: 600 },
+      timing: { bufferYouth: 18, bufferAdult: 42 },
+    })).toMatchObject({ turnaroundMins: 18, endMins: 688 });
+
+    expect(schedulingState.getFixtureOccupancy({
+      fixture: { homeTeam: "HSM Firsts", teamType: "open age", gameMins: 90, koMins: 600 },
+      timing: { bufferYouth: 18, bufferAdult: 42 },
+    })).toMatchObject({ turnaroundMins: 42, endMins: 732 });
+  });
+
   test("uses shared occupancy for pitch clashes and allows an exact handoff", () => {
     const fixtures = [{
       canonicalFixtureIdentity: fixtureIdentity,

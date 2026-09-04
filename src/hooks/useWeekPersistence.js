@@ -9,19 +9,10 @@ import { getParkingCapacity } from "../lib/domain/clubDomain.js";
 import { getParkingSettings } from "../lib/intelligence/parking/parkingService.js";
 import { weatherService } from "../lib/services/weatherService.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
-import { ENTITLEMENTS, hasEntitlement } from "../lib/subscriptions/entitlements.js";
-import { ELITE_APPROVAL_TYPES, createEliteApprovalRequest, loadEliteApprovalState } from "../lib/elite/eliteGovernanceService.js";
-import {
-  buildMatchweekApprovalKey,
-  buildMatchweekApprovalSnapshot,
-} from "../lib/elite/eliteApprovalSnapshots.js";
-
-export function shouldCheckMatchweekApproval({ subscription, activeClubId, workspaceRole } = {}) {
-  return Boolean(
-    activeClubId &&
-    String(workspaceRole || "").toLowerCase() !== "scheduler" &&
-    hasEntitlement(subscription, ENTITLEMENTS.APPROVAL_WORKFLOWS)
-  );
+export function shouldCheckMatchweekApproval() {
+  // Matchweek publication is a direct scheduling action. Other approval domains
+  // retain their own policies; this compatibility export is deliberately false.
+  return false;
 }
 
 function splitFixtures(fixtures = [], dayKey) {
@@ -241,35 +232,6 @@ export function useWeekPersistence({
     const publishedDays = snapshots.filter((day) => day.hasRun);
     if (!publishedDays.length) return;
 
-    let approvalEntityKey = "";
-    if (shouldCheckMatchweekApproval({ subscription, activeClubId, workspaceRole })) {
-      const approvalSnapshot = buildMatchweekApprovalSnapshot(publishedDays);
-      approvalEntityKey = buildMatchweekApprovalKey(approvalSnapshot);
-      try {
-        const approvalState = await loadEliteApprovalState(activeClubId, ELITE_APPROVAL_TYPES.MATCHWEEK, approvalEntityKey);
-        if (approvalState.policy.matchweekApprovalRequired && !approvalState.approved) {
-          if (!approvalState.pending) {
-            await createEliteApprovalRequest(activeClubId, {
-              approvalType: ELITE_APPROVAL_TYPES.MATCHWEEK,
-              entityKey: approvalEntityKey,
-              title: "Current matchweek release",
-              summary: `${approvalSnapshot.fixtureCount} fixtures across ${approvalSnapshot.days.length} operating day${approvalSnapshot.days.length === 1 ? "" : "s"}.`,
-              snapshot: approvalSnapshot,
-            });
-          }
-          toast.info("Elite approval required", {
-            description: approvalState.pending
-              ? "This exact matchweek is already waiting for a separate reviewer in Organisation Command."
-              : "An approval request has been created in Organisation Command. A separate reviewer must approve this exact matchweek before publication.",
-          });
-          return false;
-        }
-      } catch (error) {
-        toast.error("Matchweek approval could not be checked", { description: error?.message });
-        return false;
-      }
-    }
-
     const byKey = Object.fromEntries(snapshots.map((day) => [day.key, day]));
     const saturday = byKey.saturday || {
       scheduled: [],
@@ -302,8 +264,6 @@ export function useWeekPersistence({
           ? satDate || undefined
           : midweekDate || undefined,
       savedAt: new Date().toISOString(),
-      approvalEntityKey: approvalEntityKey || undefined,
-      approvalSnapshotHash: approvalEntityKey ? approvalEntityKey.split(":").at(-1) : undefined,
       carParkSpaces: parkingCapacity,
       parking: {
         enabled: parkingSettings.enabled,
