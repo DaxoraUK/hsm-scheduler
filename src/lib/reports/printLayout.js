@@ -1,6 +1,13 @@
 export const REPORT_PRINT_STYLES = `
   @media print {
     .np { display: none !important; }
+    body[data-print-target="reports"] :has(#ground-control-report-print) {
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    #ground-control-report-print thead { display: table-header-group; }
+    #ground-control-report-print tr { break-inside: avoid; }
     body[data-print-target="reports"] :not(#ground-control-report-print):not(#ground-control-report-print *):not(:has(#ground-control-report-print)) {
       display: none !important;
     }

@@ -1,3 +1,5 @@
+import { isFixtureOperationallyActive } from "./fixtureLifecycle.js";
+
 export const MATCHDAY_SCOPES = Object.freeze({
   MATCHWEEK: "matchweek",
   WEEKEND: "weekend",
@@ -75,7 +77,7 @@ export function getScopedMatchdayData({
     ? decorateFixtureDay(midweekFinal, MATCHDAY_SCOPES.MIDWEEK)
     : [];
   const fixtures = [...midweek, ...saturday, ...sunday];
-  const activeFixtures = fixtures.filter((fixture) => fixture?.status !== "postponed");
+  const activeFixtures = fixtures.filter(isFixtureOperationallyActive);
 
   return {
     scope: normalised,

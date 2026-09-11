@@ -207,16 +207,32 @@ export function useWeekPersistence({
   subscription = null,
   workspaceRole = "",
   canPublish = true,
+  canSave = canPublish,
+  saveMatchday,
   onSyncFailure,
   onSyncSuccess,
 }) {
   const saveWeek = useCallback(async () => {
-    if (!canPublish) {
+    if (!canSave) {
       toast.error("Read-only access", {
-        description: "Your club role cannot publish or save matchweeks.",
+        description: "Your club role cannot save matchweeks.",
       });
       return false;
     }
+    if (saveMatchday) {
+      const days = [
+        { scope: "saturday", date: satDate, built: satHasRun },
+        { scope: "sunday", date: sunDate, built: sunHasRun },
+        { scope: "midweek", date: midweekDate, built: midweekHasRun },
+      ].filter((day) => day.built && day.date);
+      if (!days.length) return false;
+      for (const { scope, date } of days) {
+        if (await saveMatchday({ scope, date }) === false) return false;
+      }
+      return true;
+    }
+    // Compatibility-only history publication keeps its separate capability.
+    if (!canPublish) return false;
     const baseSnapshots = buildFixtureDaySnapshots({
       fixtureDays,
       satDate,
@@ -367,6 +383,8 @@ export function useWeekPersistence({
     subscription,
     workspaceRole,
     canPublish,
+    canSave,
+    saveMatchday,
     onSyncFailure,
     onSyncSuccess,
   ]);

@@ -280,6 +280,7 @@ export default function MatchdayPage({
   clearNavigationTarget,
 }) {
   const [selectedFixtureIdentity, setSelectedFixtureIdentity] = useState("");
+  const readOnly = !props.workspaceAccess?.canOperate || Boolean(props.matchdayLocks?.[day.toLowerCase()]?.locked);
   const [activeWorkspace, setActiveWorkspace] = useState("fixtures");
   const [sectionQuery, setSectionQuery] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -491,6 +492,7 @@ export default function MatchdayPage({
 
   const editableOverride = useCallback(
     (target, fieldOrPatch, value) => {
+      if (readOnly) return false;
       if (typeof onOverride !== "function") return;
       const fixture = typeof target === "number"
         ? final[target]
@@ -509,7 +511,7 @@ export default function MatchdayPage({
       if (!fixtureIdentity || !Object.keys(patch).length) return false;
       return onOverride(fixtureIdentity, patch);
     },
-    [final, onOverride],
+    [final, onOverride, readOnly],
   );
   const buildSchedule = props.mode === "test"
     ? (runTest || (isSunday ? props.runSunTest : props.runSatTest))
@@ -843,7 +845,7 @@ export default function MatchdayPage({
     setShowManual,
     overrides,
     onOverride: editableOverride,
-    readOnly: false,
+    readOnly,
     dateLabel,
     games: final,
     conflicts,
@@ -857,15 +859,13 @@ export default function MatchdayPage({
         scope: day.toLowerCase(),
         date: matchdayDate,
         patches: { [fixtureIdentity]: patch },
+        action: "fixture.manually_resolved",
       });
       const state = result?.build?.byIdentity?.get?.(fixtureIdentity);
       if (result === false || state?.state !== "scheduled") return false;
       return state.fixture;
     },
-    onRestoreExcludedFixture: (fixture) => {
-      editableOverride(fixture, { exclusion: null });
-      window.setTimeout(() => runRebuild(), 0);
-    },
+    onRestoreExcludedFixture: (fixture) => editableOverride(fixture, { exclusion: null }),
   };
 
   const selectedFixtureRecord = selectedFixtureIdentity
@@ -961,7 +961,7 @@ export default function MatchdayPage({
             pitchCfg={props.pitchCfg}
             closedPitches={props.closedPitches}
             club={clubWithTiming}
-            readOnly={false}
+            readOnly={readOnly}
             dirty={timelineDirty}
             saving={timelineSaving}
             changeHistory={timelineHistory}
@@ -1101,7 +1101,7 @@ export default function MatchdayPage({
             render: () => (
               <DayOptimiserCard
                 optimisation={dayOptimisation}
-                readOnly={false}
+                readOnly={readOnly}
                 onApplyMove={applyOptimisationMove}
                 onApplyAll={applyAllOptimisationMoves}
               />
@@ -1433,6 +1433,8 @@ export default function MatchdayPage({
           allowArtificial={props.useAstro}
           setAllowArtificial={props.setUseAstro}
           canOperate={Boolean(props.workspaceAccess?.canOperate)}
+          lockState={props.matchdayLocks?.[day.toLowerCase()]}
+          onChangeLock={(locked) => props.changeMatchdayLock?.({ scope: day.toLowerCase(), locked })}
           canPublish={Boolean(props.workspaceAccess?.canPublish)}
           onPrint={props.onPrintReport}
           onPublish={publishCurrentSchedule}
@@ -1560,7 +1562,7 @@ export default function MatchdayPage({
           })
           : undefined}
         operatorIdentity={props.operatorIdentity}
-        readOnly={false}
+        readOnly={readOnly}
         onClose={() => setSelectedFixtureIdentity("")}
       />
 

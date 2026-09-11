@@ -4,6 +4,11 @@ import {
 } from "./fixtureVenueFlow.js";
 import { resolveEffectiveAllocation } from "./effectiveAllocation.js";
 import { buildEffectiveMatchdaySchedule } from "./effectiveMatchdaySchedule.js";
+import {
+  getFixtureProviderLifecycleStatus,
+  isFixtureOperationallyActive,
+  isInactiveFixtureLifecycle,
+} from "./fixtureLifecycle.js";
 
 export { getFixtureOccupancy } from "./fixtureOccupancy.js";
 export { resolveEffectiveAllocation } from "./effectiveAllocation.js";
@@ -64,26 +69,39 @@ function applyIntent(fixture = {}, intent = {}) {
     : null;
   const official = intent?.official || {};
   const lifecycle = intent?.lifecycle || {};
+  const providerLifecycleStatus = getFixtureProviderLifecycleStatus(fixture);
+  const providerIsInactive = isInactiveFixtureLifecycle(providerLifecycleStatus);
+  const effectiveLifecycleStatus = providerIsInactive
+    ? providerLifecycleStatus
+    : (lifecycle.status || (fixture.status === "away" ? "active" : fixture.status) || "active");
+  const effectiveStatus = forceAway && effectiveLifecycleStatus === "active"
+    ? "away"
+    : effectiveLifecycleStatus;
 
   return {
     ...fixture,
+    providerLifecycleStatus,
     ...(reverseToHome ? {
       homeTeam: fixture.awayTeam || fixture.homeTeam,
       awayTeam: fixture.homeTeam || fixture.awayTeam,
       venueRole: "home",
       isAwayFixture: false,
       requiresScheduling: true,
-      status: lifecycle.status || "active",
+      status: effectiveStatus,
       effectiveVenueReversalApplied: true,
     } : {}),
     ...(forceAway ? {
       venueRole: "away",
       isAwayFixture: true,
       requiresScheduling: false,
-      status: lifecycle.status || "away",
+      status: effectiveStatus,
     } : {}),
-    ...(lifecycle.status ? { status: lifecycle.status } : {}),
+    status: effectiveStatus,
     ...(intent?.fields && typeof intent.fields === "object" ? intent.fields : {}),
+    // A general Control Centre field patch must not revive a provider-inactive
+    // fixture or rewrite its canonical lifecycle fact.
+    providerLifecycleStatus,
+    status: effectiveStatus,
     ...(Object.keys(official).length ? official : {}),
     ...(lockedAllocation ? { lockedAllocation } : {}),
     ...(intent?.exclusion ? { excludedFromGroundControl: true, exclusion: { ...intent.exclusion } } : {}),
@@ -116,6 +134,12 @@ export function mergeFixtureIntent(intents = {}, fixtureIdentity, patch = {}) {
   };
   ["venue", "allocation", "exclusion", "official", "lifecycle", "fields"].forEach((key) => {
     const merged = mergeNested(current, patch, key);
+    if (key === "allocation" && merged && patch.allocation) {
+      const allocationPatch = patch.allocation;
+      if ("koTime" in allocationPatch && !("koMins" in allocationPatch)) delete merged.koMins;
+      if ("koMins" in allocationPatch && !("koTime" in allocationPatch)) delete merged.koTime;
+      if (("koTime" in allocationPatch || "koMins" in allocationPatch) && !("endMins" in allocationPatch)) delete merged.endMins;
+    }
     if (merged === undefined) delete next[key];
     else next[key] = merged;
   });
@@ -153,10 +177,12 @@ export function materialiseEffectiveFixtures({ providerFixtures = [], manualFixt
   const diagnostics = uniqueIdentityDiagnostics(fixtures);
   const excluded = fixtures.filter((fixture) => fixture.excludedFromGroundControl);
   const included = fixtures.filter((fixture) => !fixture.excludedFromGroundControl);
-  const home = included.filter((fixture) =>
+  const inactive = included.filter((fixture) => !isFixtureOperationallyActive(fixture));
+  const operational = included.filter((fixture) => isFixtureOperationallyActive(fixture));
+  const home = operational.filter((fixture) =>
     !fixture.isAwayFixture && fixture.venueRole !== "away" && fixture.requiresScheduling !== false,
   );
-  const away = included.filter((fixture) => !home.includes(fixture));
+  const away = operational.filter((fixture) => !home.includes(fixture));
 
   return {
     safe: diagnostics.length === 0,
@@ -164,6 +190,7 @@ export function materialiseEffectiveFixtures({ providerFixtures = [], manualFixt
     fixtures,
     included,
     excluded,
+    inactive,
     home,
     away,
   };

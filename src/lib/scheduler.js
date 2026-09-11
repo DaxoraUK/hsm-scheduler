@@ -405,7 +405,11 @@ function scheduleFixtureDayCore(
       continue;
     }
 
-    const fixtureWithCfg = { ...fixture, cfg };
+    const occupancyTiming = {
+      halfTimeMins: cfg.halfTimeMins ?? 0,
+      turnaroundMins: bufMap[cfg.format] ?? SCHEDULING_TIME_INCREMENT_MINS,
+    };
+    const fixtureWithCfg = { ...fixture, cfg, occupancyTiming };
     const duration = getFixtureOccupancy({
       fixture: fixtureWithCfg,
       timing: {
@@ -456,6 +460,7 @@ function scheduleFixtureDayCore(
             koMins: adultKickOffMins,
             endMins: adultKickOffMins + duration,
             cfg,
+            occupancyTiming,
             usingAlt: pitchId !== cfg.defaultPitch,
             usingAstro: isArtificialPitch(pitchCfg, pitchId),
             usingFallback: false,
@@ -567,6 +572,7 @@ function scheduleFixtureDayCore(
         koMins: allocation.time,
         endMins: allocation.time + duration,
         cfg,
+        occupancyTiming,
         usingAlt:
           allocation.pitchId !== cfg.defaultPitch &&
           preferredOptions.includes(allocation.pitchId),

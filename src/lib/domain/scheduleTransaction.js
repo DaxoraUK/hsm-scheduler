@@ -3,6 +3,7 @@ import { resolveEffectiveAllocation } from "./effectiveAllocation.js";
 import { getFixtureOccupancy } from "./fixtureOccupancy.js";
 import { createPitchRegistry } from "../registry/pitchRegistry.js";
 import { isPitchSuitableForFixture } from "../intelligence/pitch/pitchService.js";
+import { isFixtureOperationallyActive } from "./fixtureLifecycle.js";
 
 const allocationFields = ["pitchId", "pitchLabel", "koTime", "koMins", "endMins"];
 
@@ -38,17 +39,18 @@ function buildBaseRevision(fixtures = []) {
 }
 
 function isActiveFixture(fixture = {}) {
-  const status = String(fixture.status || "active").toLowerCase();
-  return !["postponed", "cancelled", "away", "unresolved"].includes(status)
+  return isFixtureOperationallyActive(fixture)
+    && !["away", "unresolved"].includes(String(fixture.status || "active").toLowerCase())
     && fixture.isAwayFixture !== true
     && fixture.requiresScheduling !== false;
 }
 
 function fixtureWindow(fixture = {}, timing = {}) {
-  const occupancy = getFixtureOccupancy({ fixture, timing });
+  const effective = resolveEffectiveAllocation({ fixture, timing });
+  const occupancy = getFixtureOccupancy({ fixture: effective, timing });
   const start = occupancy.koMins;
-  const end = fixture.endMins != null && !Number.isNaN(Number(fixture.endMins))
-    ? Number(fixture.endMins)
+  const end = effective.endMins != null && !Number.isNaN(Number(effective.endMins))
+    ? Number(effective.endMins)
     : occupancy.endMins;
   return { start, end };
 }

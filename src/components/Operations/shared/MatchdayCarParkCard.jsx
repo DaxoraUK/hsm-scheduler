@@ -8,6 +8,7 @@ import {
 import { getValidatedFixRecommendations } from "../../../lib/engines/recommendationEngine.js";
 import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 import { SCHEDULING_TIME_INCREMENT_MINS } from "../../../lib/domain/fixtureOccupancy.js";
+import { isFixtureOperationallyActive } from "../../../lib/domain/fixtureLifecycle.js";
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number(value) || 0));
@@ -671,10 +672,7 @@ export default function MatchdayCarParkCard({
 }) {
   const activeFixtures = useMemo(
     () =>
-      satFinal.filter((fixture) => {
-        const status = String(fixture?.status || "active").toLowerCase();
-        return status !== "postponed" && status !== "cancelled";
-      }),
+      satFinal.filter(isFixtureOperationallyActive),
     [satFinal]
   );
   const hasFixtures = activeFixtures.length > 0;

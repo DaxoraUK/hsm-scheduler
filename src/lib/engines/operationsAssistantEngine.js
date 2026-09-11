@@ -1,5 +1,6 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { createPlatformAction, buildActionSummary } from "./actionFramework.js";
+import { isFixtureOperationallyActive } from "../domain/fixtureLifecycle.js";
 
 function getFixturesFromArgs(args = {}) {
   return (
@@ -49,7 +50,7 @@ export function getOperationsAssistant({
   if (clubTwin?.assistant) return clubTwin.assistant;
 
   const activeFixtures = getFixturesFromArgs({ fixtures, final, games, scheduledFixtures, matchdayFixtures })
-    .filter((fixture) => fixture?.status !== "postponed");
+    .filter(isFixtureOperationallyActive);
   const built = typeof scheduleBuilt === "boolean" ? scheduleBuilt : Boolean(hasRun || activeFixtures.length);
   const missingOfficials = refWarnings ?? countMissingOfficials(activeFixtures);
   const parking = getParkingSnapshot({ fixtures: activeFixtures, club, pitchCfg });

@@ -1,4 +1,5 @@
 function toFiniteNumber(value) {
+  if (value == null || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -38,6 +39,7 @@ export function classifyFixtureAgeCategory(fixture = {}) {
 }
 
 export function getFixtureOccupancy({ fixture = {}, timing = {} } = {}) {
+  timing = { ...timing, ...(fixture.occupancyTiming || {}) };
   const playingMins = Math.max(1, toFiniteNumber(
     fixture.cfg?.gameMins ?? fixture.gameMins ?? fixture.manualMins ?? 70,
   ) ?? 70);

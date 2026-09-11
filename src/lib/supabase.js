@@ -476,6 +476,20 @@ async function replaceCollection(clubId, collection, records) {
 }
 
 export const DB = {
+  async saveFullTimeFixtureEvidence(clubId, { dayScope, matchdayDate, sources = [], detail = {} }) {
+    const allowed = ["id", "fixtureSnapshot", "previousFixtureSnapshot", "health", "pendingReconciliations"];
+    return supaFetch("POST", "rpc/save_full_time_fixture_evidence", {
+      target_club_id: requireClubId(clubId), target_day_scope: dayScope || null, target_matchday_date: matchdayDate || null,
+      source_updates: sources.map((source) => Object.fromEntries(allowed.filter((key) => key in source).map((key) => [key, source[key]]))),
+      event_detail: detail,
+    });
+  },
+  async recordMatchdayHistoryEvent(clubId, { dayScope, matchdayDate, action, detail = {} }) {
+    return supaFetch("POST", "rpc/record_matchday_history_event", {
+      target_club_id: requireClubId(clubId), target_day_scope: dayScope, target_matchday_date: matchdayDate,
+      event_action: action, event_data: detail,
+    });
+  },
   async loadMatchdaySchedulingState(clubId, { dayScope, matchdayDate } = {}) {
     const id = requireClubId(clubId);
     return supaFetch("POST", "rpc/load_matchday_scheduling_state", {
@@ -491,15 +505,17 @@ export const DB = {
     expectedRevision,
     intents = {},
     manualFixtures = [],
+    evidence,
   } = {}) {
     const id = requireClubId(clubId);
-    return supaFetch("POST", "rpc/save_matchday_scheduling_state", {
+    return supaFetch("POST", evidence ? "rpc/commit_matchday_schedule" : "rpc/save_matchday_scheduling_state", {
       target_club_id: id,
       target_day_scope: String(dayScope || "").trim(),
       target_matchday_date: String(matchdayDate || "").trim(),
       expected_revision: Math.max(0, Number(expectedRevision) || 0),
       intent_data: intents && typeof intents === "object" ? intents : {},
       manual_fixture_data: Array.isArray(manualFixtures) ? manualFixtures : [],
+      ...(evidence ? { operational_evidence: evidence } : {}),
     });
   },
 

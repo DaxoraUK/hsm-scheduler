@@ -1,10 +1,11 @@
 import React from "react";
 import { AM, BL, DEFAULT_CLUB, G, PITCHES, TE } from "../lib/constants.js";
 import { cleanName, t2s } from "../lib/scheduler.js";
+import { isFixtureOperationallyActive } from "../lib/domain/fixtureLifecycle.js";
 
 function Timeline({games,club=DEFAULT_CLUB,pitchList=PITCHES}){const primary=club.primary||G;
   if(!games.length)return null;
-  const active=games.filter(g=>g.status!=="postponed");
+  const active=games.filter(isFixtureOperationallyActive);
   if(!active.length)return <div style={{fontSize:12,color:"#aaa"}}>No active fixtures.</div>;
   const minT=Math.min(...active.map(g=>g.koMins||0).filter(v=>!isNaN(v)));
   const maxT=Math.max(...active.map(g=>g.endMins||0).filter(v=>!isNaN(v)));

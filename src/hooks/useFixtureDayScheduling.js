@@ -3,6 +3,8 @@ import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fi
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
 import { findEffectiveAllocationConflicts } from "../lib/domain/allocationConflicts.js";
+import { resolveEffectiveAllocation } from "../lib/domain/effectiveAllocation.js";
+import { isFixtureOperationallyActive } from "../lib/domain/fixtureLifecycle.js";
 
 export function useFixtureDayScheduling({
   dayKey = "saturday",
@@ -18,29 +20,25 @@ export function useFixtureDayScheduling({
 
   const final = useMemo(
     () =>
-      decorateFixturesForDay(effectiveScheduled, key),
+      decorateFixturesForDay(effectiveScheduled.map((fixture) => resolveEffectiveAllocation({ fixture })), key),
     [effectiveScheduled, key]
   );
 
   const active = useMemo(
-    () =>
-      final.filter(
-        (game) => game.status !== "postponed" && game.status !== "cancelled" && game.status !== "away" && !game.isAwayFixture
-      ),
+    () => final.filter((game) => isFixtureOperationallyActive(game) && game.status !== "away" && !game.isAwayFixture),
     [final]
   );
 
   const postponed = useMemo(
-    () => final.filter((game) => game.status === "postponed"),
-    [final]
+    () => (effectiveSchedule?.inactive || []).filter((game) => game.status === "postponed"),
+    [effectiveSchedule]
   );
 
   const officialWarnings = useMemo(
     () =>
       final.filter(
         (game) =>
-          game.status !== "postponed" &&
-          game.status !== "cancelled" &&
+          isFixtureOperationallyActive(game) &&
           game.status !== "away" &&
           !game.isAwayFixture &&
           !isFixtureOfficialConfirmed(game)

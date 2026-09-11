@@ -190,7 +190,7 @@ function fixtureRows(history = [], { club = {}, pitchCfg = [], teamCfg = [] } = 
     const start = row.date ? new Date(`${dateKey(row.date)}T${row.koTime === "TBC" ? "12:00" : row.koTime}:00`) : null;
     return {
       id: `fixture:${row.id}`,
-      sourceId: text(row.raw?.id || row.raw?.fixtureId || row.raw?.sourceId),
+      sourceId: text(row.raw?.canonicalFixtureIdentity || row.raw?.sourceFixtureUrl || row.raw?.id || row.raw?.fixtureId),
       sourceType: "matchday",
       source: "Matchday history",
       date: dateKey(row.date),
@@ -227,6 +227,9 @@ function dedupeRows(rows = []) {
   const fixtureSourceIds = new Set(rows.filter((row) => row.sourceType === "matchday").map((row) => row.sourceId).filter(Boolean));
   const map = new Map();
   rows.forEach((row) => {
+    // These bookings mirror Operations, including unsaved builds. Saved
+    // matchday evidence owns this scope even when it is now empty/excluded.
+    if (row.source === "Annual Planner" && /^matchday(?:_|$)/.test(row.sourceType)) return;
     if (row.source === "Annual Planner" && ["matchday", "fixture", "full_time"].includes(row.sourceType) && row.sourceId && fixtureSourceIds.has(row.sourceId)) return;
     const key = row.sourceId && ["matchday", "fixture", "full_time"].includes(row.sourceType)
       ? `shared:${row.sourceId}`
@@ -277,7 +280,7 @@ function rangeDays(startDate, endDate) {
   return rows;
 }
 
-function configuredWindowForDay(day, policy, club = {}) {
+function configuredWindowsForDay(day, policy, club = {}) {
   const dayOfWeek = day.getDay();
   const allowedDays = list(policy?.allowed_days || policy?.allowedDays).map(Number);
   const trainingAllowed = allowedDays.includes(dayOfWeek);
@@ -290,32 +293,50 @@ function configuredWindowForDay(day, policy, club = {}) {
   const windows = [];
   if (trainingAllowed) windows.push([trainingStart, trainingEnd]);
   if (weekend) windows.push([matchdayStart, matchdayEnd]);
-  if (!windows.length) return 0;
-  const start = Math.min(...windows.map((row) => row[0]));
-  const end = Math.max(...windows.map((row) => row[1]));
-  return Math.max(0, end - start) / 60;
+  const merged = [];
+  windows.filter(([start, end]) => end > start).sort((a, b) => a[0] - b[0]).forEach(([start, end]) => {
+    const last = merged.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  });
+  return merged;
 }
 
-function closureBreakdown(payload = {}, filters = {}, pitchId = "", siteId = "") {
+function closureBreakdown(payload = {}, filters = {}, pitchId = "", siteId = "", club = {}) {
   const totals = { total: 0, weather: 0, maintenance: 0, other: 0 };
-  list(payload.blackouts).map(normaliseAnnualBlackout).filter((row) => {
-    if (!inRange({ date: row.startDate }, filters.startDate, filters.endDate)) return false;
+  const closures = list(payload.blackouts).map(normaliseAnnualBlackout).filter((row) => {
     if (row.pitchId && pitchId && text(row.pitchId) !== text(pitchId)) return false;
     if (row.venueId && siteId && text(row.venueId) !== text(siteId)) return false;
     return true;
-  }).forEach((row) => {
+  }).map((row) => {
     const start = new Date(row.startAt || `${row.startDate}T00:00:00`);
     const end = new Date(row.endAt || `${row.endDate || row.startDate}T23:59:00`);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
-    const hours = Math.max(0, end - start) / 3600000;
     const descriptor = `${row.closureType} ${row.title} ${row.reason}`.toLowerCase();
     const category = /(weather|waterlog|flood|snow|ice|storm|rain|heat)/.test(descriptor)
       ? "weather"
       : /(maint|repair|drain|surface|work|inspection)/.test(descriptor)
         ? "maintenance"
         : "other";
-    totals.total += hours;
-    totals[category] += hours;
+    return { start: start.getTime(), end: end.getTime(), category };
+  }).filter((row) => Number.isFinite(row.start) && row.end > row.start);
+  const policy = defaultPolicy(payload);
+  rangeDays(filters.startDate, filters.endDate).forEach((day) => {
+    configuredWindowsForDay(day, policy, club).forEach(([startMinute, endMinute]) => {
+      const midnight = new Date(day); midnight.setHours(0, 0, 0, 0);
+      const start = new Date(midnight); start.setMinutes(startMinute);
+      const end = new Date(midnight); end.setMinutes(endMinute);
+      const clipped = closures.map((row) => ({ ...row, start: Math.max(+start, row.start), end: Math.min(+end, row.end) })).filter((row) => row.end > row.start);
+      const boundaries = [...new Set(clipped.flatMap((row) => [row.start, row.end]))].sort((a, b) => a - b);
+      for (let i = 1; i < boundaries.length; i += 1) {
+        const covering = clipped.filter((row) => row.start <= boundaries[i - 1] && row.end >= boundaries[i]);
+        if (!covering.length) continue;
+        const hours = (boundaries[i] - boundaries[i - 1]) / 3600000;
+        // Overlap is counted once; category priority makes the split deterministic.
+        const category = ["weather", "maintenance", "other"].find((value) => covering.some((row) => row.category === value));
+        totals.total += hours;
+        totals[category] += hours;
+      }
+    });
   });
   return totals;
 }
@@ -327,12 +348,16 @@ function buildCapacity({ payload = {}, club = {}, pitchCfg = [], filters = {}, r
   const byPitch = new Map();
   pitchRows.forEach((pitch) => {
     const id = text(pitch.id || pitch.pitchId || pitch.name);
-    const configured = days.reduce((sum, day) => sum + configuredWindowForDay(day, policy, club), 0);
+    if (filters.pitch && filters.pitch !== "all" && filters.pitch !== id) return;
+    const configured = days.reduce((sum, day) => sum + configuredWindowsForDay(day, policy, club).reduce((hours, [start, end]) => hours + (end - start) / 60, 0), 0);
     const siteId = text(pitch.siteId || pitch.site_id || pitch.venueId || pitch.venue_id || "primary");
-    const closures = closureBreakdown(payload, filters, id, siteId);
+    if (filters.site && filters.site !== "all" && filters.site !== siteId) return;
+    const closures = closureBreakdown(payload, filters, id, siteId, club);
     const closureHours = Math.min(configured, closures.total);
     const closureScale = closures.total > 0 ? closureHours / closures.total : 0;
     byPitch.set(id, {
+      pitchName: pitch.label || pitch.name || id,
+      siteId,
       configuredFacilityHours: configured,
       closureHours,
       weatherClosureHours: closures.weather * closureScale,
@@ -356,6 +381,11 @@ function buildCapacity({ payload = {}, club = {}, pitchCfg = [], filters = {}, r
 
 function aggregateFacilityRows(rows, capacityByPitch) {
   const map = new Map();
+  capacityByPitch.forEach((capacity, id) => map.set(id, {
+    id, pitchName: capacity.pitchName || id, siteId: capacity.siteId,
+    bookings: 0, teamHours: 0, facilityHours: 0, deliveredHours: 0,
+    cancelledHours: 0, participants: 0,
+  }));
   rows.forEach((row) => {
     const key = text(row.pitchId || "unallocated");
     const current = map.get(key) || {

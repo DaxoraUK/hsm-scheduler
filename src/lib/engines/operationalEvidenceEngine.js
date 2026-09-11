@@ -3,6 +3,7 @@ import { cleanName } from "../scheduler.js";
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { getParkingCapacity, getPrimarySite } from "../domain/clubDomain.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
+import { getOfficialAppointmentSource, getOfficialAppointmentStatus } from "./officialsEngine.js";
 
 const DAY_ORDER = ["midweek", "saturday", "sunday"];
 const STATUS_RANK = { delivered: 1, away: 1, unresolved: 2, postponed: 3, cancelled: 4 };
@@ -141,23 +142,11 @@ function fixtureStatus(fixture = {}, forcedStatus = "") {
 }
 
 function officialStatus(fixture = {}) {
-  const status = normaliseText(
-    fixture.refStatus || fixture.officialStatus || fixture.refereeStatus || fixture.assignmentStatus
-  );
-  if (["confirmed", "accepted"].includes(status)) return "confirmed";
-  if (["assigned", "awaiting", "pending"].includes(status)) return "pending";
-  if (["declined", "cancelled", "unavailable"].includes(status)) return "declined";
-  return status || "unconfirmed";
+  return getOfficialAppointmentStatus(fixture);
 }
 
 function officialSource(fixture = {}) {
-  const source = normaliseText(
-    fixture.officialSource || fixture.refereeSource || fixture.appointmentSource || fixture.appointmentType,
-  );
-  if (source.includes("league")) return "League-appointed";
-  if (source.includes("club")) return "Club-appointed";
-  if (source.includes("internal") || source.includes("in house")) return "Internal";
-  return "Unknown/TBC";
+  return { league_appointed: "League-appointed", club_appointed: "Club-appointed", internal: "Internal", unknown: "Unknown/TBC" }[getOfficialAppointmentSource(fixture)];
 }
 
 function officialName(fixture = {}) {
@@ -184,7 +173,9 @@ function weatherRisk(fixture = {}) {
 }
 
 function stableFixtureKey(fixture = {}, day = "matchday") {
-  const explicit = fixture.id || fixture.fixtureId || fixture.key || fixture.fullTimeId || fixture.sourceId;
+  const explicit = fixture.canonicalFixtureIdentity
+    || (fixture.sourceFixtureUrl ? `url:${String(fixture.sourceFixtureUrl).trim().toLowerCase()}` : "")
+    || fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id || fixture.key;
   if (explicit) return `${day}:id:${String(explicit)}`;
   return [
     day,
@@ -431,8 +422,19 @@ export function normaliseSavedMatchday(entry = {}, index = 0) {
 }
 
 export function normaliseSavedHistory(history = []) {
+  const seenDays = new Set();
   return asArray(history)
+    .filter((entry) => !entry.eventOnly)
     .map(normaliseSavedMatchday)
+    .sort((a, b) => (Date.parse(b.savedAt) || b.date.getTime()) - (Date.parse(a.savedAt) || a.date.getTime()))
+    .map((entry) => ({ ...entry, days: entry.days.filter((day) => {
+      if (!day.date || !day.hasRun) return true;
+      const key = `${day.key}:${day.date}`;
+      if (seenDays.has(key)) return false;
+      seenDays.add(key);
+      return true;
+    }) }))
+    .filter((entry) => entry.days.length > 0)
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 

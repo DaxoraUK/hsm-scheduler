@@ -66,6 +66,7 @@ function blockedSchedule({ effective, diagnostics, revision }) {
     fixtures: effective?.fixtures || [],
     included: effective?.included || [],
     excluded: effective?.excluded || [],
+    inactive: effective?.inactive || [],
     home: effective?.home || [],
     away: effective?.away || [],
     scheduled: [],
@@ -108,6 +109,9 @@ export function buildEffectiveMatchdaySchedule({
   effective.excluded.forEach((fixture) => {
     byIdentity.set(getFixtureFlowIdentity(fixture), { fixture, state: "excluded", allocation: null });
   });
+  effective.inactive.forEach((fixture) => {
+    byIdentity.set(getFixtureFlowIdentity(fixture), { fixture, state: "inactive", allocation: null });
+  });
   effective.away.forEach((fixture) => {
     byIdentity.set(getFixtureFlowIdentity(fixture), { fixture, state: "away", allocation: null });
   });
@@ -142,6 +146,7 @@ export function buildEffectiveMatchdaySchedule({
     fixtures: effective.fixtures,
     included: effective.included,
     excluded: effective.excluded,
+    inactive: effective.inactive,
     home: effective.home,
     away: effective.away,
     scheduled,

@@ -22,10 +22,10 @@ export default function MatchdayManualFixtures({
 }) {
   const [pendingDeleteFixture, setPendingDeleteFixture] = useState(null);
 
-  const deleteManualFixture = () => {
+  const deleteManualFixture = async () => {
     if (!pendingDeleteFixture) return;
     if (typeof onRemoveManualFixture === "function") {
-      onRemoveManualFixture(pendingDeleteFixture);
+      if (await onRemoveManualFixture(pendingDeleteFixture) === false) return;
     } else {
       const fixtureIdentity = getFixtureFlowIdentity(pendingDeleteFixture);
       setManualFixtures((previous) =>

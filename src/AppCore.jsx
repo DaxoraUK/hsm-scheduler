@@ -13,8 +13,9 @@ import React, {
   useRef,
 } from "react";
 import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
+import { useMatchdayLocks } from "./hooks/useMatchdayLocks.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
-import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
+import { getPersistedFullTimeFixturesForDay, useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
 import { useClubAccess } from "./hooks/useClubAccess.js";
 import { useLeagueAccess } from "./hooks/useLeagueAccess.js";
@@ -70,6 +71,7 @@ import {
 } from "./lib/constants.js";
 
 import { cleanName, scheduleSat, scheduleSun } from "./lib/scheduler.js";
+import { prepareMatchdayCommit, selectHydratedMatchday } from "./lib/domain/matchdayCommit.js";
 import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
@@ -88,6 +90,7 @@ import {
   removeFixtureIntent,
   toFixturePresentationOverrides,
 } from "./lib/domain/schedulingState.js";
+import { filterOperationalFixtureRecords } from "./lib/domain/fixtureLifecycle.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -137,6 +140,7 @@ import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { reconcileSiteAssignments } from "./lib/siteAssignments.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import { matchdayFixtureToAnnualBooking } from "./lib/planning/annualPlannerEngine.js";
+import { normaliseSavedHistory } from "./lib/engines/operationalEvidenceEngine.js";
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,
@@ -885,6 +889,15 @@ function App() {
     setSettingsTab("subscription");
     return false;
   }, [planCompliance]);
+  const { locks: matchdayLocks, setLock: setSharedMatchdayLock } = useMatchdayLocks({
+    clubId: activeClubId, satDate, sunDate, midweekDate, canOperate: operationalWorkspaceAccess.canOperate,
+  });
+  const requireEditableMatchday = useCallback((scope) => {
+    if (operationalWorkspaceAccess.canOperate && matchdayLocks[scope]?.loaded && !matchdayLocks[scope]?.locked) return true;
+    toast.error("Matchday cannot be edited", { description: matchdayLocks[scope]?.locked ? "Unlock this day in Operations before changing the schedule." : "Scheduling access and a current lock state are required. Retry after the workspace has loaded." });
+    return false;
+  }, [operationalWorkspaceAccess.canOperate, matchdayLocks.saturday?.loaded, matchdayLocks.saturday?.locked,
+    matchdayLocks.sunday?.loaded, matchdayLocks.sunday?.locked, matchdayLocks.midweek?.loaded, matchdayLocks.midweek?.locked]);
 
   const onboardingInitialDraft = useMemo(
     () =>
@@ -1819,6 +1832,7 @@ function App() {
 
   const runSat = useCallback(
     (baseFx, scopedIntents = satOverrides) => {
+      if (!requireEditableMatchday("saturday")) return false;
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
@@ -1852,6 +1866,7 @@ function App() {
     },
     [
       satManual,
+      requireEditableMatchday,
       satOverrides,
       fullTimeVenueOverrides,
       useAstro,
@@ -1896,7 +1911,7 @@ function App() {
         return false;
       }
       setSatFetchStatus(statuses);
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "saturday", date: satDate });
       setSatProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       if (!runSat(fixtures)) return false;
@@ -1916,8 +1931,10 @@ function App() {
       const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSaturdayFixtures(satDate);
       if (skipped) return false;
       setSatFetchStatus(statuses);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "saturday", date: satDate });
       setSatProviderFixtures(fixtures);
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setSatScheduled((current) => filterOperationalFixtureRecords(current, fixtures));
+      setSatUnresolved((current) => filterOperationalFixtureRecords(current, fixtures));
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
       toast.success("Saturday fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
       return true;
@@ -1929,6 +1946,7 @@ function App() {
 
   const runSun = useCallback(
     (baseFx, scopedIntents = sunOverrides) => {
+      if (!requireEditableMatchday("sunday")) return false;
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
@@ -1962,6 +1980,7 @@ function App() {
     },
     [
       sunManual,
+      requireEditableMatchday,
       sunOverrides,
       fullTimeVenueOverrides,
       useAstro,
@@ -1998,7 +2017,7 @@ function App() {
         toast.warning("Full-Time source not configured", { description: "Add and enable at least one source in Settings, or use manual fixtures." });
         return false;
       }
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "sunday", date: sunDate });
       setSunProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
       if (!runSun(fixtures)) return false;
@@ -2016,8 +2035,10 @@ function App() {
     try {
       const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchSundayFixtures(sunDate);
       if (skipped) return false;
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "sunday", date: sunDate });
       setSunProviderFixtures(fixtures);
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setSunScheduled((current) => filterOperationalFixtureRecords(current, fixtures));
+      setSunUnresolved((current) => filterOperationalFixtureRecords(current, fixtures));
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
       toast.success("Sunday fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
       return true;
@@ -2029,6 +2050,7 @@ function App() {
 
   const runMidweek = useCallback(
     (baseFx, scopedIntents = midweekOverrides) => {
+      if (!requireEditableMatchday("midweek")) return false;
       if (!requirePlanCompliance()) return false;
       const intents = mergeFixtureIntentCollections(
         venueOverridesToFixtureIntents(fullTimeVenueOverrides),
@@ -2063,6 +2085,7 @@ function App() {
     },
     [
       midweekManual,
+      requireEditableMatchday,
       midweekOverrides,
       fullTimeVenueOverrides,
       useAstro,
@@ -2111,7 +2134,7 @@ function App() {
         return false;
       }
       setMidweekFetchStatus(statuses);
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "midweek", date: midweekDate });
       setMidweekProviderFixtures(fixtures);
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
       if (!runMidweek(fixtures)) return false;
@@ -2131,8 +2154,10 @@ function App() {
       const { statuses, fixtures, snapshots, changes, skipped, partial } = await fetchMidweekFixtures(midweekDate);
       if (skipped) return false;
       setMidweekFetchStatus(statuses);
+      await persistFullTimeImportEvidence(statuses, snapshots, changes, { scope: "midweek", date: midweekDate });
       setMidweekProviderFixtures(fixtures);
-      await persistFullTimeImportEvidence(statuses, snapshots, changes);
+      setMidweekScheduled((current) => filterOperationalFixtureRecords(current, fixtures));
+      setMidweekUnresolved((current) => filterOperationalFixtureRecords(current, fixtures));
       if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful provider facts were refreshed; the current schedule was not rebuilt." });
       toast.success("Midweek fixtures refreshed", { description: "Provider facts are current. Select Rebuild Schedule to regenerate allocations." });
       return true;
@@ -2142,9 +2167,10 @@ function App() {
     }
   };
 
-  const persistScopedFixtureIntents = useCallback(async (scope, date, intents, manualFixtures) => {
+  const persistScopedFixtureIntents = useCallback(async (scope, date, intents, manualFixtures, action = "schedule.saved") => {
     if (!date) return false;
-    const scopeKey = `${scope}:${date}`;
+    if (!requireEditableMatchday(scope)) return false;
+    const scopeKey = `${activeClubId || "local"}:${scope}:${date}`;
     const scopeManualFixtures = Array.isArray(manualFixtures)
       ? manualFixtures
       : scope === "sunday"
@@ -2158,6 +2184,18 @@ function App() {
     // the cloud source from which generated allocations may reappear.
     if (isSupaConfigured() && activeClubId) {
       try {
+        const providerFixtures = scope === "sunday" ? sunProviderFixtures : scope === "midweek" ? midweekProviderFixtures : satProviderFixtures;
+        const closedPitches = scope === "sunday" ? sunClosedPitches : scope === "midweek" ? midweekClosedPitches : satClosedPitches;
+        const scheduler = scope === "sunday" ? scheduleSun : scheduleSat;
+        const effectiveIntents = mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), intents);
+        const build = buildSchedulingState({ providerFixtures, manualFixtures: scopeManualFixtures, intents: effectiveIntents,
+          scheduler: (fixtures) => scheduler(fixtures, useAstro, closedPitches, teamCfg, getBufMap(),
+            scope === "midweek" ? midweekStartMins : getStartMins(), scope === "midweek" ? midweekEndMins : getEndMins(),
+            pitchCfg, club.maxConcurrent || 3, scope === "midweek" ? { fixedAdultKickOffMins: null } : {}),
+        });
+        const previous = scope === "sunday" ? sunOverrides : scope === "midweek" ? midweekOverrides : satOverrides;
+        const changedIdentities = Object.keys(intents).filter((id) => JSON.stringify(intents[id]?.allocation) !== JSON.stringify(previous[id]?.allocation));
+        const prepared = prepareMatchdayCommit({ scope, date, build, intents: effectiveIntents, manualFixtures: scopeManualFixtures, pitchCfg, closedPitches, changedIdentities, action, club });
         let expectedRevision = schedulingStateRevisionsRef.current[scopeKey];
         if (expectedRevision == null) {
           const current = await DB.loadMatchdaySchedulingState(activeClubId, {
@@ -2170,10 +2208,12 @@ function App() {
           dayScope: scope,
           matchdayDate: date,
           expectedRevision,
-          intents,
+          intents: effectiveIntents,
           manualFixtures: scopeManualFixtures,
+          evidence: { ...prepared.evidence, providerFixtures },
         });
         schedulingStateRevisionsRef.current[scopeKey] = Number(saved?.revision) || expectedRevision + 1;
+        if (saved?.history_entry) setHistory((current) => [saved.history_entry, ...current.filter((item) => item.id !== saved.history_entry.id)]);
         return saved || true;
       } catch (error) {
         toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
@@ -2204,10 +2244,12 @@ function App() {
       toast.error("Fixture intent could not be saved", { description: error?.message || "The scheduling change needs retrying." });
       return false;
     }
-  }, [activeClubId, club, midweekManual, satManual, sunManual]);
+  }, [activeClubId, club, midweekManual, satManual, sunManual, satProviderFixtures, sunProviderFixtures, midweekProviderFixtures,
+    satClosedPitches, sunClosedPitches, midweekClosedPitches, fullTimeVenueOverrides, useAstro, teamCfg, pitchCfg,
+    startHour, startMin, endHour, endMin, bufferYouth, bufferAdult, midweekStartMins, midweekEndMins, satOverrides, sunOverrides, midweekOverrides, requireEditableMatchday]);
 
   useEffect(() => {
-    if (!isSupaConfigured() || !activeClubId) return undefined;
+    if (!isSupaConfigured() || !activeClubId || !workspaceHydrated) return undefined;
     let active = true;
     const scopes = [
       { scope: "saturday", date: satDate, setIntents: setSatOverrides, setManual: setSatManual },
@@ -2220,10 +2262,30 @@ function App() {
         dayScope: scope,
         matchdayDate: date,
       });
-      if (!active || !state || Number(state.revision) <= 0) return;
-      schedulingStateRevisionsRef.current[`${scope}:${date}`] = Number(state.revision) || 0;
-      setIntents(state.intents && typeof state.intents === "object" ? state.intents : {});
-      setManual(Array.isArray(state.manual_fixtures) ? state.manual_fixtures : []);
+      if (!active || !state) return;
+      schedulingStateRevisionsRef.current[`${activeClubId}:${scope}:${date}`] = Number(state.revision) || 0;
+      const hydrated = selectHydratedMatchday(state, club.integrations?.fullTimeFa?.schedulingIntents?.[scope]?.[date]);
+      setIntents(hydrated.intents);
+      setManual(hydrated.manualFixtures);
+      const snapshot = state.operational_snapshot;
+      const day = snapshot?.fixtureDays?.find((item) => item.key === scope && item.date === date);
+      if (day && Array.isArray(snapshot.providerFixtures)) {
+        const setProvider = scope === "sunday" ? setSunProviderFixtures : scope === "midweek" ? setMidweekProviderFixtures : setSatProviderFixtures;
+        const setScheduled = scope === "sunday" ? setSunScheduled : scope === "midweek" ? setMidweekScheduled : setSatScheduled;
+        const setUnresolved = scope === "sunday" ? setSunUnresolved : scope === "midweek" ? setMidweekUnresolved : setSatUnresolved;
+        const setHasRun = scope === "sunday" ? setSunHasRun : scope === "midweek" ? setMidweekHasRun : setSatHasRun;
+        const configuredSources = club.integrations?.fullTimeFa?.sources;
+        const canonicalProviderFixtures = Array.isArray(configuredSources)
+          ? getPersistedFullTimeFixturesForDay(club.integrations?.fullTimeFa || {}, date, scope)
+          : snapshot.providerFixtures;
+        setProvider(canonicalProviderFixtures);
+        // Generated cards and unresolved records are evidence, never
+        // rehydration input. The canonical provider facts plus saved intent
+        // re-materialise them through the normal matchday build boundary.
+        setScheduled([]);
+        setUnresolved([]);
+        setHasRun(true);
+      }
     })).catch((error) => {
       // Existing local state remains usable; persistence will surface a
       // concrete error if an authorised operator next attempts to save.
@@ -2231,9 +2293,10 @@ function App() {
     });
 
     return () => { active = false; };
-  }, [activeClubId, midweekDate, satDate, sunDate]);
+  }, [activeClubId, club.integrations?.fullTimeFa, midweekDate, satDate, sunDate, workspaceHydrated]);
 
   useEffect(() => {
+    if (isSupaConfigured() && activeClubId) return;
     const scoped = club.integrations?.fullTimeFa?.schedulingIntents || {};
     const synchronise = (setter, value) => setter((current) =>
       JSON.stringify(current) === JSON.stringify(value || {}) ? current : (value || {}),
@@ -2241,9 +2304,9 @@ function App() {
     synchronise(setSatOverrides, scoped.saturday?.[satDate]);
     synchronise(setSunOverrides, scoped.sunday?.[sunDate]);
     synchronise(setMidweekOverrides, scoped.midweek?.[midweekDate]);
-  }, [club.integrations?.fullTimeFa?.schedulingIntents, midweekDate, satDate, sunDate]);
+  }, [activeClubId, club.integrations?.fullTimeFa?.schedulingIntents, midweekDate, satDate, sunDate]);
 
-  const writeFixtureOverride = (setOverrides, currentIntents, persistIntent, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
+  const writeFixtureOverride = async (setOverrides, currentIntents, persistIntent, target, fieldOrPatch, value, legacyFixtureIdentity = "") => {
     const fixtureIdentity = String(
       typeof target === "string" ? target : legacyFixtureIdentity || "",
     ).trim();
@@ -2255,17 +2318,31 @@ function App() {
 
     if (fixtureIdentity) {
       const next = mergeFixtureIntent(currentIntents, fixtureIdentity, fixturePatchToIntent(patch));
-      setOverrides(next);
-      return persistIntent(next);
+      const saved = await persistIntent(next, "exclusion" in patch ? (patch.exclusion ? "fixture.excluded" : "fixture.restored")
+        : "referee" in patch || "refStatus" in patch ? "fixture.official_changed" : "fixture.control_centre_updated");
+      if (saved !== false) setOverrides(next);
+      return saved;
     }
     toast.error("Fixture update blocked", { description: "This operation did not provide a canonical fixture identity." });
   };
 
-  const rebuildSat = useCallback(() => runSat(satProviderFixtures), [runSat, satProviderFixtures]);
-  const rebuildSun = useCallback(() => runSun(sunProviderFixtures), [runSun, sunProviderFixtures]);
+  const rebuildSat = useCallback(async () => {
+    const result = runSat(satProviderFixtures);
+    if (result === false) return false;
+    return await persistScopedFixtureIntents("saturday", satDate, satOverrides, satManual, "schedule.optimised") === false ? false : result;
+  }, [runSat, satProviderFixtures, satDate, satOverrides, satManual, persistScopedFixtureIntents]);
+  const rebuildSun = useCallback(async () => {
+    const result = runSun(sunProviderFixtures);
+    if (result === false) return false;
+    return await persistScopedFixtureIntents("sunday", sunDate, sunOverrides, sunManual, "schedule.optimised") === false ? false : result;
+  }, [runSun, sunProviderFixtures, sunDate, sunOverrides, sunManual, persistScopedFixtureIntents]);
   const rebuildMidweek = useCallback(
-    () => runMidweek(midweekProviderFixtures),
-    [midweekProviderFixtures, runMidweek],
+    async () => {
+      const result = runMidweek(midweekProviderFixtures);
+      if (result === false) return false;
+      return await persistScopedFixtureIntents("midweek", midweekDate, midweekOverrides, midweekManual, "schedule.optimised") === false ? false : result;
+    },
+    [midweekProviderFixtures, runMidweek, midweekDate, midweekOverrides, midweekManual, persistScopedFixtureIntents],
   );
   const satPresentationOverrides = useMemo(() => toFixturePresentationOverrides(satOverrides), [satOverrides]);
   const sunPresentationOverrides = useMemo(() => toFixturePresentationOverrides(sunOverrides), [sunOverrides]);
@@ -2286,32 +2363,32 @@ function App() {
     intents: mergeFixtureIntentCollections(venueOverridesToFixtureIntents(fullTimeVenueOverrides), midweekOverrides),
   }).excluded, [fullTimeVenueOverrides, midweekManual, midweekOverrides, midweekProviderFixtures]);
   const satOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSatOverrides, satOverrides, (intents) => persistScopedFixtureIntents("saturday", satDate, intents, satManual), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSatOverrides, satOverrides, (intents, action) => persistScopedFixtureIntents("saturday", satDate, intents, satManual, action), target, fieldOrPatch, value, fixtureIdentity);
   const sunOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setSunOverrides, sunOverrides, (intents) => persistScopedFixtureIntents("sunday", sunDate, intents, sunManual), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setSunOverrides, sunOverrides, (intents, action) => persistScopedFixtureIntents("sunday", sunDate, intents, sunManual, action), target, fieldOrPatch, value, fixtureIdentity);
   const midweekOv = (target, fieldOrPatch, value, fixtureIdentity = "") =>
-    writeFixtureOverride(setMidweekOverrides, midweekOverrides, (intents) => persistScopedFixtureIntents("midweek", midweekDate, intents, midweekManual), target, fieldOrPatch, value, fixtureIdentity);
+    writeFixtureOverride(setMidweekOverrides, midweekOverrides, (intents, action) => persistScopedFixtureIntents("midweek", midweekDate, intents, midweekManual, action), target, fieldOrPatch, value, fixtureIdentity);
 
   // A user-intent mutation is immediately re-materialised through the same
   // canonical rebuild boundary as an optimiser run. This prevents cards,
   // validators and timeline state retaining a pre-move allocation while the
   // intent has already changed.
   useEffect(() => {
-    if (satHasRun) runSat(satProviderFixtures);
+    if (satHasRun && matchdayLocks.saturday?.loaded && !matchdayLocks.saturday?.locked) runSat(satProviderFixtures);
     // runSat is intentionally omitted: its identity changes with the intent
     // it consumes, whereas the transition itself is driven by intent changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [satHasRun, satManual, satOverrides]);
   useEffect(() => {
-    if (sunHasRun) runSun(sunProviderFixtures);
+    if (sunHasRun && matchdayLocks.sunday?.loaded && !matchdayLocks.sunday?.locked) runSun(sunProviderFixtures);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sunHasRun, sunManual, sunOverrides]);
   useEffect(() => {
-    if (midweekHasRun) runMidweek(midweekProviderFixtures);
+    if (midweekHasRun && matchdayLocks.midweek?.loaded && !matchdayLocks.midweek?.locked) runMidweek(midweekProviderFixtures);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [midweekHasRun, midweekManual, midweekOverrides]);
 
-  const commitFixtureIntentBatch = useCallback(async ({ scope, date, patches } = {}) => {
+  const commitFixtureIntentBatch = useCallback(async ({ scope, date, patches, action = "calendar.saved" } = {}) => {
     const setOverrides = scope === "sunday"
       ? setSunOverrides
       : scope === "midweek"
@@ -2323,14 +2400,14 @@ function App() {
         ? midweekOverrides
         : satOverrides;
     const nextIntents = mergeFixtureAllocationBatch(currentIntents, patches);
-    setOverrides(nextIntents);
     const manualFixtures = scope === "sunday"
       ? sunManual
       : scope === "midweek"
         ? midweekManual
         : satManual;
-    const saved = await persistScopedFixtureIntents(scope, date, nextIntents, manualFixtures);
+    const saved = await persistScopedFixtureIntents(scope, date, nextIntents, manualFixtures, action);
     if (saved === false) return false;
+    setOverrides(nextIntents);
     const build = scope === "sunday"
       ? runSun(sunProviderFixtures, nextIntents)
       : scope === "midweek"
@@ -2365,39 +2442,65 @@ function App() {
       toast.error("Publishing access required", { description: "Your workspace role can view this schedule but cannot publish it." });
       return false;
     }
-    const saved = await saveMatchdaySchedule({ scope, date });
-    if (saved === false) return false;
     if (!isSupaConfigured() || !activeClubId) {
       toast.error("Secure workspace unavailable", { description: "Publishing requires an authenticated club workspace." });
       return false;
     }
     try {
-      const scopeKey = `${scope}:${date}`;
-      const expectedRevision = Number(schedulingStateRevisionsRef.current[scopeKey]) || Number(saved?.revision) || 0;
+      const saved = matchdayLocks[scope]?.locked
+        ? await DB.loadMatchdaySchedulingState(activeClubId, { dayScope: scope, matchdayDate: date })
+        : await saveMatchdaySchedule({ scope, date });
+      if (saved === false) return false;
+      const scopeKey = `${activeClubId}:${scope}:${date}`;
+      const expectedRevision = Number(saved?.revision) || Number(schedulingStateRevisionsRef.current[scopeKey]) || 0;
       const published = await DB.publishMatchdaySchedulingState(activeClubId, {
         dayScope: scope,
         matchdayDate: date,
         expectedRevision,
-        snapshot: { canonicalIdentities: [...new Set(canonicalIdentities)].sort() },
+        snapshot: saved?.operational_snapshot || { canonicalIdentities: [...new Set(canonicalIdentities)].sort() },
       });
       schedulingStateRevisionsRef.current[scopeKey] = Number(published?.revision) || expectedRevision;
+      try { setHistory(await DB.loadHistory(activeClubId)); }
+      catch { toast.warning("Published history needs refreshing", { description: "Publication succeeded and its audit is stored. The History view could not be reloaded." }); }
       toast.success("Schedule published", { description: "The saved matchday schedule was published directly under your workspace capability." });
       return published || true;
     } catch (error) {
       toast.error("Schedule could not be published", { description: error?.message || "The schedule remains safely saved; retry publication when ready." });
       return false;
     }
-  }, [activeClubId, operationalWorkspaceAccess.canPublish, saveMatchdaySchedule]);
-  const removeManualFixture = (currentManualFixtures, currentIntents, setManualFixtures, setOverrides, scope, date, fixture) => {
+  }, [activeClubId, operationalWorkspaceAccess.canPublish, saveMatchdaySchedule, matchdayLocks]);
+  const changeMatchdayLock = useCallback(async ({ scope, locked }) => {
+    const date = scope === "sunday" ? sunDate : scope === "midweek" ? midweekDate : satDate;
+    try {
+      const saved = locked ? await saveMatchdaySchedule({ scope, date }) : null;
+      if (saved === false) return false;
+      const result = await setSharedMatchdayLock(scope, locked, {
+        snapshotHash: `revision:${saved?.revision || 0}`,
+        fixtureCount: saved?.operational_snapshot?.canonicalIdentities?.length || 0,
+      });
+      if (isSupaConfigured() && activeClubId) {
+        try { setHistory(await DB.loadHistory(activeClubId)); }
+        catch { toast.warning("Lock history needs refreshing", { description: "The lock change and its audit are stored. The History view could not be reloaded." }); }
+      }
+      toast.success(locked ? "Matchday locked" : "Matchday unlocked");
+      return result;
+    } catch (error) {
+      toast.error("Matchday lock was not changed", { description: error.message });
+      return false;
+    }
+  }, [activeClubId, satDate, sunDate, midweekDate, saveMatchdaySchedule, setSharedMatchdayLock]);
+  const removeManualFixture = async (currentManualFixtures, currentIntents, setManualFixtures, setOverrides, scope, date, fixture) => {
     const fixtureIdentity = getFixtureFlowIdentity(fixture);
     if (!fixtureIdentity) return;
     const nextManualFixtures = currentManualFixtures.filter(
       (candidate) => getFixtureFlowIdentity(candidate) !== fixtureIdentity,
     );
     const nextIntents = removeFixtureIntent(currentIntents, fixtureIdentity);
+    const saved = await persistScopedFixtureIntents(scope, date, nextIntents, nextManualFixtures, "fixture.manual_deleted");
+    if (saved === false) return false;
     setManualFixtures(nextManualFixtures);
     setOverrides(nextIntents);
-    void persistScopedFixtureIntents(scope, date, nextIntents, nextManualFixtures);
+    return saved;
   };
   const removeSatManualFixture = (fixture) =>
     removeManualFixture(satManual, satOverrides, setSatManual, setSatOverrides, "saturday", satDate, fixture);
@@ -2455,11 +2558,16 @@ function App() {
   const matchdayCalendarSyncRef = useRef(new Map());
   useEffect(() => {
     if (!workspaceHydrated || !activeClubId || !workspaceAccess.canOperate) return undefined;
+    const savedDays = normaliseSavedHistory(history).flatMap((entry) => entry.days);
     const days = [
-      { scope: "saturday", date: satDate, hasRun: satHasRun, fixtures: satActive },
-      { scope: "sunday", date: sunDate, hasRun: sunHasRun, fixtures: sunActive },
-      { scope: "midweek", date: midweekDate, hasRun: activeMidweekHasRun, fixtures: activeMidweekActive },
-    ].filter((day) => day.hasRun && day.date);
+      { scope: "saturday", date: satDate },
+      { scope: "sunday", date: sunDate },
+      { scope: "midweek", date: midweekDate },
+    ].flatMap((day) => {
+      const saved = savedDays.find((item) => item.key === day.scope && item.date === day.date && item.hasRun);
+      return saved ? [{ ...day, fixtures: saved.scheduled.filter((fixture) =>
+        !["away", "postponed", "cancelled"].includes(fixture.status) && !fixture.isAwayFixture && !fixture.excludedFromGroundControl) }] : [];
+    });
     if (!days.length) return undefined;
 
     const timer = window.setTimeout(() => {
@@ -2489,7 +2597,7 @@ function App() {
           matchdayCalendarSyncRef.current.delete(syncKey);
           toast.error("Shared calendar sync needs attention", {
             id: "shared-calendar-sync-needs-attention",
-            description: error?.message || "The schedule was built, but Coach Hub has not received the latest fixtures yet.",
+            description: error?.message || "The schedule is saved, but Coach Hub has not received the latest fixtures yet.",
           });
         });
       });
@@ -2497,16 +2605,11 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [
     activeClubId,
-    activeMidweekActive,
-    activeMidweekHasRun,
+    history,
     midweekDate,
     pitchCfg,
-    satActive,
     satDate,
-    satHasRun,
-    sunActive,
     sunDate,
-    sunHasRun,
     workspaceAccess.canOperate,
     workspaceHydrated,
   ]);
@@ -2586,6 +2689,8 @@ function App() {
     subscription,
     workspaceRole: operationalWorkspaceAccess.role,
     canPublish: operationalWorkspaceAccess.canPublish,
+    canSave: operationalWorkspaceAccess.canOperate,
+    saveMatchday: saveMatchdaySchedule,
     onSyncFailure: reportSyncFailure,
     onSyncSuccess: reportSyncSuccess,
   });
@@ -2593,7 +2698,7 @@ function App() {
   const { fetchSaturdayFixtures, fetchSundayFixtures, fetchMidweekFixtures } =
     useFixtureFetcher(club.integrations?.fullTimeFa || {});
 
-  const persistFullTimeImportEvidence = useCallback(async (statuses = [], snapshots = [], changes = []) => {
+  const persistFullTimeImportEvidence = useCallback(async (statuses = [], snapshots = [], changes = [], { scope, date } = {}) => {
     if (!statuses.length) return;
     const checkedAt = new Date().toISOString();
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot.fixtures]));
@@ -2606,7 +2711,9 @@ function App() {
       const nextSnapshot = snapshotById.get(source.id);
       const discoveredChanges = changesById.get(source.id) || [];
       const pendingByKey = new Map((source.pendingReconciliations || []).map((change) => [change.key, change]));
-      discoveredChanges.forEach((change) => pendingByKey.set(change.key, change));
+      discoveredChanges
+        .filter((change) => !change.autoApplied)
+        .forEach((change) => pendingByKey.set(change.key, change));
       return {
         ...source,
         ...(status.ok && Array.isArray(nextSnapshot) ? { fixtureSnapshot: nextSnapshot } : {}),
@@ -2629,12 +2736,25 @@ function App() {
         fullTimeFa: { ...fullTime, sources: nextSources },
       },
     };
-    setClub(nextClub);
     try {
-      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
-      else tenantSetJson("club", nextClub);
+      if (isSupaConfigured() && activeClubId) {
+        const saved = await DB.saveFullTimeFixtureEvidence(activeClubId, { dayScope: scope, matchdayDate: date,
+          sources: nextSources.filter((source) => statuses.some((status) => status.id === source.id)).map((source) => ({
+            id: source.id, health: source.health, pendingReconciliations: source.pendingReconciliations,
+            ...(snapshotById.has(source.id) && statuses.some((status) => status.id === source.id && status.ok)
+              ? { fixtureSnapshot: source.fixtureSnapshot, previousFixtureSnapshot: sources.find((previous) => previous.id === source.id)?.fixtureSnapshot || [] } : {}),
+          })),
+          detail: { statuses, changes, canonicalIdentities: [...new Set(snapshots.flatMap((snapshot) => (snapshot.fixtures || []).filter((fixture) => fixture.date === date).map(getFixtureFlowIdentity)))] },
+        });
+        setClub(saved.configuration);
+        if (saved.history_entry) setHistory((current) => [saved.history_entry, ...current]);
+      } else {
+        tenantSetJson("club", nextClub);
+        setClub(nextClub);
+      }
     } catch (error) {
-      console.warn("Full-Time source health could not be persisted.", error);
+      console.warn("Full-Time source evidence could not be persisted.", error);
+      throw error;
     }
   }, [activeClubId, club]);
 
@@ -2688,12 +2808,18 @@ function App() {
         ? setMidweekOverrides
         : setSatOverrides;
 
+    if (isSupaConfigured() && activeClubId) {
+      const date = dayKey === "sunday" ? sunDate : dayKey === "midweek" ? midweekDate : satDate;
+      const saved = await persistScopedFixtureIntents(dayKey, date, nextSessionOverrides, undefined, "fixture.reversed_home");
+      if (saved !== false) setDaySessionOverrides(nextSessionOverrides);
+      return saved !== false;
+    }
+
     setClub(nextClub);
     setDaySessionOverrides(nextSessionOverrides);
 
     try {
-      if (isSupaConfigured() && activeClubId) await DB.saveClub(activeClubId, nextClub);
-      else tenantSetJson("club", nextClub);
+      tenantSetJson("club", nextClub);
       return true;
     } catch (error) {
       setClub(club);
@@ -2701,7 +2827,7 @@ function App() {
       toast.error("Fixture reversal could not be saved", { description: error?.message || "The fixture was left unchanged." });
       return false;
     }
-  }, [activeClubId, club, midweekOverrides, satOverrides, sunOverrides]);
+  }, [activeClubId, club, midweekOverrides, satOverrides, sunOverrides, satDate, sunDate, midweekDate, persistScopedFixtureIntents]);
 
   const { resetAll } = useOperationsActions({
     setSatScheduled,
@@ -3163,6 +3289,7 @@ function App() {
           {mainPage === "dashboard" && pageEntitled && (
             <Suspense fallback={<LazyPageFallback label="Mission Control" />}>
               <DashboardPage
+                matchdayLocks={matchdayLocks}
                 setMainPage={setMainPage}
                 setDayTab={setDayTab}
                 setNavigationTarget={setNavigationTarget}
@@ -3173,6 +3300,7 @@ function App() {
                 matchdayScope={matchdayScope}
                 setMatchdayScope={setMatchdayScope}
                 saveWeek={saveWeek}
+                publishMatchdaySchedule={publishMatchdaySchedule}
                 mode={mode}
                 runSatTest={runSatTest}
                 runSatLive={runSatLive}
@@ -3250,6 +3378,8 @@ function App() {
                 {/* ── SATURDAY ── */}
                 {dayTab === "saturday" && (
                   <SaturdayPage
+                    matchdayLocks={matchdayLocks}
+                    changeMatchdayLock={changeMatchdayLock}
                     navigationTarget={navigationTarget}
                     clearNavigationTarget={clearNavigationTarget}
                     S={S}
@@ -3341,6 +3471,8 @@ function App() {
                 {/* ── SUNDAY ── */}
                 {dayTab === "sunday" && (
                   <SundayPage
+                    matchdayLocks={matchdayLocks}
+                    changeMatchdayLock={changeMatchdayLock}
                     navigationTarget={navigationTarget}
                     clearNavigationTarget={clearNavigationTarget}
                     S={S}
@@ -3416,6 +3548,8 @@ function App() {
 
                 {midweekEnabled && dayTab === "midweek" && (
                   <MidweekPage
+                    matchdayLocks={matchdayLocks}
+                    changeMatchdayLock={changeMatchdayLock}
                     navigationTarget={navigationTarget}
                     clearNavigationTarget={clearNavigationTarget}
                     S={S}

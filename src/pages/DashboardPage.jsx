@@ -23,7 +23,6 @@ import useLiveWeather from "../hooks/useLiveWeather.js";
 import { calculateWeatherIntelligence } from "../lib/engines/weatherIntelligenceEngine.js";
 import { findOfficialConflicts } from "../lib/engines/officialsEngine.js";
 import { buildCoreOperationalReadiness } from "../lib/engines/operationalReadinessEngine.js";
-import { readMatchdayLock } from "../lib/operations/matchdayLock.js";
 import { buildMatchweekPilotReadiness } from "../lib/pilot/matchweekPilotReadiness.js";
 import { toast } from "../lib/notifications/daxoraNotifications.js";
 import {
@@ -45,6 +44,7 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage({
+  matchdayLocks = {},
   setMainPage,
   setDayTab,
   setNavigationTarget,
@@ -55,6 +55,7 @@ export default function DashboardPage({
   matchdayScope: matchdayScopeProp,
   setMatchdayScope: setMatchdayScopeProp,
   saveWeek,
+  publishMatchdaySchedule,
   mode = "test",
   runSatTest,
   runSatLive,
@@ -240,14 +241,11 @@ export default function DashboardPage({
           : []),
       ].map((item) => ({
         ...item,
-        locked: readMatchdayLock({
-          clubId: club?.id || club?.name,
-          day: item.id,
-          date: item.date,
-        }),
+        locked: Boolean(matchdayLocks[item.id]?.locked),
       })),
     [
       club?.id,
+      matchdayLocks,
       midweekActive.length,
       midweekDate,
       midweekEnabled,
@@ -436,7 +434,12 @@ export default function DashboardPage({
       nav.goToCommunications({ day: navigationDay }),
     [WORKFLOW_ACTIONS.OPERATIONS]: () =>
       nav.goToOperations({ day: operationsLandingDay }),
-    [WORKFLOW_ACTIONS.PUBLISH]: saveWeek,
+    [WORKFLOW_ACTIONS.PUBLISH]: async () => {
+      for (const day of buildDays.filter((item) => item.hasRun)) {
+        if (await publishMatchdaySchedule?.({ scope: day.id, date: day.date }) === false) return false;
+      }
+      return true;
+    },
   };
 
   const workflowSteps = workflowModel.steps.map((step) => ({

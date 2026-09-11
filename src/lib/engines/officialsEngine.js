@@ -1,4 +1,5 @@
 import { getFixtureOccupancy } from "../domain/fixtureOccupancy.js";
+import { isFixtureOperationallyActive } from "../domain/fixtureLifecycle.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -24,7 +25,7 @@ function titleCase(value = "") {
 }
 
 function isPostponed(fixture = {}) {
-  return clean(fixture.status) === "postponed";
+  return !isFixtureOperationallyActive(fixture);
 }
 
 function isUnavailableRef(ref = {}) {

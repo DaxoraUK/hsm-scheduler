@@ -900,7 +900,7 @@ function FixturePlannerDrawer({ selected, rankedPitches, timeline, candidate, ca
                 </label>
                 <label className="text-xs font-black text-slate-700">
                   Kick-off
-                  <input type="time" step="900" min={formatTimelineTime(timeline.start)} max={formatTimelineTime(timeline.end)} value={koTime} onChange={(event) => setKoTime(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-400" />
+                  <input type="time" step="300" min={formatTimelineTime(timeline.start)} max={formatTimelineTime(timeline.end)} value={koTime} onChange={(event) => setKoTime(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-400" />
                 </label>
               </div>
               <button type="button" onClick={() => onPreview({ pitchId, koMins: normalisePlannerTimeInput(koTime, fixture.koMins) })} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"><ShieldAlert size={16} /> Validate move</button>

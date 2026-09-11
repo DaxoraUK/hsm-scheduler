@@ -93,7 +93,7 @@ export default function FixtureDrawer({
   };
 
   const applyFixturePatch = (patch) => {
-    onOverride(fixtureIdentity, patch);
+    return onOverride(fixtureIdentity, patch);
   };
 
   const buildPatch = (field, value) => {
@@ -187,15 +187,16 @@ export default function FixtureDrawer({
     updateFixture("status", status);
   };
 
-  const excludeFromGroundControl = () => {
+  const excludeFromGroundControl = async () => {
     if (!canEdit) return;
-    applyFixturePatch({
+    const saved = await applyFixturePatch({
       exclusion: {
         reason: exclusionReason,
         recordedAt: new Date().toISOString(),
         actor: operatorIdentity || "operator",
       },
     });
+    if (saved === false) return;
     toast.success("Fixture excluded", {
       description: "The provider fixture remains intact and is no longer included in matchday operations.",
     });

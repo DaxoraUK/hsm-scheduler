@@ -31,7 +31,14 @@ export function resolveEffectiveAllocation({
   const lastPatchProvidesEnd = Boolean(lastKickOffPatch && Object.prototype.hasOwnProperty.call(lastKickOffPatch, "endMins"));
   const fixtureWithAllocation = {
     ...fixture,
+    // Configuration is derived evidence, not a new provider fixture or intent.
+    ...(derivedAllocation.cfg ? { cfg: derivedAllocation.cfg } : {}),
+    ...(derivedAllocation.occupancyTiming ? { occupancyTiming: derivedAllocation.occupancyTiming } : {}),
     ...allocation,
+    ...(lastKickOffPatch && "koTime" in lastKickOffPatch && !("koMins" in lastKickOffPatch)
+      ? { koMins: undefined } : {}),
+    ...(lastKickOffPatch && "koMins" in lastKickOffPatch && !("koTime" in lastKickOffPatch)
+      ? { koTime: `${String(Math.floor(lastKickOffPatch.koMins / 60)).padStart(2, "0")}:${String(lastKickOffPatch.koMins % 60).padStart(2, "0")}` } : {}),
     ...(lastKickOffPatch && !lastPatchProvidesEnd ? { endMins: undefined } : {}),
   };
   const occupancy = getFixtureOccupancy({ fixture: fixtureWithAllocation, timing });
@@ -39,7 +46,7 @@ export function resolveEffectiveAllocation({
   return {
     ...fixtureWithAllocation,
     koMins: occupancy.koMins ?? fixtureWithAllocation.koMins ?? null,
-    endMins: lastKickOffPatch && !lastPatchProvidesEnd
+    endMins: fixtureWithAllocation.occupancyTiming || (lastKickOffPatch && !lastPatchProvidesEnd)
       ? occupancy.endMins
       : fixtureWithAllocation.endMins ?? occupancy.endMins,
   };

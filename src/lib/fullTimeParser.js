@@ -1,3 +1,5 @@
+import { normaliseFixtureLifecycleStatus } from "./domain/fixtureLifecycle.js";
+
 const DEFAULT_CLUB_ALIASES = Object.freeze(["horwich", "st mary", "st. mary", "hsm"]);
 
 export const SUN_TEAMS = Object.freeze(["lionesses", "sunday 1sts", "sunday firsts"]);
@@ -76,6 +78,10 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
   const venue = columns.venueIndex >= 0 ? values[columns.venueIndex] : values[versusIndex + 2] || "";
   const referee = columns.refereeIndex >= 0 ? values[columns.refereeIndex] : "";
 
+  const detectedLifecycleStatus = normaliseFixtureLifecycleStatus(statusText);
+  const providerLifecycleStatus = ["postponed", "cancelled", "abandoned", "void", "withdrawn"].includes(detectedLifecycleStatus)
+    ? detectedLifecycleStatus
+    : "active";
   return {
     homeTeam: home,
     awayTeam: away,
@@ -85,7 +91,8 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
     referee,
     type,
     isCup: /\bcup\b/i.test(type),
-    status: /postponed|cancelled|canceled|abandoned/.test(statusText) ? "postponed" : "active",
+    status: providerLifecycleStatus,
+    providerLifecycleStatus,
   };
 }
 

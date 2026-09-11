@@ -6,6 +6,8 @@
  * engine and towards one predictable object that can be enriched over time.
  */
 
+import { isFixtureOperationallyActive } from "./fixtureLifecycle.js";
+
 const EMPTY_ARRAY = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
 
@@ -57,7 +59,7 @@ function normaliseFixture(fixture = {}, index = 0) {
     endMins,
     pitchId: fixture.pitchId || fixture.pitch || fixture.assignedPitchId || null,
     status: fixture.status || "scheduled",
-    isActive: fixture.status !== "postponed" && fixture.status !== "cancelled",
+    isActive: isFixtureOperationallyActive(fixture),
     isScheduled: koMins != null && endMins != null && Boolean(fixture.pitchId || fixture.pitch || fixture.assignedPitchId),
   };
 }
@@ -213,7 +215,7 @@ export function enrichMatchdayMany(matchday = {}, updates = {}) {
 }
 
 export function getActiveFixtures(games = []) {
-  return asArray(games).filter((game) => game.status !== "postponed" && game.status !== "cancelled");
+  return asArray(games).filter(isFixtureOperationallyActive);
 }
 
 export function getScheduledFixtures(games = []) {

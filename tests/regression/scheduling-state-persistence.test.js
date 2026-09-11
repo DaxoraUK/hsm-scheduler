@@ -37,6 +37,16 @@ beforeEach(() => {
 });
 
 describe("canonical matchday scheduling-state persistence", () => {
+  test("provider refresh transmits fixture evidence only, never club settings or source credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ configuration: {}, history_entry: { action: "provider.refreshed" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await DB.saveFullTimeFixtureEvidence(CLUB_ID, { dayScope: "saturday", matchdayDate: "2026-09-05",
+      sources: [{ id: "fa-one", fixtureSnapshot: [], previousFixtureSnapshot: [], health: { ok: true }, url: "untouched-source-url", credential: "must-not-be-sent" }], detail: { canonicalIdentities: [] } });
+    expect(fetchMock.mock.calls[0][0]).toContain("/rest/v1/rpc/save_full_time_fixture_evidence");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ target_club_id: CLUB_ID, target_day_scope: "saturday", target_matchday_date: "2026-09-05",
+      source_updates: [{ id: "fa-one", fixtureSnapshot: [], previousFixtureSnapshot: [], health: { ok: true } }], event_detail: { canonicalIdentities: [] } });
+  });
+
   test("loads state and saves only canonical intent and manual fixtures with an expected revision", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ revision: 4, intents: {}, manual_fixtures: [] }))

@@ -22,6 +22,7 @@ import {
 } from "../../../lib/intelligence/scheduling/kickOffRules.js";
 import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
 import { getFixtureOccupancy, SCHEDULING_TIME_INCREMENT_MINS } from "../../../lib/domain/fixtureOccupancy.js";
+import { isFixtureOperationallyActive } from "../../../lib/domain/fixtureLifecycle.js";
 
 function timeToMinutes(time) {
   const [hours, minutes] = String(time || "").split(":").map(Number);
@@ -53,9 +54,7 @@ function getBlockedPitchIds(pitchId, pitchCfg = []) {
 }
 
 function isActiveFixture(fixture = {}) {
-  const status = String(fixture.status || "active").toLowerCase();
-
-  return status !== "postponed" && status !== "cancelled";
+  return isFixtureOperationallyActive(fixture);
 }
 
 function getSuitablePitches({ fixture = {}, cfg = {}, pitchCfg = [], closedPitches = [] } = {}) {
@@ -223,8 +222,9 @@ export default function MatchdayUnresolvedCard({
 }) {
   const [pendingOverride, setPendingOverride] = useState(null);
   const [resolvingFixtureIdentity, setResolvingFixtureIdentity] = useState("");
+  const operationalUnresolved = unresolved.filter(isActiveFixture);
 
-  if (unresolved.length === 0) return null;
+  if (operationalUnresolved.length === 0) return null;
 
   const resolveFixture = async ({ fixture, patch, cfg, overridden = false }) => {
     if (readOnly) return false;
@@ -232,7 +232,7 @@ export default function MatchdayUnresolvedCard({
     if (!fixtureIdentity || typeof onResolveFixture !== "function") return false;
     const koMins =
       patch.koMins != null ? patch.koMins : timeToMinutes(patch.koTime);
-    const duration = getDuration(cfg);
+    const duration = getDuration(fixture, cfg, club?.timingSettings || {});
     const endMins =
       patch.endMins != null ? patch.endMins : koMins != null ? koMins + duration : null;
 
@@ -339,7 +339,7 @@ export default function MatchdayUnresolvedCard({
       return;
     }
 
-    const duration = getDuration(cfg);
+    const duration = getDuration(fixture, cfg, club?.timingSettings || {});
     const endMins = koMins + duration;
 
     const clash = findPitchClash({
@@ -372,7 +372,7 @@ export default function MatchdayUnresolvedCard({
             </div>
 
             <div className="mt-1 text-xl font-black">
-              Fixture Requires Intervention ({unresolved.length})
+              Fixture Requires Intervention ({operationalUnresolved.length})
             </div>
           </div>
         </div>
@@ -384,7 +384,7 @@ export default function MatchdayUnresolvedCard({
             Schedule locked · unresolved fixtures remain visible, but assignment controls are disabled.
           </div>
         ) : null}
-        {unresolved.map((fixture, index) => {
+        {operationalUnresolved.map((fixture, index) => {
           const cfg = resolveFixtureTeam(fixture, teamCfg);
           const configuredCompatiblePitches = getSuitablePitches({
             fixture,

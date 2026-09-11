@@ -48,9 +48,11 @@ function HistoryPanel({ history, onLoad, onDelete, club = DEFAULT_CLUB }) {
             <tr key={week.id}>
               <td style={S.td(index % 2)}>
                 <strong>{week.dateLabel}</strong>
+                {week.action ? <div>{week.action.replaceAll(".", " ").replaceAll("_", " ")}</div> : null}
                 <br />
                 <span style={{ fontSize: 10, color: "#888" }}>
-                  {week.savedAt ? new Date(week.savedAt).toLocaleDateString("en-GB") : ""}
+                  {week.savedAt ? new Date(week.savedAt).toLocaleString("en-GB") : ""}
+                  {week.operatorLabel || week.operatorId ? ` · ${week.operatorLabel || week.operatorId}` : ""}
                 </span>
               </td>
               <td style={S.td(index % 2)}>{saturdayCount}</td>
@@ -62,12 +64,12 @@ function HistoryPanel({ history, onLoad, onDelete, club = DEFAULT_CLUB }) {
                 {midweekCount > 0 ? midweekCount : <span style={{ color: "#aaa" }}>-</span>}
               </td>
               <td style={S.td(index % 2)}>
-                <button
+                {!week.eventOnly && <button
                   style={{ ...S.btn(club.primary), padding: "3px 10px", fontSize: 11 }}
                   onClick={() => onLoad(week)}
                 >
                   Load
-                </button>
+                </button>}
                 <button
                   style={{ ...S.btn(RE), padding: "3px 10px", fontSize: 11, marginLeft: 6 }}
                   onClick={() => onDelete(week.id)}

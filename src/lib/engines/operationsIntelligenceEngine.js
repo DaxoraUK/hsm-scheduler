@@ -1,8 +1,9 @@
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "./officialsEngine.js";
+import { isFixtureOperationallyActive } from "../domain/fixtureLifecycle.js";
 
 function activeFixtures(fixtures = []) {
-  return fixtures.filter((fixture) => String(fixture?.status || "").toLowerCase() !== "postponed");
+  return fixtures.filter(isFixtureOperationallyActive);
 }
 
 function getKickoff(fixture = {}) {

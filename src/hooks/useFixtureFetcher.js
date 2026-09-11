@@ -52,7 +52,7 @@ function mergeFixtureRecords(current = {}, incoming = {}) {
 
 export const deduplicateFixtureSet = deduplicateBySourceIdentity;
 
-const REVIEW_FIELDS = Object.freeze(["date", "kickOff", "venue", "referee", "status"]);
+const REVIEW_FIELDS = Object.freeze(["date", "kickOff", "venue", "referee", "status", "providerLifecycleStatus"]);
 
 function sourceFeedCoversDate(fixtures = [], date = "", today = "") {
   if (!date) return false;
@@ -167,8 +167,16 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
       return;
     }
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
-    if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
-    if (fields.includes("date") || ignored.has(key)) snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
+    const lifecycleFactChanged = fields.includes("status") || fields.includes("providerLifecycleStatus");
+    // Keep the provider change in the immutable refresh evidence, but do not
+    // expose a review queue that can leave an inactive fixture operational.
+    if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture, autoApplied: lifecycleFactChanged });
+    // Provider lifecycle is authoritative: a postponed/cancelled fixture must
+    // leave the active operational set in this refresh, not wait for a user
+    // review of a stale scheduling snapshot.
+    if (fields.includes("date") || lifecycleFactChanged || ignored.has(key)) {
+      snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
+    }
   });
   const canonicalised = collapseProvenLegacyAliases(snapshot);
   collisions.push(...canonicalised.collisions);
@@ -258,6 +266,18 @@ async function fetchLeagueFixtures(source) {
 function isSundayTeam(fixture = {}) {
   const clubTeam = clean(fixture.clubTeamName || fixture.homeTeam).toLowerCase();
   return SUN_TEAMS.some((keyword) => clubTeam.includes(keyword));
+}
+
+// Scheduling-state evidence is derived and may be stale. Rehydration must
+// rebuild from these persisted provider facts rather than replaying a prior
+// operational snapshot.
+export function getPersistedFullTimeFixturesForDay(fixtureSourceConfig = {}, targetDate = "", fixtureDayKey = "saturday") {
+  const key = normaliseFixtureDayKey(fixtureDayKey);
+  const fixtures = getConfiguredFixtureSources(fixtureSourceConfig)
+    .flatMap((source) => source.fixtureSnapshot || [])
+    .filter((fixture) => fixture?.date === targetDate)
+    .filter((fixture) => key === "sunday" ? isSundayTeam(fixture) : key === "saturday" ? !isSundayTeam(fixture) : true);
+  return deduplicateBySourceIdentity(fixtures);
 }
 
 export function useFixtureFetcher(fixtureSourceConfig = {}) {

@@ -32,6 +32,7 @@ export default function MatchweekCommandBar({
   runTest, runLive, saveWeek, pitchCfg = {}, closedPitches = [], allowArtificial, setAllowArtificial,
   onPrint, onPublish, onReview, onResolve, onOptimise, optimisationCount = 0,
   canOperate = false, canPublish = false,
+  lockState, onChangeLock,
   onRebuild, rebuildBusy = false,
   onRefresh,
 }) {
@@ -87,9 +88,10 @@ export default function MatchweekCommandBar({
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           {typeof setAllowArtificial === "function" ? <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700"><input type="checkbox" checked={Boolean(allowArtificial)} onChange={(event) => setAllowArtificial(event.target.checked)} disabled={!canOperate} className="h-5 w-5 accent-emerald-600" />Allow artificial surfaces</label> : null}
-          <SecondaryButton onClick={saveWeek} disabled={!hasRun || !canOperate}><Save size={17} />Save Schedule</SecondaryButton>
+          <SecondaryButton onClick={saveWeek} disabled={!hasRun || !canOperate || lockState?.locked}><Save size={17} />Save Schedule</SecondaryButton>
+          {onChangeLock ? <SecondaryButton onClick={() => onChangeLock(!lockState?.locked)} disabled={!canOperate || !lockState?.loaded || (!hasRun && !lockState?.locked)}>{lockState?.locked ? "Unlock Matchday" : "Lock Matchday"}</SecondaryButton> : null}
           <SecondaryButton onClick={onRefresh} disabled={!canOperate || typeof onRefresh !== "function"}><RefreshCw size={17} />Refresh Fixtures</SecondaryButton>
-          <SecondaryButton onClick={onRebuild} disabled={!canOperate || rebuildBusy || typeof onRebuild !== "function"}><RefreshCw size={17} className={rebuildBusy ? "animate-spin" : undefined} />{rebuildBusy ? "Rebuilding…" : "Optimise/Rebuild Day"}</SecondaryButton>
+          <SecondaryButton onClick={onRebuild} disabled={!canOperate || lockState?.locked || rebuildBusy || typeof onRebuild !== "function"}><RefreshCw size={17} className={rebuildBusy ? "animate-spin" : undefined} />{rebuildBusy ? "Rebuilding…" : "Optimise/Rebuild Day"}</SecondaryButton>
           <SecondaryButton onClick={onPrint} disabled={!hasRun || fixtureCount === 0}><Printer size={17} />Print</SecondaryButton>
           <SecondaryButton onClick={onPublish} disabled={!hasRun || blockingCount > 0 || !canPublish}><Send size={17} />Publish schedule</SecondaryButton>
           <SecondaryButton onClick={onOptimise} disabled={!canOperate || optimisationCount === 0}><Sparkles size={17} />{optimisationCount ? `${optimisationCount} improvement${optimisationCount === 1 ? "" : "s"}` : "Optimised"}</SecondaryButton>
