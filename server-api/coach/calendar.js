@@ -22,7 +22,18 @@ function closureDate(value, endOfDay = false) {
   return icsDate(raw);
 }
 
-function calendarEvent({ id, startAt, endAt, title, location = "", description = "", now }) {
+function londonDate(value) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+  return ["year", "month", "day"].map((type) => parts.find((part) => part.type === type).value).join("");
+}
+
+function followingCalendarDate(value) {
+  const day = londonDate(value);
+  const next = new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)) + 1));
+  return next.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+function calendarEvent({ id, startAt, endAt, title, location = "", description = "", now, status = "CONFIRMED", transparent = false, dateOnly = false }) {
   const start = icsDate(startAt);
   const end = icsDate(endAt);
   if (!start || !end) return "";
@@ -30,8 +41,10 @@ function calendarEvent({ id, startAt, endAt, title, location = "", description =
     "BEGIN:VEVENT",
     `UID:${icsEscape(id || crypto.randomUUID())}@daxora.co.uk`,
     `DTSTAMP:${now}`,
-    `DTSTART:${start}`,
-    `DTEND:${end}`,
+    dateOnly ? `DTSTART;VALUE=DATE:${londonDate(startAt)}` : `DTSTART:${start}`,
+    dateOnly ? `DTEND;VALUE=DATE:${followingCalendarDate(startAt)}` : `DTEND:${end}`,
+    `STATUS:${status}`,
+    `TRANSP:${transparent ? "TRANSPARENT" : "OPAQUE"}`,
     `SUMMARY:${icsEscape(title)}`,
     location ? `LOCATION:${icsEscape(location)}` : "",
     description ? `DESCRIPTION:${icsEscape(description)}` : "",
@@ -45,18 +58,27 @@ function buildCalendar(payload = {}) {
   const pitchClosures = Array.isArray(payload.pitch_closures || payload.pitchClosures) ? payload.pitch_closures || payload.pitchClosures : [];
   const now = icsDate(new Date());
 
-  const bookingEvents = bookings.map((booking) => calendarEvent({
+  const bookingEvents = bookings.map((booking) => {
+    const inactive = ["postponed", "cancelled", "canceled", "abandoned"].includes(String(booking.status || "").toLowerCase());
+    const away = (booking.fixture_venue_role || booking.fixtureVenueRole) === "away";
+    const timeKnown = booking.fixture_time_known ?? booking.fixtureTimeKnown ?? true;
+    const prefix = [inactive ? (booking.status === "postponed" ? "POSTPONED" : "CANCELLED") : "", away ? "AWAY" : ""].filter(Boolean).join(" · ");
+    return calendarEvent({
     id: booking.id,
     startAt: booking.start_at || booking.startAt,
     endAt: booking.end_at || booking.endAt,
-    title: booking.title || [booking.team_name || booking.teamName, booking.booking_type || booking.bookingType].filter(Boolean).join(" · ") || "Team booking",
+    title: [prefix, booking.title || [booking.team_name || booking.teamName, booking.booking_type || booking.bookingType].filter(Boolean).join(" · ") || "Team booking"].filter(Boolean).join(" · "),
     location: [booking.venue_name || booking.venueName, booking.pitch_name || booking.pitchName, booking.pitch_area_name || booking.pitchAreaName].filter(Boolean).join(" · "),
     description: [
+      !timeKnown ? "Kick-off TBC" : "",
       booking.opponent_name || booking.opponentName ? `Opponent: ${booking.opponent_name || booking.opponentName}` : "",
       booking.booking_reference || booking.bookingReference ? `Reference: ${booking.booking_reference || booking.bookingReference}` : "",
     ].filter(Boolean).join("\n"),
     now,
-  }));
+    status: inactive ? "CANCELLED" : "CONFIRMED",
+    transparent: inactive || away || !timeKnown,
+    dateOnly: !timeKnown,
+  }); });
 
   const blackoutEvents = blackouts.map((blackout) => calendarEvent({
     id: `blackout-${blackout.id || crypto.randomUUID()}`,

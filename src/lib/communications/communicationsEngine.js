@@ -1,6 +1,7 @@
 import { cleanName } from "../scheduler.js";
 import { contactForTeam } from "./contactModel.js";
 import { getOfficialDisplayName, isFixtureOfficialConfirmed } from "../engines/officialsEngine.js";
+import { getFixtureFlowIdentity, isAwayFixture } from "../domain/fixtureVenueFlow.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -25,7 +26,9 @@ function fixtureStatus(fixture = {}, forcedStatus = "") {
 }
 
 function stableId(fixture = {}, day = "matchday", index = 0) {
-  const explicit = fixture.id || fixture.fixtureId || fixture.key || fixture.fullTimeId || fixture.sourceId;
+  const explicit = fixture.sourceFixtureUrl || fixture.sourceFixtureKey
+    ? getFixtureFlowIdentity(fixture)
+    : fixture.id || fixture.fixtureId || fixture.key || fixture.fullTimeId;
   if (explicit) return `${day}:${String(explicit)}`;
   return [
     day,
@@ -89,7 +92,7 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
       || "",
   ).trim();
   const refereeStatus = normalise(fixture.refStatus || fixture.officialStatus || fixture.assignmentStatus);
-  const contact = contactForTeam(teamCfg, teamContacts, teamName, index);
+  const contact = contactForTeam(teamCfg, teamContacts, teamName, index, fixture.cfg?.id || fixture.teamId || "");
   const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
   const assistantDestination = contact.preferredChannel === "email" ? contact.assistantEmail : contact.assistantPhone;
   const additionalRecipients = (Array.isArray(contact.additionalContacts) ? contact.additionalContacts : []).map((person) => {
@@ -178,8 +181,9 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
 
 function dayRows({ day, dateLabel, hasRun, final, unresolved, club, teamCfg, teamContacts, governedTemplates }) {
   if (!hasRun && !asArray(final).length && !asArray(unresolved).length) return [];
-  const scheduledRows = asArray(final).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg, teamContacts, governedTemplates }));
-  const unresolvedRows = asArray(unresolved).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg, teamContacts, governedTemplates }));
+  // Ground Control coordinates club-hosted matchdays, not the hosts' Away operations.
+  const scheduledRows = asArray(final).filter((fixture) => !isAwayFixture(fixture)).map((fixture, index) => makeRow({ fixture, day, dateLabel, index, club, teamCfg, teamContacts, governedTemplates }));
+  const unresolvedRows = asArray(unresolved).filter((fixture) => !isAwayFixture(fixture)).map((fixture, index) => makeRow({ fixture, forcedStatus: "unresolved", day, dateLabel, index: scheduledRows.length + index, club, teamCfg, teamContacts, governedTemplates }));
   const byId = new Map();
   [...scheduledRows, ...unresolvedRows].forEach((row) => {
     const current = byId.get(row.id);

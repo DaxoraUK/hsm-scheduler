@@ -166,11 +166,13 @@ export const COACH_CALENDAR_LEGEND = Object.freeze([
   { key: "booked", label: "Booked / provisional", tone: "border-violet-200 bg-violet-50 text-violet-800", swatch: "bg-violet-500" },
   { key: "pending", label: "Pending request", tone: "border-amber-200 bg-amber-50 text-amber-800", swatch: "bg-amber-500" },
   { key: "fixture", label: "Fixture / friendly", tone: "border-sky-200 bg-sky-50 text-sky-800", swatch: "bg-sky-500" },
+  { key: "inactive", label: "Postponed / cancelled", tone: "border-slate-300 bg-slate-100 text-slate-600", swatch: "bg-slate-400" },
   { key: "unavailable", label: "Closed / unavailable", tone: "border-rose-200 bg-rose-50 text-rose-800", swatch: "bg-rose-500" },
 ]);
 
 export function calendarEventCategory(event = {}) {
   if (event.kind === "blackout" || event.kind === "pitch_closure" || event.kind === "closure") return "unavailable";
+  if (["postponed", "cancelled", "canceled", "abandoned"].includes(String(event.status || event.calendarStatus || "").toLowerCase())) return "inactive";
   if (event.kind === "request" || ["requested", "submitted", "needs_information", "alternative_offered"].includes(String(event.status || "").toLowerCase())) return "pending";
   if (["friendly", "match", "fixture"].includes(String(event.bookingType || event.booking_type || "").toLowerCase())) return "fixture";
   if (["confirmed", "approved", "accepted"].includes(String(event.status || event.calendarStatus || "").toLowerCase())) return "approved";
@@ -200,5 +202,8 @@ export function calendarEventTone(event = {}) {
 export function calendarEventLabel(event = {}) {
   if (event.kind === "pitch_closure") return "Pitch closure";
   if (event.kind === "blackout" || event.kind === "closure") return "Blackout";
+  const venueRole = event.fixtureVenueRole || event.fixture_venue_role;
+  if (calendarEventCategory(event) === "inactive") return `${event.status === "postponed" ? "Postponed" : "Cancelled"}${venueRole ? ` · ${venueRole === "away" ? "Away" : "Home"} fixture` : ""}`;
+  if (venueRole) return venueRole === "away" ? "Away fixture" : "Home fixture";
   return calendarEventAppearance(event).label;
 }

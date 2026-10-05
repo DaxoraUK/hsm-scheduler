@@ -16,6 +16,16 @@ export function getFixtureFlowIdentity(fixture = {}) {
 
 const ALLOCATION_FIELDS = ["pitchId", "pitchLabel", "koMins", "koTime", "endMins"];
 
+export function isAwayFixture(fixture = {}) {
+  return Boolean(fixture.isAwayFixture || fixture.venueRole === "away"
+    || fixture.requiresScheduling === false || fixture.status === "away");
+}
+
+function inactiveStatus(fixture = {}) {
+  const status = String(fixture.status || "").trim().toLowerCase();
+  return ["postponed", "cancelled", "canceled", "abandoned"].includes(status) ? status : "";
+}
+
 export function applyFixtureOverrides(fixtures = [], overrides = {}, { preserveValidatedAllocation = false } = {}) {
   const stableOverrides = new Map(
     Object.values(overrides || {})
@@ -115,7 +125,7 @@ export function prepareAwayFixture(fixture = {}) {
   const koTime = fixture.koTime || fixture.kickOff || "";
   return {
     ...fixture,
-    status: "away",
+    status: inactiveStatus(fixture) || "away",
     venueRole: "away",
     isAwayFixture: true,
     requiresScheduling: false,
@@ -130,7 +140,7 @@ export function partitionFixturesForScheduling(fixtures = []) {
   const home = [];
   const away = [];
   fixtures.forEach((fixture) => {
-    if (fixture?.isAwayFixture || fixture?.venueRole === "away" || fixture?.requiresScheduling === false) away.push(prepareAwayFixture(fixture));
+    if (isAwayFixture(fixture)) away.push(prepareAwayFixture(fixture));
     else home.push(fixture);
   });
   return { home, away };
@@ -142,7 +152,7 @@ export function reverseAwayFixture(fixture = {}, { actor = "", now = new Date().
     ...fixture,
     homeTeam: fixture.awayTeam || fixture.homeTeam,
     awayTeam: fixture.homeTeam || fixture.awayTeam,
-    status: "active",
+    status: inactiveStatus(fixture) || "active",
     venueRole: "home",
     isAwayFixture: false,
     requiresScheduling: true,
@@ -151,8 +161,36 @@ export function reverseAwayFixture(fixture = {}, { actor = "", now = new Date().
     venueReversal: {
       originalHomeTeam: fixture.homeTeam || "",
       originalAwayTeam: fixture.awayTeam || "",
+      originalKoTime: fixture.koTime || fixture.kickOff || "",
+      originalVenue: fixture.venue || "",
+      originalVenueName: fixture.venueName || "",
       actor: String(actor || "").trim(),
       reversedAt,
     },
+  };
+}
+
+export function restoreAwayFixture(fixture = {}) {
+  const reversal = fixture.venueReversal;
+  if (!reversal?.originalHomeTeam || !reversal?.originalAwayTeam) {
+    throw new Error("The original imported teams are missing; this reversal cannot be safely restored.");
+  }
+  const koTime = reversal.originalKoTime ?? fixture.koTime ?? fixture.kickOff ?? "";
+  return {
+    ...fixture,
+    homeTeam: reversal.originalHomeTeam,
+    awayTeam: reversal.originalAwayTeam,
+    status: inactiveStatus(fixture) || "away",
+    venueRole: "away",
+    isAwayFixture: true,
+    requiresScheduling: false,
+    pitchId: "",
+    pitchLabel: "Away",
+    koTime,
+    koMins: clockToMinutes(koTime),
+    endMins: null,
+    venue: reversal.originalVenue ?? fixture.venue ?? "",
+    venueName: reversal.originalVenueName ?? fixture.venueName ?? "",
+    venueReversal: null,
   };
 }

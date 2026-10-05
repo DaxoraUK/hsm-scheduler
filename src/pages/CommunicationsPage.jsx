@@ -11,6 +11,7 @@ import {
   Mail,
   MessageSquareText,
   RadioTower,
+  Search,
   Phone,
   Send,
   ShieldAlert,
@@ -263,11 +264,14 @@ function QueueModal({ rows, selected, setSelected, privacy, capabilities, sendin
 export default function CommunicationsPage(props) {
   const eliteCommunicationGovernance = hasEntitlement(props.subscription, ENTITLEMENTS.COMMUNICATION_GOVERNANCE);
   const [governedTemplates, setGovernedTemplates] = useState([]);
-  const [liveTeamContacts, setLiveTeamContacts] = useState(() => Array.isArray(props.teamContacts) ? props.teamContacts : []);
+  const [contactState, setContactState] = useState(() => ({ clubId: props.activeClubId, rows: props.teamContacts || [] }));
+  const liveTeamContacts = contactState.clubId === props.activeClubId ? contactState.rows : (props.teamContacts || []);
   const model = useMemo(() => buildCommunicationsModel({ ...props, teamContacts: liveTeamContacts, governedTemplates }), [props, liveTeamContacts, governedTemplates]);
   const privacy = useMemo(() => normaliseCommunicationPrivacy(props.communicationPrivacy), [props.communicationPrivacy]);
   const [day, setDay] = useState("all");
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [updateType, setUpdateType] = useState("all");
   const [queueOpen, setQueueOpen] = useState(false);
   const [selected, setSelected] = useState({});
   const [queueSnapshot, setQueueSnapshot] = useState({});
@@ -281,6 +285,8 @@ export default function CommunicationsPage(props) {
   const [coachHubConfirmation, setCoachHubConfirmation] = useState(null);
   const [coachHubDeliveries, setCoachHubDeliveries] = useState([]);
   const automaticAudienceRef = useRef("");
+  const historyRequestRef = useRef(0);
+  const submissionInFlightRef = useRef(false);
   const canCommunicate = Boolean(props.workspaceAccess?.canCommunicate && !props.workspaceAccess?.isReadOnly);
   const canPublish = Boolean(props.workspaceAccess?.canPublish && !props.workspaceAccess?.isReadOnly);
   const auditAvailable = Boolean(props.activeClubId && props.communicationSchemaReady && canCommunicate);
@@ -309,15 +315,19 @@ export default function CommunicationsPage(props) {
   };
 
   useEffect(() => {
-    setLiveTeamContacts(Array.isArray(props.teamContacts) ? props.teamContacts : []);
-  }, [props.teamContacts]);
+    setContactState({ clubId: props.activeClubId, rows: Array.isArray(props.teamContacts) ? props.teamContacts : [] });
+    setQueueOpen(false);
+    setSelected({});
+    setSendConfirmation(null);
+    setCoachHubConfirmation(null);
+  }, [props.activeClubId, props.teamContacts]);
 
   useEffect(() => {
     let cancelled = false;
     if (!props.activeClubId || !canCommunicate) return undefined;
     DB.loadTeamContacts(props.activeClubId)
       .then((rows) => {
-        if (!cancelled && Array.isArray(rows)) setLiveTeamContacts(rows);
+        if (!cancelled && Array.isArray(rows)) setContactState({ clubId: props.activeClubId, rows });
       })
       .catch(() => {
         // Existing in-memory contacts remain available if the protected directory is temporarily unavailable.
@@ -330,6 +340,9 @@ export default function CommunicationsPage(props) {
   const rows = audienceRows.filter((row) => {
     if (day !== "all" && row.day !== day) return false;
     if (filter !== "all" && row.readyState !== filter) return false;
+    if (updateType !== "all" && row.status !== updateType) return false;
+    if (search.trim() && ![row.teamName, row.opposition, row.pitch, ...row.recipients.map((recipient) => recipient.name)]
+      .join(" ").toLowerCase().includes(search.trim().toLowerCase())) return false;
     return true;
   });
   const readyRows = rows.filter((row) => row.readyState === "ready" && row.recipients.length && row.contact.receiveMatchdayMessages);
@@ -345,8 +358,11 @@ export default function CommunicationsPage(props) {
   };
 
   const loadEvents = useCallback(async () => {
+    const request = ++historyRequestRef.current;
+    setEvents([]);
+    setCoachHubDeliveries([]);
     if (!auditAvailable) {
-      setEvents([]);
+      setHistoryLoading(false);
       return;
     }
     setHistoryLoading(true);
@@ -355,17 +371,20 @@ export default function CommunicationsPage(props) {
         DB.listCommunicationEvents(props.activeClubId, 50),
         DB.listCoachHubMatchweekDeliveryStatus(props.activeClubId, 30),
       ]);
-      setEvents(eventRows);
-      setCoachHubDeliveries(deliveryRows);
+      if (request === historyRequestRef.current) {
+        setEvents(eventRows);
+        setCoachHubDeliveries(deliveryRows);
+      }
     } catch (error) {
-      toast.error("Communication history could not be loaded", { description: error?.message });
+      if (request === historyRequestRef.current) toast.error("Communication history could not be loaded", { description: error?.message });
     } finally {
-      setHistoryLoading(false);
+      if (request === historyRequestRef.current) setHistoryLoading(false);
     }
   }, [auditAvailable, props.activeClubId]);
 
   useEffect(() => {
     loadEvents();
+    return () => { historyRequestRef.current += 1; };
   }, [loadEvents]);
 
   useEffect(() => {
@@ -434,6 +453,7 @@ export default function CommunicationsPage(props) {
   };
 
   const openQueue = async () => {
+    if (!readyRows.length || !canCommunicate) return;
     await openQueueWithRows(readyRows);
   };
 
@@ -482,8 +502,7 @@ export default function CommunicationsPage(props) {
   };
 
   const markReviewed = async (row) => {
-    await record(row, "reviewed");
-    toast.success("Review recorded", { description: row.teamName });
+    if (await record(row, "reviewed")) toast.success("Review recorded", { description: `${row.teamName} · readiness checks still apply.` });
   };
 
   const copySelected = async (selectedRows) => {
@@ -601,9 +620,21 @@ export default function CommunicationsPage(props) {
     setCoachHubConfirmation({ rows: selectedRows });
   };
 
-  const confirmCoachHubPublish = async () => {
+  const runSubmission = async (task) => {
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
+    setSending(true);
+    try {
+      await task();
+    } finally {
+      submissionInFlightRef.current = false;
+      setSending(false);
+    }
+  };
+
+  const confirmCoachHubPublish = async () => runSubmission(async () => {
     const selectedRows = coachHubConfirmation?.rows || [];
-    if (!selectedRows.length || sending) return;
+    if (!selectedRows.length) return;
     const staleRows = findStaleCommunicationRows(selectedRows, model.rows, queueSnapshot);
     if (staleRows.length) {
       toast.error("The message queue is out of date", { description: "Reopen it and review the latest fixture details." });
@@ -639,7 +670,6 @@ export default function CommunicationsPage(props) {
       }
     }
 
-    setSending(true);
     try {
       const groups = selectedRows.reduce((result, row) => ({ ...result, [row.day]: [...(result[row.day] || []), row] }), {});
       const results = await Promise.all(Object.entries(groups).map(([dayKey, dayRows]) => DB.publishCoachHubMatchweekMessages(props.activeClubId, dayRows.map((row) => ({
@@ -658,13 +688,11 @@ export default function CommunicationsPage(props) {
       if (result?.reused) toast.info(`${result.reused} unchanged update${result.reused === 1 ? " was" : "s were"} already published`);
     } catch (error) {
       toast.error("Coach Hub publish failed", { description: error?.message });
-    } finally {
-      setSending(false);
     }
-  };
+  });
 
-  const confirmWebSend = async () => {
-    if (!sendConfirmation?.rows?.length || sending) return;
+  const confirmWebSend = async () => runSubmission(async () => {
+    if (!sendConfirmation?.rows?.length) return;
     const confirmation = sendConfirmation;
     const staleRows = findStaleCommunicationRows(confirmation.rows, model.rows, confirmation.signatures || {});
     if (staleRows.length) {
@@ -674,7 +702,6 @@ export default function CommunicationsPage(props) {
       return;
     }
     if (!(await assertCurrentMatchdayApproval(confirmation.rows))) return;
-    setSending(true);
     try {
       const requestKey = confirmation.requestKey || buildCommunicationApprovalKey(confirmation.rows);
       const result = await dispatchCommunicationBatch({
@@ -717,10 +744,8 @@ export default function CommunicationsPage(props) {
       });
       setSendFailure(failure);
       toast.error(failure.title, { description: failure.description });
-    } finally {
-      setSending(false);
     }
-  };
+  });
 
   return (
     <PageContainer>
@@ -729,8 +754,8 @@ export default function CommunicationsPage(props) {
         title="Communications"
         subtitle="Prepare one coach-message queue, send through configured web providers or use the audited copy-out fallback, and track only provider-confirmed delivery states."
         action={model.counts.total ? (
-          <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady || !canCommunicate} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
-            <Send size={17} /> Send coach messages
+          <button type="button" onClick={openQueue} disabled={!props.communicationSchemaReady || !canCommunicate || !readyRows.length || sending} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
+            <Send size={17} /> Send coach messages{readyRows.length ? ` (${readyRows.length})` : ""}
           </button>
         ) : null}
       />
@@ -745,7 +770,9 @@ export default function CommunicationsPage(props) {
 
       <div className="mb-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
         <UsersRound size={19} className="mt-0.5 shrink-0 text-sky-700" />
-        <span><strong>Shared team contacts.</strong> The same adult contact record powers Communications, Coach Hub invitations, booking requests, calendar updates and acknowledgements. Update it once in Settings → Teams.</span>
+        <div className="flex-1"><span><strong>Shared team contacts.</strong> Update adult coach details in Settings → Teams once for Communications and Coach Hub.</span>
+          {props.onOpenTeamSettings ? <button type="button" onClick={props.onOpenTeamSettings} className="ml-3 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-black text-sky-800">Manage team contacts</button> : null}
+        </div>
       </div>
 
       {props.audience?.teamKeys?.length ? (
@@ -788,6 +815,15 @@ export default function CommunicationsPage(props) {
       </div>
 
       <Card eyebrow="Review queue" title="Coach messages" subtitle={model.disclaimer}>
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold leading-5 text-slate-600">
+          Home fixtures only, including postponement and cancellation updates. Away games stay in the team calendar, not this operational message queue. Nothing is sent automatically.
+        </div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+          <label className="relative flex-1"><Search size={17} className="absolute left-3 top-3.5 text-slate-400" /><input type="search" aria-label="Search coach messages" placeholder="Search team, opposition, pitch or coach…" value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm" /></label>
+          <select aria-label="Fixture update type" value={updateType} onChange={(event) => setUpdateType(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
+            <option value="all">All fixture updates</option><option value="scheduled">Home match details</option><option value="postponed">Postponements</option><option value="cancelled">Cancellations</option><option value="unresolved">Awaiting allocation</option>
+          </select>
+        </div>
         <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap gap-2">
             {model.days.map((item) => (
@@ -805,17 +841,18 @@ export default function CommunicationsPage(props) {
           </div>
         </div>
 
+        <div className="mb-4 text-xs font-bold text-slate-500">Showing {rows.length} of {audienceRows.length} Home fixture updates · {readyRows.length} ready in this view</div>
         {!model.rows.length ? (
-          <EmptyState title="No communications are ready" description="Build a Saturday, Sunday or Midweek schedule to prepare coach messages." />
+          <EmptyState title="No Home fixture updates" description="Build a Saturday, Sunday or Midweek schedule. Away fixtures do not need club matchday communications." />
         ) : !rows.length ? (
           <EmptyState title="No messages match this view" description="Change the day or review filter." />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="space-y-3">
             {rows.map((row) => {
               const state = readiness(row);
               const latest = events.find((event) => event.message_key === row.id && event.message_hash === row.messageHash);
               return (
-                <article key={row.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                <article key={row.id} data-communication-fixture={row.id} className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -824,7 +861,8 @@ export default function CommunicationsPage(props) {
                         {latest ? <StatusChip status="info" size="sm">{eventLabel(latest.action)}</StatusChip> : null}
                       </div>
                       <h3 className="mt-3 text-xl font-black text-slate-950">{row.teamName}</h3>
-                      <div className="mt-1 text-sm font-semibold text-slate-500">{row.dateLabel} · {row.ko} · {row.pitch}</div>
+                      <div className="mt-1 text-sm font-bold text-slate-700">vs {row.opposition}</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-500">{row.dateLabel}{["postponed", "cancelled"].includes(row.status) ? " · Not taking place" : ` · ${row.ko} · ${row.pitch}`}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right ring-1 ring-slate-200">
                       <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Recipients</div>
@@ -839,7 +877,7 @@ export default function CommunicationsPage(props) {
                         {recipient.name} · {maskContactDestination(recipient.destination)}
                       </span>
                     ))}
-                    {!row.recipients.length ? <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-amber-800"><UsersRound size={13} />Add contact in Team settings</span> : null}
+                    {!row.recipients.length ? <button type="button" onClick={props.onOpenTeamSettings} disabled={!props.onOpenTeamSettings} className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-amber-800"><UsersRound size={13} />Add contact in Team settings</button> : null}
                   </div>
 
                   {row.issues.length ? (
@@ -849,7 +887,11 @@ export default function CommunicationsPage(props) {
                     </div>
                   ) : null}
 
-                  <pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 font-sans text-sm font-semibold leading-6 text-slate-700">{row.message}</pre>
+                  <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50">
+                    <summary className="cursor-pointer px-4 py-3 text-xs font-black text-slate-700">Preview message and recipients</summary>
+                    <pre className="whitespace-pre-wrap border-t border-slate-200 p-4 font-sans text-sm font-semibold leading-6 text-slate-700">{row.message}</pre>
+                    {row.recipients.map((recipient) => <div key={`${recipient.type}:${recipient.destination}`} className="border-t border-slate-200 px-4 py-3 text-xs font-semibold text-slate-600">{recipient.name} · {recipient.channel} · {maskContactDestination(recipient.destination)}<pre className="mt-2 whitespace-pre-wrap font-sans leading-5">{recipient.message || row.message}</pre></div>)}
+                  </details>
 
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
                     {row.readyState !== "blocked" ? (

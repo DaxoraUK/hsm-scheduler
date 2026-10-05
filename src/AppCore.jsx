@@ -2061,9 +2061,9 @@ function App() {
   useEffect(() => {
     if (!workspaceHydrated || !activeClubId || !workspaceAccess.canOperate) return undefined;
     const days = [
-      { scope: "saturday", date: satDate, hasRun: satHasRun, fixtures: satActive },
-      { scope: "sunday", date: sunDate, hasRun: sunHasRun, fixtures: sunActive },
-      { scope: "midweek", date: midweekDate, hasRun: activeMidweekHasRun, fixtures: activeMidweekActive },
+      { scope: "saturday", date: satDate, hasRun: satHasRun, fixtures: satFinal },
+      { scope: "sunday", date: sunDate, hasRun: sunHasRun, fixtures: sunFinal },
+      { scope: "midweek", date: midweekDate, hasRun: activeMidweekHasRun, fixtures: activeMidweekFinal },
     ].filter((day) => day.hasRun && day.date);
     if (!days.length) return undefined;
 
@@ -2076,13 +2076,7 @@ function App() {
             sourceType: `matchday_${day.scope}`,
           }))
           .filter(Boolean);
-        const signature = JSON.stringify(bookings.map((booking) => ({
-          sourceId: booking.sourceId,
-          teamKey: booking.teamKey,
-          pitchId: booking.pitchId,
-          startAt: booking.startAt,
-          endAt: booking.endAt,
-        })));
+        const signature = JSON.stringify(bookings);
         const syncKey = `${activeClubId}:${day.scope}:${day.date}`;
         if (matchdayCalendarSyncRef.current.get(syncKey) === signature) return;
         matchdayCalendarSyncRef.current.set(syncKey, signature);
@@ -2102,14 +2096,14 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [
     activeClubId,
-    activeMidweekActive,
+    activeMidweekFinal,
     activeMidweekHasRun,
     midweekDate,
     pitchCfg,
-    satActive,
+    satFinal,
     satDate,
     satHasRun,
-    sunActive,
+    sunFinal,
     sunDate,
     sunHasRun,
     workspaceAccess.canOperate,
@@ -3146,6 +3140,10 @@ function App() {
                 midweekEnabled={midweekEnabled}
                 audience={coachCommunicationAudience}
                 onClearAudience={() => setCoachCommunicationAudience(null)}
+                satDate={satDate}
+                sunDate={sunDate}
+                midweekDate={midweekDate}
+                onOpenTeamSettings={() => { setMainPage("settings"); setSettingsTab("teams"); }}
               />
             </Suspense>
           )}

@@ -103,6 +103,8 @@ export function normaliseCoachBooking(row = {}) {
     teamKey: text(row.team_key || row.teamKey),
     teamName: text(row.team_name || row.teamName),
     opponentName: text(row.opponent_name || row.opponentName),
+    fixtureVenueRole: text(row.fixture_venue_role || row.fixtureVenueRole),
+    fixtureTimeKnown: row.fixture_time_known ?? row.fixtureTimeKnown ?? true,
     venueId: text(row.venue_id || row.venueId),
     venueName: text(row.venue_name || row.venueName),
     pitchId: text(row.pitch_id || row.pitchId),
@@ -343,9 +345,11 @@ export function buildCoachHubMetrics(workspace = {}, now = new Date()) {
   const messages = Array.isArray(workspace.messages) ? workspace.messages : [];
   const closureAlternatives = Array.isArray(workspace.closureAlternatives) ? workspace.closureAlternatives : [];
   const nowMs = now.getTime();
-  const futureBookings = bookings.filter((row) => new Date(row.endAt || row.startAt).getTime() >= nowMs).sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+  const futureBookings = bookings.filter((row) => !["postponed", "cancelled", "canceled", "abandoned", "rejected"].includes(row.status)
+    && new Date(row.endAt || row.startAt).getTime() >= nowMs).sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   return {
     nextBooking: futureBookings[0] || null,
+    upcomingBookings: futureBookings,
     upcomingCount: futureBookings.length,
     pendingRequests: requests.filter((row) => ["submitted", "needs_information", "alternative_offered"].includes(row.status)).length + closureAlternatives.filter((row) => row.status === "offered").length,
     alternatives: requests.filter((row) => row.status === "alternative_offered").length + closureAlternatives.filter((row) => row.status === "offered").length,

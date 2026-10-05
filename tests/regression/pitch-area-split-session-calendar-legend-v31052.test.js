@@ -64,7 +64,7 @@ describe("Ground Control v3.10.5.2 split pitch areas and calendar legend", () =>
   });
 
   it("uses one shared category map for event colours and legend labels", () => {
-    expect(COACH_CALENDAR_LEGEND.map((row) => row.key)).toEqual(["approved", "booked", "pending", "fixture", "unavailable"]);
+    expect(COACH_CALENDAR_LEGEND.map((row) => row.key)).toEqual(["approved", "booked", "pending", "fixture", "inactive", "unavailable"]);
     expect(calendarEventCategory({ status: "confirmed" })).toBe("approved");
     expect(calendarEventCategory({ kind: "request", status: "submitted" })).toBe("pending");
     expect(calendarEventCategory({ bookingType: "friendly", status: "confirmed" })).toBe("fixture");

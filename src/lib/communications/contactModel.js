@@ -163,13 +163,19 @@ export function alignTeamContactsForEditing(teamCfg = [], contacts = []) {
   });
 }
 
-export function contactForTeam(teamCfg = [], contacts = [], teamName = "", index = 0) {
+export function contactForTeam(teamCfg = [], contacts = [], teamName = "", index = 0, teamKey = "") {
   const needle = normaliseTeamKey(teamName);
   const rows = alignTeamContacts(teamCfg, contacts);
-  return rows.find((contact) => {
+  const keyed = teamKey && rows.find((contact) => contact.teamKey === String(teamKey));
+  const exact = needle && rows.filter((contact) => normaliseTeamKey(contact.teamName) === needle);
+  if (keyed) return keyed;
+  if (exact?.length === 1) return exact[0];
+  const matches = needle ? rows.filter((contact) => {
     const contactName = normaliseTeamKey(contact.teamName);
-    return contactName === needle || contactName.includes(needle) || needle.includes(contactName);
-  }) || normaliseTeamContact({}, { name: teamName }, index);
+    return contactName && (contactName.includes(needle) || needle.includes(contactName));
+  }) : [];
+  // A shortened name must never route a message to an arbitrarily chosen coach.
+  return matches.length === 1 ? matches[0] : normaliseTeamContact({}, { name: teamName }, index);
 }
 
 export function maskContactDestination(value = "") {

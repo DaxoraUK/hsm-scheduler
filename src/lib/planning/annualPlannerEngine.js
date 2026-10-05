@@ -1,3 +1,5 @@
+import { getFixtureFlowIdentity, isAwayFixture } from "../domain/fixtureVenueFlow.js";
+
 const ACTIVE_BOOKING_STATUSES = new Set(["requested", "provisional", "confirmed", "completed"]);
 
 export const FULL_PITCH_AREA_ID = "__full_pitch__";
@@ -171,6 +173,8 @@ export function normaliseAnnualBooking(row = {}) {
     notes: clean(row.notes),
     sourceType: clean(row.source_type || row.sourceType || "annual_planner"),
     sourceId: clean(row.source_id || row.sourceId),
+    fixtureVenueRole: clean(row.fixture_venue_role || row.fixtureVenueRole),
+    fixtureTimeKnown: row.fixture_time_known ?? row.fixtureTimeKnown ?? true,
     createdAt: row.created_at || row.createdAt || null,
     updatedAt: row.updated_at || row.updatedAt || null,
   });
@@ -471,6 +475,7 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
 }
 
 export function getMatchdayFixtureSourceId(fixture = {}, { date = "" } = {}) {
+  if (fixture.sourceFixtureUrl || fixture.sourceFixtureKey) return getFixtureFlowIdentity(fixture);
   const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
   const startMinutes = finite(fixture.koMins, timeToMinutes(fixture.koTime || fixture.ko || fixture.kickOff || "09:00"));
   return clean(fixture.id || fixture.fixtureId || fixture.sourceFixtureKey || fixture.fullTimeId
@@ -480,8 +485,15 @@ export function getMatchdayFixtureSourceId(fixture = {}, { date = "" } = {}) {
 export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchCfg = [], sourceType = "matchday" } = {}) {
   const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
   if (!dateKey) return null;
-  const startMinutes = finite(fixture.koMins, timeToMinutes(fixture.koTime || fixture.ko || "09:00"));
-  const duration = Math.max(15, finite(fixture.endMins, startMinutes + finite(fixture.cfg?.gameMins, 90) + finite(fixture.cfg?.bufferMins, 30)) - startMinutes);
+  const away = isAwayFixture(fixture);
+  const rawStatus = clean(fixture.status).toLowerCase();
+  const inactive = ["postponed", "cancelled", "canceled", "abandoned"].includes(rawStatus);
+  const time = clean(fixture.koTime || fixture.ko || fixture.kickOff);
+  const numericTime = fixture.koMins != null && fixture.koMins !== "" && Number.isFinite(Number(fixture.koMins));
+  const timeKnown = numericTime || /^\d{1,2}:\d{2}$/.test(time);
+  const startMinutes = numericTime ? Number(fixture.koMins) : timeToMinutes(time, 0);
+  const defaultEnd = startMinutes + finite(fixture.cfg?.gameMins, 90) + finite(fixture.cfg?.bufferMins, 30);
+  const duration = Math.max(15, (fixture.endMins == null ? defaultEnd : finite(fixture.endMins, defaultEnd)) - startMinutes);
   const endMinutes = startMinutes + duration;
   const pitch = pitchCfg.find((row) => clean(row.id) === clean(fixture.pitchId));
   const startAt = localDateTime(dateKey, `${pad(Math.floor(startMinutes / 60))}:${pad(startMinutes % 60)}`);
@@ -493,13 +505,17 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
     id: `matchday_${stableSourceId}`,
     title: `${fixture.homeTeam || fixture.team || "Home"} vs ${fixture.awayTeam || "TBC"}`,
     bookingType: "match",
-    status: "confirmed",
-    teamKey: fixture.cfg?.id || fixture.teamId || fixture.homeTeam || fixture.team || "",
-    teamName: fixture.homeTeam || fixture.team || "",
-    opponentName: fixture.awayTeam || "",
-    pitchId: fixture.pitchId || "",
-    pitchName: fixture.pitchLabel || pitch?.label || fixture.pitchId || "",
-    venueId: fixture.venueId || pitch?.siteId || "",
+    status: inactive ? (rawStatus === "postponed" ? "postponed" : "cancelled")
+      : away || (fixture.pitchId && timeKnown) ? "confirmed" : "provisional",
+    teamKey: fixture.cfg?.id || fixture.teamId || (away ? fixture.awayTeam : fixture.homeTeam) || fixture.team || "",
+    teamName: (away ? fixture.awayTeam : fixture.homeTeam) || fixture.team || "",
+    opponentName: (away ? fixture.homeTeam : fixture.awayTeam) || "",
+    pitchId: away || inactive ? "" : fixture.pitchId || "",
+    pitchName: away || inactive ? "" : fixture.pitchLabel || pitch?.label || fixture.pitchId || "",
+    venueId: away || inactive ? "" : pitch?.siteId || fixture.venueId || "",
+    venueName: away ? fixture.venueName || fixture.venue || "" : pitch?.siteName || (fixture.venueReversal ? "" : fixture.venueName || fixture.venue) || "",
+    fixtureVenueRole: away ? "away" : "home",
+    fixtureTimeKnown: timeKnown,
     startAt: startAt.toISOString(),
     endAt: endAt.toISOString(),
     sourceType,
@@ -509,7 +525,7 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
 
 export function buildAnnualPlannerSnapshot({ bookings = [], blackouts = [], year = new Date().getFullYear() } = {}) {
   const rows = bookings.map(normaliseAnnualBooking).filter((booking) => Number(booking.startDate.slice(0, 4)) === Number(year));
-  const active = rows.filter(activeBooking);
+  const active = rows.filter((booking) => activeBooking(booking) && booking.fixtureVenueRole !== "away");
   const requested = rows.filter((booking) => booking.status === "requested");
   const confirmed = rows.filter((booking) => booking.status === "confirmed");
   const friendlies = active.filter((booking) => booking.bookingType === "friendly");

@@ -33,7 +33,7 @@ import {
   postponeFixture,
   restoreFixture,
 } from "../../../lib/domain/fixtureLifecycle.js";
-import { reverseAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
+import { reverseAwayFixture, restoreAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
 
 const PARKING_ADVISORY_TYPES = new Set([
   "parking_capacity",
@@ -227,6 +227,20 @@ export default function FixtureDrawer({
     });
   };
 
+  const restoreImportedAway = () => {
+    if (!canEdit) return;
+    try {
+      const restored = restoreAwayFixture(displayFixture);
+      const fields = ["homeTeam", "awayTeam", "status", "venueRole", "isAwayFixture", "requiresScheduling",
+        "pitchId", "pitchLabel", "koTime", "koMins", "endMins", "venue", "venueName", "venueReversal"];
+      applyFixturePatch(Object.fromEntries(fields.map((field) => [field, restored[field]])));
+      setBlockedMove(null);
+      toast.success("Imported Away fixture restored", { description: "The saved Home reversal and club pitch allocation have been removed. Other fixture edits are retained." });
+    } catch (error) {
+      toast.error("Reversal could not be restored", { description: error.message });
+    }
+  };
+
   const assignOfficial = (rawValue) => {
     const value = String(rawValue || "").trimStart();
     const selectedRef = refs.find(
@@ -406,6 +420,13 @@ Good luck!`;
         </div>
 
         <div className="space-y-6 p-6">
+          {displayFixture.venueReversal && !displayFixture.isAwayFixture ? (
+            <div className="rounded-3xl border border-violet-200 bg-violet-50 p-5 text-violet-950">
+              <div className="text-sm font-black">Manually reversed from Away to Home</div>
+              <p className="mt-1 text-sm font-semibold">Restore the original teams and Away venue. This removes the club pitch allocation, not the fixture.</p>
+              {canEdit ? <button type="button" onClick={restoreImportedAway} className="mt-4 rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-sm font-black">Restore imported Away fixture</button> : null}
+            </div>
+          ) : null}
           {displayFixture.isAwayFixture ? (
             <div className="rounded-3xl border border-sky-200 bg-sky-50 p-5 text-sky-950">
               <div className="text-sm font-black">Away fixture — no club pitch allocation required</div>
