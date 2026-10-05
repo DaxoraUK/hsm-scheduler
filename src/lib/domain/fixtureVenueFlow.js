@@ -20,10 +20,20 @@ export function applyFixtureOverrides(fixtures = [], overrides = {}) {
       .filter((override) => override?.fixtureIdentity)
       .map((override) => [String(override.fixtureIdentity), override]),
   );
+  const identityCounts = new Map();
+  fixtures.forEach((fixture) => {
+    const identity = getFixtureFlowIdentity(fixture);
+    identityCounts.set(identity, (identityCounts.get(identity) || 0) + 1);
+  });
 
   return fixtures.map((fixture, index) => {
-    const stable = stableOverrides.get(getFixtureFlowIdentity(fixture));
-    const legacy = stable ? {} : overrides?.[index] || {};
+    const identity = getFixtureFlowIdentity(fixture);
+    // A stable override is only safe when the imported set has one row for
+    // that identity. Duplicate source rows must remain independently indexed
+    // until reconciliation removes the duplicate; otherwise one action fans
+    // out to every matching fixture.
+    const stable = identityCounts.get(identity) === 1 ? stableOverrides.get(identity) : null;
+    const legacy = overrides?.[index] || {};
     const { fixtureIdentity: _fixtureIdentity, ...patch } = { ...legacy, ...(stable || {}) };
     return { ...fixture, ...patch, ...(Object.keys(patch).length ? { manualOverrideApplied: true } : {}) };
   });

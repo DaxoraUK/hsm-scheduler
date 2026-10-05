@@ -356,4 +356,17 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
       awayTeam: "Rossendale Football Club LAL",
     }]);
   });
+
+  test("recognises Full-Time P-P rows as postponed rather than live", () => {
+    const html = `<table><tbody>
+      <tr><td colspan="6">Sat 05 Sept 2026</td></tr>
+      <tr class="fixture-row"><td>L</td><td>Horwich St. Mary's U15 Knights</td><td>v</td><td>AFC Egerton U15</td><td>14:30</td><td>P-P</td></tr>
+    </tbody></table>`;
+
+    expect(parseFullTimeHtml(html, "2026-09-05", { teamAliases: ["Horwich St. Mary's"] })).toMatchObject([{
+      status: "postponed",
+      homeTeam: "Horwich St. Mary's U15 Knights",
+      awayTeam: "AFC Egerton U15",
+    }]);
+  });
 });

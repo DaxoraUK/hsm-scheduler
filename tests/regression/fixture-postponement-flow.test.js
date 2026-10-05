@@ -3,6 +3,7 @@ import {
   postponeFixture,
   restoreFixture,
 } from "../../src/lib/domain/fixtureLifecycle.js";
+import { applyFixtureOverrides } from "../../src/lib/domain/fixtureVenueFlow.js";
 
 const fixture = {
   id: "fixture-1",
@@ -44,5 +45,19 @@ describe("fixture postponement lifecycle", () => {
 
     expect(restored).toMatchObject({ status: "active", pitchId: "P1", koMins: 600 });
     expect(restored.postponement).toMatchObject({ restoredAt: "2026-09-05T07:00:00.000Z", restoredBy: "Club owner" });
+  });
+
+  it("does not fan one stable override out to duplicate records", () => {
+    const rows = [
+      { ...fixture, id: "fixture-a", sourceFixtureKey: "source-duplicate", status: "active" },
+      { ...fixture, id: "fixture-b", sourceFixtureKey: "source-duplicate", status: "active", koTime: "10:15", koMins: 615 },
+    ];
+
+    const result = applyFixtureOverrides(rows, {
+      0: { fixtureIdentity: "source-duplicate", status: "postponed" },
+    });
+
+    expect(result[0].status).toBe("postponed");
+    expect(result[1].status).toBe("active");
   });
 });

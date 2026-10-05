@@ -962,12 +962,18 @@ export default function MatchdayPage({
       : null;
 
   function openFixture(fixture, index) {
-    if (typeof index === "number") {
-      setSelectedFixtureIndex(index);
-      return;
-    }
-
-    const fixtureIndex = final.findIndex((item) => item === fixture);
+    const identity = getFixtureFlowIdentity(fixture || {});
+    const identityIndex = identity
+      ? final.findIndex((item) => getFixtureFlowIdentity(item) === identity)
+      : -1;
+    const referenceIndex = final.findIndex((item) => item === fixture);
+    const fixtureIndex = identityIndex >= 0
+      ? identityIndex
+      : referenceIndex >= 0
+        ? referenceIndex
+        : typeof index === "number"
+          ? index
+          : -1;
 
     if (fixtureIndex >= 0) {
       setSelectedFixtureIndex(fixtureIndex);

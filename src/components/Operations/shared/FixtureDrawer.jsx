@@ -169,15 +169,41 @@ export default function FixtureDrawer({
     }
     if (status === "active" && displayFixture.status === "postponed") {
       const restored = restoreFixture(displayFixture, { actor: operatorIdentity });
-      applyFixturePatch({
+      const restoredPatch = {
         status: restored.status,
         date: restored.date,
         pitchId: restored.pitchId,
         pitchLabel: restored.pitchLabel,
         koMins: restored.koMins,
         koTime: restored.koTime,
+        endMins: restored.endMins,
         postponement: restored.postponement,
+      };
+      const impact = getOperationsImpact({
+        fixtures,
+        fixtureIndex,
+        pitchCfg,
+        closedPitches,
+        club,
+        start: club?.startTime,
+        end: club?.endTime,
+        patch: restoredPatch,
       });
+      if (!impact.ok && !isParkingAdvisory(impact)) {
+        // The original slot may have been reused while this fixture was
+        // postponed. Restore the fixture itself, but leave allocation to the
+        // canonical scheduler instead of reintroducing a pitch clash.
+        restoredPatch.pitchId = "";
+        restoredPatch.pitchLabel = "";
+        restoredPatch.koMins = null;
+        restoredPatch.koTime = "";
+        restoredPatch.endMins = null;
+        restoredPatch.requiresScheduling = true;
+        toast.info("Fixture restored without its old slot", {
+          description: "The original pitch or kick-off is no longer available. Rebuild the schedule to allocate a safe slot.",
+        });
+      }
+      applyFixturePatch(restoredPatch);
       return;
     }
     updateFixture("status", status);

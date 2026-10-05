@@ -56,7 +56,7 @@ export function parseFullTimeDate(value) {
   return Number.isNaN(parsed.getTime()) ? "" : iso;
 }
 
-function rowFixture(cells = [], groupedDate = "", columns = {}) {
+function rowFixture(cells = [], groupedDate = "", columns = {}, rowText = "") {
   const values = cells.map(clean);
   const versusIndex = values.findIndex((value) => /^(?:v|vs|v\.|-)$/i.test(value));
   const dateCell = values.find((value) => parseFullTimeDate(value)) || groupedDate;
@@ -72,7 +72,7 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
     || values.find((value) => /^\d{1,2}:\d{2}$/.test(value))
     || "";
   const type = values[0] === dateCell ? "" : values[0];
-  const statusText = values.join(" ").toLowerCase();
+  const statusText = `${values.join(" ")} ${rowText}`.toLowerCase();
   const venue = columns.venueIndex >= 0 ? values[columns.venueIndex] : values[versusIndex + 2] || "";
   const referee = columns.refereeIndex >= 0 ? values[columns.refereeIndex] : "";
 
@@ -85,7 +85,7 @@ function rowFixture(cells = [], groupedDate = "", columns = {}) {
     referee,
     type,
     isCup: /\bcup\b/i.test(type),
-    status: /postponed|cancelled|canceled|abandoned/.test(statusText) ? "postponed" : "active",
+    status: /postponed|cancelled|canceled|abandoned|\bp[\s.-]*p\b/.test(statusText) ? "postponed" : "active",
   };
 }
 
@@ -128,7 +128,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
         groupedDate = rowText;
         return;
       }
-      const parsed = rowFixture(cells, groupedDate, columns);
+      const parsed = rowFixture(cells, groupedDate, columns, `${rowText} ${row.getAttribute("data-status") || ""} ${row.getAttribute("aria-label") || ""} ${row.className || ""}`);
       if (!parsed || (target && parsed.date !== target) || !isClubFixture(parsed, clubAliases)) return;
 
       const isHomeFixture = isHSMHome(parsed.homeTeam, clubAliases);
