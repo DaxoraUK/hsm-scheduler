@@ -3,7 +3,7 @@ import {
   postponeFixture,
   restoreFixture,
 } from "../../src/lib/domain/fixtureLifecycle.js";
-import { applyFixtureOverrides } from "../../src/lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, mergeFixtureScheduleResults, shouldApplyFixtureImport } from "../../src/lib/domain/fixtureVenueFlow.js";
 
 const fixture = {
   id: "fixture-1",
@@ -59,5 +59,29 @@ describe("fixture postponement lifecycle", () => {
 
     expect(result[0].status).toBe("postponed");
     expect(result[1].status).toBe("active");
+  });
+
+  it("keeps postponed fixtures in the rebuilt schedule without booking them", () => {
+    const active = { ...fixture, id: "active", sourceFixtureKey: "active" };
+    const postponed = { ...fixture, id: "postponed", sourceFixtureKey: "postponed", status: "postponed" };
+
+    const result = mergeFixtureScheduleResults(
+      [active, postponed],
+      [{ ...active, pitchId: "P1" }],
+      [],
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual(expect.objectContaining({ id: "postponed", status: "postponed" }));
+    expect(result.filter((row) => row.id === "postponed")).toHaveLength(1);
+  });
+
+  it("does not replace an existing schedule with a partial or empty import", () => {
+    const existing = [{ ...fixture, sourceFixtureKey: "existing" }];
+
+    expect(shouldApplyFixtureImport({ fixtures: [], partial: true, existing })).toBe(false);
+    expect(shouldApplyFixtureImport({ fixtures: [], partial: false, existing })).toBe(false);
+    expect(shouldApplyFixtureImport({ fixtures: [{ ...fixture }], partial: false, existing })).toBe(true);
+    expect(shouldApplyFixtureImport({ fixtures: [], partial: false, existing: [] })).toBe(true);
   });
 });

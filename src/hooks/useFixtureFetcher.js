@@ -86,6 +86,7 @@ export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], t
     const key = `${matchup}|${fields.map((field) => `${field}:${clean(current[field])}>${clean(fixture[field])}`).join("|")}`;
     if (!ignored.has(key)) changes.push({ key, fields, before: current, after: fixture });
     if (fields.includes("date") || ignored.has(key)) snapshot[currentIndex] = mergeFixtureRecords(current, fixture);
+    else if (fields.includes("status")) snapshot[currentIndex] = { ...current, status: fixture.status };
   });
   return {
     snapshot: deduplicateBySourceIdentity(snapshot).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.kickOff).localeCompare(String(b.kickOff))),

@@ -60,6 +60,16 @@ export function deduplicateFixtureSet(fixtures = []) {
   return output;
 }
 
+export function mergeFixtureScheduleResults(all = [], scheduled = [], away = []) {
+  const retained = all.filter((fixture) => fixture?.status === "postponed" || fixture?.status === "cancelled");
+  return deduplicateFixtureSet([...scheduled, ...away, ...retained]);
+}
+
+export function shouldApplyFixtureImport({ fixtures = [], partial = false, existing = [] } = {}) {
+  if (partial) return false;
+  return fixtures.length > 0 || existing.length === 0;
+}
+
 export function prepareAwayFixture(fixture = {}) {
   const koTime = fixture.koTime || fixture.kickOff || "";
   return {

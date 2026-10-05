@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, partitionFixturesForScheduling } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, mergeFixtureScheduleResults, partitionFixturesForScheduling, shouldApplyFixtureImport } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -1763,7 +1763,7 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSatScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setSatScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
       setSatUnresolved(deduplicateFixtureSet(u));
       setSatHasRun(true);
       return true;
@@ -1813,7 +1813,14 @@ function App() {
       }
       setSatFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
-      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      if (!shouldApplyFixtureImport({ fixtures, partial, existing: [...satScheduled, ...satManual] })) {
+        toast.warning(partial ? "Full-Time import incomplete" : "No fixtures returned", {
+          description: partial
+            ? "The existing Saturday schedule was kept because one or more sources failed. Retry when all sources are available."
+            : "The existing Saturday schedule was kept because the source returned no fixtures for this date.",
+        });
+        return false;
+      }
       setSatHasRun(false);
       setSatScheduled([]);
       setSatUnresolved([]);
@@ -1844,7 +1851,7 @@ function App() {
         pitchCfg,
         club.maxConcurrent || 3,
       );
-      setSunScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setSunScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
       setSunUnresolved(deduplicateFixtureSet(u));
       setSunHasRun(true);
       return true;
@@ -1886,7 +1893,14 @@ function App() {
         return false;
       }
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
-      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful Sunday fixtures were imported; review the configured sources." });
+      if (!shouldApplyFixtureImport({ fixtures, partial, existing: [...sunScheduled, ...sunManual] })) {
+        toast.warning(partial ? "Full-Time import incomplete" : "No fixtures returned", {
+          description: partial
+            ? "The existing Sunday schedule was kept because one or more sources failed. Retry when all sources are available."
+            : "The existing Sunday schedule was kept because the source returned no fixtures for this date.",
+        });
+        return false;
+      }
       runSun(fixtures);
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
@@ -1914,7 +1928,7 @@ function App() {
         club.maxConcurrent || 3,
         { fixedAdultKickOffMins: null },
       );
-      setMidweekScheduled(deduplicateFixtureSet([...s, ...fixtureFlow.away]));
+      setMidweekScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
       setMidweekUnresolved(deduplicateFixtureSet(u));
       setMidweekHasRun(true);
       return true;
@@ -1968,7 +1982,14 @@ function App() {
       }
       setMidweekFetchStatus(statuses);
       await persistFullTimeImportEvidence(statuses, snapshots, changes);
-      if (partial) toast.warning("Some Full-Time sources failed", { description: "Successful sources were imported. Review the source status before publishing." });
+      if (!shouldApplyFixtureImport({ fixtures, partial, existing: [...midweekScheduled, ...midweekManual] })) {
+        toast.warning(partial ? "Full-Time import incomplete" : "No fixtures returned", {
+          description: partial
+            ? "The existing midweek schedule was kept because one or more sources failed. Retry when all sources are available."
+            : "The existing midweek schedule was kept because the source returned no fixtures for this date.",
+        });
+        return false;
+      }
       setMidweekHasRun(false);
       setMidweekScheduled([]);
       setMidweekUnresolved([]);
