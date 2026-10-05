@@ -47,7 +47,7 @@ export function useFixtureDayScheduling({
 
   const final = useMemo(
     () =>
-      decorateFixturesForDay(applyFixtureOverrides(scheduled, overrides), key),
+      decorateFixturesForDay(applyFixtureOverrides(scheduled, overrides, { preserveValidatedAllocation: true }), key),
     [scheduled, overrides, key]
   );
 

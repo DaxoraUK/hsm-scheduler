@@ -8,6 +8,35 @@ import {
 } from "../../src/lib/fullTimeParser.js";
 
 describe("FA Full-Time fixture parsing", () => {
+  test("attaches the live feed's separate postponed row only to its preceding fixture", () => {
+    const row = (id, team, opponent, type) => `<tr><td>${type}</td><td><a href="https://fulltime.thefa.com/displayFixture.html?id=${id}">Horwich St. Mary's ${team}</a></td><td>v</td><td>${opponent}</td><td>Club Ground</td></tr>`;
+    const html = `<table>
+      <tr><td colspan="7">Sat 10 Oct 2026 09:00</td></tr>
+      ${row("30598191", "U13 Locomotives", "Cherrybrook U13 fc cherrybrook", "U13A")}
+      <tr><td colspan="7">Postponed</td></tr>
+      ${row("30951160", "U13 Locomotives", "Winton Wanderers U13 Rangers", "Cup:")}
+      ${row("30721968", "U13 Vulcans", "Winton Wanderers U13 Spiders", "U13E")}
+      <tr><td colspan="7">Postponed</td></tr>
+      ${row("30951176", "U13 Vulcans", "Woodbank Junior U13 Warriors", "Cup:")}
+    </table>`;
+    const fixtures = parseFullTimeHtml(html, "2026-10-10", { sourceId: "full-time-feed-167398131" });
+    expect(fixtures).toHaveLength(4);
+    expect(fixtures.map(({ sourceFixtureKey, status }) => ({ sourceFixtureKey, status }))).toEqual([
+      { sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30598191", status: "postponed" },
+      { sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30951160", status: "active" },
+      { sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30721968", status: "postponed" },
+      { sourceFixtureKey: "url:https://fulltime.thefa.com/displayfixture.html?id=30951176", status: "active" },
+    ]);
+  });
+
+  test("does not attach another club's standalone status to the last matching club fixture", () => {
+    const html = `<table><tr><td colspan="7">Sat 10 Oct 2026 09:00</td></tr>
+      <tr><td>U13A</td><td>Horwich St Mary's U13 Locomotives</td><td>v</td><td>Visitors</td></tr>
+      <tr><td>U13A</td><td>Another Club</td><td>v</td><td>Other Visitors</td></tr>
+      <tr><td colspan="7">Postponed</td></tr></table>`;
+    expect(parseFullTimeHtml(html, "2026-10-10")[0].status).toBe("active");
+  });
+
   test("retains venue and an assigned referee when the official feed exposes those columns", () => {
     const html = `<table><tr><th>Date</th><th>Home</th><th></th><th>Away</th><th>Venue</th><th>Referee</th></tr><tr><td>22/08/2026 14:30</td><td>Horwich St. Mary's</td><td>v</td><td>Rossendale</td><td>Scholes Bank</td><td>Alex Official</td></tr></table>`;
     expect(parseFullTimeHtml(html, "2026-08-22", { teamAliases: ["Horwich"] })[0]).toMatchObject({ venue: "Scholes Bank", referee: "Alex Official", refStatus: "assigned" });

@@ -521,7 +521,7 @@ export default function MatchdayPage({
   const editableOverride = useCallback(
     (index, field, value) => {
       if (isLocked || typeof onOverride !== "function") return;
-      onOverride(index, field, value, getFixtureFlowIdentity(final[index] || {}));
+      onOverride(index, field, value, final[index] ? getFixtureFlowIdentity(final[index]) : "");
     },
     [final, isLocked, onOverride],
   );
@@ -648,14 +648,14 @@ export default function MatchdayPage({
     (move) => {
       if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
       Object.entries(move.patch).forEach(([field, value]) =>
-        onOverride(move.fixtureIndex, field, value),
+        editableOverride(move.fixtureIndex, field, value),
       );
       toast.success("Validated fixture move applied", {
         description:
           move.summary || move.fixtureTitle || "The schedule has been updated.",
       });
     },
-    [isLocked, onOverride],
+    [isLocked, onOverride, editableOverride],
   );
 
   const applyAllValidatedMoves = useCallback(() => {
@@ -664,7 +664,7 @@ export default function MatchdayPage({
 
     moves.forEach((move) => {
       Object.entries(move.patch || {}).forEach(([field, value]) =>
-        onOverride(move.fixtureIndex, field, value),
+        editableOverride(move.fixtureIndex, field, value),
       );
     });
 
@@ -672,7 +672,7 @@ export default function MatchdayPage({
     toast.success("Schedule improvements applied", {
       description: `${moves.length} validated move${moves.length === 1 ? "" : "s"} applied.`,
     });
-  }, [dayOptimisation.moves, isLocked, onOverride]);
+  }, [dayOptimisation.moves, isLocked, onOverride, editableOverride]);
 
   const applyAllOptimisationMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
@@ -711,10 +711,10 @@ export default function MatchdayPage({
       const fixtureIndex = getTimelineRecordIndex(record);
       if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
       Object.entries(patch).forEach(([field, value]) =>
-        onOverride(fixtureIndex, field, value),
+        editableOverride(fixtureIndex, field, value),
       );
     },
-    [getTimelineRecordIndex, onOverride],
+    [getTimelineRecordIndex, onOverride, editableOverride],
   );
 
   const undoTimelineMove = useCallback(() => {
@@ -764,7 +764,7 @@ export default function MatchdayPage({
       if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
 
       Object.entries(candidate.patch).forEach(([field, value]) =>
-        onOverride(candidate.fixtureIndex, field, value),
+        editableOverride(candidate.fixtureIndex, field, value),
       );
       const record = buildPlannerChangeRecord(candidate);
       if (record) setTimelineHistory((current) => [...current, record]);
@@ -776,7 +776,7 @@ export default function MatchdayPage({
         description: getTimelineCandidateSummary(candidate),
       });
     },
-    [isLocked, onOverride],
+    [isLocked, onOverride, editableOverride],
   );
 
   const requestTimelineMove = useCallback(

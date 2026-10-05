@@ -74,7 +74,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, mergeFixtureScheduleResults, partitionFixturesForScheduling, shouldApplyFixtureImport } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, mergeFixtureScheduleResults, partitionFixturesForScheduling, shouldApplyFixtureImport, updateFixtureOverride } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -2005,11 +2005,11 @@ function App() {
   };
 
   const satOv = (i, k, v, fixtureIdentity = "") =>
-    setSatOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+    setSatOverrides((p) => updateFixtureOverride(p, i, k, v, fixtureIdentity));
   const sunOv = (i, k, v, fixtureIdentity = "") =>
-    setSunOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+    setSunOverrides((p) => updateFixtureOverride(p, i, k, v, fixtureIdentity));
   const midweekOv = (i, k, v, fixtureIdentity = "") =>
-    setMidweekOverrides((p) => ({ ...p, [i]: { ...(p[i] || {}), [k]: v, ...(fixtureIdentity ? { fixtureIdentity } : {}) } }));
+    setMidweekOverrides((p) => updateFixtureOverride(p, i, k, v, fixtureIdentity));
   const {
     satFinal,
     satActive,

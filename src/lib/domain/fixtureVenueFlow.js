@@ -14,7 +14,9 @@ export function getFixtureFlowIdentity(fixture = {}) {
   ].join("|").toLowerCase();
 }
 
-export function applyFixtureOverrides(fixtures = [], overrides = {}) {
+const ALLOCATION_FIELDS = ["pitchId", "pitchLabel", "koMins", "koTime", "endMins"];
+
+export function applyFixtureOverrides(fixtures = [], overrides = {}, { preserveValidatedAllocation = false } = {}) {
   const stableOverrides = new Map(
     Object.values(overrides || {})
       .filter((override) => override?.fixtureIdentity)
@@ -33,9 +35,27 @@ export function applyFixtureOverrides(fixtures = [], overrides = {}) {
     // until reconciliation removes the duplicate; otherwise one action fans
     // out to every matching fixture.
     const stable = identityCounts.get(identity) === 1 ? stableOverrides.get(identity) : null;
-    const legacy = overrides?.[index] || {};
+    const indexed = overrides?.[index];
+    // Once an override names a fixture, its old array position is not a
+    // second target. Scheduling sorts rows and moves inactive rows to the end.
+    const legacy = indexed && (!indexed.fixtureIdentity || indexed.fixtureIdentity === identity)
+      ? indexed : {};
     const { fixtureIdentity: _fixtureIdentity, ...patch } = { ...legacy, ...(stable || {}) };
-    return { ...fixture, ...patch, ...(Object.keys(patch).length ? { manualOverrideApplied: true } : {}) };
+    const allocationOverrideInput = Object.fromEntries(
+      ALLOCATION_FIELDS.filter((field) => Object.hasOwn(patch, field)).map((field) => [field, patch[field]]),
+    );
+    // The scheduler has already accepted or replaced this exact allocation
+    // request. Do not undo its result when deriving the displayed schedule.
+    // A newer edit differs from the consumed request and still applies now.
+    if (preserveValidatedAllocation && Object.hasOwn(fixture, "manualAllocationApplied")
+      && JSON.stringify(fixture.allocationOverrideInput) === JSON.stringify(allocationOverrideInput)) {
+      ALLOCATION_FIELDS.forEach((field) => delete patch[field]);
+    }
+    return {
+      ...fixture, ...patch,
+      ...(Object.keys(patch).length ? { manualOverrideApplied: true } : {}),
+      ...(Object.keys(allocationOverrideInput).length ? { allocationOverrideInput } : {}),
+    };
   });
 }
 
@@ -58,6 +78,27 @@ export function deduplicateFixtureSet(fixtures = []) {
     output[index] = merged;
   });
   return output;
+}
+
+export function updateFixtureOverride(overrides = {}, index, field, value, fixtureIdentity = "") {
+  if (!fixtureIdentity) {
+    return { ...overrides, [index]: { ...(overrides[index] || {}), [field]: value } };
+  }
+  const next = { ...overrides };
+  let existing = {};
+  Object.entries(overrides).forEach(([key, override]) => {
+    if (override?.fixtureIdentity === fixtureIdentity) {
+      existing = { ...existing, ...override };
+      delete next[key];
+    }
+  });
+  // Upgrade genuinely positional legacy edits only when they have no owner.
+  if (overrides[index] && !overrides[index].fixtureIdentity) {
+    existing = { ...overrides[index], ...existing };
+    delete next[index];
+  }
+  next[`fixture:${fixtureIdentity}`] = { ...existing, [field]: value, fixtureIdentity };
+  return next;
 }
 
 export function mergeFixtureScheduleResults(all = [], scheduled = [], away = []) {

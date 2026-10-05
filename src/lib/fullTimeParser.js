@@ -116,6 +116,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
 
   doc.querySelectorAll("table").forEach((table, tableIndex) => {
     let groupedDate = "";
+    let previousFixture = null;
     const headers = [...table.querySelectorAll("tr th")].map((cell) => clean(cell.textContent).toLowerCase());
     const columns = {
       venueIndex: headers.findIndex((header) => /venue|ground/.test(header)),
@@ -126,9 +127,18 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
       const rowText = clean(row.textContent);
       if (cells.length <= 1 && parseFullTimeDate(rowText)) {
         groupedDate = rowText;
+        previousFixture = null;
+        return;
+      }
+      // The official code-snippet feed renders lifecycle status as a separate
+      // colspan row AFTER the fixture, not necessarily inside its cells.
+      if (cells.length === 1 && /^(?:postponed|cancelled|canceled|abandoned|p[\s.-]*p)\b/i.test(rowText)) {
+        if (previousFixture) previousFixture.status = "postponed";
+        previousFixture = null;
         return;
       }
       const parsed = rowFixture(cells, groupedDate, columns, `${rowText} ${row.getAttribute("data-status") || ""} ${row.getAttribute("aria-label") || ""} ${row.className || ""}`);
+      previousFixture = null;
       if (!parsed || (target && parsed.date !== target) || !isClubFixture(parsed, clubAliases)) return;
 
       const isHomeFixture = isHSMHome(parsed.homeTeam, clubAliases);
@@ -151,6 +161,7 @@ export function parseFullTimeHtml(html, targetDate, options = {}) {
       };
       fixture.sourceFixtureKey = getFullTimeFixtureKey(fixture);
       out.push(fixture);
+      previousFixture = fixture;
     });
   });
 

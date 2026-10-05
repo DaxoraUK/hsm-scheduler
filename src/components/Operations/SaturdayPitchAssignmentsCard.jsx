@@ -20,8 +20,6 @@ export default function SaturdayPitchAssignmentsCard({
   club,
   satHasRun,
   satActive = [],
-  satFinal = [],
-  satOverrides = {},
   pitchCfg = [],
   closedPitches = [],
   useAstro = false,
@@ -37,23 +35,21 @@ export default function SaturdayPitchAssignmentsCard({
     const map = new Map();
     pitchCfg.forEach((pitch) => map.set(pitch.id, []));
     satActive.forEach((game) => {
-      const fixtureIndex = satFinal.indexOf(game);
-      const pitchId = satOverrides[fixtureIndex]?.pitchId || game.pitchId;
+      const pitchId = game.pitchId;
       if (!pitchId) return;
       const current = map.get(pitchId) || [];
       current.push(game);
       map.set(pitchId, current);
     });
     return map;
-  }, [pitchCfg, satActive, satFinal, satOverrides]);
+  }, [pitchCfg, satActive]);
 
   if (!satHasRun) return null;
 
   const usedPitches = pitchCfg.filter((pitch) =>
     satActive.some(
       (game) =>
-        (satOverrides[satFinal.indexOf(game)]?.pitchId || game.pitchId) ===
-        pitch.id
+        game.pitchId === pitch.id
     )
   );
 
