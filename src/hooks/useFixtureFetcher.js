@@ -35,16 +35,16 @@ const REVIEW_FIELDS = Object.freeze(["date", "kickOff", "venue", "referee", "sta
 
 function sourceFeedCoversDate(fixtures = [], date = "", today = "") {
   if (!date) return false;
-  const dates = fixtures.map((fixture) => fixture?.date).filter((fixtureDate) => fixtureDate >= today);
+  const dates = fixtures.map((fixture) => fixture?.date).filter((fixtureDate) => fixtureDate >= today || fixtureDate === date);
   return dates.some((fixtureDate) => fixtureDate <= date) && dates.some((fixtureDate) => fixtureDate >= date);
 }
 
 export function reconcileFullTimeFixtureSnapshot(previous = [], incoming = [], today = new Date().toISOString().slice(0, 10), ignoredKeys = [], { requestedDate = "" } = {}) {
-  const incomingFixtures = incoming.filter((fixture) => fixture?.date >= today);
+  const incomingFixtures = incoming.filter((fixture) => fixture?.date >= today || fixture?.date === requestedDate);
   const replaceRequestedDate = sourceFeedCoversDate(incomingFixtures, requestedDate, today);
   const incomingIdentities = new Set(incomingFixtures.map(sourceFixtureIdentity).filter(Boolean));
   const retained = previous.filter((fixture) => {
-    if (fixture?.date < today) return false;
+    if (fixture?.date < today && fixture?.date !== requestedDate) return false;
     if (!replaceRequestedDate || fixture?.date !== requestedDate) return true;
     const identity = sourceFixtureIdentity(fixture);
     return !identity || incomingIdentities.has(identity);

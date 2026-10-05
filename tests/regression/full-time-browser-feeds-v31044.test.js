@@ -311,6 +311,23 @@ describe("Daxora Ground Control v3.10.44 official Full-Time browser feeds", () =
     expect(result.snapshot).toEqual([expect.objectContaining({ status: "postponed", kickOff: "14:30" })]);
   });
 
+  test("refreshes an explicitly requested historical date so provider postponements are not discarded", () => {
+    const previous = [{
+      sourceFixtureUrl: "https://fulltime.thefa.com/displayFixture.html?id=historical-postponed",
+      sourceFixtureKey: "historical-old",
+      date: "2026-09-05",
+      homeTeam: "Horwich St. Mary's U15 Knights",
+      awayTeam: "AFC Egerton U15",
+      kickOff: "14:30",
+      status: "active",
+    }];
+    const incoming = [{ ...previous[0], sourceFixtureKey: "historical-new", status: "postponed" }];
+
+    const result = reconcileFullTimeFixtureSnapshot(previous, incoming, "2026-10-05", [], { requestedDate: "2026-09-05" });
+
+    expect(result.snapshot).toEqual([expect.objectContaining({ date: "2026-09-05", status: "postponed" })]);
+  });
+
   test("upserts duplicate imported rows by source identity without collapsing legitimate repeats", () => {
     const duplicate = { sourceFixtureKey: "source-row-1", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "10:00" };
     const legitimateRepeat = { sourceFixtureKey: "source-row-2", date: "2026-09-05", homeTeam: "U15 Knights", awayTeam: "AFC Egerton U15", kickOff: "12:00" };
