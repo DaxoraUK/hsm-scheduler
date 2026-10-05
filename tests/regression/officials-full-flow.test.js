@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { calculateOfficialsReadiness, getOfficialAssignmentState, getOfficialDisplayName } from "../../src/lib/engines/officialsEngine.js";
+import { calculateOfficialsReadiness, findOfficialConflicts, getOfficialAssignmentState, getOfficialDisplayName } from "../../src/lib/engines/officialsEngine.js";
 import { getRefereeStats } from "../../src/lib/dashboardStats.js";
 import { buildOperationsCentreSnapshot } from "../../src/lib/engines/operationsCentreEngine.js";
 import { calculateOperationsIntelligence } from "../../src/lib/engines/operationsIntelligenceEngine.js";
@@ -17,6 +17,27 @@ const leagueAppointedFixture = {
 };
 
 describe("league-appointed officials flow", () => {
+  test.each([
+    { status: "away" }, { isAwayFixture: true }, { venueRole: "away" }, { requiresScheduling: false },
+    { status: "postponed" }, { status: "cancelled" }, { status: "Cancelled" },
+  ])("does not require local referee confirmation for excluded fixture %j", (excluded) => {
+    const fixtures = [
+      leagueAppointedFixture,
+      { ...leagueAppointedFixture, id: "excluded", refStatus: "TBC", ...excluded },
+    ];
+    expect(getRefereeStats({ fixtures })).toMatchObject({ total: 1, confirmed: 1, outstanding: 0, pct: 100 });
+    expect(calculateOfficialsReadiness({ fixtures, active: fixtures }).metrics).toMatchObject({ confirmed: 1, missing: 0, fixtures: 1 });
+  });
+
+  test("excluded fixtures cannot create official clashes, while active Home games still require confirmation", () => {
+    const home = { ...leagueAppointedFixture, referee: "A Ref" };
+    const away = { ...home, id: "away", isAwayFixture: true };
+    const cancelled = { ...home, id: "cancelled", status: "cancelled" };
+    expect(findOfficialConflicts([home, away, cancelled])).toEqual([]);
+    expect(getRefereeStats({ fixtures: [{ ...home, refStatus: "TBC" }] })).toMatchObject({ total: 1, outstanding: 1 });
+    expect(getRefereeStats({ fixtures: [{ ...away, isAwayFixture: false, venueRole: "home", requiresScheduling: true }] })).toMatchObject({ total: 1, confirmed: 1 });
+  });
+
   test("treats a confirmed league appointment as covered before the official name is supplied", () => {
     expect(getOfficialAssignmentState(leagueAppointedFixture)).toBe("confirmed");
     expect(getOfficialDisplayName(leagueAppointedFixture)).toBe("League-appointed official");

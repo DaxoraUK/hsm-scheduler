@@ -21,8 +21,12 @@ function titleCase(value = "") {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function isPostponed(fixture = {}) {
-  return clean(fixture.status) === "postponed";
+export function requiresLocalOfficial(fixture = {}) {
+  const status = clean(fixture.status || fixture.fixtureStatus || fixture.outcome);
+  return !["away", "postponed", "cancelled", "canceled", "abandoned"].includes(status)
+    && !fixture.isAwayFixture
+    && clean(fixture.venueRole) !== "away"
+    && fixture.requiresScheduling !== false;
 }
 
 function isUnavailableRef(ref = {}) {
@@ -186,7 +190,7 @@ export function fixturesOverlap(fixtureA = {}, fixtureB = {}) {
 export function findOfficialConflicts(fixtures = [], refs = []) {
   const activeFixtures = asArray(fixtures).filter(
     (fixture) =>
-      !isPostponed(fixture) &&
+      requiresLocalOfficial(fixture) &&
       isFixtureOfficialConfirmed(fixture) &&
       shouldEnforceOfficialClashes(fixture, refs)
   );
@@ -267,7 +271,7 @@ function buildOfficialWorkloads(fixtures = [], refs = [], turnaroundMinutes = 15
   const assignments = new Map();
 
   asArray(fixtures).forEach((fixture, index) => {
-    if (isPostponed(fixture)) return;
+    if (!requiresLocalOfficial(fixture)) return;
     const official = normalise(getOfficialName(fixture));
     if (!official || ["tbc", "none", "unassigned", "missing"].includes(official)) return;
 
@@ -469,7 +473,7 @@ function statusFromCounts({ missingCount = 0, conflictCount = 0, declinedCount =
 }
 
 export function calculateOfficialsReadiness({ fixtures = [], active = [], officialConflicts = [], refWarnings = null, refs = [], turnaroundMinutes = 15 } = {}) {
-  const activeFixtures = asArray(active).length ? asArray(active) : asArray(fixtures).filter((fixture) => !isPostponed(fixture));
+  const activeFixtures = (asArray(active).length ? asArray(active) : asArray(fixtures)).filter(requiresLocalOfficial);
   const fixtureCount = activeFixtures.length;
   const fixtureSummaries = activeFixtures.map((fixture, index) => fixtureSummary(fixture, index));
 
@@ -482,7 +486,8 @@ export function calculateOfficialsReadiness({ fixtures = [], active = [], offici
   const inferredConflicts = findOfficialConflicts(activeFixtures, refs);
   const suppliedConflicts = asArray(officialConflicts).filter((conflict) => {
     const sample = conflict?.a || conflict?.fixtures?.[0] || null;
-    return sample ? shouldEnforceOfficialClashes(sample, refs) : true;
+    const affected = asArray(conflict?.fixtures).length ? conflict.fixtures : [conflict?.a, conflict?.b].filter(Boolean);
+    return affected.every(requiresLocalOfficial) && (sample ? shouldEnforceOfficialClashes(sample, refs) : true);
   });
   const conflicts = suppliedConflicts.length ? suppliedConflicts : inferredConflicts;
 

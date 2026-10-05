@@ -59,6 +59,31 @@ function evidenceFor(entry, club = makeClub(), filters = {}) {
 }
 
 describe("analytics and reports v1", () => {
+  test("fixture print rows use individual provider identities, not their shared feed ID", () => {
+    const imported = ["dynamos", "knights", "lisbon"].map((team, index) => makeFixture({
+      id: undefined, homeTeam: team,
+      extra: { sourceId: "BBDFL", sourceFixtureUrl: `https://fulltime.thefa.com/fixture.html?id=${101 + index}`, sourceFixtureKey: `provider-${101 + index}` },
+    }));
+    imported.forEach((fixture) => delete fixture.id);
+    const model = buildReportsModel({
+      reportType: "fixtures", scope: "saturday", club: makeClub(), pitchCfg: clonePitches(),
+      current: { satFinal: [...imported, makeFixture({ id: "reserves" })], satHasRun: true, satDate: "2026-10-10" },
+    });
+    expect(model.activeFixtures.map((row) => row.homeTeam)).toEqual(["dynamos", "HSM 1st Team", "knights", "lisbon"]);
+    expect(new Set(model.activeFixtures.map((row) => row.id)).size).toBe(4);
+  });
+
+  test("report reconciliation distinguishes source games sharing a generated number and merges only the same provider game", () => {
+    const first = makeFixture({ id: "1", extra: { sourceFixtureKey: "feed:game-a" } });
+    const second = makeFixture({ id: "1", extra: { sourceFixtureKey: "feed:game-b" } });
+    const model = buildReportsModel({
+      reportType: "fixtures", scope: "saturday", club: makeClub(),
+      current: { satFinal: [first, second, { ...first, pitchId: "P2", koMins: 600 }], satHasRun: true },
+    });
+    expect(model.activeFixtures).toHaveLength(2);
+    expect(model.activeFixtures.find((row) => row.raw.sourceFixtureKey === "feed:game-a").pitchId).toBe("P2");
+  });
+
   test("a fixture retained in scheduled and postponed collections is counted once as postponed", () => {
     const fixture = makeFixture({ id: "duplicate" });
     const evidence = evidenceFor(savedEntry({ scheduled: [fixture], postponed: [fixture] }));

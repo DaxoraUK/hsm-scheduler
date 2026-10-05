@@ -1,4 +1,5 @@
 import { getParkingSummary } from "./engines/parkingEngine.js";
+import { requiresLocalOfficial } from "./engines/officialsEngine.js";
 
 export function getActiveFixtures({
   fixtures = null,
@@ -25,7 +26,7 @@ export function isRefConfirmed(fixture) {
 }
 
 export function getRefereeStats(options = {}) {
-  const fixtures = getActiveFixtures(options);
+  const fixtures = getActiveFixtures(options).filter(requiresLocalOfficial);
 
   const confirmed = fixtures.filter(isRefConfirmed).length;
   const outstanding = fixtures.length - confirmed;

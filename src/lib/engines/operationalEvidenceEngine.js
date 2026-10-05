@@ -3,6 +3,7 @@ import { cleanName } from "../scheduler.js";
 import { getParkingSnapshot } from "./parkingEngine.js";
 import { getParkingCapacity, getPrimarySite } from "../domain/clubDomain.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
+import { getFixtureFlowIdentity } from "../domain/fixtureVenueFlow.js";
 
 const DAY_ORDER = ["midweek", "saturday", "sunday"];
 const STATUS_RANK = { delivered: 1, away: 1, unresolved: 2, postponed: 3, cancelled: 4 };
@@ -173,7 +174,11 @@ function weatherRisk(fixture = {}) {
 }
 
 function stableFixtureKey(fixture = {}, day = "matchday") {
-  const explicit = fixture.id || fixture.fixtureId || fixture.key || fixture.fullTimeId || fixture.sourceId;
+  // A sourceId identifies the whole feed, not an individual game. Prefer the
+  // same provider identity used by scheduling, including for reversed games.
+  const explicit = fixture.sourceFixtureUrl || fixture.sourceFixtureKey
+    ? getFixtureFlowIdentity(fixture)
+    : fixture.id || fixture.fixtureId || fixture.key || fixture.fullTimeId;
   if (explicit) return `${day}:id:${String(explicit)}`;
   return [
     day,
