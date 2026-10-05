@@ -76,6 +76,8 @@ export async function POST(request) {
       target_club_id: clubId,
       recipients: messages.map((item) => ({
         teamKey: item.teamKey,
+        personId: item.personId,
+        assignmentId: item.assignmentId,
         recipientType: item.recipientType,
         channel: item.channel,
         destination: item.destination,

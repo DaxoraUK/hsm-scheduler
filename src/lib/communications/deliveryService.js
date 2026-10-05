@@ -100,13 +100,15 @@ export function buildDeliveryMessages(rows = [], capabilities = EMPTY_DELIVERY_C
   (Array.isArray(rows) ? rows : []).forEach((row) => {
     (Array.isArray(row.recipients) ? row.recipients : []).forEach((recipient) => {
       const item = {
-        clientKey: `${row.id}:${recipient.type}`,
+        clientKey: `${row.id}:${recipient.assignmentId || recipient.personId || `${recipient.type}:${recipient.channel}:${recipient.destination}`}`,
         messageKey: row.id,
         messageHash: row.messageHash,
         fixtureId: row.raw?.id || row.raw?.fixtureId || null,
         teamKey: row.contact?.teamKey || null,
         teamName: row.teamName,
         recipientType: recipient.type,
+        personId: recipient.personId || null,
+        assignmentId: recipient.assignmentId || null,
         recipientLabel: recipient.name,
         recipientHint: maskContactDestination(recipient.destination),
         channel: recipient.channel,

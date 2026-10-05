@@ -84,6 +84,8 @@ export function sanitiseOutboundMessages(clubId, rows = []) {
       teamName: text(row?.teamName, 180),
       recipientType,
       recipientLabel: text(row?.recipientLabel, 180),
+      personId: text(row?.personId, 80) || null,
+      assignmentId: text(row?.assignmentId, 80) || null,
       recipientHint: destinationHint(channel, destination),
       channel,
       destination,

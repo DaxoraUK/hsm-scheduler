@@ -1,3 +1,5 @@
+import { sameTeamContactReference } from "../communications/contactModel.js";
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -79,6 +81,7 @@ export function buildRequestConversation(entries = [], currentRole = "coach") {
 }
 
 export function buildCoachCommunicationAudience({
+  teamCfg = [],
   people = [],
   assignments = [],
   teamKeys = [],
@@ -107,7 +110,7 @@ export function buildCoachCommunicationAudience({
   const recipients = [];
   (Array.isArray(assignments) ? assignments : []).forEach((assignment) => {
     const teamKey = text(assignment.teamKey || assignment.team_key);
-    if (!explicitTeams.has(teamKey) || text(assignment.status || "active") !== "active") return;
+    if (![...explicitTeams].some((key) => sameTeamContactReference(teamKey, assignment.teamName || assignment.team_name, key, key, teamCfg)) || text(assignment.status || "active") !== "active") return;
     const person = personById.get(text(assignment.personId || assignment.person_id));
     if (!person || text(person.status || "active") !== "active") return;
     const email = text(person.email).toLowerCase();

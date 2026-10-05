@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Copy, Download, Eraser, ExternalLink, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import { DB } from "../../lib/supabase.js";
-import { alignTeamContacts } from "../../lib/communications/contactModel.js";
+import { alignTeamContacts, teamContactDirectoryRows } from "../../lib/communications/contactModel.js";
 import {
   COMMUNICATION_LAWFUL_BASES,
   DPIA_STATUSES,
@@ -150,7 +150,7 @@ export default function CommunicationsPrivacyPanel({
       ) : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Contact records" value={contacts.filter((item) => item.coachPhone || item.coachEmail || item.assistantPhone || item.assistantEmail).length} detail="Adult team contacts" tone="green" />
+        <StatTile label="Contact records" value={contacts.filter((item) => teamContactDirectoryRows(item).length).length} detail="Teams with adult contacts" tone="green" />
         <StatTile label="Privacy notices" value={contacts.filter((item) => item.privacyNoticeProvidedAt).length} detail="Recorded as provided" tone="blue" />
         <StatTile label="Retention" value={`${draft.retentionDays} days`} detail="Audit and provider delivery history" tone="violet" />
         <StatTile label="Setup gaps" value={gaps.length} detail={gaps.length ? gaps.slice(0, 2).join(" · ") : "Required fields complete"} tone={gaps.length ? "rose" : "slate"} />

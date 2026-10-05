@@ -4,7 +4,7 @@
 -- everything back. No actual fixture, calendar, contact or message is changed.
 begin;
 do $$ declare table_name text; begin
-  foreach table_name in array array['annual_planner_bookings','annual_planner_blackouts','annual_planner_closure_impacts','coach_hub_team_assignments','coach_hub_calendar_feeds','coach_hub_messages','pitch_closures','pitches','clubs'] loop
+  foreach table_name in array array['annual_planner_bookings','annual_planner_blackouts','annual_planner_closure_impacts','coach_hub_team_assignments','coach_hub_people','team_config','coach_hub_calendar_feeds','coach_hub_messages','pitch_closures','pitches','clubs'] loop
     execute format('create temporary table %I (like public.%I including defaults including constraints including indexes)', table_name, table_name);
   end loop;
 end $$;
@@ -14,6 +14,8 @@ alter table pg_temp.annual_planner_bookings alter column created_by set default 
 alter table pg_temp.annual_planner_bookings alter column updated_by set default '00000000-0000-0000-0000-000000000002'::uuid;
 create temporary table calendar_checks(name text, passed boolean, detail jsonb);
 -- ROUTINE_BODIES
+insert into pg_temp.coach_hub_people(id,club_id,identity_key,display_name,status)
+values ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','regression-person','Coach','active');
 create trigger test_calendar_notifications after insert or update on pg_temp.annual_planner_bookings
   for each row execute function pg_temp.notify_coach_hub_booking_change();
 insert into pg_temp.coach_hub_team_assignments(club_id, person_id, team_key, team_name)
@@ -46,6 +48,12 @@ begin
   insert into calendar_checks values('signed-in calendar retains four published/lifecycle rows but hides draft',jsonb_array_length(payload->'bookings')=4,jsonb_build_object('rows',jsonb_array_length(payload->'bookings')));
   payload := pg_temp.get_coach_hub_calendar_by_token('regression-token');
   insert into calendar_checks values('subscribed calendar matches signed-in publication rules',jsonb_array_length(payload->'bookings')=4,jsonb_build_object('rows',jsonb_array_length(payload->'bookings')));
+  update pg_temp.coach_hub_team_assignments set team_key='Cobras';
+  payload := pg_temp.get_coach_hub_calendar_context(club,'2026-10-01','2026-10-31');
+  insert into calendar_checks values('calendar resolves exact legacy name key without losing Home/Away lifecycle rows',jsonb_array_length(payload->'bookings')=4,jsonb_build_object('rows',jsonb_array_length(payload->'bookings')));
+  payload := pg_temp.get_coach_hub_calendar_by_token('regression-token');
+  insert into calendar_checks values('subscribed calendar resolves the same legacy name key',jsonb_array_length(payload->'bookings')=4,jsonb_build_object('rows',jsonb_array_length(payload->'bookings')));
+  update pg_temp.coach_hub_team_assignments set team_key='cobras';
   insert into calendar_checks select 'Away generates no coach message or acknowledgement',count(*)=0,jsonb_build_object('messages',count(*)) from pg_temp.coach_hub_messages message join pg_temp.annual_planner_bookings booking on message.related_id=booking.id::text where booking.source_id in ('away','cancelled');
   begin
     perform pg_temp.sync_matchday_calendar(club,'saturday','2026-10-10',jsonb_build_array(fixtures->0,fixtures->0));

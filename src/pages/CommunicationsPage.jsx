@@ -324,15 +324,24 @@ export default function CommunicationsPage(props) {
 
   useEffect(() => {
     let cancelled = false;
+    let request = 0;
     if (!props.activeClubId || !canCommunicate) return undefined;
-    DB.loadTeamContacts(props.activeClubId)
+    const refresh = () => {
+      const currentRequest = ++request;
+      return DB.loadTeamContacts(props.activeClubId)
       .then((rows) => {
-        if (!cancelled && Array.isArray(rows)) setContactState({ clubId: props.activeClubId, rows });
+        if (!cancelled && currentRequest === request && Array.isArray(rows)) setContactState({ clubId: props.activeClubId, rows });
       })
       .catch(() => {
         // Existing in-memory contacts remain available if the protected directory is temporarily unavailable.
       });
-    return () => { cancelled = true; };
+    };
+    refresh();
+    window.addEventListener("ground-control-coach-hub-contacts-changed", refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ground-control-coach-hub-contacts-changed", refresh);
+    };
   }, [props.activeClubId, canCommunicate]);
 
   const audienceRecipients = Array.isArray(props.audience?.recipients) ? props.audience.recipients.filter((row) => row.ready) : [];

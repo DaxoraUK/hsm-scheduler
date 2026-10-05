@@ -457,6 +457,7 @@ export default function AnnualPlannerPage({
       teamKeys,
     });
     const enriched = buildCoachCommunicationAudience({
+      teamCfg,
       people: pilotWorkspace.people,
       assignments: pilotWorkspace.assignments,
       teamKeys: audience.teamKeys,
@@ -466,7 +467,7 @@ export default function AnnualPlannerPage({
     if (!onOpenCoachAudience) {
       toast.info("Coach audience prepared", { description: `${enriched.readyCount} connected coach contact${enriched.readyCount === 1 ? "" : "s"} identified.` });
     }
-  }, [onOpenCoachAudience, pilotWorkspace.assignments, pilotWorkspace.people, workspace.blackouts, workspace.bookings]);
+  }, [onOpenCoachAudience, pilotWorkspace.assignments, pilotWorkspace.people, teamCfg, workspace.blackouts, workspace.bookings]);
 
   function openCoachReview(request) {
     const candidate = normaliseAnnualBooking({

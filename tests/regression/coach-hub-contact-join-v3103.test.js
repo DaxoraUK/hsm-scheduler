@@ -65,7 +65,7 @@ describe("Ground Control v3.10.3 Coach Hub contact join repair", () => {
   it("keeps the repository-level merge as a shared Communications and Teams fallback", () => {
     const repository = read("src/lib/supabase.js");
     expect(repository).toContain('import { mergeCoachHubWorkspaceIntoContacts } from "./coachHubContactBridge.js";');
-    expect(repository).toContain("return mergeCoachHubWorkspaceIntoContacts(contacts, workspace)");
+    expect(repository).toContain("return mergeCoachHubWorkspaceIntoContacts(contacts, workspace, teamCfg)");
   });
 
   it("removes the source-slot filter from the database contact join", () => {

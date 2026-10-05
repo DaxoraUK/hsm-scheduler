@@ -31,7 +31,7 @@ function normaliseAdditionalContact(contact = {}) {
     name: text(contact.name || contact.displayName || contact.display_name),
     email: text(contact.email).toLowerCase(),
     mobile: text(contact.mobile || contact.phone),
-    preferredChannel: ["whatsapp", "sms", "email"].includes(channel) ? channel : "email",
+    preferredChannel: ["whatsapp", "sms", "email", "in_app"].includes(channel) ? channel : "email",
     staffRole: text(contact.staffRole || contact.staff_role || "coach"),
     isPrimary: Boolean(contact.isPrimary ?? contact.is_primary),
   };
@@ -58,6 +58,46 @@ export function normaliseTeamKey(value, fallback = "") {
 
 export function getTeamContactKey(team = {}, index = 0) {
   return text(team.id || team.teamId || team.key) || normaliseTeamKey(team.name || team.teamName, `team-${index + 1}`);
+}
+
+// Read-only directory display for Coach Hub and Settings summaries. Directory
+// records are authoritative; legacy slots remain available for older clubs.
+export function teamContactDirectoryRows(contact = {}) {
+  const record = normaliseTeamContact(contact);
+  const rows = [...record.additionalContacts,
+    { name: record.coachName, email: record.coachEmail, mobile: record.coachPhone, staffRole: "Primary contact" },
+    ...(record.assistantEnabled ? [{ name: record.assistantName, email: record.assistantEmail, mobile: record.assistantPhone, staffRole: "Assistant" }] : []),
+  ].filter((row) => row.name || row.email || row.mobile);
+  return rows.filter((row, index) => rows.findIndex((candidate) =>
+    (row.personId && candidate.personId === row.personId)
+    || (row.email && candidate.email === row.email)
+    || (row.mobile && candidate.mobile === row.mobile)
+    || (!row.personId && !candidate.personId && !row.assignmentId && !candidate.assignmentId
+      && !row.email && !row.mobile && !candidate.email && !candidate.mobile && candidate.name === row.name)) === index);
+}
+
+// Explicit IDs are opaque. Only name-derived legacy keys may use exact-name
+// compatibility, and only when the configured team is unambiguous.
+export function resolveTeamContactKey(teams = [], key = "", name = "") {
+  const raw = text(key);
+  const rows = Array.isArray(teams) ? teams : [];
+  const direct = raw && rows.filter((team, index) => getTeamContactKey(team, index) === raw);
+  if (direct?.length === 1) return raw;
+  const needle = name && normaliseTeamKey(name);
+  if (!needle || (raw && normaliseTeamKey(raw) !== needle)) return "";
+  const matches = rows.filter((team) => normaliseTeamKey(team.name || team.teamName) === needle);
+  return matches.length === 1 ? getTeamContactKey(matches[0], rows.indexOf(matches[0])) : "";
+}
+
+export function sameTeamContactReference(key, name, otherKey, otherName, teams = []) {
+  if (teams.length) {
+    const left = resolveTeamContactKey(teams, key, name);
+    const right = resolveTeamContactKey(teams, otherKey, otherName);
+    return Boolean(left && right && left === right);
+  }
+  // Without configuration there is no evidence that a name-like key is not an
+  // explicit ID. Fail closed; callers needing legacy aliases supply teamCfg.
+  return Boolean(text(key) && text(key) === text(otherKey));
 }
 
 export function stripTeamContactFields(team = {}) {
@@ -125,57 +165,41 @@ export function normaliseEditableTeamContact(contact = {}, team = {}, index = 0)
   };
 }
 
-export function alignTeamContacts(teamCfg = [], contacts = []) {
+function alignContacts(teamCfg = [], contacts = [], normalise = normaliseTeamContact) {
   const rows = Array.isArray(teamCfg) ? teamCfg : [];
   const contactRows = Array.isArray(contacts) ? contacts : [];
-  const byKey = new Map(contactRows.map((contact, index) => {
-    const normalised = normaliseTeamContact(contact, {}, index);
-    return [normalised.teamKey, normalised];
-  }));
-  const byName = new Map(contactRows.map((contact, index) => {
-    const normalised = normaliseTeamContact(contact, {}, index);
-    return [normaliseTeamKey(normalised.teamName), normalised];
-  }));
-
   return rows.map((team, index) => {
     const teamKey = getTeamContactKey(team, index);
-    const existing = byKey.get(teamKey) || byName.get(normaliseTeamKey(team.name || team.teamName));
-    return normaliseTeamContact(existing || {}, team, index);
+    const matches = contactRows.filter((contact) => resolveTeamContactKey(rows,
+      contact.teamKey || contact.team_key, contact.teamName || contact.team_name) === teamKey);
+    const existing = matches.find((contact) => text(contact.teamKey || contact.team_key) === teamKey) || matches[0] || {};
+    const assigned = new Map();
+    matches.flatMap(additionalContacts).forEach((contact) => {
+      const identity = contact.assignmentId || `${contact.personId}:${contact.staffRole}:${contact.email}:${contact.mobile}`;
+      assigned.set(identity, contact);
+    });
+    return normalise({ ...existing, teamKey, additionalContacts: [...assigned.values()] }, team, index);
   });
 }
 
-export function alignTeamContactsForEditing(teamCfg = [], contacts = []) {
-  const rows = Array.isArray(teamCfg) ? teamCfg : [];
-  const contactRows = Array.isArray(contacts) ? contacts : [];
-  const byKey = new Map(contactRows.map((contact, index) => {
-    const normalised = normaliseEditableTeamContact(contact, {}, index);
-    return [normalised.teamKey, normalised];
-  }));
-  const byName = new Map(contactRows.map((contact, index) => {
-    const normalised = normaliseEditableTeamContact(contact, {}, index);
-    return [normaliseTeamKey(normalised.teamName), normalised];
-  }));
+export function alignTeamContacts(teamCfg = [], contacts = []) {
+  return alignContacts(teamCfg, contacts, normaliseTeamContact);
+}
 
-  return rows.map((team, index) => {
-    const teamKey = getTeamContactKey(team, index);
-    const existing = byKey.get(teamKey) || byName.get(normaliseTeamKey(team.name || team.teamName));
-    return normaliseEditableTeamContact(existing || {}, team, index);
-  });
+export function alignTeamContactsForEditing(teamCfg = [], contacts = []) {
+  return alignContacts(teamCfg, contacts, normaliseEditableTeamContact);
 }
 
 export function contactForTeam(teamCfg = [], contacts = [], teamName = "", index = 0, teamKey = "") {
   const needle = normaliseTeamKey(teamName);
   const rows = alignTeamContacts(teamCfg, contacts);
-  const keyed = teamKey && rows.find((contact) => contact.teamKey === String(teamKey));
+  const resolvedKey = resolveTeamContactKey(teamCfg, teamKey, teamName);
+  const keyed = resolvedKey && rows.find((contact) => contact.teamKey === resolvedKey);
+  if (teamKey && !resolvedKey) return normaliseTeamContact({}, { name: teamName }, index);
   const exact = needle && rows.filter((contact) => normaliseTeamKey(contact.teamName) === needle);
   if (keyed) return keyed;
   if (exact?.length === 1) return exact[0];
-  const matches = needle ? rows.filter((contact) => {
-    const contactName = normaliseTeamKey(contact.teamName);
-    return contactName && (contactName.includes(needle) || needle.includes(contactName));
-  }) : [];
-  // A shortened name must never route a message to an arbitrarily chosen coach.
-  return matches.length === 1 ? matches[0] : normaliseTeamContact({}, { name: teamName }, index);
+  return normaliseTeamContact({}, { name: teamName }, index);
 }
 
 export function maskContactDestination(value = "") {

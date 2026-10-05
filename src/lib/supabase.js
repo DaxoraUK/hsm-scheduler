@@ -633,10 +633,11 @@ export const DB = {
     // assistant source slots. Merge the authoritative Coach Hub workspace so
     // Settings -> Teams always receives every active assignment.
     try {
-      const workspace = await supaFetch("POST", "rpc/list_coach_hub_admin_workspace", {
-        target_club_id: id,
-      });
-      return mergeCoachHubWorkspaceIntoContacts(contacts, workspace);
+      const [workspace, teamCfg] = await Promise.all([
+        supaFetch("POST", "rpc/list_coach_hub_admin_workspace", { target_club_id: id }),
+        DB.loadTeamCfg(id),
+      ]);
+      return mergeCoachHubWorkspaceIntoContacts(contacts, workspace, teamCfg);
     } catch {
       // Users without Coach Hub administration access retain the protected
       // team-contact rows that their current role is permitted to read.

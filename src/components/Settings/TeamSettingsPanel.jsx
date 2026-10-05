@@ -154,15 +154,16 @@ function hasContactData(contact = {}) {
   return hasDirectContactData(contact) || Boolean(primaryCoachHubAssignment(contact));
 }
 
-function coachHubContactForTeam(team = {}, index = 0, workspace = {}) {
+function coachHubContactForTeam(team = {}, index = 0, workspace = {}, teamCfg = []) {
   return resolveCoachHubContactForTeam(
     { ...team, key: getTeamContactKey(team, index) },
     [workspace?.people || [], workspace?.assignments || []],
+    teamCfg,
   );
 }
 
-function resolvedVisibleTeamContact(team = {}, index = 0, contact = {}, workspace = {}) {
-  const directCoachHubContact = coachHubContactForTeam(team, index, workspace);
+function resolvedVisibleTeamContact(team = {}, index = 0, contact = {}, workspace = {}, teamCfg = []) {
+  const directCoachHubContact = coachHubContactForTeam(team, index, workspace, teamCfg);
   if (directCoachHubContact) {
     return {
       ...contact,
@@ -263,7 +264,7 @@ export default function TeamSettingsPanel({
           team,
           index,
           contact,
-          visibleContact: resolvedVisibleTeamContact(team, index, contact, coachHubWorkspace),
+          visibleContact: resolvedVisibleTeamContact(team, index, contact, coachHubWorkspace, teamCfg),
         };
       })
       .filter(({ team, visibleContact }) => {
@@ -382,7 +383,7 @@ export default function TeamSettingsPanel({
     ? contacts[selectedIndex] || normaliseEditableTeamContact({}, selectedTeam, selectedIndex)
     : null;
   const selectedContact = selectedStoredContact
-    ? resolvedVisibleTeamContact(selectedTeam, selectedIndex, selectedStoredContact, coachHubWorkspace)
+    ? resolvedVisibleTeamContact(selectedTeam, selectedIndex, selectedStoredContact, coachHubWorkspace, teamCfg)
     : null;
   const selectedHomeSiteId = resolveSiteId(selectedTeam?.siteId || selectedTeam?.homeSiteId, sites, primarySite?.id);
   const selectedSitePitches = sortedPitches.filter((pitch) => resolveSiteId(pitch.siteId, sites, primarySite?.id) === selectedHomeSiteId);
@@ -428,7 +429,7 @@ export default function TeamSettingsPanel({
         <CompactMetric
           label="Contacts"
           value={teamCfg.filter((team, index) => {
-            const visible = resolvedVisibleTeamContact(team, index, contacts[index], coachHubWorkspace);
+            const visible = resolvedVisibleTeamContact(team, index, contacts[index], coachHubWorkspace, teamCfg);
             return Boolean(visible?.coachName || visible?.coachPhone || visible?.coachEmail || hasContactData(contacts[index]));
           }).length}
         />

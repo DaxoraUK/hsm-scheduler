@@ -81,6 +81,6 @@ describe("Ground Control v3.10.2.9 Coach Hub contact authority repair", () => {
     const repository = read("src/lib/supabase.js");
     expect(repository).toContain('import { mergeCoachHubWorkspaceIntoContacts } from "./coachHubContactBridge.js";');
     expect(repository).toContain('"rpc/list_coach_hub_admin_workspace"');
-    expect(repository).toContain("return mergeCoachHubWorkspaceIntoContacts(contacts, workspace)");
+    expect(repository).toContain("return mergeCoachHubWorkspaceIntoContacts(contacts, workspace, teamCfg)");
   });
 });

@@ -1,3 +1,5 @@
+import { sameTeamContactReference } from "./communications/contactModel.js";
+
 function text(value) {
   return String(value || "").trim();
 }
@@ -37,7 +39,7 @@ function personRecord(person = {}) {
     name: text(person.display_name || person.displayName || person.full_name || person.fullName || person.name),
     email: text(person.email).toLowerCase(),
     mobile: text(person.mobile || person.phone),
-    preferredChannel: ["whatsapp", "sms", "email"].includes(channel) ? channel : "email",
+    preferredChannel: ["whatsapp", "sms", "email", "in_app"].includes(channel) ? channel : "email",
     status: text(person.status || "active").toLowerCase(),
   };
 }
@@ -92,14 +94,14 @@ function rowName(row = {}) {
  * ensures every active assignment is available to Settings -> Teams, regardless
  * of its source_slot or whether a legacy team_contacts row already exists.
  */
-export function mergeCoachHubWorkspaceIntoContacts(contacts = [], workspace = {}) {
+export function mergeCoachHubWorkspaceIntoContacts(contacts = [], workspace = {}, teamCfg = []) {
   const baseRows = Array.isArray(contacts) ? contacts.map((row) => ({ ...row })) : [];
   const people = Array.isArray(workspace?.people) ? workspace.people : [];
   const assignments = Array.isArray(workspace?.assignments) ? workspace.assignments : [];
   const peopleById = new Map(
     people
       .map(personRecord)
-      .filter((person) => person.id && person.status !== "inactive")
+      .filter((person) => person.id && person.status === "active")
       .map((person) => [person.id, person]),
   );
 
@@ -121,17 +123,16 @@ export function mergeCoachHubWorkspaceIntoContacts(contacts = [], workspace = {}
     });
 
   const indexByKey = new Map();
-  const indexByName = new Map();
   baseRows.forEach((row, index) => {
     const key = rowKey(row);
-    const name = normaliseIdentity(rowName(row));
     if (key) indexByKey.set(key, index);
-    if (name) indexByName.set(name, index);
   });
 
   grouped.forEach((group) => {
     const byKey = group.teamKey ? indexByKey.get(group.teamKey) : undefined;
-    const byName = group.teamName ? indexByName.get(normaliseIdentity(group.teamName)) : undefined;
+    const compatible = baseRows.map((row, index) => ({ row, index })).filter(({ row }) =>
+      sameTeamContactReference(group.teamKey, group.teamName, rowKey(row), rowName(row), teamCfg));
+    const byName = compatible.length === 1 ? compatible[0].index : undefined;
     const index = byKey ?? byName;
     if (index === undefined) {
       const created = {
@@ -150,7 +151,6 @@ export function mergeCoachHubWorkspaceIntoContacts(contacts = [], workspace = {}
       };
       baseRows.push(created);
       if (group.teamKey) indexByKey.set(group.teamKey, baseRows.length - 1);
-      if (group.teamName) indexByName.set(normaliseIdentity(group.teamName), baseRows.length - 1);
       return;
     }
 
@@ -164,22 +164,24 @@ export function mergeCoachHubWorkspaceIntoContacts(contacts = [], workspace = {}
   return baseRows;
 }
 
-export function resolveCoachHubContactForTeam(team = {}, sources = []) {
+export function resolveCoachHubContactForTeam(team = {}, sources = [], teamCfg = []) {
   const flattened = (Array.isArray(sources) ? sources : []).flat(Infinity).filter(Boolean);
   const peopleById = new Map(
     flattened
       .filter((row) => row.id && (row.display_name || row.displayName || row.full_name || row.fullName || row.name))
+      .filter((row) => text(row.status || "active").toLowerCase() === "active")
       .map((row) => [text(row.id), personRecord(row)]),
   );
   const targetKey = text(team.id || team.teamId || team.key);
   const targetName = normaliseIdentity(team.name || team.teamName);
   const candidates = flattened
     .filter((row) => row.team_key || row.teamKey || row.team_id || row.teamId || row.team_name || row.teamName)
+    .filter((row) => text(row.status || "active").toLowerCase() === "active")
+    .filter((row) => !assignmentPersonId(row) || peopleById.has(assignmentPersonId(row)))
     .filter((row) => {
       const key = assignmentTeamKey(row);
       const name = normaliseIdentity(assignmentTeamName(row));
-      return (targetKey && key === targetKey)
-        || (targetName && name && (name.includes(targetName) || targetName.includes(name)));
+      return sameTeamContactReference(targetKey, targetName, key, name, teamCfg);
     })
     .map((assignment) => {
       const person = peopleById.get(assignmentPersonId(assignment)) || {};

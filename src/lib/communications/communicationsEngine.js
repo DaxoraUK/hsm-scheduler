@@ -92,10 +92,12 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
       || "",
   ).trim();
   const refereeStatus = normalise(fixture.refStatus || fixture.officialStatus || fixture.assignmentStatus);
-  const contact = contactForTeam(teamCfg, teamContacts, teamName, index, fixture.cfg?.id || fixture.teamId || "");
+  // Display cleanup must not change the identity used to find the contact.
+  const contact = contactForTeam(teamCfg, teamContacts, fixture.homeTeam || fixture.team || fixture.home || teamName, index, fixture.cfg?.id || fixture.teamId || "");
   const primaryDestination = contact.preferredChannel === "email" ? contact.coachEmail : contact.coachPhone;
   const assistantDestination = contact.preferredChannel === "email" ? contact.assistantEmail : contact.assistantPhone;
   const additionalRecipients = (Array.isArray(contact.additionalContacts) ? contact.additionalContacts : []).map((person) => {
+    if (person.preferredChannel === "in_app") return null;
     const destination = person.preferredChannel === "email" ? person.email : person.mobile;
     return destination ? {
       type: person.staffRole || "coach",
@@ -110,7 +112,9 @@ function makeRow({ fixture, forcedStatus = "", day, dateLabel, index, club, team
     primaryDestination ? { type: "coach", name: contact.coachName || "Coach", destination: primaryDestination, channel: contact.preferredChannel } : null,
     contact.assistantEnabled && assistantDestination ? { type: "assistant", name: contact.assistantName || "Assistant coach", destination: assistantDestination, channel: contact.preferredChannel } : null,
     ...additionalRecipients,
-  ].filter(Boolean).filter((recipient, index, rows) => rows.findIndex((candidate) => `${candidate.channel}:${candidate.destination}`.toLowerCase() === `${recipient.channel}:${recipient.destination}`.toLowerCase()) === index);
+  ].filter(Boolean).filter((recipient) => !contact.additionalContacts.some((person) => person.preferredChannel === "in_app"
+    && (recipient.channel === "email" ? person.email === recipient.destination.toLowerCase() : person.mobile === recipient.destination)))
+    .filter((recipient, index, rows) => rows.findIndex((candidate) => `${candidate.channel}:${candidate.destination}`.toLowerCase() === `${recipient.channel}:${recipient.destination}`.toLowerCase()) === index);
   const issues = [];
 
   if (status === "scheduled" && ko === "TBC") issues.push("Kick-off time missing");
