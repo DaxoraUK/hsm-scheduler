@@ -8,6 +8,7 @@ import {
 import { formatTimelineTime } from "./timelineEngine.js";
 import { detectAnnualPlannerConflicts, getMatchdayFixtureSourceId, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
 import { getScheduleResourceFailure } from "../scheduling/scheduleConstraints.js";
+import {getFixtureFlowIdentity} from '../domain/fixtureVenueFlow.js';
 
 export const TIMELINE_SNAP_MINUTES = 15;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
@@ -157,7 +158,7 @@ export function buildTimelineMoveCandidate({
   const duration = getFixtureDuration(fixture);
   const safeKo = clampTimelineMinutes(snapTimelineMinutes(koMins), start, end, duration);
   const patch = buildTimelineMovePatch({ fixture, pitch, koMins: safeKo });
-  const resourceFailure = getScheduleResourceFailure({fixtures:fixtures.filter((_,i)=>i!==fixtureIndex),next:{...fixture,...patch},pitchCfg,closedPitches,club,matchDate,resourceContext});
+  const resourceFailure = getScheduleResourceFailure({fixtures,fixtureIdentity:getFixtureFlowIdentity(fixture),next:{...fixture,...patch},pitchCfg,closedPitches,club,matchDate,resourceContext});
   if(resourceFailure && ["resource_context","resource_booking"].includes(resourceFailure.type)) return {...resourceFailure,blocked:true,fixture,fixtureIndex,pitch,patch,title:"Move blocked",message:resourceFailure.reason,timeSuggestions:[],pitchSuggestions:[],validatedRecommendations:[]};
   const noChange = patch.pitchId === fixture.pitchId && patch.koMins === fixture.koMins;
   if (noChange) {
@@ -261,6 +262,8 @@ export function buildTimelineMoveCandidate({
     club,
     start: Number.isFinite(start) ? formatTimelineTime(start) : club?.startTime,
     end: Number.isFinite(end) ? formatTimelineTime(end) : club?.endTime,
+    matchDate,
+    resourceContext,
   });
   const advisory = !impact.ok && PARKING_ADVISORY_TYPES.has(String(impact.type || ""));
 
@@ -278,6 +281,7 @@ export function buildTimelineMoveCandidate({
     koTime: patch.koTime,
     endMins: patch.endMins,
     patch,
+    fixtureIdentity:getFixtureFlowIdentity(fixture),
     pitchState,
     previousPatch: {
       pitchId: fixture.pitchId,

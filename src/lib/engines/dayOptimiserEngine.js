@@ -1,6 +1,7 @@
 import { getValidatedFixRecommendations } from "./recommendationEngine.js";
 import { validateFixtureUpdate } from "./validationEngine.js";
 import { isParkingEnabled } from "../settings/workspaceSettings.js";
+import {isFixtureSchedulingDemand} from '../domain/fixtureLifecycle.js';
 
 function getFixtureTitle(fixture = {}) {
   return [fixture.homeTeam || fixture.team || fixture.fixture, fixture.awayTeam]
@@ -46,12 +47,14 @@ export function calculateDayOptimisation({
   pitchCfg = [],
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
   start,
   end,
   interval = 15,
   maxMoves = 4,
 } = {}) {
-  const activeFixtures = fixtures.filter((fixture) => fixture?.status !== "postponed");
+  const activeFixtures = fixtures.filter(isFixtureSchedulingDemand);
   const parkingEnabled = isParkingEnabled(club);
 
   if (!activeFixtures.length) {
@@ -73,7 +76,7 @@ export function calculateDayOptimisation({
   const candidateMap = new Map();
 
   fixtures.forEach((fixture, fixtureIndex) => {
-    if (fixture?.status === "postponed") return;
+    if (!isFixtureSchedulingDemand(fixture)) return;
 
     const recommendations = getValidatedFixRecommendations({
       fixtures,
@@ -81,6 +84,8 @@ export function calculateDayOptimisation({
       pitchCfg,
       closedPitches,
       club,
+      matchDate,
+      resourceContext,
       start,
       end,
       interval,
@@ -118,6 +123,8 @@ export function calculateDayOptimisation({
       patch: candidate.patch,
       closedPitches,
       club,
+      matchDate,
+      resourceContext,
     });
 
     if (!validation.ok) return;

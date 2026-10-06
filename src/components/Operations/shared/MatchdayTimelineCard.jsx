@@ -76,6 +76,7 @@ export default function MatchdayTimelineCard({
   onFixtureClick = () => {},
   matchDate = "",
   annualPlannerEnabled = false,
+  resourceContext: suppliedResourceContext,
 }) {
   const isCompact = variant === "compact";
   const canEdit = !readOnly && typeof onMoveRequest === "function";
@@ -133,6 +134,7 @@ export default function MatchdayTimelineCard({
 
   useEffect(() => {
     let cancelled = false;
+    if(suppliedResourceContext) {setAnnualPlannerResources(suppliedResourceContext);return undefined;}
     const clubId = String(club?.id || "").trim();
     if (!annualPlannerEnabled || !clubId || !matchDate || !isSupaConfigured()) {
       setAnnualPlannerResources({ status: annualPlannerEnabled ? "error" : "disabled", bookings: [], blackouts: [] });
@@ -163,7 +165,7 @@ export default function MatchdayTimelineCard({
       cancelled = true;
       window.removeEventListener("daxora-annual-planner-updated", refresh);
     };
-  }, [annualPlannerEnabled, club?.id, matchDate]);
+  }, [annualPlannerEnabled, club?.id, matchDate,suppliedResourceContext]);
 
   useEffect(() => {
     if (!scrollRef.current || typeof ResizeObserver === "undefined") return undefined;
@@ -204,7 +206,7 @@ export default function MatchdayTimelineCard({
         resourceBlackouts: annualPlannerResources.blackouts,
         resourceContext: annualPlannerEnabled ? withScheduleReservations(annualPlannerResources,pitchCfg) : null,
       }),
-    [annualPlannerResources.blackouts, annualPlannerResources.bookings, closedPitches, club, games, matchDate, pitchCfg, timeline.end, timeline.start],
+    [annualPlannerResources,annualPlannerEnabled, closedPitches, club, games, matchDate, pitchCfg, timeline.end, timeline.start],
   );
 
   const commitCandidate = useCallback(

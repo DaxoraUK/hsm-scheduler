@@ -115,6 +115,7 @@ export default function MidweekPage(props) {
         navigationTarget={props.navigationTarget}
         clearNavigationTarget={props.clearNavigationTarget}
         onOverride={props.midweekOv}
+        onAllocationChange={props.onAllocationChange}
         hasRun={props.midweekHasRun}
         final={props.midweekFinal}
         overrides={props.midweekOverrides}

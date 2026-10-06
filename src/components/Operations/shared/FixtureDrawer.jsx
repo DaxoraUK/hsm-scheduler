@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   X,
   Clock,
@@ -33,11 +33,11 @@ import {
   postponeFixture,
   restoreFixture,
 } from "../../../lib/domain/fixtureLifecycle.js";
-import { reverseAwayFixture, restoreAwayFixture } from "../../../lib/domain/fixtureVenueFlow.js";
+import { reverseAwayFixture, restoreAwayFixture, getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
+import {buildFixtureAllocationPatch} from '../../../lib/scheduling/fixtureMove.js';
 
 const PARKING_ADVISORY_TYPES = new Set([
   "parking_capacity",
-  "parking_concurrency",
 ]);
 
 function isParkingAdvisory(impact) {
@@ -52,17 +52,23 @@ export default function FixtureDrawer({
   pitchCfg = [],
   closedPitches = [],
   onOverride,
+  onAllocationChange,
+  matchDate,
+  resourceContext,
   operatorIdentity = "",
   readOnly = false,
   onClose,
 }) {
   const [blockedMove, setBlockedMove] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [moveAdvisory,setMoveAdvisory]=useState('');
+  const moveBusy=useRef(false);
 
   useEffect(() => {
     setBlockedMove(null);
     setActiveTab("overview");
-  }, [fixture?.__index]);
+    setMoveAdvisory('');
+  }, [fixture && getFixtureFlowIdentity(fixture)]);
 
   if (!fixture) return null;
 
@@ -95,19 +101,8 @@ export default function FixtureDrawer({
   const buildPatch = (field, value) => {
     if (field === "koTime") {
       const koMins = timeToMinutes(value);
-      const duration = getFixtureDuration({
-        ...fixture,
-        ...(blockedMove?.pendingPatch || {}),
-        koTime: value,
-        koMins,
-        endMins: null,
-      });
-
-      return {
-        koTime: value,
-        koMins,
-        endMins: koMins != null ? koMins + duration : fixture.endMins,
-      };
+      const pitch=pitchCfg.find(p=>p.id===(displayFixture.pitchId||displayFixture.pitch));
+      return buildFixtureAllocationPatch({fixture,pitch:pitch||{},koMins,club});
     }
 
     if (field === "pitchId") {
@@ -122,8 +117,25 @@ export default function FixtureDrawer({
     return { [field]: value };
   };
 
-  const updateFixturePatch = (patch) => {
+  const updateFixturePatch = async (patch) => {
     if (!canEdit) return;
+
+    const allocation=Object.keys(patch).some(field=>['pitchId','koTime','koMins','endMins'].includes(field));
+    if(allocation) {
+      if(moveBusy.current) return;
+      moveBusy.current=true;
+      try {
+        const result=await onAllocationChange?.({fixtureIdentity:getFixtureFlowIdentity(fixture),patch,
+          expectedPreviousPatch:{pitchId:fixture.pitchId,koMins:fixture.koMins,endMins:fixture.endMins}});
+        if(!result?.ok) {setBlockedMove({title:'Move not applied',message:result?.reason||'Open Operations to apply this allocation.',pendingPatch:patch});return;}
+        setBlockedMove(null);
+        const advisory=result.moves?.flatMap(move=>move.advisories||[])||result.advisories||[];
+        setMoveAdvisory(advisory.map(item=>item.reason||item.message).join(' ')||'');
+        toast.success('Fixture allocation updated');
+      } catch(error){setBlockedMove({title:'Move not applied',message:error.message,pendingPatch:patch});}
+      finally{moveBusy.current=false;}
+      return;
+    }
 
     const impact = getOperationsImpact({
       fixtures,
@@ -134,15 +146,13 @@ export default function FixtureDrawer({
       start: club?.startTime,
       end: club?.endTime,
       patch,
+      matchDate,
+      resourceContext,
     });
 
     if (!impact.ok) {
-      const canOverride = isParkingAdvisory(impact);
-
       setBlockedMove({
         ...impact,
-        severity: canOverride ? "warning" : impact.severity,
-        canOverride,
         pendingPatch: patch,
       });
       return;
@@ -282,17 +292,6 @@ export default function FixtureDrawer({
     });
   };
 
-  const applyPendingOverride = () => {
-    const patch = blockedMove?.pendingPatch;
-    if (!patch || !blockedMove?.canOverride) return;
-
-    applyFixturePatch(patch);
-    setBlockedMove(null);
-    toast.warning("Fixture change applied with a parking warning", {
-      description:
-        "The schedule has been updated. Review the parking plan before publishing the matchday.",
-    });
-  };
 
   const discardPendingChange = () => {
     setBlockedMove(null);
@@ -420,6 +419,7 @@ Good luck!`;
         </div>
 
         <div className="space-y-6 p-6">
+          {moveAdvisory ? <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">Parking advisory: {moveAdvisory}</div> : null}
           {displayFixture.venueReversal && !displayFixture.isAwayFixture ? (
             <div className="rounded-3xl border border-violet-200 bg-violet-50 p-5 text-violet-950">
               <div className="text-sm font-black">Manually reversed from Away to Home</div>
@@ -538,7 +538,6 @@ Good luck!`;
                     applySuggestedPitch={applySuggestedPitch}
                     applySuggestedTime={applySuggestedTime}
                     applyValidatedRecommendation={applyValidatedRecommendation}
-                    applyPendingOverride={applyPendingOverride}
                     discardPendingChange={discardPendingChange}
                   />
                 )}

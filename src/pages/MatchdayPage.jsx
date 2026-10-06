@@ -63,6 +63,8 @@ import { DB, isSupaConfigured } from "../lib/supabase.js";
 import { buildMatchdaySnapshotHash } from "../lib/operations/matchdayApproval.js";
 import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 import { createRebuildAction } from "../lib/domain/rebuildAction.js";
+import {isFixtureSchedulingDemand} from '../lib/domain/fixtureLifecycle.js';
+import {loadScheduleResourceContext,withScheduleReservations} from '../lib/scheduling/scheduleResourceContext.js';
 
 const WORKSPACES = [
   {
@@ -263,6 +265,7 @@ export default function MatchdayPage({
   runLive,
   dateLabel,
   onOverride,
+  onAllocationChange,
   ManualFixtures = MatchdayManualFixtures,
   UnresolvedCard = MatchdayUnresolvedCard,
   ScheduleCard = MatchdayScheduleCard,
@@ -303,6 +306,22 @@ export default function MatchdayPage({
   const [timelineSaving, setTimelineSaving] = useState(false);
   const [timelineHistory, setTimelineHistory] = useState([]);
   const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
+  const allocationBusyRef=useRef(false);
+  const [resourceContext,setResourceContext]=useState({status:'loading',bookings:[],blackouts:[]});
+  const annualPlannerEnabled=hasEntitlement(props.subscription,ENTITLEMENTS.ANNUAL_PLANNER);
+  useEffect(()=>{
+    let current=true;
+    const refresh=async()=>{
+      setResourceContext({status:annualPlannerEnabled?'loading':'disabled',bookings:[],blackouts:[]});
+      try {
+        const loaded=await loadScheduleResourceContext({clubId:props.activeClubId||props.club?.id,matchDate:matchdayDate,
+          plannerEnabled:annualPlannerEnabled,loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent:()=>current});
+        if(current) setResourceContext(withScheduleReservations(loaded,props.pitchCfg||[]));
+      } catch(error){if(current)setResourceContext({status:'error',reason:error.message,bookings:[],blackouts:[]});}
+    };
+    refresh();window.addEventListener('daxora-annual-planner-updated',refresh);
+    return ()=>{current=false;window.removeEventListener('daxora-annual-planner-updated',refresh);};
+  },[annualPlannerEnabled,props.activeClubId,props.club?.id,matchdayDate,props.pitchCfg]);
 
   useEffect(() => {
     let active = true;
@@ -352,7 +371,7 @@ export default function MatchdayPage({
   }, [day, lockIdentity, props.activeClubId, props.club?.id]);
 
   useEffect(() => {
-    setTimelineDirty(false);
+    setTimelineDirty(Boolean(hasRun));
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
   }, [day, matchdayDate]);
@@ -370,6 +389,7 @@ export default function MatchdayPage({
       endTime: `${String(props.endHour ?? 11).padStart(2, "0")}:${String(props.endMin ?? 30).padStart(2, "0")}`,
       bufferYouth: props.bufferYouth,
       bufferAdult: props.bufferAdult,
+      useAstro: props.useAstro??props.club?.useAstro,
     }),
     [
       day,
@@ -381,11 +401,12 @@ export default function MatchdayPage({
       props.endMin,
       props.bufferYouth,
       props.bufferAdult,
+      props.useAstro,
     ],
   );
 
   const active = useMemo(
-    () => final.filter((fixture) => !["postponed", "cancelled", "away"].includes(fixture.status) && !fixture.isAwayFixture),
+    () => final.filter(isFixtureSchedulingDemand),
     [final],
   );
 
@@ -514,8 +535,10 @@ export default function MatchdayPage({
         club: clubWithTiming,
         start: clubWithTiming.startTime,
         end: clubWithTiming.endTime,
+        matchDate:matchdayDate,
+        resourceContext,
       }),
-    [active, clubWithTiming, props.closedPitches, props.pitchCfg],
+    [active, clubWithTiming, props.closedPitches, props.pitchCfg,matchdayDate,resourceContext],
   );
 
   const editableOverride = useCallback(
@@ -648,41 +671,52 @@ export default function MatchdayPage({
     persistScheduleLock,
   ]);
 
+  const applyAllocationRequest=useCallback(async(request,{recordHistory=true}={})=>{
+    if(isLocked||allocationBusyRef.current||typeof onAllocationChange!=='function') return {ok:false,reason:'This schedule cannot be edited right now.'};
+    allocationBusyRef.current=true;
+    try {
+      const result=await onAllocationChange(request);
+      if(!result?.ok) {toast.error('Move was not applied',{description:result?.reason||'Review the current schedule and retry.'});return result||{ok:false};}
+      setTimelineDirty(true);
+      if(recordHistory) {
+        const records=(result.moves||[]).map(buildPlannerChangeRecord).filter(Boolean);
+        setTimelineHistory(current=>[...current,...records]);setTimelineRedoHistory([]);
+      }
+      return result;
+    } catch(error){toast.error('Move was not applied',{description:error.message});return {ok:false,reason:error.message};}
+    finally{allocationBusyRef.current=false;}
+  },[isLocked,onAllocationChange]);
+
   const applyOptimisationMove = useCallback(
-    (move) => {
-      if (isLocked || typeof onOverride !== "function" || !move?.patch) return;
-      Object.entries(move.patch).forEach(([field, value]) =>
-        editableOverride(move.fixtureIndex, field, value),
-      );
+    async (move) => {
+      if (!move?.patch) return;
+      const result=await applyAllocationRequest({fixtureIdentity:move.fixtureIdentity,patch:move.patch,expectedPreviousPatch:move.expectedPreviousPatch});
+      if(!result?.ok) return;
       toast.success("Validated fixture move applied", {
         description:
           move.summary || move.fixtureTitle || "The schedule has been updated.",
       });
     },
-    [isLocked, onOverride, editableOverride],
+    [applyAllocationRequest],
   );
 
-  const applyAllValidatedMoves = useCallback(() => {
+  const applyAllValidatedMoves = useCallback(async () => {
     const moves = dayOptimisation.moves || [];
-    if (!moves.length || isLocked || typeof onOverride !== "function") return;
-
-    moves.forEach((move) => {
-      Object.entries(move.patch || {}).forEach(([field, value]) =>
-        editableOverride(move.fixtureIndex, field, value),
-      );
-    });
+    if (!moves.length || isLocked || typeof onAllocationChange !== "function") return;
+    const result=await applyAllocationRequest({moves});
+    if(!result?.ok) return;
 
     setPendingConfirmation(null);
     toast.success("Schedule improvements applied", {
       description: `${moves.length} validated move${moves.length === 1 ? "" : "s"} applied.`,
     });
-  }, [dayOptimisation.moves, isLocked, onOverride, editableOverride]);
+  }, [dayOptimisation.moves, isLocked, onAllocationChange, applyAllocationRequest]);
 
   const applyAllOptimisationMoves = useCallback(() => {
     const moves = dayOptimisation.moves || [];
-    if (!moves.length || isLocked || typeof onOverride !== "function") return;
+    if (!moves.length || isLocked || typeof onAllocationChange !== "function") return;
     setPendingConfirmation({ type: "optimise", count: moves.length });
-  }, [dayOptimisation.moves, isLocked, onOverride]);
+  }, [dayOptimisation.moves, isLocked, onAllocationChange]);
 
   const reviewOptimisation = useCallback(() => {
     setSectionQuery("");
@@ -698,65 +732,43 @@ export default function MatchdayPage({
     window.setTimeout(() => setHighlightedSection(null), 2200);
   }, []);
 
-  const getTimelineRecordIndex = useCallback(
-    (record) => {
-      const matchedIndex = final.findIndex(
-        (fixture, fixtureIndex) =>
-          getPlannerFixtureIdentity(fixture, fixtureIndex) === record?.fixtureId,
-      );
-      return matchedIndex >= 0 ? matchedIndex : record?.fixtureIndex;
-    },
-    [final],
-  );
-
-  const applyTimelineRecordPatch = useCallback(
-    (record, patch) => {
-      if (typeof onOverride !== "function" || !record || !patch) return;
-      const fixtureIndex = getTimelineRecordIndex(record);
-      if (!Number.isInteger(fixtureIndex) || fixtureIndex < 0) return;
-      Object.entries(patch).forEach(([field, value]) =>
-        editableOverride(fixtureIndex, field, value),
-      );
-    },
-    [getTimelineRecordIndex, onOverride, editableOverride],
-  );
-
-  const undoTimelineMove = useCallback(() => {
+  const undoTimelineMove = useCallback(async () => {
     const record = timelineHistory.at(-1);
     if (!record || isLocked) return;
-    applyTimelineRecordPatch(record, record.previousPatch);
+    const result=await applyAllocationRequest({fixtureIdentity:record.fixtureId,patch:record.previousPatch,expectedPreviousPatch:record.patch},{recordHistory:false});
+    if(!result?.ok) return;
     setTimelineHistory((current) => current.slice(0, -1));
     setTimelineRedoHistory((current) => [...current, record]);
-    setTimelineDirty(timelineHistory.length > 1);
+    setTimelineDirty(true);
     toast.info("Planner change undone", {
       description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+  }, [applyAllocationRequest, isLocked, timelineHistory]);
 
-  const redoTimelineMove = useCallback(() => {
+  const redoTimelineMove = useCallback(async () => {
     const record = timelineRedoHistory.at(-1);
     if (!record || isLocked) return;
-    applyTimelineRecordPatch(record, record.patch);
+    const result=await applyAllocationRequest({fixtureIdentity:record.fixtureId,patch:record.patch,expectedPreviousPatch:record.previousPatch},{recordHistory:false});
+    if(!result?.ok) return;
     setTimelineRedoHistory((current) => current.slice(0, -1));
     setTimelineHistory((current) => [...current, record]);
     setTimelineDirty(true);
     toast.success("Planner change reapplied", {
       description: record.summary || "The fixture move has been reapplied.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineRedoHistory]);
+  }, [applyAllocationRequest, isLocked, timelineRedoHistory]);
 
-  const discardTimelineChanges = useCallback(() => {
+  const discardTimelineChanges = useCallback(async () => {
     if (!timelineHistory.length || isLocked) return;
-    [...timelineHistory].reverse().forEach((record) =>
-      applyTimelineRecordPatch(record, record.previousPatch),
-    );
+    const result=await applyAllocationRequest({moves:[...timelineHistory].reverse().map(record=>({fixtureIdentity:record.fixtureId,patch:record.previousPatch,expectedPreviousPatch:record.patch}))},{recordHistory:false});
+    if(!result?.ok) return;
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
-    setTimelineDirty(false);
+    setTimelineDirty(true);
     toast.info("Planner changes discarded", {
-      description: "The matchday schedule has returned to its last saved state.",
+      description: "The reviewed moves were undone. Save Week to publish the resulting draft.",
     });
-  }, [applyTimelineRecordPatch, isLocked, timelineHistory]);
+  }, [applyAllocationRequest, isLocked, timelineHistory]);
 
   const requestDiscardTimelineChanges = useCallback(() => {
     if (!timelineHistory.length || isLocked) return;
@@ -764,23 +776,17 @@ export default function MatchdayPage({
   }, [isLocked, timelineHistory.length]);
 
   const applyTimelineMove = useCallback(
-    (candidate) => {
-      if (isLocked || typeof onOverride !== "function" || !candidate?.patch) return;
-
-      Object.entries(candidate.patch).forEach(([field, value]) =>
-        editableOverride(candidate.fixtureIndex, field, value),
-      );
-      const record = buildPlannerChangeRecord(candidate);
-      if (record) setTimelineHistory((current) => [...current, record]);
-      setTimelineRedoHistory([]);
-      setTimelineDirty(true);
+    async (candidate) => {
+      if (!candidate?.patch) return;
+      const result=await applyAllocationRequest({fixtureIdentity:candidate.fixtureIdentity||getFixtureFlowIdentity(candidate.fixture),patch:candidate.patch,expectedPreviousPatch:candidate.previousPatch});
+      if(!result?.ok) return;
       setPendingConfirmation(null);
 
       toast.success("Fixture moved in Matchday Planner", {
         description: getTimelineCandidateSummary(candidate),
       });
     },
-    [isLocked, onOverride, editableOverride],
+    [applyAllocationRequest],
   );
 
   const requestTimelineMove = useCallback(
@@ -798,10 +804,6 @@ export default function MatchdayPage({
         });
         return;
       }
-      if (candidate.advisory) {
-        setPendingConfirmation({ type: "timeline-warning", candidate });
-        return;
-      }
       applyTimelineMove(candidate);
     },
     [applyTimelineMove],
@@ -812,11 +814,12 @@ export default function MatchdayPage({
     setTimelineSaving(true);
     try {
       const saved = await props.saveWeek();
-      if (saved !== false) {
+      if (saved === true) {
         setTimelineDirty(false);
         setTimelineHistory([]);
         setTimelineRedoHistory([]);
       }
+    } catch(error) {toast.error('Matchweek was not saved',{description:error.message});
     } finally {
       setTimelineSaving(false);
     }
@@ -1077,6 +1080,7 @@ export default function MatchdayPage({
             onMoveRequest={editableOverride ? requestTimelineMove : undefined}
             onFixtureClick={openFixture}
             matchDate={matchdayDate}
+            resourceContext={resourceContext}
             annualPlannerEnabled={hasEntitlement(props.subscription, ENTITLEMENTS.ANNUAL_PLANNER)}
           />
         ),
@@ -1678,6 +1682,9 @@ export default function MatchdayPage({
         pitchCfg={props.pitchCfg}
         closedPitches={props.closedPitches}
         onOverride={editableOverride}
+        onAllocationChange={applyAllocationRequest}
+        matchDate={matchdayDate}
+        resourceContext={resourceContext}
         operatorIdentity={props.operatorIdentity}
         readOnly={isLocked}
         onClose={() => setSelectedFixtureIndex(null)}

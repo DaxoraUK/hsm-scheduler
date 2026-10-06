@@ -20,6 +20,7 @@ export default function SaturdayPage(props) {
         navigationTarget={props.navigationTarget}
         clearNavigationTarget={props.clearNavigationTarget}
         onOverride={props.satOv}
+        onAllocationChange={props.onAllocationChange}
         hasRun={props.satHasRun}
         final={props.satFinal}
         overrides={props.satOverrides}

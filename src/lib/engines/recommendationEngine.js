@@ -1,3 +1,4 @@
+import {getFixtureFlowIdentity} from "../domain/fixtureVenueFlow.js";
 import {
   getFixtureDuration,
   minutesToTime,
@@ -245,6 +246,8 @@ function validateCandidate({
   pitchCfg = [],
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
   patch = {},
   validateParking = true,
 } = {}) {
@@ -254,6 +257,8 @@ function validateCandidate({
     pitchCfg,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
     patch,
     validateParking,
     changeType: "schedule",
@@ -318,6 +323,8 @@ export function getFixtureClashes({
   patch = {},
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
 } = {}) {
   const validation = validateFixtureUpdate({
     fixtures,
@@ -326,6 +333,8 @@ export function getFixtureClashes({
     patch,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
   });
 
   if (validation.ok) return [];
@@ -351,6 +360,8 @@ export function getAvailablePitchSuggestions({
   limit = 4,
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
 } = {}) {
   const current = fixtures[fixtureIndex];
 
@@ -381,6 +392,8 @@ export function getAvailablePitchSuggestions({
         patch,
         closedPitches,
         club,
+    matchDate,
+    resourceContext,
       });
 
       return {
@@ -410,6 +423,8 @@ export function getNextAvailableTimes({
   limit = 8,
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
 } = {}) {
   const current = {
     ...(fixtures[fixtureIndex] || {}),
@@ -440,6 +455,8 @@ export function getNextAvailableTimes({
       patch,
       closedPitches,
       club,
+    matchDate,
+    resourceContext,
     });
 
     if (validation.ok) {
@@ -462,6 +479,8 @@ export function getValidatedFixRecommendations({
   pitchCfg = [],
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
   basePatch = {},
   start,
   end,
@@ -479,6 +498,8 @@ export function getValidatedFixRecommendations({
   const { startMins, endMins } = getFixtureTimingWindow({
     fixture: workingFixture,
     club,
+    matchDate,
+    resourceContext,
     start,
     end,
   });
@@ -528,6 +549,8 @@ export function getValidatedFixRecommendations({
         patch,
         closedPitches,
         club,
+    matchDate,
+    resourceContext,
         validateParking: !allowParkingImprovement,
       });
 
@@ -539,6 +562,8 @@ export function getValidatedFixRecommendations({
         current: workingFixture,
         patch,
         club,
+    matchDate,
+    resourceContext,
         pitchCfg,
       });
 
@@ -547,6 +572,8 @@ export function getValidatedFixRecommendations({
         fixtureIndex,
         patch,
         club,
+    matchDate,
+    resourceContext,
         pitchCfg,
       });
 
@@ -572,6 +599,8 @@ export function getValidatedFixRecommendations({
       candidates.set(key, {
         id: key,
         fixtureIndex,
+        fixtureIdentity:getFixtureFlowIdentity(current),
+        expectedPreviousPatch:{pitchId:current.pitchId,koMins:current.koMins,endMins:current.endMins},
         fixtureTitle,
         type: changedKo && changedPitch ? "time_pitch" : changedKo ? "time" : "pitch",
         title: allowParkingImprovement
@@ -620,6 +649,8 @@ export function getOperationsImpact({
   patch = {},
   closedPitches = [],
   club = {},
+  matchDate,
+  resourceContext,
   start,
   end,
 } = {}) {
@@ -630,10 +661,13 @@ export function getOperationsImpact({
     patch,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
   });
 
   if (validation.ok) {
     return {
+      ...validation,
       ok: true,
       title: "Move available",
       message: "This change does not create any operational conflicts.",
@@ -662,6 +696,8 @@ export function getOperationsImpact({
     limit: 4,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
   });
 
   const timeSuggestions = getNextAvailableTimes({
@@ -675,6 +711,8 @@ export function getOperationsImpact({
     limit: 8,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
   });
 
   const validatedRecommendations = getValidatedFixRecommendations({
@@ -683,6 +721,8 @@ export function getOperationsImpact({
     pitchCfg,
     closedPitches,
     club,
+    matchDate,
+    resourceContext,
     basePatch: patch,
     start,
     end,

@@ -22,6 +22,7 @@ export default function SundayPage(props) {
         navigationTarget={props.navigationTarget}
         clearNavigationTarget={props.clearNavigationTarget}
         onOverride={props.sunOv}
+        onAllocationChange={props.onAllocationChange}
         hasRun={props.sunHasRun}
         final={props.sunFinal}
         overrides={props.sunOverrides}

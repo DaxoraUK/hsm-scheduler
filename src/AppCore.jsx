@@ -127,7 +127,9 @@ import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import { matchdayFixtureToAnnualBooking } from "./lib/planning/annualPlannerEngine.js";
 import { loadScheduleResourceContext, withScheduleReservations } from "./lib/scheduling/scheduleResourceContext.js";
 import { prepareScopedScheduleDraft } from "./lib/scheduling/prepareScopedScheduleDraft.js";
-import { readMatchdayScheduleDraft } from "./lib/storage/matchdayScheduleDraft.js";
+import { readMatchdayScheduleDraft,writeMatchdayScheduleDraft } from "./lib/storage/matchdayScheduleDraft.js";
+import {applyFixtureMoveTransaction} from './lib/scheduling/fixtureMove.js';
+import {readMatchdayLock} from './lib/operations/matchdayLock.js';
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,
@@ -1753,12 +1755,16 @@ function App() {
 
   const scheduleScopeRef = useRef(null);
   scheduleScopeRef.current = {clubId:activeClubId,userId:authSession?.user?.id,saturday:satDate,sunday:sunDate,midweek:midweekDate,
-    settings:JSON.stringify({pitchCfg,club,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,useAstro,midweekStartMins,midweekEndMins})};
+    canOperate:workspaceAccess.canOperate,
+    settings:JSON.stringify({pitchCfg,club,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,useAstro,midweekStartMins,midweekEndMins,satClosedPitches,sunClosedPitches,midweekClosedPitches})};
   const prepareDayDraft = async ({dayKey,matchDate,all,away,overrides,schedule}) => {
     const context = getTenantStorageContext();
     const captured = scheduleScopeRef.current;
-    const isCurrent = () => scheduleScopeRef.current.clubId===captured.clubId && scheduleScopeRef.current.userId===captured.userId
-      && scheduleScopeRef.current[dayKey]===matchDate && scheduleScopeRef.current.settings===captured.settings
+    const previousOverrides=allocationStateRef.current?.[dayKey]?.overrides;
+    const isCurrent = () => activeClubId===captured.clubId && authSession?.user?.id===captured.userId
+      && allocationStateRef.current?.[dayKey]?.overrides===previousOverrides
+      && scheduleScopeRef.current.clubId===captured.clubId && scheduleScopeRef.current.userId===captured.userId
+      && scheduleScopeRef.current.canOperate && scheduleScopeRef.current[dayKey]===matchDate && scheduleScopeRef.current.settings===captured.settings
       && context.clubId===captured.clubId && context.userId===captured.userId;
     const result = await prepareScopedScheduleDraft({context,dayKey,matchDate,all,away,overrides,schedule,isCurrent,
       loadResources:()=>loadScheduleResourceContext({clubId:activeClubId,matchDate,
@@ -2110,6 +2116,49 @@ function App() {
   const activeMidweekConflicts = midweekEnabled ? midweekConflicts : [];
   const activeMidweekUnresolved = midweekEnabled ? midweekUnresolved : [];
   const activeMidweekReadiness = midweekEnabled ? midweekReadiness : null;
+
+  const allocationStateRef=useRef({});
+  const allocationBusyRef=useRef(new Set());
+  allocationStateRef.current={
+    saturday:{fixtures:satFinal,overrides:satOverrides,unresolved:satUnresolved,closedPitches:satClosedPitches,setScheduled:setSatScheduled,setOverrides:setSatOverrides},
+    sunday:{fixtures:sunFinal,overrides:sunOverrides,unresolved:sunUnresolved,closedPitches:sunClosedPitches,setScheduled:setSunScheduled,setOverrides:setSunOverrides},
+    midweek:{fixtures:midweekFinal,overrides:midweekOverrides,unresolved:midweekUnresolved,closedPitches:midweekClosedPitches,setScheduled:setMidweekScheduled,setOverrides:setMidweekOverrides},
+  };
+  const applyDayAllocation=async(dayKey,request)=>{
+    if(allocationBusyRef.current.has(dayKey)) return {ok:false,reason:'Another move is being applied. Try again shortly.'};
+    const captured=scheduleScopeRef.current;
+    const matchDate=captured[dayKey];
+    const context=getTenantStorageContext();
+    const isCurrent=()=>activeClubId===captured.clubId && authSession?.user?.id===captured.userId
+      && scheduleScopeRef.current.clubId===captured.clubId && scheduleScopeRef.current.userId===captured.userId
+      && scheduleScopeRef.current.canOperate && scheduleScopeRef.current[dayKey]===matchDate && scheduleScopeRef.current.settings===captured.settings
+      && context.clubId===captured.clubId && context.userId===captured.userId;
+    allocationBusyRef.current.add(dayKey);
+    let sharedLocked=false;
+    try {
+      return await applyFixtureMoveTransaction({request,isCurrent,
+        loadResources:async()=>{
+          if(isSupaConfigured()&&activeClubId) {
+            const lock=await DB.getMatchdayLock(activeClubId,{dayScope:dayKey,matchdayDate:matchDate});
+            sharedLocked=Boolean(lock?.locked);
+          }
+          return withScheduleReservations(await loadScheduleResourceContext({clubId:activeClubId,matchDate,
+            plannerEnabled:hasEntitlement(subscription,ENTITLEMENTS.ANNUAL_PLANNER),loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent}),pitchCfg);
+        },
+        getCurrent:()=>({...allocationStateRef.current[dayKey],pitchCfg,matchDate,
+          club:{...club,useAstro,bufferYouth,bufferAdult,startHour:dayKey==='midweek'?Math.floor(midweekStartMins/60):startHour,
+            startMin:dayKey==='midweek'?midweekStartMins%60:startMin,endHour:dayKey==='midweek'?Math.floor(midweekEndMins/60):endHour,
+            endMin:dayKey==='midweek'?midweekEndMins%60:endMin},
+          readOnly:sharedLocked||!workspaceAccess.canOperate||readMatchdayLock({clubId:club.id||club.name,day:dayKey,date:matchDate})}),
+        writeDraft:result=>writeMatchdayScheduleDraft({context,dayKey,matchDate,scheduled:result.fixtures,
+          unresolved:allocationStateRef.current[dayKey].unresolved,overrides:result.overrides}),
+        commitState:result=>{
+          const dayState=allocationStateRef.current[dayKey];
+          allocationStateRef.current[dayKey]={...dayState,fixtures:result.fixtures,overrides:result.overrides};
+          dayState.setOverrides(result.overrides);dayState.setScheduled(result.fixtures);
+        }});
+    } finally {allocationBusyRef.current.delete(dayKey);}
+  };
 
   const matchdayCalendarSyncRef = useRef(new Map());
   useEffect(() => {
@@ -2913,6 +2962,8 @@ function App() {
                     pitchCfg={pitchCfg}
                     satOverrides={satOverrides}
                     satOv={satOv}
+                    onAllocationChange={request=>applyDayAllocation('saturday',request)}
+                    useAstro={useAstro}
                     satScheduled={satScheduled}
                     setSatScheduled={setSatScheduled}
                     setSatUnresolved={setSatUnresolved}
@@ -2982,6 +3033,7 @@ function App() {
                     pitchCfg={pitchCfg}
                     refs={refs}
                     sunOv={sunOv}
+                    onAllocationChange={request=>applyDayAllocation('sunday',request)}
                     thC={thC}
                     pitchClosures={pitchClosures}
                     closedPitches={sunClosedPitches}
@@ -3056,6 +3108,7 @@ function App() {
                     pitchCfg={pitchCfg}
                     refs={refs}
                     midweekOv={midweekOv}
+                    onAllocationChange={request=>applyDayAllocation('midweek',request)}
                     thC={thC}
                     pitchClosures={pitchClosures}
                     closedPitches={midweekClosedPitches}

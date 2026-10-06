@@ -1,4 +1,5 @@
 import { formatTimelineTime } from "./timelineEngine.js";
+import {getFixtureFlowIdentity} from '../domain/fixtureVenueFlow.js';
 import { snapTimelineMinutes, TIMELINE_SNAP_MINUTES } from "./timelineDragEngine.js";
 
 export const MATCHDAY_PLANNER_ZOOM = Object.freeze({
@@ -45,12 +46,7 @@ export function getPlannerCanvasWidth({ start, end, zoom = "fit", viewportWidth 
 }
 
 export function getPlannerFixtureIdentity(fixture = {}, fallbackIndex = 0) {
-  return String(
-    fixture.id ||
-      fixture.fixtureId ||
-      fixture.externalId ||
-      `${fixture.pitchId || "pitch"}-${fixture.koMins || "time"}-${fixture.homeTeam || fixture.team || "fixture"}-${fallbackIndex}`,
-  );
+  return getFixtureFlowIdentity(fixture);
 }
 
 export function buildPlannerChangeRecord(candidate = {}) {
