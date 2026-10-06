@@ -1,6 +1,6 @@
 export function isFixtureSchedulingDemand(fixture = {}) {
   const status = String(fixture.lifecycleStatus || fixture.status || "active").trim().toLowerCase();
-  const venue = String(fixture.homeAway || fixture.venueType || "").trim().toLowerCase();
+  const venue = String(fixture.venueRole || fixture.homeAway || fixture.venueType || "").trim().toLowerCase();
   return !["postponed","cancelled","canceled","abandoned","void","withdrawn","away"].includes(status)
     && venue !== "away" && fixture.isAwayFixture !== true && fixture.requiresScheduling !== false;
 }

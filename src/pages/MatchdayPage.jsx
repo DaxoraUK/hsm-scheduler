@@ -530,20 +530,24 @@ export default function MatchdayPage({
     : (runLive || (isSunday ? props.runSunLive : props.runSatLive));
   const rebuildAction = useMemo(() => createRebuildAction(buildSchedule), [buildSchedule]);
   const [rebuildBusy, setRebuildBusy] = useState(false);
+  const rebuildBusyRef = useRef(false);
   const runRebuild = useCallback(async () => {
-    if (rebuildBusy) return;
+    if (rebuildBusyRef.current || isLocked) return {skipped:true};
+    rebuildBusyRef.current = true;
     setRebuildBusy(true);
     try {
       const result = await rebuildAction();
+      if(result === false) toast.error(`${day} schedule could not be rebuilt`, {description:"The existing schedule was kept. Review the reported error and retry."});
       if (result !== false && !result?.skipped) toast.success(`${day} schedule rebuilt`, { description: "The current day was refreshed without duplicating fixtures." });
       return result;
     } catch (error) {
       toast.error(`${day} schedule could not be rebuilt`, { description: error?.message || "The existing schedule was left unchanged." });
       return false;
     } finally {
+      rebuildBusyRef.current = false;
       setRebuildBusy(false);
     }
-  }, [day, rebuildAction, rebuildBusy]);
+  }, [day, rebuildAction, isLocked]);
   const currentSnapshotHash = useMemo(() => buildMatchdaySnapshotHash(final), [final]);
   const approvalStale = Boolean(isLocked && lockInfo.snapshot_hash && lockInfo.snapshot_hash !== currentSnapshotHash);
 
@@ -1524,8 +1528,8 @@ export default function MatchdayPage({
           closedPitches={props.closedPitches}
           unresolvedCount={unresolved.length}
           refWarnings={refWarnings}
-          runTest={runTest || (isSunday ? props.runSunTest : props.runSatTest)}
-          runLive={runLive || (isSunday ? props.runSunLive : props.runSatLive)}
+          runTest={runRebuild}
+          runLive={runRebuild}
           onRebuild={runRebuild}
           rebuildBusy={rebuildBusy}
           saveWeek={props.saveWeek}

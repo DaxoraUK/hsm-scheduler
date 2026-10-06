@@ -112,7 +112,7 @@ export function updateFixtureOverride(overrides = {}, index, field, value, fixtu
 }
 
 export function mergeFixtureScheduleResults(all = [], scheduled = [], away = []) {
-  const retained = all.filter((fixture) => fixture?.status === "postponed" || fixture?.status === "cancelled");
+  const retained = all.filter((fixture) => ["postponed","cancelled","canceled","abandoned","void","withdrawn"].includes(String(fixture?.lifecycleStatus||fixture?.status||"").toLowerCase()));
   return deduplicateFixtureSet([...scheduled, ...away, ...retained]);
 }
 

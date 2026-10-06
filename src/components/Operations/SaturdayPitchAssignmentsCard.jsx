@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { cleanName } from "../../lib/scheduler.js";
 import { createPitchRegistry } from "../../lib/registry/pitchRegistry.js";
+import {getPitchClosureTargets} from "../../lib/scheduling/pitchResourceModel.js";
 import Card from "@/ui/Card.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 
@@ -63,16 +64,14 @@ export default function SaturdayPitchAssignmentsCard({
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {pitchCfg.map((pitch) => {
           const games = gamesByPitch.get(pitch.id) || [];
-          const linkedUsage = registry
-            .getLinkedPitchIds(pitch.id)
+          const linkedUsage = getPitchClosureTargets([pitch.id],registry.all)
             .filter((pitchId) => pitchId !== pitch.id)
             .flatMap((pitchId) =>
               (gamesByPitch.get(pitchId) || []).map((game) => ({ pitchId, game }))
             );
           const linkedUsageLabel = [...new Set(linkedUsage.map(({ pitchId, game }) => `${pitchId} at ${game.koTime || game.ko || "scheduled time"}`))].join(", ");
 
-          const linkedClosureSources = registry
-            .getLinkedPitchIds(pitch.id)
+          const linkedClosureSources = getPitchClosureTargets([pitch.id],registry.all)
             .filter((pitchId) => explicitClosed.has(pitchId));
           const explicitlyClosed = explicitClosed.has(pitch.id);
           const linkedClosed = !explicitlyClosed && linkedClosureSources.length > 0;

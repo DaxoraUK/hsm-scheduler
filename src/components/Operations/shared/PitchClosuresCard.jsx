@@ -3,6 +3,7 @@ import Card from "@/ui/Card.jsx";
 import StatusChip from "@/ui/StatusChip.jsx";
 import { sortPitches } from "../../../lib/pitches.js";
 import { createPitchRegistry } from "../../../lib/registry/pitchRegistry.js";
+import {getPitchClosureTargets} from "../../../lib/scheduling/pitchResourceModel.js";
 import {
   describePitchClosure,
   getActivePitchClosures,
@@ -45,7 +46,7 @@ function formatDisplayDate(value) {
 }
 
 function getPitchStatus({ pitch, registry, explicitClosures, allowArtificial }) {
-  const linkedIds = registry.getLinkedPitchIds(pitch.id);
+  const linkedIds = getPitchClosureTargets([pitch.id],registry.all);
   const explicitClosure = explicitClosures.get(pitch.id) || null;
   const closureSources = linkedIds
     .filter((pitchId) => pitchId !== pitch.id && explicitClosures.has(pitchId))

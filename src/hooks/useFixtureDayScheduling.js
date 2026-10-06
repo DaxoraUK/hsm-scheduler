@@ -3,6 +3,8 @@ import { decorateFixturesForDay, normaliseFixtureDayKey } from "../lib/domain/fi
 import { getParkingSnapshot } from "../lib/engines/parkingEngine.js";
 import { isFixtureOfficialConfirmed } from "../lib/engines/officialsEngine.js";
 import { applyFixtureOverrides } from "../lib/domain/fixtureVenueFlow.js";
+import {pitchesShareSpace} from "../lib/scheduling/pitchResourceModel.js";
+import {isFixtureSchedulingDemand} from "../lib/domain/fixtureLifecycle.js";
 
 function buildPitchConflicts(active = [], pitchCfg = []) {
   const conflicts = [];
@@ -17,10 +19,7 @@ function buildPitchConflicts(active = [], pitchCfg = []) {
       const firstPitch = pitchCfg.find((pitch) => pitch.id === first.pitchId);
       const secondPitch = pitchCfg.find((pitch) => pitch.id === second.pitchId);
 
-      const linked =
-        first.pitchId === second.pitchId ||
-        firstPitch?.innerOf === second.pitchId ||
-        secondPitch?.innerOf === first.pitchId;
+      const linked = pitchesShareSpace(first.pitchId,second.pitchId,pitchCfg);
 
       if (
         linked &&
@@ -54,7 +53,7 @@ export function useFixtureDayScheduling({
   const active = useMemo(
     () =>
       final.filter(
-        (game) => game.status !== "postponed" && game.status !== "cancelled" && game.status !== "away" && !game.isAwayFixture
+        isFixtureSchedulingDemand
       ),
     [final]
   );

@@ -93,6 +93,7 @@ import {
   clearTenantStorageContext,
   migrateLegacyTenantStorage,
   setTenantStorageContext,
+  getTenantStorageContext,
   tenantGetItem,
   tenantGetJson,
   tenantRemoveItem,
@@ -125,6 +126,8 @@ import { reconcileSiteAssignments } from "./lib/siteAssignments.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import { matchdayFixtureToAnnualBooking } from "./lib/planning/annualPlannerEngine.js";
 import { loadScheduleResourceContext, withScheduleReservations } from "./lib/scheduling/scheduleResourceContext.js";
+import { prepareScopedScheduleDraft } from "./lib/scheduling/prepareScopedScheduleDraft.js";
+import { readMatchdayScheduleDraft } from "./lib/storage/matchdayScheduleDraft.js";
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,
@@ -1748,12 +1751,46 @@ function App() {
   const getStartMins = () => startHour * 60 + startMin;
   const getEndMins = () => endHour * 60 + endMin;
 
+  const scheduleScopeRef = useRef(null);
+  scheduleScopeRef.current = {clubId:activeClubId,userId:authSession?.user?.id,saturday:satDate,sunday:sunDate,midweek:midweekDate,
+    settings:JSON.stringify({pitchCfg,club,startHour,startMin,endHour,endMin,bufferYouth,bufferAdult,useAstro,midweekStartMins,midweekEndMins})};
+  const prepareDayDraft = async ({dayKey,matchDate,all,away,overrides,schedule}) => {
+    const context = getTenantStorageContext();
+    const captured = scheduleScopeRef.current;
+    const isCurrent = () => scheduleScopeRef.current.clubId===captured.clubId && scheduleScopeRef.current.userId===captured.userId
+      && scheduleScopeRef.current[dayKey]===matchDate && scheduleScopeRef.current.settings===captured.settings
+      && context.clubId===captured.clubId && context.userId===captured.userId;
+    const result = await prepareScopedScheduleDraft({context,dayKey,matchDate,all,away,overrides,schedule,isCurrent,
+      loadResources:()=>loadScheduleResourceContext({clubId:activeClubId,matchDate,
+        plannerEnabled:hasEntitlement(subscription,ENTITLEMENTS.ANNUAL_PLANNER),
+        loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent})});
+    if(!result.ok) toast.error("Schedule was not rebuilt",{description:result.reason});
+    return result;
+  };
+  const draftHydrationRef = useRef("");
+  useLayoutEffect(() => {
+    if(!workspaceHydrated || !workspaceAccess.canOperate || !activeClubId || !authSession?.user?.id) return;
+    const context = getTenantStorageContext();
+    const key = JSON.stringify([context,satDate,sunDate,midweekDate]);
+    if(draftHydrationRef.current===key) return;
+    draftHydrationRef.current=key;
+    for(const [dayKey,matchDate,setScheduled,setUnresolved,setOverrides,setHasRun] of [
+      ["saturday",satDate,setSatScheduled,setSatUnresolved,setSatOverrides,setSatHasRun],
+      ["sunday",sunDate,setSunScheduled,setSunUnresolved,setSunOverrides,setSunHasRun],
+      ["midweek",midweekDate,setMidweekScheduled,setMidweekUnresolved,setMidweekOverrides,setMidweekHasRun],
+    ]) {
+      const draft=readMatchdayScheduleDraft({context,dayKey,matchDate});
+      if(draft) {setScheduled(draft.scheduled);setUnresolved(draft.unresolved);setOverrides(draft.overrides);setHasRun(true);}
+    }
+  },[workspaceHydrated,workspaceAccess.canOperate,activeClubId,authSession?.user?.id,satDate,sunDate,midweekDate]);
+
   const runSat = useCallback(
-    (baseFx) => {
+    async (baseFx) => {
       if (!requirePlanCompliance()) return false;
       const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...satManual], satOverrides));
       const fixtureFlow = partitionFixturesForScheduling(all);
-      const { scheduled: s, unresolved: u } = scheduleSat(
+      const result = await prepareDayDraft({dayKey:"saturday",matchDate:satDate,all,away:fixtureFlow.away,overrides:satOverrides,
+        schedule:resourceContext => scheduleSat(
         fixtureFlow.home,
         useAstro,
         satClosedPitches,
@@ -1762,10 +1799,12 @@ function App() {
         getStartMins(),
         getEndMins(),
         pitchCfg,
-        club.maxConcurrent || 3,
-      );
-      setSatScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
-      setSatUnresolved(deduplicateFixtureSet(u));
+        club.maxConcurrent ?? 3,
+        { club, matchDate:satDate, resourceContext, bufferYouth, bufferAdult },
+      )});
+      if(!result.ok) return false;
+      setSatScheduled(result.scheduled);
+      setSatUnresolved(result.unresolved);
       setSatHasRun(true);
       return true;
     },
@@ -1782,6 +1821,11 @@ function App() {
       bufferYouth,
       bufferAdult,
       pitchCfg,
+      club,
+      activeClubId,
+      authSession?.user?.id,
+      subscription,
+      satDate,
       requirePlanCompliance,
     ],
   );
@@ -1796,7 +1840,7 @@ function App() {
         count: testSat.length,
       },
     ]);
-    runSat(testSat);
+    return runSat(testSat);
   };
 
   const runSatLive = async () => {
@@ -1822,10 +1866,7 @@ function App() {
         });
         return false;
       }
-      setSatHasRun(false);
-      setSatScheduled([]);
-      setSatUnresolved([]);
-      runSat(fixtures);
+      if(!await runSat(fixtures)) return false;
       if (!fixtures.length) toast.info("No Saturday home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
       return true;
     } catch (error) {
@@ -1837,11 +1878,12 @@ function App() {
   };
 
   const runSun = useCallback(
-    (baseFx) => {
+    async (baseFx) => {
       if (!requirePlanCompliance()) return false;
       const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...sunManual], sunOverrides));
       const fixtureFlow = partitionFixturesForScheduling(all);
-      const { scheduled: s, unresolved: u } = scheduleSun(
+      const result = await prepareDayDraft({dayKey:"sunday",matchDate:sunDate,all,away:fixtureFlow.away,overrides:sunOverrides,
+        schedule:resourceContext => scheduleSun(
         fixtureFlow.home,
         useAstro,
         sunClosedPitches,
@@ -1850,10 +1892,12 @@ function App() {
         getStartMins(),
         getEndMins(),
         pitchCfg,
-        club.maxConcurrent || 3,
-      );
-      setSunScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
-      setSunUnresolved(deduplicateFixtureSet(u));
+        club.maxConcurrent ?? 3,
+        { club, matchDate:sunDate, resourceContext, bufferYouth, bufferAdult },
+      )});
+      if(!result.ok) return false;
+      setSunScheduled(result.scheduled);
+      setSunUnresolved(result.unresolved);
       setSunHasRun(true);
       return true;
     },
@@ -1871,6 +1915,11 @@ function App() {
       bufferAdult,
       pitchCfg,
       club.maxConcurrent,
+      club,
+      activeClubId,
+      authSession?.user?.id,
+      subscription,
+      sunDate,
       requirePlanCompliance,
     ],
   );
@@ -1902,7 +1951,7 @@ function App() {
         });
         return false;
       }
-      runSun(fixtures);
+      if(!await runSun(fixtures)) return false;
       if (!fixtures.length) toast.info("No Sunday home fixtures found", { description: "The sources responded successfully but contained no matching Sunday fixtures for this date." });
       return true;
     } catch (error) {
@@ -1913,11 +1962,12 @@ function App() {
   };
 
   const runMidweek = useCallback(
-    (baseFx) => {
+    async (baseFx) => {
       if (!requirePlanCompliance()) return false;
       const all = deduplicateFixtureSet(applyFixtureOverrides([...baseFx, ...midweekManual], midweekOverrides));
       const fixtureFlow = partitionFixturesForScheduling(all);
-      const { scheduled: s, unresolved: u } = scheduleSat(
+      const result = await prepareDayDraft({dayKey:"midweek",matchDate:midweekDate,all,away:fixtureFlow.away,overrides:midweekOverrides,
+        schedule:resourceContext => scheduleSat(
         fixtureFlow.home,
         useAstro,
         midweekClosedPitches,
@@ -1926,11 +1976,12 @@ function App() {
         midweekStartMins,
         midweekEndMins,
         pitchCfg,
-        club.maxConcurrent || 3,
-        { fixedAdultKickOffMins: null },
-      );
-      setMidweekScheduled(mergeFixtureScheduleResults(all, s, fixtureFlow.away));
-      setMidweekUnresolved(deduplicateFixtureSet(u));
+        club.maxConcurrent ?? 3,
+        { club, matchDate:midweekDate, resourceContext, bufferYouth, bufferAdult, fixedAdultKickOffMins:null },
+      )});
+      if(!result.ok) return false;
+      setMidweekScheduled(result.scheduled);
+      setMidweekUnresolved(result.unresolved);
       setMidweekHasRun(true);
       return true;
     },
@@ -1946,6 +1997,11 @@ function App() {
       midweekEndMins,
       pitchCfg,
       club.maxConcurrent,
+      club,
+      activeClubId,
+      authSession?.user?.id,
+      subscription,
+      midweekDate,
       requirePlanCompliance,
     ],
   );
@@ -1960,7 +2016,7 @@ function App() {
         count: testMidweek.length,
       },
     ]);
-    runMidweek(testMidweek);
+    return runMidweek(testMidweek);
   };
 
   const runMidweekLive = async () => {
@@ -1991,10 +2047,7 @@ function App() {
         });
         return false;
       }
-      setMidweekHasRun(false);
-      setMidweekScheduled([]);
-      setMidweekUnresolved([]);
-      runMidweek(fixtures);
+      if(!await runMidweek(fixtures)) return false;
       if (!fixtures.length) toast.info("No midweek home fixtures found", { description: "The sources responded successfully but contained no matching fixtures for this date." });
       return true;
     } catch (error) {
