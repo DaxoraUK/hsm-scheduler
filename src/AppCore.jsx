@@ -124,6 +124,7 @@ import { createOnboardingDraft } from "./lib/onboarding/onboardingEngine.js";
 import { reconcileSiteAssignments } from "./lib/siteAssignments.js";
 import { buildHistoryRestoreState } from "./lib/history/historyRestore.js";
 import { matchdayFixtureToAnnualBooking } from "./lib/planning/annualPlannerEngine.js";
+import { loadScheduleResourceContext, withScheduleReservations } from "./lib/scheduling/scheduleResourceContext.js";
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,

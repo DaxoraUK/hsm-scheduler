@@ -7,6 +7,7 @@ import {
 } from "../intelligence/pitch/pitchService.js";
 import { formatTimelineTime } from "./timelineEngine.js";
 import { detectAnnualPlannerConflicts, getMatchdayFixtureSourceId, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
+import { getScheduleResourceFailure } from "../scheduling/scheduleConstraints.js";
 
 export const TIMELINE_SNAP_MINUTES = 15;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
@@ -86,12 +87,7 @@ export function rankTimelinePitches({ pitchCfg = [], fixture = {}, closedPitches
 
 export function buildTimelineMovePatch({ fixture = {}, pitch = {}, koMins } = {}) {
   const snappedKo = snapTimelineMinutes(koMins);
-  const duration = getFixtureDuration({
-    ...fixture,
-    koMins: snappedKo,
-    koTime: formatTimelineTime(snappedKo),
-    endMins: null,
-  });
+  const duration = getFixtureDuration(fixture);
   const endMins = snappedKo + duration;
 
   return {
@@ -117,6 +113,7 @@ export function buildTimelineMoveCandidate({
   matchDate = "",
   resourceBookings = [],
   resourceBlackouts = [],
+  resourceContext = null,
 } = {}) {
   const fixture = fixtures[fixtureIndex];
   const pitch = (pitchCfg || []).find((item) => item.id === pitchId);
@@ -160,6 +157,8 @@ export function buildTimelineMoveCandidate({
   const duration = getFixtureDuration(fixture);
   const safeKo = clampTimelineMinutes(snapTimelineMinutes(koMins), start, end, duration);
   const patch = buildTimelineMovePatch({ fixture, pitch, koMins: safeKo });
+  const resourceFailure = getScheduleResourceFailure({fixtures:fixtures.filter((_,i)=>i!==fixtureIndex),next:{...fixture,...patch},pitchCfg,closedPitches,club,matchDate,resourceContext});
+  if(resourceFailure && ["resource_context","resource_booking"].includes(resourceFailure.type)) return {...resourceFailure,blocked:true,fixture,fixtureIndex,pitch,patch,title:"Move blocked",message:resourceFailure.reason,timeSuggestions:[],pitchSuggestions:[],validatedRecommendations:[]};
   const noChange = patch.pitchId === fixture.pitchId && patch.koMins === fixture.koMins;
   if (noChange) {
     return {
@@ -208,6 +207,7 @@ export function buildTimelineMoveCandidate({
   const resourceConflicts = matchDate
     ? detectAnnualPlannerConflicts(resourceCandidate, {
         bookings: resourceBookings,
+        pitches: pitchCfg,
         blackouts: resourceBlackouts,
         ignoreSourceId: resourceCandidate.sourceId,
       })

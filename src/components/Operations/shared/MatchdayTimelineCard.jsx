@@ -48,6 +48,7 @@ import {
 } from "../../../lib/engines/matchdayPlannerEngine.js";
 import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";
 import { DB, isSupaConfigured } from "../../../lib/supabase.js";
+import { loadScheduleResourceContext, withScheduleReservations } from "../../../lib/scheduling/scheduleResourceContext.js";
 
 const PITCH_COLUMN_WIDTH = 184;
 const EDGE_SCROLL_DISTANCE = 68;
@@ -87,7 +88,7 @@ export default function MatchdayTimelineCard({
   const [proposal, setProposal] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(900);
-  const [annualPlannerResources, setAnnualPlannerResources] = useState({ bookings: [], blackouts: [] });
+  const [annualPlannerResources, setAnnualPlannerResources] = useState({ status: "loading", bookings: [], blackouts: [] });
   const scrollRef = useRef(null);
   const rowRefs = useRef(new Map());
   const dragRef = useRef(null);
@@ -134,21 +135,21 @@ export default function MatchdayTimelineCard({
     let cancelled = false;
     const clubId = String(club?.id || "").trim();
     if (!annualPlannerEnabled || !clubId || !matchDate || !isSupaConfigured()) {
-      setAnnualPlannerResources({ bookings: [], blackouts: [] });
+      setAnnualPlannerResources({ status: annualPlannerEnabled ? "error" : "disabled", bookings: [], blackouts: [] });
       return undefined;
     }
 
     const loadResources = async () => {
+      if (!cancelled) setAnnualPlannerResources({status:"loading",bookings:[],blackouts:[]});
       try {
-        const result = await DB.listAnnualPlannerWorkspace(clubId, { startDate: matchDate, endDate: matchDate });
+        const result = await loadScheduleResourceContext({clubId,matchDate,plannerEnabled:true,loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent:()=>!cancelled});
         if (!cancelled) {
           setAnnualPlannerResources({
-            bookings: Array.isArray(result?.bookings) ? result.bookings : [],
-            blackouts: Array.isArray(result?.blackouts) ? result.blackouts : [],
+            ...result,
           });
         }
-      } catch {
-        if (!cancelled) setAnnualPlannerResources({ bookings: [], blackouts: [] });
+      } catch (error) {
+        if (!cancelled) setAnnualPlannerResources({status:"error",reason:error.message,bookings:[],blackouts:[]});
       }
     };
 
@@ -201,6 +202,7 @@ export default function MatchdayTimelineCard({
         matchDate,
         resourceBookings: annualPlannerResources.bookings,
         resourceBlackouts: annualPlannerResources.blackouts,
+        resourceContext: annualPlannerEnabled ? withScheduleReservations(annualPlannerResources,pitchCfg) : null,
       }),
     [annualPlannerResources.blackouts, annualPlannerResources.bookings, closedPitches, club, games, matchDate, pitchCfg, timeline.end, timeline.start],
   );

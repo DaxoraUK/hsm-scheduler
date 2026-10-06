@@ -40,7 +40,7 @@ export function getScheduleResourceFailure({fixtures=[],fixtureIdentity,next={},
   for(const booking of resourceContext?.reservations??[]) {
     if(booking.fixtureIdentity&&booking.fixtureIdentity===fixtureIdentity) continue;
     if(!overlap(range,{start:booking.startMins,end:booking.endMins})) continue;
-    if(pitchesShareSpace(id,booking.pitchId,pitchCfg)||(booking.teamKey&&teams.has(booking.teamKey))) return fail('resource_booking','A protected planner booking occupies this pitch or team at this time.',booking);
+    if((booking.allPitches&&(!booking.venueId||!pitch.siteId||booking.venueId===pitch.siteId))||pitchesShareSpace(id,booking.pitchId,pitchCfg)||(booking.teamKey&&(teams.has(booking.teamKey)||teams.has('id:'+booking.teamKey)))) return fail('resource_booking','A protected planner booking occupies this pitch or team at this time.',booking);
   }
   const max=Number(club.maxConcurrent);
   if(max>0&&!isPitchIndependent(id,pitchCfg)) {

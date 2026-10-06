@@ -1,4 +1,5 @@
 import { getFixtureFlowIdentity, isAwayFixture } from "../domain/fixtureVenueFlow.js";
+import { pitchesShareSpace } from "../scheduling/pitchResourceModel.js";
 
 const ACTIVE_BOOKING_STATUSES = new Set(["requested", "provisional", "confirmed", "completed"]);
 
@@ -351,6 +352,8 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
   });
 
   if (normalised.pitchId) {
+    const related = overlapping.filter(booking => booking.pitchId && booking.pitchId !== normalised.pitchId && pitchesShareSpace(booking.pitchId,normalised.pitchId,pitches));
+    if(related.length) conflicts.push({type:"full_pitch_overlap",severity:"danger",booking:related[0],title:"Playing space unavailable",message:"Another booking occupies this pitch layout or a containing playing area."});
     const samePitch = overlapping.filter((booking) => booking.pitchId && booking.pitchId === normalised.pitchId);
     const pitch = (Array.isArray(pitches) ? pitches : []).find((row) => clean(row.id) === normalised.pitchId) || null;
     const trainingCapacity = Math.max(1, Math.min(20, finite(pitch?.trainingCapacity ?? pitch?.training_capacity ?? 1, 1)));
@@ -458,7 +461,7 @@ export function detectAnnualPlannerConflicts(candidate = {}, { bookings = [], bl
     const start = new Date(blackout.startAt || 0);
     const end = new Date(blackout.endAt || 0);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
-    const samePitch = !blackout.pitchId || !normalised.pitchId || blackout.pitchId === normalised.pitchId;
+    const samePitch = !blackout.pitchId || !normalised.pitchId || blackout.pitchId === normalised.pitchId || pitchesShareSpace(blackout.pitchId,normalised.pitchId,pitches);
     const sameVenue = !blackout.venueId || !normalised.venueId || blackout.venueId === normalised.venueId;
     if (samePitch && sameVenue && intervalsOverlap(interval.start, interval.end, start, end)) {
       conflicts.push({
