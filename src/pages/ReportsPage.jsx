@@ -1,3 +1,4 @@
+import { presentList } from "../lib/lists/listPresentation.js";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
@@ -495,14 +496,14 @@ export default function ReportsPage({
             {reportType === "funding" ? (
               <SelectControl label="Funding project" value={fundingProjectId} onChange={setFundingProjectId}>
                 <option value="">Select a saved funding project</option>
-                {fundingProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                {presentList(fundingProjects, { columns: [{ key: "name", type: "text", value: row => row.title }], sort: { key: "name", direction: "asc" } }).rows.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
               </SelectControl>
             ) : null}
           </div>
         )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Report types">
-          {availableReportTypes.map((item) => {
+          {presentList(availableReportTypes, { columns: [{ key: "name", type: "text", value: row => row.label }], sort: { key: "name", direction: "asc" } }).rows.map((item) => {
             const Icon = REPORT_ICONS[item.id] || FileCheck2;
             const active = reportType === item.id;
             return (

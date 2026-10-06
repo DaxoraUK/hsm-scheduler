@@ -1,3 +1,6 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
+import SortableTableHeader from "../lists/SortableTableHeader.jsx";
+import { presentList } from "../../lib/lists/listPresentation.js";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -676,7 +679,7 @@ export default function FundingWorkspacePanel({
                   aria-label="Funding project"
                 >
                   <option value="">New unsaved project</option>
-                  {workspace.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+                  {presentList(workspace.projects, { columns: [{ key: "title", type: "text", value: row => row.title }], sort: { key: "title", direction: "asc" } }).rows.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
                 </select>
               </Field>
               <button
@@ -898,11 +901,11 @@ export default function FundingWorkspacePanel({
             </div>
             {projectDocuments.length ? (
               <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
-                <div className="overflow-x-auto">
+                <RecordCollection label="Funding documents" rows={projectDocuments} columns={[{ key: "name", label: "Document", type: "text", value: row => row.fileName }, { key: "supports", label: "Supports", type: "text", value: row => checklist.items.find(item => item.key === row.requirementKey)?.title || row.requirementKey }, { key: "date", label: "Uploaded", type: "date", value: row => row.createdAt }, { key: "size", label: "Size", type: "number", value: row => row.sizeBytes }]} filterFields={[{ key: "type", label: "Document type", value: row => row.documentType }]} contextKey={activeProjectId} >{(displayRows, list) => <div className="overflow-x-auto">
                   <table className="min-w-[900px] w-full text-left">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500"><tr><th className="px-4 py-3">Document</th><th className="px-4 py-3">Supports</th><th className="px-4 py-3">Uploaded</th><th className="px-4 py-3">Size</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500"><tr><SortableTableHeader columnKey="name" label="Document" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="supports" label="Supports" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="date" label="Uploaded" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="size" label="Size" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {projectDocuments.map((document) => {
+                      {displayRows.map((document) => {
                         const requirement = checklist.items.find((item) => item.key === document.requirementKey);
                         return (
                           <tr key={document.id}>
@@ -916,7 +919,7 @@ export default function FundingWorkspacePanel({
                       })}
                     </tbody>
                   </table>
-                </div>
+                </div>}</RecordCollection>
               </div>
             ) : (
               <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 p-10 text-center"><FolderOpen size={32} className="mx-auto text-slate-300" /><h3 className="mt-3 text-lg font-black text-slate-900">No documents attached</h3><p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500">Upload the first document and choose the requirement it supports. You can also attach evidence directly from an expanded readiness item.</p><button type="button" onClick={() => openUpload()} disabled={!canManage || !activeProjectId} className="mt-4 inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-40"><Upload size={16} /> Upload first document</button></div>
@@ -930,15 +933,15 @@ export default function FundingWorkspacePanel({
               <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Evidence history</div><h3 className="mt-1 text-xl font-black text-slate-950">Immutable application snapshots</h3><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">Create a dated record before submission. It freezes the project brief, programme, checklist, document manifest and operational evidence summary without copying private document contents.</p></div>
               <button type="button" onClick={createSnapshot} disabled={!canManage || !activeProjectId || busyKey === "snapshot"} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40">{busyKey === "snapshot" ? <Loader2 size={17} className="animate-spin" /> : <Archive size={17} />} Create snapshot</button>
             </div>
-            <div className="mt-5 space-y-3">
-              {projectSnapshots.map((snapshot) => (
+            <RecordCollection label="Evidence snapshots" rows={projectSnapshots} contextKey={activeProjectId} defaultSort={{ key: "date", direction: "desc" }} columns={[{ key: "date", label: "Created", type: "date", value: row => row.createdAt }, { key: "name", label: "Name", type: "text", value: row => row.label }]}>{displaySnapshots => <div className="mt-5 space-y-3">
+              {displaySnapshots.map((snapshot) => (
                 <div key={snapshot.id} className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><FileCheck2 size={21} /></div><div><div className="text-sm font-black text-slate-950">{snapshot.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">Created {formatDate(snapshot.createdAt, true)} · Readiness {snapshot.snapshot?.readiness?.score ?? 0}% · {snapshot.snapshot?.documents?.length ?? 0} documents referenced</div></div></div>
                   <StatusChip status="success" size="sm">Locked evidence record</StatusChip>
                 </div>
               ))}
               {!projectSnapshots.length ? <div className="rounded-[24px] border border-dashed border-slate-300 p-10 text-center"><History size={32} className="mx-auto text-slate-300" /><h3 className="mt-3 text-lg font-black text-slate-900">No evidence snapshot yet</h3><p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500">Create one when the project and checklist reach a meaningful milestone, especially immediately before submitting an application.</p></div> : null}
-            </div>
+            </div>}</RecordCollection>
           </div>
         ) : null}
       </Card>

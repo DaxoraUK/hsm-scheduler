@@ -1,3 +1,5 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
+import SortableTableHeader from "../lists/SortableTableHeader.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -249,11 +251,11 @@ export default function FundingImpactEvidencePanel({
 
       {records.length ? (
         <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <RecordCollection label="Impact evidence" rows={records} columns={[{ key: "period", label: "Evidence period", type: "date", value: row => row.periodStart }, { key: "delivery", label: "Delivery", type: "number", value: row => row.completedSessions }, { key: "participants", label: "Participation", type: "number", value: row => row.uniqueParticipants }, { key: "volunteers", label: "Inclusion & volunteers", type: "number", value: row => row.volunteerCount }, { key: "source", label: "Source", type: "text", value: row => row.sourceLabel }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }]} contextKey={`${clubId}:${projectId}`} defaultSort={{ key: "period", direction: "desc" }}>{(displayRows, list) => <div className="overflow-x-auto">
             <table className="min-w-[980px] w-full text-left">
-              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500"><tr><th className="px-4 py-3">Evidence period</th><th className="px-4 py-3">Delivery</th><th className="px-4 py-3">Participation</th><th className="px-4 py-3">Inclusion & volunteers</th><th className="px-4 py-3">Source</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500"><tr><SortableTableHeader columnKey="period" label="Evidence period" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="delivery" label="Delivery" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="participants" label="Participation" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="volunteers" label="Inclusion & volunteers" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><SortableTableHeader columnKey="source" label="Source" sort={list.sort} onSort={list.toggleSort} className="px-4 py-3" /><th className="px-4 py-3 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {records.map((record) => (
+                {displayRows.map((record) => (
                   <tr key={record.id} className="align-top">
                     <td className="px-4 py-4"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600"><CalendarDays size={18} /></div><div><div className="text-sm font-black text-slate-950">{formatPeriod(record)}</div><div className="mt-1"><StatusChip status={record.status === "verified" ? "success" : "warning"} size="sm">{record.status === "verified" ? "Verified" : "Draft"}</StatusChip></div></div></div></td>
                     <td className="px-4 py-4 text-sm font-semibold leading-6 text-slate-700"><strong>{record.completedSessions}</strong> completed<br /><span className="text-slate-500">{record.communitySessions} community · {record.cancelledSessions} cancelled</span></td>
@@ -265,7 +267,7 @@ export default function FundingImpactEvidencePanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}</RecordCollection>
         </div>
       ) : (
         <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-8 text-center"><UsersRound size={28} className="mx-auto text-slate-400" /><h3 className="mt-3 text-lg font-black text-slate-950">No completed-activity evidence recorded</h3><p className="mx-auto mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">Operational schedules can show planned demand, but they cannot prove delivery, attendance or beneficiaries. Add a verified evidence period when the club has a reliable source.</p></div>

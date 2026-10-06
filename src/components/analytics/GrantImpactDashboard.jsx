@@ -1,3 +1,5 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
+import SortableTableHeader from "../lists/SortableTableHeader.jsx";
 import React, { useMemo, useState } from "react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
 import {
@@ -182,20 +184,20 @@ function EvidenceMatrix({ framework }) {
       title="What Ground Control can evidence — and what it cannot"
       subtitle="Operational records are separated from calculated, inferred and manual evidence so funding claims remain defensible."
     >
-      <div className="overflow-x-auto">
+      <RecordCollection label="Grant requirements" rows={framework.requirements} columns={[{ key: "category", label: "Category", type: "text", value: row => row.category }, { key: "title", label: "Requirement", type: "text", value: row => row.title }, { key: "status", label: "Status", type: "text", value: row => matrixStatus(row).label }, { key: "source", label: "Source", type: "text", value: row => row.source }, { key: "evidence", label: "Current evidence", type: "text", value: row => row.evidence }, { key: "next", label: "Next action", type: "text", value: row => row.nextAction }]} filterFields={[{ key: "category", label: "Category", value: row => row.category }, { key: "status", label: "Status", value: row => matrixStatus(row).label }]}  >{(displayRows, list) => <div className="overflow-x-auto">
         <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left">
           <thead>
             <tr className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-              <th className="border-b border-slate-200 px-3 py-3">Category</th>
-              <th className="border-b border-slate-200 px-3 py-3">Requirement</th>
-              <th className="border-b border-slate-200 px-3 py-3">Status</th>
-              <th className="border-b border-slate-200 px-3 py-3">Source</th>
-              <th className="border-b border-slate-200 px-3 py-3">Current evidence</th>
-              <th className="border-b border-slate-200 px-3 py-3">Next action</th>
+              <SortableTableHeader columnKey="category" label="Category" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+              <SortableTableHeader columnKey="title" label="Requirement" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+              <SortableTableHeader columnKey="status" label="Status" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+              <SortableTableHeader columnKey="source" label="Source" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+              <SortableTableHeader columnKey="evidence" label="Current evidence" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+              <SortableTableHeader columnKey="next" label="Next action" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
             </tr>
           </thead>
           <tbody>
-            {framework.requirements.map((item) => {
+            {displayRows.map((item) => {
               const status = matrixStatus(item);
               return (
                 <tr key={item.id} className="align-top">
@@ -210,7 +212,7 @@ function EvidenceMatrix({ framework }) {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}</RecordCollection>
       <div className="mt-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
         <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
         <span>{framework.disclaimer}</span>
@@ -478,13 +480,13 @@ export default function GrantImpactDashboard({ midweekEnabled = true, ...props }
           <div className={`rounded-2xl p-4 ring-1 ${model.funding.coverage.staleProgrammes ? "bg-rose-50 ring-rose-200" : "bg-emerald-50 ring-emerald-200"}`}><div className={`text-[9px] font-black uppercase tracking-[0.18em] ${model.funding.coverage.staleProgrammes ? "text-rose-600" : "text-emerald-600"}`}>Re-check required</div><div className={`mt-2 text-2xl font-black ${model.funding.coverage.staleProgrammes ? "text-rose-900" : "text-emerald-900"}`}>{model.funding.coverage.staleProgrammes}</div></div>
         </div>
 
-        {model.funding.programmes.length ? (
+        <RecordCollection label="Funding opportunities" rows={model.funding.programmes} columns={[{ key: "name", label: "Name", type: "text", value: row => row.name }, { key: "funder", label: "Funder", type: "text", value: row => row.funder }]} filterFields={[{ key: "funder", label: "Funder", value: row => row.funder }]}>{displayProgrammes => <>{displayProgrammes.length ? (
           <div className="grid gap-4 xl:grid-cols-2">
-            {model.funding.programmes.map((programme) => <FundingOpportunityCard key={programme.id} programme={programme} />)}
+            {displayProgrammes.map((programme) => <FundingOpportunityCard key={programme.id} programme={programme} />)}
           </div>
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold leading-6 text-amber-950">No current verified programmes match this nation and project selection. Switch to all verified schemes to see closed or monitoring entries, and continue checking local sources.</div>
-        )}
+        )}</>}</RecordCollection>
 
         <div className="mt-5 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold leading-6 text-sky-950">
           <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />

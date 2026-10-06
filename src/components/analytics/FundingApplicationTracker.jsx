@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import {
   AlertTriangle,
   Banknote,
@@ -362,7 +363,7 @@ export default function FundingApplicationTracker({
         <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Application tasks</div><h3 className="mt-1 text-xl font-black text-slate-950">Work required before and after submission</h3><p className="mt-2 text-sm font-semibold text-slate-600">Assign every quotation, approval, portal entry and follow-up to a named owner and date.</p></div><div className="min-w-44"><ProgressBar value={taskProgress} tone={taskProgress === 100 ? "success" : overdueTasks.length ? "danger" : "warning"} /></div></div>
         {!activeId ? <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-semibold text-slate-500">Save the application before adding tasks.</div> : (
           <>
-            <div className="mt-5 space-y-3">{applicationTasks.map((task) => <TaskRow key={task.id} task={task} canManage={canManage} busy={busyKey === `task:${task.id}`} onSave={onSaveTask} onDelete={(item) => setDeleteTarget({ type: "task", item })} />)}</div>
+            <RecordCollection label="Application tasks" rows={applicationTasks} contextKey={activeId} columns={[{ key: "title", label: "Title", type: "text", value: row => row.title }, { key: "due", label: "Due date", type: "date", value: row => row.dueDate }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }]}>{displayRows => <div className="mt-5 space-y-3">{displayRows.map((task) => <TaskRow key={task.id} task={task} canManage={canManage} busy={busyKey === `task:${task.id}`} onSave={onSaveTask} onDelete={(item) => setDeleteTarget({ type: "task", item })} />)}</div>}</RecordCollection>
             <div className="mt-4 rounded-[22px] border border-dashed border-slate-300 bg-white p-4">
               <div className="grid gap-3 xl:grid-cols-[minmax(220px,1.4fr)_150px_140px_170px_160px_auto]">
                 <Field label="New task"><input className={INPUT_CLASS} value={taskDraft.title} onChange={(event) => setTaskDraft((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Obtain three contractor quotations" disabled={!canManage} /></Field>
@@ -381,7 +382,7 @@ export default function FundingApplicationTracker({
         <div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Post-award monitoring</div><h3 className="mt-1 text-xl font-black text-slate-950">Conditions, claims and funder reports</h3><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">Record every evidence return, expenditure claim, outcome report and acknowledgement required after an award. Do not wait until the due date to discover the evidence was never collected.</p></div>
         {!activeId ? <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-semibold text-slate-500">Save the application before adding monitoring requirements.</div> : (
           <>
-            <div className="mt-5 space-y-3">{applicationObligations.map((obligation) => <ObligationRow key={obligation.id} obligation={obligation} canManage={canManage} busy={busyKey === `obligation:${obligation.id}`} onSave={onSaveObligation} onDelete={(item) => setDeleteTarget({ type: "obligation", item })} />)}</div>
+            <RecordCollection label="Monitoring obligations" rows={applicationObligations} contextKey={activeId} columns={[{ key: "title", label: "Title", type: "text", value: row => row.title }, { key: "due", label: "Due date", type: "date", value: row => row.dueDate }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }]}>{displayRows => <div className="mt-5 space-y-3">{displayRows.map((obligation) => <ObligationRow key={obligation.id} obligation={obligation} canManage={canManage} busy={busyKey === `obligation:${obligation.id}`} onSave={onSaveObligation} onDelete={(item) => setDeleteTarget({ type: "obligation", item })} />)}</div>}</RecordCollection>
             <div className="mt-4 rounded-[22px] border border-dashed border-slate-300 bg-white p-4">
               <div className="grid gap-3 xl:grid-cols-[minmax(220px,1.2fr)_170px_160px_160px_auto]">
                 <Field label="New monitoring requirement"><input className={INPUT_CLASS} value={obligationDraft.title} onChange={(event) => setObligationDraft((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Submit six-month outcome report" disabled={!canManage} /></Field>

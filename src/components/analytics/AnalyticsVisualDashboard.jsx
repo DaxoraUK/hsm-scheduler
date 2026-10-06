@@ -1,3 +1,5 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
+import SortableTableHeader from "../lists/SortableTableHeader.jsx";
 import React, { useMemo, useState } from "react";
 import {
   Activity,
@@ -381,23 +383,23 @@ function EvidenceQualityPanel({ quality, embedded = false }) {
 
 function SourceRecords({ rows }) {
   return (
-    <div className="overflow-x-auto">
+    <RecordCollection label="Analytics source records" rows={rows} columns={[{ key: "entry", label: "Matchday", type: "text", value: row => row.entryLabel }, { key: "date", label: "Day / date", type: "date", value: row => row.dateLabel }, { key: "ko", label: "KO", type: "text", value: row => row.koTime }, { key: "fixture", label: "Fixture", type: "team", value: row => ({ name: row.fixtureLabel }) }, { key: "status", label: "Status", type: "text", value: row => row.statusLabel }, { key: "pitch", label: "Pitch", type: "text", value: row => row.pitchLabel }, { key: "format", label: "Format", type: "text", value: row => row.format }, { key: "official", label: "Official", type: "text", value: row => row.referee }, { key: "weather", label: "Weather", type: "text", value: row => row.weatherRisk }]} filterFields={[{ key: "status", label: "Status", value: row => row.statusLabel }, { key: "format", label: "Format", value: row => row.format }]}  defaultSort={{ key: "date", direction: "desc" }}>{(displayRows, list) => <div className="overflow-x-auto">
       <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left">
         <thead>
           <tr className="text-[10px] font-black uppercase tracking-[0.17em] text-slate-400">
-            <th className="border-b border-slate-200 px-3 py-3">Matchday</th>
-            <th className="border-b border-slate-200 px-3 py-3">Day / date</th>
-            <th className="border-b border-slate-200 px-3 py-3">KO</th>
-            <th className="border-b border-slate-200 px-3 py-3">Fixture</th>
-            <th className="border-b border-slate-200 px-3 py-3">Status</th>
-            <th className="border-b border-slate-200 px-3 py-3">Pitch</th>
-            <th className="border-b border-slate-200 px-3 py-3">Format</th>
-            <th className="border-b border-slate-200 px-3 py-3">Official</th>
-            <th className="border-b border-slate-200 px-3 py-3">Weather</th>
+            <SortableTableHeader columnKey="entry" label="Matchday" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="date" label="Day / date" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="ko" label="KO" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="fixture" label="Fixture" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="status" label="Status" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="pitch" label="Pitch" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="format" label="Format" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="official" label="Official" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
+            <SortableTableHeader columnKey="weather" label="Weather" sort={list.sort} onSort={list.toggleSort} className="border-b border-slate-200 px-3 py-3" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {displayRows.map((row) => (
             <tr key={row.id} className="align-top">
               <td className="border-b border-slate-100 px-3 py-4 text-xs font-bold text-slate-500">
                 {row.entryLabel}
@@ -449,7 +451,7 @@ function SourceRecords({ rows }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </div>}</RecordCollection>
   );
 }
 
