@@ -21,3 +21,11 @@ export function createNextPitchIdentity(pitches = []) {
 
   return { id: `P${number}`, label: `Pitch ${number}` };
 }
+export function createPlayingAreaId(existingAreas = []) {
+  const used = new Set(existingAreas.map(area => area?.id));
+  let id;
+  do {
+    id = `playing-area-${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
+  } while (used.has(id));
+  return id;
+}

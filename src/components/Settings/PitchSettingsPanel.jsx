@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import RecordCollection from "../lists/RecordCollection.jsx";
 import { AlertTriangle, ChevronRight, Info, Layers3, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { createNextPitchIdentity, sortPitches } from "../../lib/pitches.js";
+import { createNextPitchIdentity, createPlayingAreaId, sortPitches } from "../../lib/pitches.js";
+import { validatePitchSchedulingConfig } from "../../lib/scheduling/pitchResourceModel.js";
+import PitchSchedulingFields from "./PitchSchedulingFields.jsx";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
 import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
 import { getEntitlementLimit, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
@@ -202,6 +204,12 @@ export default function PitchSettingsPanel({
   }, [orderedPitches, query, sites, primarySite?.id]);
 
   const updatePitch = (realIndex, field, value) => {
+    const target = pitchCfg[realIndex];
+    if ((field === 'id' || field === 'innerOf') && target?.[field] !== value
+      && (pitchCfg.some(p => p.innerOf === target?.id) || (field === 'innerOf' && target?.playingAreaIds !== undefined))) {
+      setLimitMessage('This layout is referenced. Remove child layouts or clear their mappings before changing its parent or ID.');
+      return;
+    }
     setPitchCfg((current) => current.map((pitch, index) => {
       if (index !== realIndex) return pitch;
       const next = { ...pitch, [field]: value === "" ? null : value };
@@ -240,6 +248,11 @@ export default function PitchSettingsPanel({
   };
 
   const savePitches = () => {
+    const validation = validatePitchSchedulingConfig(pitchCfg);
+    if (!validation.ok) {
+      setLimitMessage(validation.errors.map(error => `${error.pitchId}: ${error.reason}`).join(' '));
+      return false;
+    }
     const preparedPitches = pitchCfg.map((pitch) => ({
       ...pitch,
       trainingCapacity: Math.max(1, Math.min(20, Number(pitch.trainingCapacity || pitch.training_capacity || 1) || 1)),
@@ -274,6 +287,10 @@ export default function PitchSettingsPanel({
   };
 
   const removePitch = (index) => {
+    if (pitchCfg.some(p => p.innerOf === pitchCfg[index]?.id)) {
+      setLimitMessage('This parent is referenced by child layouts. Remove those layouts first.');
+      return;
+    }
     setLimitMessage("");
     setPitchCfg((current) => current.filter((_, rowIndex) => rowIndex !== index));
     setSelectedIndex((current) => {
@@ -281,6 +298,30 @@ export default function PitchSettingsPanel({
       if (current === index) return Math.max(0, Math.min(index, pitchCfg.length - 2));
       return current;
     });
+  };
+
+  const patchScheduling = (patch) => setPitchCfg(current => current.map((pitch, index) => index === selectedIndex ? { ...pitch, ...patch } : pitch));
+  const addPlayingArea = () => {
+    if (!canAddPitch) { setLimitMessage(`${subscription?.planName || 'The current plan'} allows ${pitchLimit} pitches.`); return; }
+    setLimitMessage('');
+    const parentId = pitchCfg[selectedIndex]?.id;
+    setPitchCfg(current => {
+      const parent = current.find(p => p.id === parentId);
+      if (!parent || parent.innerOf || (!isUnlimitedLimit(pitchLimit) && current.length >= pitchLimit)) return current;
+      const areas = Array.isArray(parent.playingAreas) ? parent.playingAreas : [];
+      const area = { id: createPlayingAreaId(areas), label: `Area ${areas.length + 1}` };
+      const identity = createNextPitchIdentity(current);
+      const child = { ...identity, label: `${parent.label || parent.id} ${area.label}`, innerOf: parent.id, playingAreaIds: [area.id], siteId: parent.siteId || primarySite?.id || null, surface: inferSurface(parent), format: parent.format || '', independent: parent.independent, trainingCapacity: 1, trainingAreas: [] };
+      return [...current.map(p => p.id === parent.id ? { ...p, playingAreas: [...areas, area] } : p), child];
+    });
+  };
+  const removePlayingArea = (areaId) => {
+    const parent = pitchCfg[selectedIndex];
+    if (pitchCfg.some(p => p.innerOf === parent.id && p.playingAreaIds?.includes(areaId))) {
+      setLimitMessage('This playing area is referenced by a child layout. Remove or remap that layout first.');
+      return;
+    }
+    patchScheduling({ playingAreas: (parent.playingAreas || []).filter(a => a.id !== areaId) });
   };
 
   const importPitches = (rows, mode) => {
@@ -374,7 +415,7 @@ export default function PitchSettingsPanel({
 
       <div className="mt-4 flex items-start gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold leading-5 text-blue-950">
         <Info size={16} className="mt-0.5 shrink-0" />
-        “Inside pitch” marks a smaller layout inside a larger pitch. Training capacity controls how many teams can use the same pitch at the same time for training only; friendlies and matches still require exclusive use.
+        “Inside pitch” marks a smaller layout inside a larger pitch. Map separate playing areas to allow concurrent matches; the whole parent occupies all areas. Training capacity is a separate setting for shared training only.
       </div>
 
       <div className="@container mt-4">
@@ -434,6 +475,7 @@ export default function PitchSettingsPanel({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.15em] text-sky-800">Bookable training areas</div><p className="mt-1 text-xs font-semibold leading-5 text-sky-900/75">Optional named areas make shared use clear to coaches—for example Half A and Half B. Leaving this empty keeps capacity-based whole-pitch sharing.</p></div><button type="button" onClick={() => addTrainingArea(selectedIndex)} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-sky-800 shadow-sm"><Plus size={14} /> Add area</button></div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">{editableTrainingAreas(selectedPitch.trainingAreas || selectedPitch.training_areas).map((area, areaIndex) => <div key={`${area.id}-${areaIndex}`} className="grid grid-cols-[minmax(0,1fr)_42px] gap-2 rounded-xl bg-white p-2"><input className={inputClass} value={area.label} onChange={(event) => updateTrainingArea(selectedIndex, areaIndex, "label", event.target.value)} aria-label={`Training area ${areaIndex + 1}`} placeholder={`Area ${areaIndex + 1}`} /><button type="button" onClick={() => removeTrainingArea(selectedIndex, areaIndex)} className="flex h-11 w-10 items-center justify-center rounded-xl border border-rose-200 text-rose-700" aria-label={`Remove ${area.label || `area ${areaIndex + 1}`}`}><Trash2 size={15} /></button></div>)}{!editableTrainingAreas(selectedPitch.trainingAreas || selectedPitch.training_areas).length ? <div className="rounded-xl border border-dashed border-sky-200 bg-white/60 p-4 text-center text-xs font-semibold text-sky-800 sm:col-span-2">No named areas. The pitch still supports {Math.max(1, Number(selectedPitch.trainingCapacity || 1))} simultaneous training team{Number(selectedPitch.trainingCapacity || 1) === 1 ? "" : "s"}.</div> : null}</div>
                 </div>
+                <PitchSchedulingFields pitch={selectedPitch} pitches={pitchCfg} onPitchPatch={patchScheduling} onAddPlayingArea={addPlayingArea} onRemovePlayingArea={removePlayingArea} />
                 <Field label="Description" className="col-span-full"><input className={inputClass} value={selectedPitch.desc || ""} onChange={(event) => updatePitch(selectedIndex, "desc", event.target.value)} placeholder="Optional notes" /></Field>
               </div>
             </article>

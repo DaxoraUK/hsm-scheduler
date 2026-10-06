@@ -17,10 +17,10 @@ export function parsePitchTime(value) {
 }
 export function normalisePitchSchedulingFields(pitch={}) {
   const result={...pitch};
-  if(Array.isArray(pitch.playingAreas)) result.playingAreas=pitch.playingAreas.map(area=>({...area,id:clean(area.id),label:clean(area.label)}));
+  if(Array.isArray(pitch.playingAreas)) result.playingAreas=pitch.playingAreas.map(area=>({...area,id:clean(area?.id),label:clean(area?.label)}));
   if(Array.isArray(pitch.playingAreaIds)) result.playingAreaIds=pitch.playingAreaIds.map(clean);
   if(pitch.availabilityByDay&&typeof pitch.availabilityByDay==='object') {
-    result.availabilityByDay=Object.fromEntries(Object.entries(pitch.availabilityByDay).map(([day,windows])=>[day,Array.isArray(windows)?windows.map(window=>({...window,from:clean(window.from),to:clean(window.to)})):windows]));
+    result.availabilityByDay=Object.fromEntries(Object.entries(pitch.availabilityByDay).map(([day,windows])=>[day,Array.isArray(windows)?windows.map(window=>({...window,from:clean(window?.from),to:clean(window?.to)})):windows]));
   }
   return result;
 }
@@ -36,10 +36,10 @@ export function validatePitchSchedulingConfig(pitches=[]) {
     const parent=pitch.innerOf?byId.get(pitch.innerOf):null;
     if(pitch.innerOf&&(!parent||parent.innerOf||parent.id===pitch.id)) fail(pitch,'Select an existing root parent; nested or cyclic layouts are not supported.');
     const areas=pitch.playingAreas??[];
-    if(!Array.isArray(areas)||areas.some(a=>!clean(a.id))||new Set(areas.map(a=>a.id)).size!==areas.length) fail(pitch,'Playing area IDs must be present and unique.');
+    if(!Array.isArray(areas)||areas.some(a=>!clean(a?.id))||new Set(areas.map(a=>a?.id)).size!==areas.length) fail(pitch,'Playing area IDs must be present and unique.');
     if(pitch.playingAreaIds!==undefined) {
       const mapped=pitch.playingAreaIds;
-      const allowed=new Set((parent?.playingAreas??[]).map(a=>a.id));
+      const allowed=new Set((Array.isArray(parent?.playingAreas)?parent.playingAreas:[]).map(a=>a?.id));
       if(!parent||!Array.isArray(mapped)||mapped.length===0||new Set(mapped).size!==mapped.length||mapped.some(id=>!allowed.has(id))) fail(pitch,'Map this layout to existing playing areas of its parent.');
     }
     if(pitch.availabilityByDay!=null) {
@@ -48,7 +48,7 @@ export function validatePitchSchedulingConfig(pitches=[]) {
         if(!WEEKDAYS.includes(day)) {fail(pitch,'Invalid weekday.');continue;}
         if(windows==null) continue;
         if(!Array.isArray(windows)) {fail(pitch,'Availability must be a list of windows.');continue;}
-        const intervals=windows.map(w=>({start:parsePitchTime(w.from),end:parsePitchTime(w.to)}));
+        const intervals=windows.map(w=>({start:parsePitchTime(w?.from),end:parsePitchTime(w?.to)}));
         if(intervals.some(w=>w.start===null||w.end===null||w.start>=w.end)) {fail(pitch,'Enter valid same-day available-from/until times.');continue;}
         intervals.sort((a,b)=>a.start-b.start);
         if(intervals.some((w,i)=>i>0&&w.start<intervals[i-1].end)) fail(pitch,'Availability windows must not overlap.');

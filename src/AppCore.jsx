@@ -13,6 +13,7 @@ import React, {
   useRef,
 } from "react";
 import { useSaturdayScheduling } from "./hooks/useSaturdayScheduling.js";
+import { validatePitchSchedulingConfig } from "./lib/scheduling/pitchResourceModel.js";
 import { useSundayScheduling } from "./hooks/useSundayScheduling.js";
 import { useFixtureFetcher } from "./hooks/useFixtureFetcher.js";
 import { useWeekPersistence } from "./hooks/useWeekPersistence.js";
@@ -1135,6 +1136,13 @@ function App() {
     });
     const nextTeamCfg = siteAssignments.teams;
     const nextPitchCfg = siteAssignments.pitches;
+    if (data.pitchCfg || tab === 'pitches') {
+      const validation = validatePitchSchedulingConfig(nextPitchCfg);
+      if (!validation.ok) {
+        toast.error('Pitch settings were not saved', { description: validation.errors.map(error => `${error.pitchId}: ${error.reason}`).join(' ') });
+        return false;
+      }
+    }
     const nextTeamContacts = alignTeamContacts(nextTeamCfg, data.teamContacts || teamContacts);
     const nextRefs = data.refs || refs;
     const cloudAuthoritative = Boolean(isSupaConfigured() && activeClubId);
