@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import RecordCollection from "../components/lists/RecordCollection.jsx";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -641,6 +642,7 @@ export default function CommunicationsPage(props) {
     }
   };
 
+  useEffect(() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }, [props.activeClubId]);
   const confirmCoachHubPublish = async () => runSubmission(async () => {
     const selectedRows = coachHubConfirmation?.rows || [];
     if (!selectedRows.length) return;
@@ -851,13 +853,15 @@ export default function CommunicationsPage(props) {
         </div>
 
         <div className="mb-4 text-xs font-bold text-slate-500">Showing {rows.length} of {audienceRows.length} Home fixture updates · {readyRows.length} ready in this view</div>
+        <RecordCollection label="Coach messages" rows={rows} contextKey={props.activeClubId} search={false} totalCount={audienceRows.length} externalActiveFilterCount={Number(Boolean(search)) + Number(day !== "all") + Number(filter !== "all") + Number(updateType !== "all")} onClearExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} onResetExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} columns={[{ key: "team", label: "Team / age group", type: "team", value: row => ({ name: row.teamName }) }, { key: "name", label: "Team name", type: "text", value: row => row.teamName }, { key: "date", label: "Date", type: "date", value: row => row.date }]}>
+        {displayRows => <>
         {!model.rows.length ? (
           <EmptyState title="No Home fixture updates" description="Build a Saturday, Sunday or Midweek schedule. Away fixtures do not need club matchday communications." />
-        ) : !rows.length ? (
+        ) : !displayRows.length ? (
           <EmptyState title="No messages match this view" description="Change the day or review filter." />
         ) : (
           <div className="space-y-3">
-            {rows.map((row) => {
+            {displayRows.map((row) => {
               const state = readiness(row);
               const latest = events.find((event) => event.message_key === row.id && event.message_hash === row.messageHash);
               return (
@@ -913,6 +917,8 @@ export default function CommunicationsPage(props) {
             })}
           </div>
         )}
+        </>}
+        </RecordCollection>
       </Card>
 
       <Card eyebrow="Shared audit trail" title="Recent communication activity" subtitle="Records queue, copy-out and provider activity. Sent, delivered or read states appear only after a configured provider returns that status.">
@@ -921,8 +927,9 @@ export default function CommunicationsPage(props) {
         ) : !events.length ? (
           <EmptyState icon={History} title="No communication activity recorded" description="Open the coach-message queue, review or copy a message to create the first shared audit event." />
         ) : (
-          <div className="divide-y divide-slate-100">
-            {events.slice(0, 20).map((event) => (
+          <RecordCollection label="Recent communication activity" rows={events} contextKey={props.activeClubId} defaultSort={{ key: "date", direction: "desc" }} columns={[{ key: "date", label: "Date", type: "date", value: row => row.occurred_at }, { key: "team", label: "Team", type: "team", value: row => ({ name: row.team_name }) }]} filterFields={[{ key: "status", label: "Status", value: row => eventLabel(row.action) }]}>
+          {displayEvents => <div className="divide-y divide-slate-100">
+            {displayEvents.map((event) => (
               <div key={event.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered", "read"].includes(event.action) ? "success" : ["failed", "undelivered"].includes(event.action) ? "danger" : event.action === "provider_accepted" ? "info" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
@@ -938,7 +945,8 @@ export default function CommunicationsPage(props) {
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
+          </RecordCollection>
         )}
       </Card>
 
@@ -946,14 +954,16 @@ export default function CommunicationsPage(props) {
         {!coachHubDeliveries.length ? (
           <EmptyState icon={MessageSquareText} title="No Coach Hub updates published" description="Open the coach-message queue and publish a ready batch to Coach Hub." />
         ) : (
-          <div className="divide-y divide-slate-100">
-            {coachHubDeliveries.slice(0, 20).map((delivery) => {
+          <RecordCollection label="Coach Hub deliveries" rows={coachHubDeliveries} contextKey={props.activeClubId} defaultSort={{ key: "date", direction: "desc" }} columns={[{ key: "date", label: "Date", type: "date", value: row => row.created_at }, { key: "title", label: "Title", type: "text", value: row => row.title }]}>
+          {displayDeliveries => <div className="divide-y divide-slate-100">
+            {displayDeliveries.map((delivery) => {
               const expected = Number(delivery.expected_recipients) || 0;
               const read = Number(delivery.read_count) || 0;
               const acknowledged = Number(delivery.acknowledged_count) || 0;
               return <div key={delivery.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-black text-slate-950">{delivery.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{delivery.team_key} · {new Date(delivery.created_at).toLocaleString("en-GB")}</div></div><div className="flex flex-wrap gap-2"><StatusChip status={read >= expected && expected ? "success" : "info"} size="sm">Read {read}/{expected}</StatusChip><StatusChip status={acknowledged >= expected && expected ? "success" : "warning"} size="sm">Acknowledged {acknowledged}/{expected}</StatusChip></div></div>;
             })}
-          </div>
+          </div>}
+          </RecordCollection>
         )}
       </Card>
 

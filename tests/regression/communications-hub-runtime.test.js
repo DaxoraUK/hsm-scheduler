@@ -65,11 +65,12 @@ test("missing contacts have a working settings action and no empty send queue", 
 
 test("a directory change refreshes recipients without reopening Communications", async () => {
   await render();
-  expect(host.querySelector("article[data-communication-fixture]").textContent).toContain("Coach contact missing");
+  const knightsCard = () => [...host.querySelectorAll("article[data-communication-fixture]")].find((card) => card.querySelector("h3")?.textContent === "Knights");
+  expect(knightsCard().textContent).toContain("Coach contact missing");
   DB.loadTeamContacts.mockResolvedValue([{ teamKey: "knights", teamName: "Knights", coachName: "Updated Coach", coachEmail: "updated@example.org", preferredChannel: "email" }]);
   await act(async () => window.dispatchEvent(new CustomEvent("ground-control-coach-hub-contacts-changed")));
-  expect(host.querySelector("article[data-communication-fixture]").textContent).not.toContain("Coach contact missing");
-  expect(host.querySelector("article[data-communication-fixture]").textContent).toContain("Updated Coach");
+  expect(knightsCard().textContent).not.toContain("Coach contact missing");
+  expect(knightsCard().textContent).toContain("Updated Coach");
 });
 
 test("does not claim a review was saved when the audit write fails", async () => {
