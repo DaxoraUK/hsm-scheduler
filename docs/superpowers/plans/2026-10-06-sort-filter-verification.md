@@ -4,7 +4,7 @@ Date: 6 October 2026. Branch: referee-flow-staging.
 
 ## Status
 
-Implementation and confirmed review corrections are saved locally. The independent whole-branch review resumed and completed. All five Important findings have reproduction tests and corrections; no Critical or Minor findings were reported. Candidate deployment and stable-site verification are next; no deployment is claimed at this point.
+Implementation and confirmed review corrections are saved locally. The independent whole-branch review resumed and completed. All five Important findings have reproduction tests and corrections; no Critical or Minor findings were reported. Release commit d6260c03781f29ffc46a5164e9bea37a7eeb18c1 is deployed and promoted to https://app.daxora.co.uk. See release evidence below.
 
 The feature covers the accessible collections in the companion coverage inventory, including clickable data headings, natural A–Z ordering, configured numeric team-age ordering, clear/reset controls and original action IDs. Calendars and priority/rank views retain their domain defaults.
 
@@ -23,14 +23,22 @@ Confirmed review fixes:
 - Vite production build: exit 0; existing large-chunk warning remains.
 - Whitespace/error diff check: clean.
 - Previous local browser checks: root and sign-in loaded without console errors; actual Settings team/pitch components with synthetic records demonstrated keyboard sorting, combined filtering, counts, clear/reset, original edit mapping and mobile layout.
-- Authenticated real Operations/Planner/Coach routes and a deployed candidate have NOT been verified. No live fixture rebuilds or data changes were run.
+- Candidate public page and sign-in, and promoted app.daxora.co.uk/signin, opened successfully in the browser with no captured console errors. Authenticated real Operations/Planner/Coach routes remain unverified. No live fixture rebuilds or data changes were run.
 
-## Remaining release gates
+## Release evidence
 
-1. Independent review completed; all Important findings corrected in the same resumed fix pass with RED/GREEN evidence.
-2. Deploy a clean committed candidate to the verified ground-control project, verify complete JS/CSS output, health and browser startup, then promote only the verified candidate using the approved release plan.
-
-Do not delete this plan's scratch evidence until the final gate is complete.
+- Project: ground-control, prj_TowVxcZxDozJei2uhX0fkri51GGZ, team daxora; Vite framework.
+- Code SHA: d6260c03781f29ffc46a5164e9bea37a7eeb18c1; branch referee-flow-staging; deployment metadata independently matches.
+- Candidate: https://ground-control-iz036cyxd-daxora.vercel.app; deployment dpl_7z4r3oq4mtbAgYkYhuZ1f2xUsZ2i; READY, production target.
+- Clean git archive source upload; remote npm run build (TypeScript + Vite) passed. Vercel output build completed in approximately 10 seconds.
+- Candidate verified before promotion using authenticated vercel curl, without disabling protection. Direct unauthenticated HTTP had returned Vercel protection HTML, not application HTML.
+- Candidate and stable root: HTTP 200, actual Vite HTML. All 15 root-referenced JS/CSS bundles plus 8 main changed-route bundles returned HTTP 200 with nonempty, non-HTML bodies. This checks those 23 assets, not every nested lazy dependency or authenticated user flow.
+- Main bundles: /assets/index-BBknO56T.js and /assets/index-BipA7WsD.css. Stable verification used public HTTP, with no protection bypass.
+- Candidate and stable /api/health: HTTP 200, ready; environment staging, branch referee-flow-staging; 8 ready, 1 optional push, 0 blocked. Configuration health does not prove database transactions or mail delivery.
+- Candidate public page and sign-in rendered; stable /signin rendered with empty browser error logs. Signed-in module flows are not verified.
+- Before promotion app.daxora.co.uk resolved to dpl_DtxyBhorCJkaf9URqti5PkWDAJBr. After promotion it resolves to this exact candidate. The generated ground-control-daxora.vercel.app alias was assigned by Vercel despite --skip-domain; the custom main address remained unchanged until explicit promotion.
+- Runtime error scan: this deployment, error level, preceding 1 hour, limit 100: no logs found. Short scan is not proof of all user flows. Drains and external monitoring configuration were not verified.
+- Independent review completed; all Important findings corrected with RED/GREEN evidence. Plan scratch may now be removed; this committed record, tests and Git history retain the results.
 
 ## Rulings I made
 
@@ -49,6 +57,6 @@ Do not delete this plan's scratch evidence until the final gate is complete.
 
 - Existing production bundle-size warning: no unrelated code splitting added.
 - Whole-history filtering is not complete for capped backend collections; see the coverage inventory for exact boundaries. This is remaining work, not an exemption.
-- Independent review is complete. Authenticated/deployed UI verification remains pending.
+- Independent review and public deployed startup verification are complete. Authenticated module verification remains pending; monitoring/drains configuration is unverified.
 
-No deployment, remote push, database migration, fixture mutation, external invitation or message sending occurred during this handoff.
+Deployment and explicit promotion occurred as described. No remote Git push, merge/PR, database migration, fixture mutation, external invitation or message sending occurred. Documentation-only commits after release do not change the deployed code SHA.
