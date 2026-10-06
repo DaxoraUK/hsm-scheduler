@@ -1,4 +1,5 @@
 import React from "react";
+import RecordCollection from "../../lists/RecordCollection.jsx";
 import {
   AlertTriangle,
   ArrowRight,
@@ -296,11 +297,13 @@ export default function OfficialsIntelligenceCard({ intelligence = {}, onFixture
             </div>
             <div className="text-sm font-black text-slate-500">{attentionFixtures.length} to resolve</div>
           </div>
-          <div className="mt-4 grid gap-2 lg:grid-cols-2">
-            {attentionFixtures.slice(0, 8).map((item) => (
+          <RecordCollection label="Official coverage" rows={attentionFixtures.map((item, index) => ({ ...item, priorityIndex: index }))} defaultSort={{ key: "priority", direction: "asc" }} columns={[{ key: "priority", label: "Priority", type: "number", value: row => row.priorityIndex }, { key: "name", label: "Fixture", type: "text", value: row => row.label }, { key: "official", label: "Official", type: "text", value: row => row.official }]} filterFields={[{ key: "status", label: "Status", value: row => row.state }]}>
+          {displayAttention => <div className="mt-4 grid gap-2 lg:grid-cols-2">
+            {displayAttention.map((item) => (
               <FixtureRow key={`${item.id}-${item.state}`} item={item} onFixtureClick={onFixtureClick} />
             ))}
-          </div>
+          </div>}
+          </RecordCollection>
         </div>
       ) : null}
     </div>

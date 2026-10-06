@@ -1,4 +1,5 @@
 import React from "react";
+import RecordCollection from "../../lists/RecordCollection.jsx";
 import { cleanName } from "../../../lib/scheduler.js";
 import MatchFixtureCard from "./MatchFixtureCard.jsx";
 
@@ -102,8 +103,12 @@ export default function MatchdayScheduleCard({
           </div>
         )}
 
-        <div className="space-y-4">
-          {games.map((fixture, index) => {
+        <RecordCollection label={`${day} fixtures`} rows={games.map((fixture, index) => ({ fixture, index }))} contextKey={`${club?.id || ""}:${day}:${dateLabel || ""}`}
+          columns={[{ key: "team", label: "Team / age group", type: "team", value: row => ({ ...row.fixture.cfg, name: row.fixture.cfg?.name || row.fixture.homeTeam }) }, { key: "name", label: "Team name", type: "text", value: row => row.fixture.homeTeam }, { key: "time", label: "Kick-off", type: "text", value: row => row.fixture.koTime }, { key: "pitch", label: "Pitch", type: "text", value: row => row.fixture.pitchLabel || row.fixture.pitchId }]}
+          searchText={row => `${row.fixture.homeTeam} ${row.fixture.awayTeam}`}
+          filterFields={[{ key: "pitch", label: "Pitch", value: row => row.fixture.pitchLabel || row.fixture.pitchId }, { key: "status", label: "Status", value: row => row.fixture.status || "active" }, { key: "venue", label: "Home / Away", value: row => row.fixture.isAwayFixture || row.fixture.status === "away" ? "Away" : "Home" }]}>
+        {displayGames => <div className="space-y-4">
+          {displayGames.map(({ fixture, index }) => {
             const officialConflict = officialConflicts.some(
               (conflict) => conflict.a === fixture || conflict.b === fixture,
             );
@@ -123,7 +128,8 @@ export default function MatchdayScheduleCard({
               />
             );
           })}
-        </div>
+        </div>}
+        </RecordCollection>
       </div>
     </section>
   );
