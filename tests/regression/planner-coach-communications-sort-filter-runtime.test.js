@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import CommunicationsPage from '../../src/pages/CommunicationsPage.jsx';
 import CoachHubPage from '../../src/pages/CoachHubPage.jsx';
-import AnnualPlannerPage from '../../src/pages/AnnualPlannerPage.jsx';
+import AnnualPlannerPage, { AvailabilityWorkspace } from '../../src/pages/AnnualPlannerPage.jsx';
 import AnnualPlannerCompletionWorkspace from '../../src/components/planning/AnnualPlannerCompletionWorkspace.jsx';
 vi.mock('../../src/lib/supabase.js', () => ({ DB: {
   loadTeamContacts: async () => [], listCommunicationEvents: async () => [], listCoachHubMatchweekDeliveryStatus: async () => [],
@@ -62,4 +62,24 @@ test('planner completion collections retain ID based bulk selection after filter
   expect(cards.map(row => row.querySelector('span span').textContent)).toEqual(['U7 Sharks', 'U17 Lisbon']);
   await act(async () => cards[0].querySelector('input').click());
   expect(cards[0].querySelector('input').checked).toBe(true);
+});
+test('limited communication feeds explicitly describe their recent-only scope', async () => {
+  await act(async () => root.render(React.createElement(CommunicationsPage, { activeClubId: 'c', workspaceAccess: {} })));
+  expect(host.textContent).toContain('up to 50');
+  expect(host.textContent).toContain('up to 30');
+  expect(host.querySelector('[aria-label="Recent communication activity sort and filter"]')).toBeNull();
+});
+test('Coach home connected teams provide age-ordered collection controls', async () => {
+  await act(async () => root.render(React.createElement(CoachHubPage, { clubId: 'club-a' })));
+  expect(host.querySelectorAll('[aria-label="Connected teams sort and filter"]')).toHaveLength(1);
+  expect(host.querySelector('header [aria-label="Connected teams sort and filter"]')).toBeNull();
+});
+test('Planner closure action and matchday closure records can be filtered without changing resolve targets', async () => {
+  const onResolve = vi.fn();
+  const impact = { id: 'i', status: 'action_required', booking_title: 'Zulu booking', team_name: 'U17 Lisbon' };
+  await act(async () => root.render(React.createElement(AvailabilityWorkspace, { blackouts: [], closureImpacts: [impact], pitchClosures: [{ id: 'p', pitchName: 'Pitch 10', startDate: '2026-10-10' }], pitchCfg: [], settings: {}, canOperate: true, onResolveImpact: onResolve })));
+  expect(host.querySelector('[aria-label="Closure actions sort and filter"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="Matchday pitch closures sort and filter"]')).not.toBeNull();
+  await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent === 'Review and resolve').click());
+  expect(onResolve).toHaveBeenCalledWith(impact);
 });

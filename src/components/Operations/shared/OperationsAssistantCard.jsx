@@ -1,3 +1,4 @@
+import RecordCollection from "../../lists/RecordCollection.jsx";
 import React from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Info, Sparkles } from "lucide-react";
 import StatusChip from "@/ui/StatusChip.jsx";
@@ -123,8 +124,8 @@ export default function OperationsAssistantCard({ assistant }) {
       </div>
 
       <div className="mt-6 space-y-3">
-        {actions.length ? (
-          actions.map((action) => <ActionRow key={action.id} action={action} />)
+        <RecordCollection label="Assistant actions" rows={actions} columns={[{ key: "priority", label: "Priority", type: "number", value: row => actions.indexOf(row) }, { key: "name", label: "Action", type: "text", value: row => row.title }]}  filterFields={[{ key: "status", label: "Status", value: row => row.status }]}  >{displayRows => <>{actions.length ? (
+          displayRows.map((action) => <ActionRow key={action.id} action={action} />)
         ) : (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
             <div className="flex items-start gap-3">
@@ -137,7 +138,7 @@ export default function OperationsAssistantCard({ assistant }) {
               </div>
             </div>
           </div>
-        )}
+        )}</>}</RecordCollection>
       </div>
     </div>
   );

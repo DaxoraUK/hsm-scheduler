@@ -30,7 +30,9 @@ function explicitAge(value, configured = false) {
 }
 
 export function getTeamDisplayAge(team) {
-  return explicitAge(team?.ageGroup ?? team?.age_group, true) ?? explicitAge(getTeamDisplayName(team));
+  const configured = team?.ageGroup ?? team?.age_group;
+  if (/\b(?:adult|open[ -]?age|senior)\b/i.test(String(configured ?? ''))) return null;
+  return explicitAge(configured, true) ?? explicitAge(getTeamDisplayName(team));
 }
 
 function displayAgeBucket(team) {

@@ -19,3 +19,8 @@ test('sorted entries keep original team index and matching contact attached', ()
   expect(rows.map(row => [row.index, row.contact])).toEqual([[1, 'Sharks coach'], [0, 'Lisbon coach']]);
   expect(entries[0].index).toBe(0);
 });
+test('configured adult metadata wins over a legacy youth label for display ordering', () => {
+  const adult = { name: 'U17 historic label', ageGroup: 'Adult' };
+  expect(ordering.getTeamDisplayAge(adult)).toBeNull();
+  expect(ordering.sortTeamsByAgeGroup([adult, { name: 'U18 youth' }]).map(row => row.name)).toEqual(['U18 youth', 'U17 historic label']);
+});

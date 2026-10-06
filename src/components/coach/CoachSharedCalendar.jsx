@@ -1,3 +1,5 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
+import { sortTeamsByAgeGroup } from "../../lib/teams/teamOrdering.js";
 import { useMemo, useState } from "react";
 import { Ban, CalendarDays, ChevronLeft, ChevronRight, ClipboardCopy, Clock3, Filter, MapPin, Plus, ShieldAlert } from "lucide-react";
 import {
@@ -125,7 +127,7 @@ export default function CoachSharedCalendar({ workspace, assignments = [], onCre
             <button type="button" onClick={() => setView("agenda")} className={`h-10 rounded-xl px-4 text-xs font-black ${view === "agenda" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>Agenda</button>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <label className="relative"><Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="h-10 min-w-[170px] rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-black"><option value="all">All my teams</option>{assignments.map((row) => <option key={row.id} value={row.teamKey}>{row.teamName}</option>)}</select></label>
+            <label className="relative"><Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="h-10 min-w-[170px] rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-black"><option value="all">All my teams</option>{sortTeamsByAgeGroup(assignments).map((row) => <option key={row.id} value={row.teamKey}>{row.teamName}</option>)}</select></label>
             <select value={facilityFilter} onChange={(event) => setFacilityFilter(event.target.value)} className="h-10 min-w-[170px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black"><option value="all">All facilities</option>{facilityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 min-w-[150px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-black"><option value="all">All statuses</option>{statusOptions.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select>
             <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-600"><input type="checkbox" checked={showPending} onChange={(event) => setShowPending(event.target.checked)} /> Pending</label>
@@ -148,7 +150,7 @@ export default function CoachSharedCalendar({ workspace, assignments = [], onCre
         <div className="mt-3 flex flex-wrap gap-2">{COACH_CALENDAR_LEGEND.map((item) => <span key={item.key} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${item.tone}`}><span className={`h-2.5 w-2.5 rounded-full ${item.swatch}`} />{item.label}</span>)}</div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{assignments.map((assignment) => <button disabled={busy} type="button" key={assignment.id} onClick={() => onCreateFeed(assignment)} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm"><span><span className="block text-sm font-black">{assignment.teamName}</span><span className="mt-1 block text-xs font-semibold text-slate-500">Copy team-only calendar feed</span></span><ClipboardCopy size={17} className="text-sky-700" /></button>)}</section>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><RecordCollection label="Coach calendar feeds" rows={assignments} columns={[{ key: "team", label: "Team", type: "team", value: row => ({ name: row.teamName }) }]}    >{displayRows => <>{displayRows.map((assignment) => <button disabled={busy} type="button" key={assignment.id} onClick={() => onCreateFeed(assignment)} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm"><span><span className="block text-sm font-black">{assignment.teamName}</span><span className="mt-1 block text-xs font-semibold text-slate-500">Copy team-only calendar feed</span></span><ClipboardCopy size={17} className="text-sky-700" /></button>)}</>}</RecordCollection></section>
     </div>
   );
 }

@@ -921,15 +921,14 @@ export default function CommunicationsPage(props) {
         </RecordCollection>
       </Card>
 
-      <Card eyebrow="Shared audit trail" title="Recent communication activity" subtitle="Records queue, copy-out and provider activity. Sent, delivered or read states appear only after a configured provider returns that status.">
+      <Card eyebrow="Shared audit trail" title="Recent communication activity (up to 50)" subtitle="Recent records only, not the full history. Records queue, copy-out and provider activity. Sent, delivered or read states appear only after a configured provider returns that status.">
         {historyLoading ? (
           <div className="py-8 text-center text-sm font-bold text-slate-500">Loading communication history…</div>
         ) : !events.length ? (
           <EmptyState icon={History} title="No communication activity recorded" description="Open the coach-message queue, review or copy a message to create the first shared audit event." />
         ) : (
-          <RecordCollection label="Recent communication activity" rows={events} contextKey={props.activeClubId} defaultSort={{ key: "date", direction: "desc" }} columns={[{ key: "date", label: "Date", type: "date", value: row => row.occurred_at }, { key: "team", label: "Team", type: "team", value: row => ({ name: row.team_name }) }]} filterFields={[{ key: "status", label: "Status", value: row => eventLabel(row.action) }]}>
-          {displayEvents => <div className="divide-y divide-slate-100">
-            {displayEvents.map((event) => (
+          <div className="divide-y divide-slate-100">
+            {events.map((event) => (
               <div key={event.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black text-slate-950">{event.team_name || "Matchweek queue"}</span><StatusChip status={["sent", "delivered", "read"].includes(event.action) ? "success" : ["failed", "undelivered"].includes(event.action) ? "danger" : event.action === "provider_accepted" ? "info" : "neutral"} size="sm">{eventLabel(event.action)}</StatusChip></div>
@@ -945,25 +944,22 @@ export default function CommunicationsPage(props) {
                 </div>
               </div>
             ))}
-          </div>}
-          </RecordCollection>
+          </div>
         )}
       </Card>
 
-      <Card eyebrow="Coach Hub delivery" title="Reads and acknowledgements" subtitle="Team-scoped Coach Hub updates use the same approved matchweek message and return first-party engagement evidence.">
+      <Card eyebrow="Coach Hub delivery" title="Reads and acknowledgements (up to 30)" subtitle="Recent updates only, not the full history. Team-scoped Coach Hub updates use the same approved matchweek message and return first-party engagement evidence.">
         {!coachHubDeliveries.length ? (
           <EmptyState icon={MessageSquareText} title="No Coach Hub updates published" description="Open the coach-message queue and publish a ready batch to Coach Hub." />
         ) : (
-          <RecordCollection label="Coach Hub deliveries" rows={coachHubDeliveries} contextKey={props.activeClubId} defaultSort={{ key: "date", direction: "desc" }} columns={[{ key: "date", label: "Date", type: "date", value: row => row.created_at }, { key: "title", label: "Title", type: "text", value: row => row.title }]}>
-          {displayDeliveries => <div className="divide-y divide-slate-100">
-            {displayDeliveries.map((delivery) => {
+          <div className="divide-y divide-slate-100">
+            {coachHubDeliveries.map((delivery) => {
               const expected = Number(delivery.expected_recipients) || 0;
               const read = Number(delivery.read_count) || 0;
               const acknowledged = Number(delivery.acknowledged_count) || 0;
               return <div key={delivery.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-black text-slate-950">{delivery.title}</div><div className="mt-1 text-xs font-semibold text-slate-500">{delivery.team_key} · {new Date(delivery.created_at).toLocaleString("en-GB")}</div></div><div className="flex flex-wrap gap-2"><StatusChip status={read >= expected && expected ? "success" : "info"} size="sm">Read {read}/{expected}</StatusChip><StatusChip status={acknowledged >= expected && expected ? "success" : "warning"} size="sm">Acknowledged {acknowledged}/{expected}</StatusChip></div></div>;
             })}
-          </div>}
-          </RecordCollection>
+          </div>
         )}
       </Card>
 

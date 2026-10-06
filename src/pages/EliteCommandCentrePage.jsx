@@ -1,3 +1,4 @@
+import RecordCollection from "../components/lists/RecordCollection.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -394,7 +395,7 @@ export default function EliteCommandCentrePage({
           )}
         />
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {model.sites.map((site) => <SiteCard key={site.id} site={site} />)}
+          <RecordCollection label="Organisation sites" rows={model.sites} columns={[{ key: "name", label: "Site", type: "text", value: row => row.name }]} contextKey={activeClubId}   >{displayRows => <>{displayRows.map((site) => <SiteCard key={site.id} site={site} />)}</>}</RecordCollection>
         </div>
       </section>
 
@@ -402,7 +403,7 @@ export default function EliteCommandCentrePage({
         <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm lg:p-7">
           <SectionHeader eyebrow="Organisation action" title="What needs senior attention" description="Only issues with cross-site, accountability or release impact are surfaced here." />
           <div className="mt-6 space-y-3">
-            {model.actions.length ? model.actions.map((action) => (
+            <RecordCollection label="Organisation actions" rows={model.actions} columns={[{ key: "priority", label: "Priority", type: "number", value: row => model.actions.indexOf(row) }, { key: "name", label: "Action", type: "text", value: row => row.label }]} contextKey={activeClubId} filterFields={[{ key: "priority", label: "Priority", value: row => row.priority }]}  >{displayRows => <>{model.actions.length ? displayRows.map((action) => (
               <button key={action.id} type="button" onClick={() => openAction(action.destination)} className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${ACTION_STYLES[action.priority] || ACTION_STYLES.medium}`}>
                 <span className="flex items-start gap-3">
                   <AlertTriangle size={18} className="mt-0.5 shrink-0" />
@@ -415,7 +416,7 @@ export default function EliteCommandCentrePage({
                 <div className="flex items-center gap-3 text-base font-black"><CheckCircle2 size={20} /> No organisation-wide actions</div>
                 <p className="mt-2 text-sm font-semibold leading-6 text-emerald-800">All configured sites are currently within the Elite command checks.</p>
               </div>
-            )}
+            )}</>}</RecordCollection>
           </div>
         </section>
 

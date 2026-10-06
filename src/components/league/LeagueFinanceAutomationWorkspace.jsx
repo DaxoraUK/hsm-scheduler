@@ -1,3 +1,4 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -233,7 +234,7 @@ export default function LeagueFinanceAutomationWorkspace({ leagueId, workspace, 
           <Field label="Payment terms"><select className={INPUT} value={template.dueDays} onChange={(event) => setTemplate((current) => ({ ...current, dueDays: Number(event.target.value) }))}>{[7,14,21,30,45,60].map((days) => <option key={days} value={days}>{days} days</option>)}</select></Field>
         </div>
         <button type="button" disabled={busy || !data.access.canManage} onClick={saveTemplate} className={`${BUTTON} mt-4 bg-emerald-600 text-white`}><Sparkles size={14} /> Save billing template</button>
-        <div className="mt-5 grid gap-2 sm:grid-cols-2">{data.billingTemplates.map((row) => <button key={row.id} type="button" onClick={() => { setTemplate({ ...row }); setRun((current) => ({ ...current, templateId: row.id })); }} className="rounded-2xl border border-slate-200 p-4 text-left hover:border-emerald-300"><div className="text-sm font-black text-slate-950">{row.name}</div><div className="mt-1 text-xs font-semibold text-slate-500">{row.chargeName} · per {row.scope} · {row.dueDays} days</div></button>)}{!data.billingTemplates.length ? <div className="sm:col-span-2 rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">Create the first template to unlock bulk billing.</div> : null}</div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2"><RecordCollection label="Billing templates" rows={data.billingTemplates} columns={[{ key: "name", label: "Name", type: "text", value: row => row.name }, { key: "terms", label: "Terms / days", type: "number", value: row => row.dueDays }]} contextKey={leagueId} filterFields={[{ key: "active", label: "Active", value: row => row.active ? "Active" : "Inactive" }]}  >{displayRows => <>{displayRows.map((row) => <button key={row.id} type="button" onClick={() => { setTemplate({ ...row }); setRun((current) => ({ ...current, templateId: row.id })); }} className="rounded-2xl border border-slate-200 p-4 text-left hover:border-emerald-300"><div className="text-sm font-black text-slate-950">{row.name}</div><div className="mt-1 text-xs font-semibold text-slate-500">{row.chargeName} · per {row.scope} · {row.dueDays} days</div></button>)}</>}</RecordCollection>{!data.billingTemplates.length ? <div className="sm:col-span-2 rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">Create the first template to unlock bulk billing.</div> : null}</div>
       </Panel>
     </div>
 

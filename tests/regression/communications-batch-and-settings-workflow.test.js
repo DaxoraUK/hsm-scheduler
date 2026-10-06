@@ -29,12 +29,12 @@ describe("communications reservation and registry settings workflow", () => {
   test("uses searchable master-detail editors instead of rendering every team and pitch form", () => {
     expect(teams).toContain("Find a team or coach");
     expect(teams).toContain("selectedTeam");
-    expect(teams).toContain("filteredTeams.map");
+    expect(teams).toContain("displayTeams.map");
     expect(teams).not.toContain("teamCfg.map((team, index) =>");
 
     expect(pitches).toContain("Find a pitch, site or format");
     expect(pitches).toContain("selectedPitch");
-    expect(pitches).toContain("filteredPitches.map");
+    expect(pitches).toContain("displayPitches.map");
     expect(pitches).not.toContain("{sortPitches(pitchCfg).map((pitch");
   });
 

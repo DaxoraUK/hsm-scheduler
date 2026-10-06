@@ -2,17 +2,24 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import * as LeaguePage from '../../src/pages/LeagueManagerPage.jsx';
 import Admin from '../../src/pages/PlatformAdminPage.jsx';
 import LeagueAnalytics from '../../src/components/league/LeagueAnalyticsWorkspace.jsx';
+import LeagueSchedule from '../../src/components/league/LeagueScheduleWorkspace.jsx';
 import LeagueResults from '../../src/components/league/LeagueResultsWorkspace.jsx';
 import LeagueRegistrations from '../../src/components/league/LeagueRegistrationsWorkspace.jsx';
 import LeagueDiscipline from '../../src/components/league/LeagueDisciplineWorkspace.jsx';
 import LeagueFinance from '../../src/components/league/LeagueFinanceWorkspace.jsx';
 import LeagueOfficials from '../../src/components/league/LeagueOfficialsWorkspace.jsx';
 import LeagueFixtureCommand from '../../src/components/league/LeagueFixtureCommandWorkspace.jsx';
+import LeagueCommand from '../../src/components/league/LeagueCommandCentreWorkspace.jsx';
 import LeagueCups from '../../src/components/league/LeagueCupWorkspace.jsx';
 import ClubRegistrations from '../../src/components/league/LeagueClubRegistrationsPanel.jsx';
 import ClubFinance from '../../src/components/league/LeagueClubFinancePanel.jsx';
+import ClubOperations from '../../src/components/league/LeagueClubOperationsWorkspace.jsx';
+import ClubPortal from '../../src/components/league/LeagueClubPortalPage.jsx';
+import FinanceAutomation from '../../src/components/league/LeagueFinanceAutomationWorkspace.jsx';
+import { normaliseLeagueFinanceData } from '../../src/lib/league/leagueFinanceEngine.js';
 import ClubDiscipline from '../../src/components/league/LeagueClubDisciplinePanel.jsx';
 const state = vi.hoisted(() => ({ failLater: false }));
 vi.mock('../../src/lib/supabase.js', () => ({ DB: {
@@ -20,8 +27,11 @@ vi.mock('../../src/lib/supabase.js', () => ({ DB: {
     if (offset && state.failLater) throw new Error('second page unavailable');
     const all = Array.from({ length: 102 }, (_, n) => ({ club_id: `club-${n}`, club_name: n === 101 ? 'Alpha last page' : `Zulu ${n}` }));
     return { items: all.slice(offset, offset + 100), total: all.length, limit: 100, offset };
-  }, platformListSupportCases: async () => [], platformListActivity: async () => [],
-  getLeagueClubOperationsData: async () => ({}), getLeagueResultsData: async () => ({}), getLeagueReportConfiguration: async () => ({}),
+  }, platformGetClubDetail: async () => ({ members: [{ user_id: 'z', display_name: 'Zulu', role: 'viewer' }, { user_id: 'a', display_name: 'Alpha', role: 'viewer' }] }),
+  getLeagueWorkspace: async () => ({ ...workspace, league: { id: 'l', name: 'League' }, invitations: [{ id: 'i', email: 'test@example.test', role: 'viewer', status: 'pending' }] }),
+  getLeagueOperationsData: async () => ({}),
+  platformListSupportCases: async () => [], platformListActivity: async () => [],
+  getLeagueClubOperationsData: async () => ({}), getLeagueClubResultsData: async () => ({}), getLeagueResultsData: async () => ({}), getLeagueReportConfiguration: async () => ({ access: { can_manage: true }, definitions: [{ id: "d", name: "Board pack", active: false }], distribution_lists: [{ id: "dl", name: "Board", recipients: [] }] }),
   getLeagueRegistrationData: async () => ({ players: [{ id: 'z', first_name: 'Zulu', last_name: 'Player' }, { id: 'a', first_name: 'Alpha', last_name: 'Player' }] }),
   getLeagueDisciplineData: async () => ({}),
   getLeagueFinanceData: async () => ({}),
@@ -89,4 +99,67 @@ test('actual League fixture list exposes shared controls without changing calend
   const operations = { officials: [], assignments: [], requirements: [], availability: [], postponements: [] };
   await act(async () => root.render(React.createElement(LeagueFixtureCommand, { leagueId: 'l', workspace, operations, initialView: 'list' })));
   expect(host.querySelector('[aria-label="League fixtures sort and filter"]')).not.toBeNull();
+});
+test.each([[LeagueRegistrations, 'transfers', 'League transfers'], [LeagueRegistrations, 'eligibility', 'Registration rules'], [LeagueDiscipline, 'hearings', 'League hearings'], [LeagueFinance, 'payments', 'League payments'], [LeagueResults, 'adjustments', 'League point adjustments']])('remaining League registers expose shared controls %#', async (Component, initialTab, label) => {
+  await act(async () => root.render(React.createElement(Component, { leagueId: 'l', workspace, initialTab })));
+  expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+});
+test('League schedule preflight numeric data headings support display sorting', async () => {
+  await act(async () => root.render(React.createElement(LeagueSchedule, { leagueId: 'l', workspace, canOperate: false })));
+  expect(host.querySelector('[aria-label="Competition assurance sort and filter"]')).not.toBeNull();
+  expect(host.querySelectorAll('th button').length).toBeGreaterThan(4);
+});
+test.each([['team', 'Team registry'], ['parent_club', 'Parent club registry'], ['venue', 'Venue registry'], ['division', 'Division registry']])('actual league %s registry supports presentation controls', async (type, label) => {
+  expect(LeaguePage.RegistryWorkspace).toBeDefined();
+  await act(async () => root.render(React.createElement(LeaguePage.RegistryWorkspace, { type, workspace, canEdit: false })));
+  expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+});
+test.each([['publication', 'League publications'], ['access', 'League club users'], ['requests', 'League change requests'], ['communications', 'League communications'], ['calendars', 'League calendar feeds']])('club operations %s supplies complete authorised collection controls', async (initialView, label) => {
+  await act(async () => root.render(React.createElement(ClubOperations, { leagueId: 'l', workspace, initialView, operations: {} })));
+  expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+});
+test('billing templates sort names without changing billing defaults or issuing invoices', async () => {
+  await act(async () => root.render(React.createElement(FinanceAutomation, { leagueId: 'l', workspace, data: normaliseLeagueFinanceData({}) })));
+  expect(host.querySelector('[aria-label="Billing templates sort and filter"]')).not.toBeNull();
+});
+test('club portal record tabs expose shared controls without widening club scope', async () => {
+  const portal = { league: { id: 'l', name: 'League' }, club: { id: 'c', name: 'Club' }, teams: [], venues: [], fixtures: [], acknowledgements: [], changeRequests: [], communications: [], calendarFeeds: [], access: {} };
+  await act(async () => root.render(React.createElement(ClubPortal, { leagueId: 'l', portal })));
+  expect(host.querySelector('[aria-label="Published club fixtures sort and filter"]')).not.toBeNull();
+  for (const [tab, label] of [['Change requests', 'Club change requests'], ['Messages', 'Club league messages'], ['Calendar', 'Club calendar feeds']]) {
+    await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent === tab).click());
+    expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+  }
+});
+test('League result review and missing-result queues supply shared filters', async () => {
+  await act(async () => root.render(React.createElement(LeagueResults, { leagueId: 'l', workspace, initialTab: 'command' })));
+  expect(host.querySelector('[aria-label="Result verification sort and filter"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="Missing results sort and filter"]')).not.toBeNull();
+});
+test('League access lists use shared controls, separate from capped audit history', async () => {
+  await act(async () => root.render(React.createElement(LeaguePage.default, { activeLeagueId: 'l', leagues: [{ id: 'l', name: 'League' }], leagueStatus: 'ready' })));
+  await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent === 'Administration').click());
+  await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent === 'Access & audit').click());
+  expect(host.querySelector('[aria-label="League members sort and filter"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="League invitations sort and filter"]')).not.toBeNull();
+});
+test('Admin club member metadata sorts all authorised members without opening operational access', async () => {
+  await mount();
+  await act(async () => host.querySelector('button .truncate.text-sm.font-black').closest('button').click());
+  expect(host.querySelector('[aria-label="Club member metadata sort and filter"]')).not.toBeNull();
+});
+test('league report definitions and distribution lists have complete collection controls', async () => {
+  await act(async () => root.render(React.createElement(LeagueAnalytics, { leagueId: 'l', workspace, operations: {}, initialTab: 'reports' })));
+  expect(host.querySelector('[aria-label="Report distribution lists sort and filter"]')).not.toBeNull();
+  expect(host.querySelector('[aria-label="Scheduled report packs sort and filter"]')).not.toBeNull();
+});
+test.each([['requirements', 'Official requirements'], ['appointments', 'Official appointment board'], ['availability', 'Official availability'], ['availability', 'Declared official conflicts'], ['postponements', 'League postponements'], ['reports', 'Official workload']])('officials %s records expose collection controls: %s', async (initialTab, label) => {
+  const operations = { officials: [], assignments: [], requirements: [], availability: [], conflicts: [], postponements: [] };
+  await act(async () => root.render(React.createElement(LeagueOfficials, { leagueId: 'l', workspace, operations, initialTab, canEdit: false })));
+  expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+});
+test('league command action queues support display sorting with priority retained', async () => {
+  const operations = { officials: [], assignments: [], requirements: [], availability: [], conflicts: [], postponements: [], venues: [] };
+  await act(async () => root.render(React.createElement(LeagueCommand, { leagueId: 'l', workspace, operations, readiness: {} })));
+  expect(host.querySelector('[aria-label="League command actions sort and filter"]')).not.toBeNull();
 });

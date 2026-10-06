@@ -6,7 +6,7 @@ const buttonClass = 'inline-flex min-h-10 items-center justify-center gap-2 roun
 export default function ListToolbar({ label, columns, sort, onSortChange, resultCount, totalCount, activeFilterCount = 0, filtersOpen, onFiltersOpenChange, onClearFilters, onResetView, children, resultScopeLabel = '' }) {
   const panelId = useId();
   const Direction = sort?.direction === 'desc' ? ArrowDown : ArrowUp;
-  return <div className="space-y-3 print:hidden" role="group" aria-label={`${label} sort and filter`}>
+  return <div className="col-span-full min-w-0 space-y-3 print:hidden" role="group" aria-label={`${label} sort and filter`}>
     <div className="flex flex-wrap items-center gap-2">
       <label className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white pl-3 text-xs font-bold text-slate-700">
         Sort<select aria-label="Sort by" value={sort?.key || ''} onChange={event => onSortChange({ key: event.target.value, direction: 'asc' })} className="min-h-10 max-w-[180px] rounded-xl bg-transparent pr-2 focus-visible:outline-2 focus-visible:outline-emerald-500">

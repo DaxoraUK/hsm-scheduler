@@ -1,3 +1,4 @@
+import RecordCollection from "../components/lists/RecordCollection.jsx";
 import { tenantGetJson, tenantSetJson } from "../lib/storage/tenantStorage.js";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -675,8 +676,8 @@ export default function OperationsCentrePage({
           </div>
 
           <div className="mt-5 space-y-3">
-            {snapshot.priorityQueue.length ? (
-              snapshot.priorityQueue.map((item, index) => (
+            <RecordCollection label="Priority actions" rows={snapshot.priorityQueue} contextKey={`${club.id || club.name}:${scope}`} columns={[{ key: "priority", label: "Priority", type: "number", value: row => snapshot.priorityQueue.indexOf(row) }, { key: "name", label: "Action", type: "text", value: row => row.title }]} filterFields={[{ key: "priority", label: "Priority", value: row => row.priority }, { key: "domain", label: "Area", value: row => row.domain }]}>{displayRows => <>            {snapshot.priorityQueue.length ? (
+              displayRows.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -684,7 +685,7 @@ export default function OperationsCentrePage({
                   className={`group flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${PRIORITY_STYLES[item.priority]}`}
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-sm font-black shadow-sm">
-                    {String(index + 1).padStart(2, "0")}
+                    {String(snapshot.priorityQueue.indexOf(item) + 1).padStart(2, "0")}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">{item.domain}</div>
@@ -700,7 +701,7 @@ export default function OperationsCentrePage({
                 <h4 className="mt-3 text-base font-black text-emerald-900">No urgent actions</h4>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">The current operating picture has no warning or critical domains.</p>
               </div>
-            )}
+            )}</>}</RecordCollection>
           </div>
         </div>
 
@@ -852,8 +853,8 @@ export default function OperationsCentrePage({
           </form>
 
           <div className="mt-4 max-h-[470px] space-y-2.5 overflow-y-auto pr-1">
-            {incidents.length ? (
-              incidents.map((incident) => (
+            <RecordCollection label="Incidents" rows={incidents} columns={[{ key: "date", label: "Logged", type: "date", value: row => row.createdAt }, { key: "name", label: "Incident", type: "text", value: row => row.title }]} contextKey={`${club.id || club.name}:${scope}`} filterFields={[{ key: "severity", label: "Severity", value: row => row.severity }, { key: "resolved", label: "Status", value: row => row.resolved ? "Resolved" : "Open" }]} defaultSort={{ key: "date", direction: "desc" }} >{displayRows => <>{incidents.length ? (
+              displayRows.map((incident) => (
                 <div
                   key={incident.id}
                   className={`rounded-2xl border p-3.5 ${
@@ -903,7 +904,7 @@ export default function OperationsCentrePage({
                 <h4 className="mt-3 text-base font-black text-emerald-900">Incident log clear</h4>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">No matchday incidents have been recorded.</p>
               </div>
-            )}
+            )}</>}</RecordCollection>
           </div>
 
           <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-100 p-3 text-xs font-semibold leading-5 text-slate-500">

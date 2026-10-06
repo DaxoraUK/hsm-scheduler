@@ -27,7 +27,7 @@ export default function RecordCollection({ label, rows = [], columns, filterFiel
         })}
       </> : null}
     </ListToolbar>
-    {!list.resultCount ? <div className="my-3 rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">No records match these filters. <button type="button" className="font-bold text-emerald-700 underline" onClick={clear}>Clear filters</button></div> : null}
+    {!list.resultCount ? <div className="col-span-full my-3 rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">No records match these filters. <button type="button" className="font-bold text-emerald-700 underline" onClick={clear}>Clear filters</button></div> : null}
     {children(list.rows, list)}
   </>;
 }

@@ -1,3 +1,4 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -383,7 +384,7 @@ function ResponsibilitiesPanel({ data, sites, clubId, canManage, activeUserId, o
   );
 }
 
-function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) {
+export function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) {
   const portfolio = useMemo(() => summariseEliteFundingPortfolio(data.funding), [data.funding]);
   const [working, setWorking] = useState("");
 
@@ -434,7 +435,7 @@ function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) 
       <Panel eyebrow="Projects" title="Application-pack control" description="Request senior approval for a project pack before it is treated as organisation-approved evidence.">
         {!portfolio.projects.length ? <EmptyBlock title="No funding projects" description="Create projects in Analytics → Funding before using organisation-wide funding control." /> : (
           <div className="grid gap-3 lg:grid-cols-2">
-            {portfolio.projects.map((project) => {
+            <RecordCollection label="Organisation funding projects" rows={portfolio.projects} columns={[{ key: "name", label: "Project", type: "text", value: row => row.title }, { key: "funding", label: "Target", type: "number", value: row => row.targetFunding }]} contextKey={clubId} filterFields={[{ key: "status", label: "Status", value: row => row.status }]}  >{displayRows => <>{displayRows.map((project) => {
               const artifact = fundingArtifact(project);
               const approval = data.approvals.find((item) => item.approvalType === ELITE_APPROVAL_TYPES.FUNDING_PACK && item.entityKey === artifact.entityKey && ["pending", "approved"].includes(item.status));
               return <article key={project.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -442,13 +443,13 @@ function FundingPanel({ data, clubId, canOperate, onRefresh, onOpenAnalytics }) 
                 <p className="mt-3 line-clamp-3 text-sm font-semibold leading-6 text-slate-600">{project.summary || "No project summary has been recorded."}</p>
                 <button type="button" disabled={!canOperate || working === project.id || approval?.status === "pending"} onClick={() => requestPack(project)} className={`${buttonPrimary} mt-4`}><FileCheck2 size={15} /> {approval?.status === "approved" ? "Request refreshed approval" : approval?.status === "pending" ? "Approval pending" : "Request pack approval"}</button>
               </article>;
-            })}
+            })}</>}</RecordCollection>
           </div>
         )}
       </Panel>
 
       <Panel eyebrow="Deadlines" title="Next 30 days" description="Tasks and monitoring obligations that could affect an application or funding agreement.">
-        {!portfolio.dueSoon.length ? <EmptyBlock title="No upcoming funding deadlines" description="Tracked application tasks and monitoring obligations due within 30 days will appear here." /> : <div className="space-y-2">{portfolio.dueSoon.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div><div className="text-sm font-black text-slate-950">{item.title}</div><div className="mt-1 text-xs font-bold text-slate-500">Owner: {item.ownerName || "Not assigned"}</div></div><div className="shrink-0 text-xs font-black text-amber-900">Due {item.dueDate}</div></div>)}</div>}
+        {!portfolio.dueSoon.length ? <EmptyBlock title="No upcoming funding deadlines" description="Tracked application tasks and monitoring obligations due within 30 days will appear here." /> : <div className="space-y-2"><RecordCollection label="Funding deadlines" rows={portfolio.dueSoon} columns={[{ key: "date", label: "Due", type: "date", value: row => row.dueDate }, { key: "name", label: "Task", type: "text", value: row => row.title }]} contextKey={clubId} filterFields={[{ key: "owner", label: "Owner", value: row => row.ownerName }]}  >{displayRows => <>{displayRows.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div><div className="text-sm font-black text-slate-950">{item.title}</div><div className="mt-1 text-xs font-bold text-slate-500">Owner: {item.ownerName || "Not assigned"}</div></div><div className="shrink-0 text-xs font-black text-amber-900">Due {item.dueDate}</div></div>)}</>}</RecordCollection></div>}
       </Panel>
     </div>
   );

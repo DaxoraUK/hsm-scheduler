@@ -1,3 +1,4 @@
+import { sortTeamsByAgeGroup } from "../../lib/teams/teamOrdering.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -101,7 +102,7 @@ export default function CoachTrainingPreferences({
 
     <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <label><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Team</span><select className="input" value={teamKey} onChange={(event) => setTeamKey(event.target.value)}>{assignments.map((row) => <option key={row.id || row.teamKey || row.team_key} value={row.teamKey || row.team_key}>{row.teamName || row.team_name}</option>)}</select></label>
+        <label><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Team</span><select className="input" value={teamKey} onChange={(event) => setTeamKey(event.target.value)}>{sortTeamsByAgeGroup(assignments).map((row) => <option key={row.id || row.teamKey || row.team_key} value={row.teamKey || row.team_key}>{row.teamName || row.team_name}</option>)}</select></label>
         <label><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Season</span><select className="input" value={seasonPhase} onChange={(event) => setSeasonPhase(event.target.value)}>{SEASONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div>
 
