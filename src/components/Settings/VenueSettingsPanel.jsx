@@ -1,4 +1,5 @@
 import React from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { Car, MapPinned, Plus, Star, Trash2 } from "lucide-react";
 import { ENTITLEMENTS, getEntitlementLimit, hasEntitlement, isUnlimitedLimit, LIMIT_KEYS } from "../../lib/subscriptions/entitlements.js";
 import {
@@ -151,7 +152,8 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
         ) : null}
 
         <div className="mt-6 space-y-4">
-          {sites.map((site, index) => (
+          <RecordCollection label="Venues" rows={sites.map((site, index) => ({ site, index }))} contextKey={club.id} columns={[{ key: "name", label: "Name", type: "text", value: row => row.site.name }, { key: "parking", label: "Parking spaces", type: "number", value: row => row.site.carParkSpaces }]} filterFields={[{ key: "primary", label: "Primary site", value: row => row.site.isPrimary ? "Primary" : "Additional" }]}>
+          {displaySites => displaySites.map(({ site, index }) => (
             <div key={`${site.id}-${index}`} className={`rounded-[24px] border p-5 ${site.isPrimary ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"}`}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -180,6 +182,7 @@ export default function VenueSettingsPanel({ club = {}, setClub, AVG_CARS = {}, 
               </div>
             </div>
           ))}
+          </RecordCollection>
         </div>
 
         <SaveBar onSave={() => saveTab?.("venues", { club })} saved={savedTab === "venues"} label="Save venues">

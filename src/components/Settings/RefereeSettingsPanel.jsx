@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
 import SettingsDataActions from "./SettingsDataActions.jsx";
@@ -132,7 +133,9 @@ export default function RefereeSettingsPanel({ refs = [], setRefs, saveTab, save
         <Notice tone="info" className="mt-5">League appointments are entered against the relevant fixture after checking the official source. League, club, manager and assistant referees are clash-checked. Parent referees, volunteers and observers remain flexible unless you override the setting.</Notice>
 
         <div className="mt-6 space-y-4">
-          {refs.map((official, index) => {
+          <RecordCollection label="Officials" rows={refs.map((official, index) => ({ ...official, originalIndex: index }))} columns={[{ key: "name", label: "Name", type: "text", value: row => row.name }, { key: "role", label: "Role", type: "text", value: row => roleMeta(row.role).label }]} filterFields={[{ key: "role", label: "Role", value: row => roleMeta(row.role).label }]}>
+          {displayRefs => displayRefs.map((official) => {
+            const index = official.originalIndex;
             const role = official.role || "club_referee";
             const meta = roleMeta(role);
             const enforce = typeof official.enforceClashes === "boolean" ? official.enforceClashes : meta.enforceClashes;
@@ -155,6 +158,7 @@ export default function RefereeSettingsPanel({ refs = [], setRefs, saveTab, save
               </article>
             );
           })}
+          </RecordCollection>
         </div>
 
         {!refs.length ? <div className="mt-5 rounded-[22px] border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">No officials saved. Add a person or import a CSV template.</div> : null}

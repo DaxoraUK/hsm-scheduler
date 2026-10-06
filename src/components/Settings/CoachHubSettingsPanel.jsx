@@ -13,7 +13,8 @@ import {
   UsersRound,
   ExternalLink,
 } from "lucide-react";
-import { compareTeamsAlphabetically } from "../../lib/teams/teamOrdering.js";
+import { compareTeamsByAgeGroup } from "../../lib/teams/teamOrdering.js";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { toast } from "sonner";
 import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
 import { alignTeamContacts, getTeamContactKey } from "../../lib/communications/contactModel.js";
@@ -439,7 +440,8 @@ export default function CoachHubSettingsPanel({
           icon={UserRoundPlus}
         />
         <div className="mt-4 space-y-2">
-          {workspace.people.length ? workspace.people.map((person) => {
+          <RecordCollection label="Coach contacts" rows={workspace.people} contextKey={clubId} columns={[{ key: "name", label: "Name", type: "text", value: row => row.display_name || row.email }, { key: "email", label: "Email", type: "text", value: row => row.email }]} filterFields={[{ key: "verification", label: "Verification", value: row => row.verification_status || row.verificationStatus || "unverified" }, { key: "access", label: "Access", value: row => row.user_id || row.userId ? "accepted" : invitationStatusForPerson(row.id, workspace.invitations) }]}>
+          {displayPeople => displayPeople.map((person) => {
             const assignments = personAssignments(person.id, workspace.assignments);
             const invitationStatus = text(person.user_id || person.userId) ? "accepted" : invitationStatusForPerson(person.id, workspace.invitations);
             return (
@@ -461,7 +463,8 @@ export default function CoachHubSettingsPanel({
                 </div>
               </div>
             );
-          }) : <EmptyState icon={AlertTriangle} title="No team contacts found" body="Add an adult coach or manager to a team, save it, then synchronise Coach Hub." />}
+          })}
+          </RecordCollection>
         </div>
       </SettingsPanel>
 
@@ -473,7 +476,8 @@ export default function CoachHubSettingsPanel({
           icon={CalendarCheck2}
         />
         <div className="mt-4 space-y-2">
-          {pendingRequests.length ? pendingRequests.map((request) => (
+          <RecordCollection label="Coach requests" rows={pendingRequests} contextKey={clubId} columns={[{ key: "date", label: "Date", type: "date", value: row => row.preferredDate }, { key: "team", label: "Team / age group", type: "team", value: row => ({ name: row.teamName }) }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "team", label: "Team", value: row => row.teamName }]}>
+          {displayRequests => displayRequests.map((request) => (
             <div key={request.id} className="flex w-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
               <button type="button" onClick={() => setReview(request)} className="min-w-0 flex-1 text-left">
                 <div className="text-sm font-black text-slate-950">{request.title}</div>
@@ -482,7 +486,8 @@ export default function CoachHubSettingsPanel({
               <span className="rounded-full bg-amber-100 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">{requestStatusLabel(request.status)}</span>
               <button type="button" onClick={() => setConversation(request)} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 text-[11px] font-black text-violet-800"><MessageSquareText size={14} /> Conversation</button>
             </div>
-          )) : <EmptyState icon={CheckCircle2} title="Coach requests are clear" body="New training, friendly and booking-change requests will appear here." />}
+          ))}
+          </RecordCollection>
         </div>
       </SettingsPanel>
 
@@ -502,7 +507,7 @@ function PersonEditorDialog({ draft, setDraft, busy, onSave }) {
 function AssignmentEditorDialog({ draft, setDraft, assignments, teams, busyId, onSave, onRemove, onEditPerson, onOpenTeam }) {
   const teamOptions = (Array.isArray(teams) ? teams : [])
     .map((team, index) => ({ team, index }))
-    .sort((left, right) => compareTeamsAlphabetically(left.team, right.team))
+    .sort((left, right) => compareTeamsByAgeGroup(left.team, right.team))
     .map(({ team, index }) => ({ key: getTeamContactKey(team, index), name: text(team.name || team.teamName || `Team ${index + 1}`) }));
   const editingSourceManaged = Boolean(draft.id) && ["coach", "assistant"].includes(draft.sourceSlot);
   const selectTeam = (teamKey) => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { AlertTriangle, ChevronRight, Info, Layers3, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { createNextPitchIdentity, sortPitches } from "../../lib/pitches.js";
 import { booleanValue } from "../../lib/settings/dataExchange.js";
@@ -386,8 +387,11 @@ export default function PitchSettingsPanel({
           <div className="mt-2.5 flex items-center justify-between px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
             <span>{filteredPitches.length} shown</span><span>{pitchCfg.length} total</span>
           </div>
-          <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
-            {filteredPitches.map(({ pitch, index }) => {
+          <RecordCollection label="Pitches" rows={filteredPitches} search={false} contextKey={club.id} totalCount={pitchCfg.length} externalActiveFilterCount={Number(Boolean(query))} onClearExternal={() => setQuery("")} onResetExternal={() => setQuery("")}
+            columns={[{ key: "name", label: "Name", type: "text", value: row => row.pitch.label || row.pitch.id }, { key: "format", label: "Format", type: "text", value: row => row.pitch.format }]}
+            filterFields={[{ key: "site", label: "Site", value: row => siteForPitch(row.pitch)?.name }, { key: "format", label: "Format", value: row => row.pitch.format }, { key: "surface", label: "Surface", value: row => surfaceLabel(row.pitch) }]}>
+          {displayPitches => <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
+            {displayPitches.map(({ pitch, index }) => {
               const active = index === selectedIndex;
               const siteName = siteForPitch(pitch)?.name || primarySite?.name || "Main site";
               return (
@@ -402,7 +406,8 @@ export default function PitchSettingsPanel({
               );
             })}
             {!filteredPitches.length ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">No pitches match that search.</div> : null}
-          </div>
+          </div>}
+          </RecordCollection>
         </aside>
 
         <div className="min-w-0">

@@ -16,7 +16,8 @@ import { DB } from "../../lib/supabase.js";
 import { resolveCoachHubContactForTeam } from "../../lib/coachHubContactBridge.js";
 import { numberValue } from "../../lib/settings/dataExchange.js";
 import { getClubSites, getPrimarySite, reconcileSiteAssignments, resolveSiteId } from "../../lib/siteAssignments.js";
-import { sortTeamEntriesAlphabetically } from "../../lib/teams/teamOrdering.js";
+import { getTeamDisplayAge, sortTeamEntriesByAgeGroup } from "../../lib/teams/teamOrdering.js";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import {
   alignTeamContactsForEditing,
   getTeamContactKey,
@@ -257,7 +258,7 @@ export default function TeamSettingsPanel({
 
   const filteredTeams = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return sortTeamEntriesAlphabetically(teamCfg
+    return sortTeamEntriesByAgeGroup(teamCfg
       .map((team, index) => {
         const contact = contacts[index];
         return {
@@ -481,8 +482,11 @@ export default function TeamSettingsPanel({
             <input className={`${inputClass} pl-10`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find team or coach" aria-label="Find a team or coach" />
           </div>
           <div className="mt-2.5 flex items-center justify-between px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400"><span>{filteredTeams.length} shown</span><span>{teamCfg.length} total</span></div>
-          <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
-            {filteredTeams.map(({ team, index, contact, visibleContact }) => {
+          <RecordCollection label="Teams" rows={filteredTeams} contextKey={clubId} search={false} totalCount={teamCfg.length} externalActiveFilterCount={Number(Boolean(query))} onClearExternal={() => setQuery("")} onResetExternal={() => setQuery("")}
+            columns={[{ key: "age", label: "Age group", type: "team", value: row => row.team }, { key: "name", label: "Name", type: "text", value: row => row.team.name }]}
+            filterFields={[{ key: "age", label: "Age group", value: row => getTeamDisplayAge(row.team) ? `U${getTeamDisplayAge(row.team)}` : teamTypeLabel(row.team) }, { key: "day", label: "Day", value: row => row.team.day || "Saturday" }, { key: "format", label: "Format", value: row => row.team.format }]}>
+          {displayTeams => <div className="mt-2 grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5 overflow-y-auto pr-1 @4xl:block @4xl:max-h-[calc(100vh-18rem)] @4xl:space-y-1">
+            {displayTeams.map(({ team, index, contact, visibleContact }) => {
               const active = index === selectedIndex;
               const contactReady = Boolean(visibleContact?.coachName || visibleContact?.coachPhone || visibleContact?.coachEmail || hasContactData(contact));
               return (
@@ -497,7 +501,8 @@ export default function TeamSettingsPanel({
               );
             })}
             {!filteredTeams.length ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-500">No teams match that search.</div> : null}
-          </div>
+          </div>}
+          </RecordCollection>
         </aside>
 
         <div className="min-w-0">

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { Plus, PlugZap, Search, Trash2 } from "lucide-react";
 import {
   Field,
@@ -197,7 +198,8 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
       </div>
 
       <div className="mt-4 space-y-4">
-        {visibleSources.map(({ source, index }) => (
+        <RecordCollection label="Fixture sources" rows={visibleSources} search={false} contextKey={club.id} totalCount={sources.length} externalActiveFilterCount={Number(Boolean(sourceFilter)) + Number(sourceStatus !== "all")} onClearExternal={() => { setSourceFilter(""); setSourceStatus("all"); }} onResetExternal={() => { setSourceFilter(""); setSourceStatus("all"); }} columns={[{ key: "name", label: "Name", type: "text", value: row => row.source.name }, { key: "feed", label: "Feed ID", type: "text", value: row => row.source.feedId }]}>
+        {displaySources => displaySources.map(({ source, index }) => (
           <details key={source.id || index} className="group rounded-[24px] border border-slate-200 bg-slate-50">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 [&::-webkit-details-marker]:hidden">
               <div>
@@ -266,6 +268,7 @@ export default function IntegrationSettingsPanel({ club = {}, setClub, saveTab, 
             </div>
           </details>
         ))}
+        </RecordCollection>
 
         {sources.length > 0 && visibleSources.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">

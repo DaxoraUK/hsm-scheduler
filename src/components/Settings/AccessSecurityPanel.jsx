@@ -18,7 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "../../lib/notifications/daxoraNotifications.js";
-import { sortTeamsAlphabetically } from "../../lib/teams/teamOrdering.js";
+import { sortTeamsByAgeGroup } from "../../lib/teams/teamOrdering.js";
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { Auth, DB } from "../../lib/supabase.js";
 import {
   canAssignAdditionalRole,
@@ -277,7 +278,7 @@ export default function AccessSecurityPanel({
   };
 
   const inviteScopeOptions = inviteResponsibilityScope.scopeType === "team"
-    ? sortTeamsAlphabetically(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+    ? sortTeamsByAgeGroup(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
     : inviteResponsibilityScope.scopeType === "site"
       ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
       : [];
@@ -426,7 +427,8 @@ export default function AccessSecurityPanel({
           <div className="flex items-center justify-center gap-2 py-12 text-sm font-bold text-slate-500"><LoaderCircle className="animate-spin" size={20} /> Loading secure access…</div>
         ) : members.length ? (
           <div className="divide-y divide-slate-100">
-            {members.map((member) => {
+            <RecordCollection label="Club members" rows={members} contextKey={activeClubId} columns={[{ key: "name", label: "Name", type: "text", value: row => row.display_name || row.email }, { key: "role", label: "Role", type: "text", value: row => row.role }]} filterFields={[{ key: "role", label: "Role", value: row => row.role }]}>
+            {displayMembers => displayMembers.map((member) => {
               const isCurrent = member.user_id === currentUserId;
               const canEdit = !isCurrent
                 && member.role !== "owner"
@@ -438,7 +440,7 @@ export default function AccessSecurityPanel({
               const assignments = roleAssignmentsFor(member);
               const scopeDraft = scopeDraftFor(member.user_id);
               const scopeOptions = scopeDraft.scopeType === "team"
-                ? sortTeamsAlphabetically(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
+                ? sortTeamsByAgeGroup(teamCfg).map((row) => ({ value: row.id || row.key || row.name, label: row.name }))
                 : scopeDraft.scopeType === "site"
                   ? sites.map((row) => ({ value: row.id || row.key || row.name || row.venue, label: row.name || row.venue }))
                   : [];
@@ -603,6 +605,7 @@ export default function AccessSecurityPanel({
                 </div>
               );
             })}
+            </RecordCollection>
           </div>
         ) : <EmptyMessage>No members were returned by the secure membership service.</EmptyMessage>}
       </SectionCard>
@@ -669,7 +672,8 @@ export default function AccessSecurityPanel({
           <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Pending invitations</div>
           {pendingInvitations.length ? (
             <div className="grid gap-2">
-              {pendingInvitations.map((invitation) => (
+              <RecordCollection label="Pending invitations" rows={pendingInvitations} contextKey={activeClubId} columns={[{ key: "email", label: "Email", type: "text", value: row => row.email }, { key: "expiry", label: "Expiry", type: "date", value: row => row.expires_at }]} filterFields={[{ key: "role", label: "Role", value: row => row.role }]}>
+              {displayInvitations => displayInvitations.map((invitation) => (
                 <div key={invitation.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-black text-slate-900">{invitation.email}</div>
@@ -681,6 +685,7 @@ export default function AccessSecurityPanel({
                   </div>
                 </div>
               ))}
+              </RecordCollection>
             </div>
           ) : <EmptyMessage>No pending invitations.</EmptyMessage>}
         </div>

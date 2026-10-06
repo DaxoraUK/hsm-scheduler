@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import RecordCollection from "../lists/RecordCollection.jsx";
+import SortableTableHeader from "../lists/SortableTableHeader.jsx";
 import { CalendarDays, History, RotateCcw, Trash2 } from "lucide-react";
 import { DB, isSupaConfigured } from "../../lib/supabase.js";
 import { buildHistoryRestoreState } from "../../lib/history/historyRestore.js";
@@ -26,6 +28,11 @@ function historyCounts(week = {}) {
     total: allFixtures.length,
   };
 }
+
+const historyColumns = [
+  { key: "date", label: "Matchweek", type: "date", value: row => row.savedAt },
+  ...["saturday", "sunday", "midweek", "postponed"].map(key => ({ key, label: key[0].toUpperCase() + key.slice(1), type: "number", value: row => historyCounts(row)[key] })),
+];
 
 export default function HistorySettingsPanel({
   history = [],
@@ -87,12 +94,13 @@ export default function HistorySettingsPanel({
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-[22px] border border-slate-200">
-          <table className="min-w-[840px] w-full border-collapse text-left">
+          <RecordCollection label="Saved matchweeks" rows={history} contextKey={activeClubId} columns={historyColumns} defaultSort={{ key: "date", direction: "desc" }} searchText={row => row.dateLabel}>
+          {(displayHistory, list) => <table className="min-w-[840px] w-full border-collapse text-left">
             <thead className="bg-slate-950 text-white">
-              <tr>{['Matchweek', 'Saturday', 'Sunday', 'Midweek', 'Postponed', 'Actions'].map((heading) => <th key={heading} className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em]">{heading}</th>)}</tr>
+              <tr>{historyColumns.map(column => <SortableTableHeader key={column.key} columnKey={column.key} label={column.label} sort={list.sort} onSort={list.toggleSort} className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em]" />)}<th className="px-4 py-3">Actions</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {history.map((week) => {
+              {displayHistory.map((week) => {
                 const counts = historyCounts(week);
                 return (
                   <tr key={week.id} className="hover:bg-slate-50">
@@ -106,7 +114,8 @@ export default function HistorySettingsPanel({
                 );
               })}
             </tbody>
-          </table>
+          </table>}
+          </RecordCollection>
         </div>
       )}
 
