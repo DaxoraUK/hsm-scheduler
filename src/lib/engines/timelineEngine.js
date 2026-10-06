@@ -9,6 +9,10 @@
 
 import { cleanName } from "../scheduler.js";
 import { sortPitches } from "../pitches.js";
+import {getTimingSettings} from '../intelligence/scheduling/kickOffRules.js';
+import {getFixtureOccupancyMinutes} from '../scheduling/fixtureTiming.js';
+import {getFixtureFlowIdentity} from '../domain/fixtureVenueFlow.js';
+import {isFixtureSchedulingDemand} from '../domain/fixtureLifecycle.js';
 
 const DEFAULT_START = 8 * 60;
 const DEFAULT_END = 16 * 60;
@@ -49,8 +53,10 @@ export function buildMatchdayTimeline({
         ? Math.ceil((latest + (padRange ? TIMELINE_PADDING_MINS : 0)) / 30) * 30
         : DEFAULT_END;
 
-  const start = Math.max(0, computedStart);
-  const end = Math.max(start + MIN_RANGE, computedEnd);
+  const timing=getTimingSettings(club||{});
+  const longest=Math.max(60,...fixtures.map(f=>getFixtureOccupancyMinutes(f.source,{club:club||{}})));
+  const start = Math.max(0, includeEmptyPitches?Math.min(computedStart,timing.earliestKickOffMins):computedStart);
+  const end = Math.max(start + MIN_RANGE, computedEnd,includeEmptyPitches?timing.latestYouthKickOffMins+longest:0);
   const range = Math.max(end - start, MIN_RANGE);
   const ticks = buildTimelineTicks(start, end);
   const halfHourTicks = buildTimelineTicks(start, end, 30).filter(
@@ -113,15 +119,12 @@ export function normaliseTimelineGames(games = [], club = null) {
     .filter(
       (game) =>
         game &&
-        game.status !== "postponed" &&
+        isFixtureSchedulingDemand(game) &&
         Number.isFinite(game.koMins) &&
         Number.isFinite(game.endMins)
     )
     .map((game, index) => ({
-      id:
-        game.id ||
-        game.fixtureId ||
-        `${game.pitchId || "pitch"}-${game.koMins}-${game.homeTeam || "home"}-${index}`,
+      id:getFixtureFlowIdentity(game),
       source: game,
       pitchId: game.pitchId,
       koMins: game.koMins,

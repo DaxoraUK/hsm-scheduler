@@ -49,17 +49,21 @@ import {
 import { getPitchDisplayFormat } from "../../../lib/intelligence/pitch/pitchService.js";
 import { DB, isSupaConfigured } from "../../../lib/supabase.js";
 import { loadScheduleResourceContext, withScheduleReservations } from "../../../lib/scheduling/scheduleResourceContext.js";
+import {getPlannerPointerTime,getPlannerGrabOffset} from '../../../lib/engines/plannerPointerEngine.js';
+import {getFixtureFlowIdentity} from '../../../lib/domain/fixtureVenueFlow.js';
+import {resolveFixtureMoveTarget} from '../../../lib/scheduling/fixtureMove.js';
 
 const PITCH_COLUMN_WIDTH = 184;
 const EDGE_SCROLL_DISTANCE = 68;
 const EDGE_SCROLL_SPEED = 18;
+const EMPTY_ROWS=Object.freeze([]);
 
 export default function MatchdayTimelineCard({
   title = "Matchday Planner",
   subtitle = "Plan pitch usage and kick-off flow across the day.",
-  games = [],
-  pitchCfg = [],
-  closedPitches = [],
+  games = EMPTY_ROWS,
+  pitchCfg = EMPTY_ROWS,
+  closedPitches = EMPTY_ROWS,
   club,
   variant = "full",
   readOnly = false,
@@ -103,6 +107,7 @@ export default function MatchdayTimelineCard({
         pitchCfg,
         club,
         includeEmptyPitches: canEdit,
+        padRange:!canEdit,
       }),
     [canEdit, club, games, pitchCfg],
   );
@@ -120,8 +125,9 @@ export default function MatchdayTimelineCard({
     viewportWidth: Math.max(520, viewportWidth - PITCH_COLUMN_WIDTH - 4),
   });
 
-  const selectedFixture = selected?.fixture || null;
-  const selectedFixtureIndex = selected?.fixtureIndex ?? -1;
+  const selectedTarget=selected?.fixture?resolveFixtureMoveTarget(games,getFixtureFlowIdentity(selected.fixture)):null;
+  const selectedFixture = selectedTarget?.ok?selectedTarget.fixture:null;
+  const selectedFixtureIndex = selectedTarget?.ok?selectedTarget.fixtureIndex:-1;
   const selectedRankedPitches = useMemo(() => {
     if (!selectedFixture) return [];
     return rankTimelinePitches({
@@ -182,18 +188,21 @@ export default function MatchdayTimelineCard({
   }, [candidate]);
 
   const clearDrag = useCallback(() => {
+    const session=dragRef.current;
+    try{session?.element?.releasePointerCapture?.(session.pointerId);}catch{}
     dragRef.current = null;
     candidateRef.current = null;
     setCandidate(null);
-    document.body.style.removeProperty("user-select");
-    document.body.style.removeProperty("cursor");
+    if(session) {document.body.style.userSelect=session.previousUserSelect;document.body.style.cursor=session.previousCursor;}
   }, []);
 
   const buildCandidate = useCallback(
-    ({ fixtureIndex, pitchId, koMins }) =>
+    ({ fixtureIndex, fixtureIdentity,pitchId, koMins,snapTime=true }) =>
       buildTimelineMoveCandidate({
         fixtures: games,
         fixtureIndex,
+        fixtureIdentity,
+        snapTime,
         pitchCfg,
         closedPitches,
         club,
@@ -208,6 +217,21 @@ export default function MatchdayTimelineCard({
       }),
     [annualPlannerResources,annualPlannerEnabled, closedPitches, club, games, matchDate, pitchCfg, timeline.end, timeline.start],
   );
+
+  const calculatePointerCandidate=useCallback((event,session)=>{
+    if(!canEdit) return null;
+    const target=document.elementFromPoint?.(event.clientX,event.clientY)?.closest?.('[data-planner-pitch-id]');
+    const pitchId=target?.dataset?.plannerPitchId;
+    const row=pitchId?rowRefs.current.get(pitchId):null;
+    if(!row) return null;
+    const rect=row.getBoundingClientRect();
+    if(rect.width<=0||event.clientX<rect.left||event.clientX>rect.right) return null;
+    const intentionalTime=Math.abs(event.clientX-session.startX)>6;
+    const koMins=intentionalTime?getPlannerPointerTime({clientX:event.clientX,rowLeft:rect.left,rowWidth:rect.width,
+      displayStart:timeline.start,displayEnd:timeline.end,grabOffsetMins:session.grabOffsetMins}):session.fixture.koMins;
+    return buildCandidate({fixtureIdentity:session.fixtureIdentity,pitchId,koMins,snapTime:intentionalTime});
+  },[buildCandidate,canEdit,timeline.start,timeline.end]);
+  useEffect(()=>{if(!canEdit)clearDrag();},[canEdit,clearDrag]);
 
   const commitCandidate = useCallback(
     (next, { requireReview = false } = {}) => {
@@ -245,19 +269,7 @@ export default function MatchdayTimelineCard({
         if (event.clientY > rect.bottom - EDGE_SCROLL_DISTANCE) scroll.scrollTop += EDGE_SCROLL_SPEED;
       }
 
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-planner-pitch-id]");
-      const pitchId = target?.dataset?.plannerPitchId;
-      const row = pitchId ? rowRefs.current.get(pitchId) : null;
-      if (!pitchId || !row) {
-        candidateRef.current = null;
-        setCandidate(null);
-        return;
-      }
-
-      const rect = row.getBoundingClientRect();
-      const ratio = rect.width > 0 ? Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) : 0;
-      const koMins = timeline.start + ratio * timeline.range;
-      const next = buildCandidate({ fixtureIndex: session.fixtureIndex, pitchId, koMins });
+      const next = calculatePointerCandidate(event,session);
       candidateRef.current = next;
       setCandidate(next);
     }
@@ -265,8 +277,8 @@ export default function MatchdayTimelineCard({
     function onPointerUp(event) {
       const session = dragRef.current;
       if (!session || event.pointerId !== session.pointerId) return;
-      const next = candidateRef.current;
-      const moved = Boolean(session.moved);
+      const next = calculatePointerCandidate(event,session);
+      const moved = session.moved||Math.hypot(event.clientX-session.startX,event.clientY-session.startY)>6;
       clearDrag();
       if (!moved) return;
       suppressFixtureClickRef.current = true;
@@ -289,16 +301,26 @@ export default function MatchdayTimelineCard({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", clearDrag);
       window.removeEventListener("keydown", onKeyDown);
+      clearDrag();
     };
-  }, [buildCandidate, clearDrag, commitCandidate, timeline.range, timeline.start]);
+  }, [calculatePointerCandidate, clearDrag, commitCandidate]);
 
   function startPointerDrag(event, fixture, fixtureIndex) {
     if (!canEdit || event.button !== 0 || !event.isPrimary) return;
     event.stopPropagation();
     setProposal(null);
+    const row=rowRefs.current.get(fixture.pitchId);
+    if(!row) return;
+    const rect=row.getBoundingClientRect();
     dragRef.current = {
       fixtureIndex,
       fixture: fixture.source,
+      fixtureIdentity:getFixtureFlowIdentity(fixture.source),
+      element:event.currentTarget,
+      grabOffsetMins:getPlannerGrabOffset({clientX:event.clientX,rowLeft:rect.left,rowWidth:rect.width,
+        displayStart:timeline.start,displayEnd:timeline.end,fixtureKoMins:fixture.koMins}),
+      previousUserSelect:document.body.style.userSelect,
+      previousCursor:document.body.style.cursor,
       timelineFixture: fixture,
       pointerId: event.pointerId,
       pointerType: event.pointerType,
@@ -312,7 +334,7 @@ export default function MatchdayTimelineCard({
 
   function previewSlotForSelected(pitchId, koMins) {
     if (!selectedFixture || selectedFixtureIndex < 0 || !canEdit) return;
-    const next = buildCandidate({ fixtureIndex: selectedFixtureIndex, pitchId, koMins });
+    const next = buildCandidate({ fixtureIdentity:getFixtureFlowIdentity(selectedFixture), pitchId, koMins,snapTime:koMins!==selectedFixture.koMins });
     setProposal(next);
     setCandidate(next);
   }
@@ -328,6 +350,7 @@ export default function MatchdayTimelineCard({
     if (!recommendation?.patch || selectedFixtureIndex < 0) return;
     const next = buildCandidate({
       fixtureIndex: selectedFixtureIndex,
+      fixtureIdentity:getFixtureFlowIdentity(selectedFixture),
       pitchId: recommendation.patch.pitchId || selectedFixture.pitchId,
       koMins: recommendation.patch.koMins ?? normalisePlannerTimeInput(recommendation.patch.koTime, selectedFixture.koMins),
     });
@@ -479,7 +502,7 @@ export default function MatchdayTimelineCard({
           ) : null}
 
           <FixturePlannerDrawer
-            selected={selected}
+            selected={selectedFixture?{fixture:selectedFixture,fixtureIndex:selectedFixtureIndex}:null}
             rankedPitches={selectedRankedPitches}
             timeline={timeline}
             candidate={proposal}
@@ -640,7 +663,7 @@ function PlannerRow({
   const pitchState = dragFixture ? getTimelinePitchState({ pitch: row.pitch, fixture: dragFixture, closedPitches }) : null;
   const closed = getTimelinePitchState({ pitch: row.pitch, fixture: row.fixtures[0]?.source || {}, closedPitches }).tone === "closed";
   const isCandidateRow = candidate?.pitchId === row.pitch.id;
-  const selectedFixtureId = selected?.fixture?.id || selected?.fixture?.fixtureId;
+  const selectedFixtureId = selected?.fixture?getFixtureFlowIdentity(selected.fixture):null;
   const movingSelected = Boolean(selected && canEdit);
   const rowTone = dragFixture
     ? pitchState?.allowed
@@ -699,7 +722,7 @@ function PlannerRow({
 
         {row.fixtures.map((fixture) => {
           const fixtureIndex = games.indexOf(fixture.source);
-          const sourceId = fixture.source.id || fixture.source.fixtureId;
+          const sourceId = getFixtureFlowIdentity(fixture.source);
           const isSelected = selectedFixtureId && sourceId === selectedFixtureId;
           const risk = getPlannerFixtureRisk(fixture.source);
           const colour = getGameColour(fixture);
@@ -906,7 +929,7 @@ function FixturePlannerDrawer({ selected, rankedPitches, timeline, candidate, ca
                   <input type="time" step="900" min={formatTimelineTime(timeline.start)} max={formatTimelineTime(timeline.end)} value={koTime} onChange={(event) => setKoTime(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-400" />
                 </label>
               </div>
-              <button type="button" onClick={() => onPreview({ pitchId, koMins: normalisePlannerTimeInput(koTime, fixture.koMins) })} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"><ShieldAlert size={16} /> Validate move</button>
+              <button type="button" onClick={() => onPreview({ pitchId, koMins: normalisePlannerTimeInput(koTime, fixture.koMins,{snap:false}) })} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"><ShieldAlert size={16} /> Validate move</button>
             </section>
           ) : null}
 
@@ -938,7 +961,7 @@ function FixturePlannerDrawer({ selected, rankedPitches, timeline, candidate, ca
             <div className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Best suitable pitches</div>
             <div className="mt-2 space-y-2">
               {rankedPitches.filter((item) => item.state.allowed).slice(0, 4).map((item, index) => (
-                <button key={item.pitch.id} type="button" disabled={!canEdit} onClick={() => { setPitchId(item.pitch.id); onPreview({ pitchId: item.pitch.id, koMins: normalisePlannerTimeInput(koTime, fixture.koMins) }); }} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left transition hover:bg-slate-50 disabled:cursor-default">
+                <button key={item.pitch.id} type="button" disabled={!canEdit} onClick={() => { setPitchId(item.pitch.id); onPreview({ pitchId: item.pitch.id, koMins: normalisePlannerTimeInput(koTime, fixture.koMins,{snap:false}) }); }} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left transition hover:bg-slate-50 disabled:cursor-default">
                   <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${index === 0 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{index + 1}</span>
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-900">{item.pitch.label || item.pitch.id}</span><span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500">{formatPitchFormat(item.format)} · validated suitability</span></span>
                 </button>

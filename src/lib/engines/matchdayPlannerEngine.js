@@ -185,8 +185,9 @@ export function getPlannerCandidateLabel(candidate = {}) {
   return "Move available";
 }
 
-export function normalisePlannerTimeInput(value, fallback = 0) {
+export function normalisePlannerTimeInput(value, fallback = 0,{snap=true}={}) {
   const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return snapTimelineMinutes(fallback);
-  return snapTimelineMinutes(Number(match[1]) * 60 + Number(match[2]));
+  if (!match) return snap?snapTimelineMinutes(fallback):fallback;
+  const minutes=Number(match[1])*60+Number(match[2]);
+  return snap?snapTimelineMinutes(minutes):minutes;
 }

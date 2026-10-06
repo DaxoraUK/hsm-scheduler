@@ -9,6 +9,9 @@ import { formatTimelineTime } from "./timelineEngine.js";
 import { detectAnnualPlannerConflicts, getMatchdayFixtureSourceId, normaliseAnnualBooking } from "../planning/annualPlannerEngine.js";
 import { getScheduleResourceFailure } from "../scheduling/scheduleConstraints.js";
 import {getFixtureFlowIdentity} from '../domain/fixtureVenueFlow.js';
+import {resolveFixtureMoveTarget,buildFixtureAllocationPatch} from '../scheduling/fixtureMove.js';
+import {getTimingSettings} from '../intelligence/scheduling/kickOffRules.js';
+import {snapPlannerTime} from './plannerPointerEngine.js';
 
 export const TIMELINE_SNAP_MINUTES = 15;
 const PARKING_ADVISORY_TYPES = new Set(["parking_capacity", "parking_concurrency"]);
@@ -86,24 +89,15 @@ export function rankTimelinePitches({ pitchCfg = [], fixture = {}, closedPitches
     });
 }
 
-export function buildTimelineMovePatch({ fixture = {}, pitch = {}, koMins } = {}) {
-  const snappedKo = snapTimelineMinutes(koMins);
-  const duration = getFixtureDuration(fixture);
-  const endMins = snappedKo + duration;
-
-  return {
-    pitchId: pitch.id,
-    pitchLabel: pitch.label || pitch.id,
-    koMins: snappedKo,
-    koTime: formatTimelineTime(snappedKo),
-    endMins,
-    endTime: formatTimelineTime(endMins),
-  };
+export function buildTimelineMovePatch({ fixture = {}, pitch = {}, koMins,club={} } = {}) {
+  return buildFixtureAllocationPatch({fixture,pitch,koMins,club});
 }
 
 export function buildTimelineMoveCandidate({
   fixtures = [],
   fixtureIndex,
+  fixtureIdentity,
+  snapTime=true,
   pitchCfg = [],
   closedPitches = [],
   club = {},
@@ -116,6 +110,10 @@ export function buildTimelineMoveCandidate({
   resourceBlackouts = [],
   resourceContext = null,
 } = {}) {
+  if(fixtureIdentity) {
+    const target=resolveFixtureMoveTarget(fixtures,fixtureIdentity);
+    fixtureIndex=target.ok?target.fixtureIndex:-1;
+  }
   const fixture = fixtures[fixtureIndex];
   const pitch = (pitchCfg || []).find((item) => item.id === pitchId);
 
@@ -155,9 +153,8 @@ export function buildTimelineMoveCandidate({
     };
   }
 
-  const duration = getFixtureDuration(fixture);
-  const safeKo = clampTimelineMinutes(snapTimelineMinutes(koMins), start, end, duration);
-  const patch = buildTimelineMovePatch({ fixture, pitch, koMins: safeKo });
+  const safeKo=snapTime?snapPlannerTime(koMins,{anchorMins:getTimingSettings(club).earliestKickOffMins}):koMins;
+  const patch = buildTimelineMovePatch({ fixture, pitch, koMins: safeKo,club });
   const resourceFailure = getScheduleResourceFailure({fixtures,fixtureIdentity:getFixtureFlowIdentity(fixture),next:{...fixture,...patch},pitchCfg,closedPitches,club,matchDate,resourceContext});
   if(resourceFailure && ["resource_context","resource_booking"].includes(resourceFailure.type)) return {...resourceFailure,blocked:true,fixture,fixtureIndex,pitch,patch,title:"Move blocked",message:resourceFailure.reason,timeSuggestions:[],pitchSuggestions:[],validatedRecommendations:[]};
   const noChange = patch.pitchId === fixture.pitchId && patch.koMins === fixture.koMins;
