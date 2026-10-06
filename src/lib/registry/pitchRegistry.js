@@ -2,6 +2,8 @@
 // Single source of truth for pitch configuration, format compatibility,
 // linked pitch relationships, surfaces, and display helpers.
 
+import { normalisePitchSchedulingFields } from "../scheduling/pitchResourceModel.js";
+
 const clean = (value) => String(value || "").trim();
 const key = (value) => clean(value).toLowerCase();
 
@@ -85,14 +87,14 @@ export function normalisePitch(pitch = {}, fallback = {}) {
   const surface = inferPitchSurface(merged);
 
   return {
-    ...merged,
+    ...normalisePitchSchedulingFields(merged),
     id,
     label: clean(merged.label || merged.name || id),
     desc,
     format: inferPitchFormat(merged),
     siteId: clean(merged.siteId || merged.venueId || merged.groundId || fallback.siteId),
     innerOf: innerOf || null,
-    independent: Boolean(merged.independent || id === "3v3" || id === "AST"),
+    independent: typeof merged.independent === "boolean" ? merged.independent : merged.innerOf ? undefined : id === "3v3" || id === "AST",
     astroOnly: Boolean(merged.astroOnly || ["astro", "3g", "4g", "artificial"].includes(surface)),
     affectsParking: merged.affectsParking !== false,
     surface,
