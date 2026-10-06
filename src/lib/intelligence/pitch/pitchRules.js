@@ -8,6 +8,7 @@ import {
   getPitchSuitabilityReason,
   isPitchSuitableForFixture,
 } from "./pitchService.js";
+import { getPitchClosureTargets, pitchesShareSpace } from "../../scheduling/pitchResourceModel.js";
 
 export function pitchClosedRule({
   next = {},
@@ -22,10 +23,7 @@ export function pitchClosedRule({
     return null;
   }
 
-  const linkedPitchIds = getLinkedPitchIds(next.pitchId, pitchCfg);
-  const closedLinkedPitchId = linkedPitchIds.find((pitchId) =>
-    closedPitches.includes(pitchId)
-  );
+  const closedLinkedPitchId = closedPitches.find(pitchId => getPitchClosureTargets([pitchId],pitchCfg).includes(next.pitchId));
 
   if (!closedLinkedPitchId) {
     return null;
@@ -124,7 +122,7 @@ export function pitchClashRule({
   const clash = fixtures.find((fixture, index) => {
     if (index === fixtureIndex) return false;
     if (!isFixtureActive(fixture)) return false;
-    if (!blockedPitchIds.includes(fixture.pitchId)) return false;
+    if (!pitchesShareSpace(next.pitchId,fixture.pitchId,pitchCfg)) return false;
 
     const fixtureKo =
       fixture.koMins != null ? fixture.koMins : timeToMinutes(fixture.koTime);

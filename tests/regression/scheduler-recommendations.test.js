@@ -207,7 +207,7 @@ describe("validated recommendations", () => {
   test("pitch suggestions exclude closed and unsuitable pitches", () => {
     const fixtures = [
       makeFixture({ id: "moving", pitchId: "P1", koTime: "09:00", koMins: 540 }),
-      makeFixture({ id: "clash", pitchId: "P1", koTime: "09:00", koMins: 540 }),
+      makeFixture({ id: "clash", homeTeam: "HSM Reserves", awayTeam: "Other visitors", pitchId: "P1", koTime: "09:00", koMins: 540 }),
     ];
     const suggestions = getAvailablePitchSuggestions({
       fixtures,

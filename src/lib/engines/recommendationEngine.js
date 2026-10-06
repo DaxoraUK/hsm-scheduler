@@ -105,12 +105,7 @@ function getFixtureTimingWindow({ fixture = {}, club = {}, start, end } = {}) {
 
 function buildTimePatch(fixture = {}, koTime) {
   const koMins = timeToMinutes(koTime);
-  const duration = getFixtureDuration({
-    ...fixture,
-    koTime,
-    koMins,
-    endMins: null,
-  });
+  const duration = getFixtureDuration(fixture);
 
   return {
     koTime,

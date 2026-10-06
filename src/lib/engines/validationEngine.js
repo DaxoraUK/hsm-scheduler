@@ -4,18 +4,16 @@ import {
   runRules,
 } from "./rulesEngine.js";
 import { createPitchRegistry } from "../registry/pitchRegistry.js";
+import { isFixtureSchedulingDemand } from "../domain/fixtureLifecycle.js";
+import { getFixtureOccupancyMinutes } from "../scheduling/fixtureTiming.js";
+import { getFixtureFlowIdentity } from "../domain/fixtureVenueFlow.js";
 
 export function normaliseStatus(value = "") {
   return String(value || "").trim().toLowerCase();
 }
 
 export function isFixtureActive(fixture = {}) {
-  const status = normaliseStatus(fixture.status || "active");
-  return status !== "postponed"
-    && status !== "cancelled"
-    && status !== "away"
-    && fixture.isAwayFixture !== true
-    && fixture.requiresScheduling !== false;
+  return isFixtureSchedulingDemand(fixture);
 }
 
 export function timeToMinutes(time) {
@@ -35,16 +33,8 @@ export function minutesToTime(totalMins) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-export function getFixtureDuration(fixture = {}) {
-  if (fixture.endMins != null && fixture.koMins != null) {
-    return fixture.endMins - fixture.koMins;
-  }
-
-  const gameMins = fixture.cfg?.gameMins || fixture.gameMins || 70;
-  const format = fixture.cfg?.format || fixture.format || "";
-  const bufferMins = String(format).includes("11") ? 30 : 15;
-
-  return gameMins + bufferMins;
+export function getFixtureDuration(fixture = {}, options = {}) {
+  return getFixtureOccupancyMinutes(fixture, options);
 }
 
 export function getLinkedPitchIds(pitchId, pitchCfg = []) {
@@ -62,7 +52,15 @@ export function validateFixtureUpdate({
   club = {},
   validateParking = true,
   changeType,
+  fixtureIdentity,
+  matchDate,
+  resourceContext,
 } = {}) {
+  if (fixtureIdentity) {
+    const matches = fixtures.map((f,i)=>getFixtureFlowIdentity(f)===fixtureIdentity?i:-1).filter(i=>i>=0);
+    if(matches.length!==1) return {ok:false,type:"stale_fixture",reason:"This fixture is missing or ambiguous. Refresh the schedule."};
+    fixtureIndex=matches[0];
+  }
   const current = fixtures[fixtureIndex];
 
   if (!current) {
@@ -88,6 +86,9 @@ export function validateFixtureUpdate({
     club,
     validateParking,
     changeType: resolvedChangeType,
+    fixtureIdentity: fixtureIdentity || getFixtureFlowIdentity(current),
+    matchDate,
+    resourceContext,
   });
 
   return runRules(rules);

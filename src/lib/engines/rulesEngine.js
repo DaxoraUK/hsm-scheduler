@@ -6,6 +6,7 @@ import {
 import { refereeClashRule } from "../intelligence/officials/officialRules.js";
 import { parkingCapacityRule, parkingConcurrencyRule } from "../intelligence/parking/parkingRules.js";
 import { getKickOffRuleFailure } from "../intelligence/scheduling/kickOffRules.js";
+import { getScheduleResourceFailure } from "../scheduling/scheduleConstraints.js";
 
 const SCHEDULE_FIELDS = ["pitchId", "pitchLabel", "koTime", "koMins", "endMins"];
 const OFFICIAL_FIELDS = ["referee", "refPhone", "refStatus"];
@@ -58,26 +59,13 @@ export function getCompetitionRules({ next = {}, club = {} } = {}) {
   ];
 }
 
-export function getScheduleRules({ fixtures = [], fixtureIndex, next = {}, pitchCfg = [], closedPitches = [], club = {} } = {}) {
+export function getScheduleRules({ fixtures = [], fixtureIndex, fixtureIdentity, next = {}, pitchCfg = [], closedPitches = [], club = {}, matchDate, resourceContext } = {}) {
   return [
-    ...getCompetitionRules({ next, club }),
     {
-      id: "pitch.closed",
+      id: "schedule.resource",
       stage: "schedule",
-      source: "pitchAvailability",
-      run: () => pitchClosedRule({ next, pitchCfg, closedPitches }),
-    },
-    {
-      id: "pitch.suitability",
-      stage: "schedule",
-      source: "pitchConfiguration",
-      run: () => pitchSuitabilityRule({ next, pitchCfg }),
-    },
-    {
-      id: "pitch.clash",
-      stage: "schedule",
-      source: "fixturePlan",
-      run: () => pitchClashRule({ fixtures, fixtureIndex, next, pitchCfg }),
+      source: "scheduleConstraints",
+      run: () => getScheduleResourceFailure({fixtures:fixtures.filter((_,i)=>i!==fixtureIndex),fixtureIdentity,next,pitchCfg,closedPitches,club,matchDate,resourceContext}),
     },
   ];
 }
@@ -101,12 +89,6 @@ export function getParkingRules({ fixtures = [], fixtureIndex, next = {}, club =
       source: "parkingSettings",
       run: () => parkingCapacityRule({ fixtures, fixtureIndex, next, club, pitchCfg }),
     },
-    {
-      id: "parking.concurrency",
-      stage: "parking",
-      source: "parkingSettings",
-      run: () => parkingConcurrencyRule({ fixtures, fixtureIndex, next, club, pitchCfg }),
-    },
   ];
 }
 
@@ -120,12 +102,15 @@ export function buildFixtureRules({
   validateParking = true,
   changeType = "metadata",
   refs = [],
+  fixtureIdentity,
+  matchDate,
+  resourceContext,
 } = {}) {
   const rules = [];
 
   if (changeType === "schedule") {
     rules.push(
-      ...getScheduleRules({ fixtures, fixtureIndex, next, pitchCfg, closedPitches, club })
+      ...getScheduleRules({ fixtures, fixtureIndex, fixtureIdentity, next, pitchCfg, closedPitches, club, matchDate, resourceContext })
     );
   }
 
@@ -141,18 +126,21 @@ export function buildFixtureRules({
 }
 
 export function runRules(rules = []) {
+  const advisories = [];
   for (const rule of rules) {
     const failure = normaliseRuleFailure(rule.run?.());
 
     if (failure) {
+      if(rule.stage==="parking") { advisories.push({...failure,severity:"warning"});continue; }
       return {
         ...failure,
         ruleId: rule.id,
         stage: rule.stage,
         source: rule.source,
+        advisories,
       };
     }
   }
 
-  return { ok: true, type: "valid" };
+  return advisories.length ? { ok: true, type: "valid", advisories } : { ok: true, type: "valid" };
 }

@@ -1,3 +1,5 @@
+import { classifyFixtureTeam } from "../../scheduling/fixtureTiming.js";
+
 function normaliseText(value = "") {
   return String(value || "").trim().toLowerCase();
 }
@@ -36,20 +38,11 @@ export function getFixtureFormatForRules(fixture = {}) {
 }
 
 export function isYouthFixture(fixture = {}) {
-  const name = normaliseText(getFixtureTeamName(fixture));
-  const ageOrder = Number(fixture.cfg?.ageOrder ?? fixture.ageOrder);
-
-  if (Number.isFinite(ageOrder) && ageOrder > 0 && ageOrder < 11) return true;
-  return /\bu\s?\d{1,2}\b/.test(name);
+  return classifyFixtureTeam(fixture) === "youth";
 }
 
 export function isAdultFixture(fixture = {}) {
-  const format = getFixtureFormatForRules(fixture);
-  const ageOrder = Number(fixture.cfg?.ageOrder ?? fixture.ageOrder);
-
-  if (isYouthFixture(fixture)) return false;
-  if (Number.isFinite(ageOrder) && ageOrder >= 11) return true;
-  return format === "11v11";
+  return classifyFixtureTeam(fixture) === "adult";
 }
 
 export function getTimingSettings(club = {}) {
