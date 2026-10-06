@@ -2,7 +2,7 @@
 
 Date: 6 October 2026
 Branch: referee-flow-staging
-Status: conversational design approved; written design awaiting review
+Status: written design approved on 6 October 2026; implementation plan awaiting review
 
 ## Outcome
 
