@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import RecordCollection from "../components/lists/RecordCollection.jsx";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -195,6 +196,7 @@ export default function PlatformAdminPage({
 }) {
   const [tab, setTab] = useState("clubs");
   const [clubs, setClubs] = useState([]);
+  const loadGeneration = useRef(0);
   const [totalClubs, setTotalClubs] = useState(0);
   const [cases, setCases] = useState([]);
   const [activity, setActivity] = useState([]);
@@ -232,14 +234,35 @@ export default function PlatformAdminPage({
 
   const loadPlatformData = useCallback(async () => {
     if (!platformContext?.isPlatformStaff) return;
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setLoadError("");
     try {
       const [clubPayload, casePayload, activityPayload] = await Promise.all([
-        DB.platformListClubs({ search, status: statusFilter, plan: planFilter, limit: 100 }),
+        (async () => {
+          const items = [];
+          let total = null;
+          const ids = new Set();
+          do {
+            if (generation !== loadGeneration.current) return null;
+            const page = await DB.platformListClubs({ search, status: statusFilter, plan: planFilter, limit: 100, offset: items.length });
+            if (!Array.isArray(page?.items) || !Number.isInteger(page?.total) || page.total < 0 || (total !== null && total !== page.total)) throw new Error("Club result count changed or is incomplete; retry the refresh.");
+            total = page.total;
+            if (!page.items.length && items.length < total) throw new Error("A club results page is incomplete.");
+            for (const row of page.items) {
+              const id = row.club_id || row.clubId;
+              if (!id || ids.has(id)) throw new Error("Club results changed while paging; retry the refresh.");
+              ids.add(id);
+              items.push(row);
+            }
+            if (items.length > total) throw new Error("Club result count is inconsistent.");
+          } while (items.length < total);
+          return { items, total };
+        })(),
         DB.platformListSupportCases({ limit: 200 }),
         DB.platformListActivity(50),
       ]);
+      if (generation !== loadGeneration.current) return;
       const nextClubs = (Array.isArray(clubPayload?.items) ? clubPayload.items : []).map(normalisePlatformClub);
       const nextCases = (Array.isArray(casePayload) ? casePayload : []).map(normaliseSupportCase);
       setClubs(nextClubs);
@@ -251,15 +274,15 @@ export default function PlatformAdminPage({
         setClubDetail(null);
       }
     } catch (error) {
-      setLoadError(error?.message || "The Daxora administration workspace could not be loaded.");
+      if (generation === loadGeneration.current) setLoadError(`Refresh incomplete; showing previous complete results, if available. ${error?.message || "Please retry."}`);
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [planFilter, platformContext?.isPlatformStaff, search, selectedClubId, statusFilter]);
 
   useEffect(() => {
     const timer = window.setTimeout(loadPlatformData, 180);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); loadGeneration.current += 1; };
   }, [loadPlatformData]);
 
   const loadClubDetail = useCallback(async (clubId) => {
@@ -578,11 +601,11 @@ export default function PlatformAdminPage({
                 </select>
               </div>
             </div>
-            <div className="mt-5 max-h-[820px] space-y-3 overflow-y-auto pr-1">
+            <RecordCollection label="Club workspaces" rows={clubs} contextKey={platformContext?.userId} search={false} columns={[{ key: "name", label: "Club name", type: "text", value: row => row.name }, { key: "teams", label: "Teams", type: "number", value: row => row.teamCount }, { key: "cases", label: "Open cases", type: "number", value: row => row.openCaseCount }]} externalActiveFilterCount={Number(Boolean(search)) + Number(Boolean(statusFilter)) + Number(Boolean(planFilter))} onClearExternal={() => { setSearch(""); setStatusFilter(""); setPlanFilter(""); }} onResetExternal={() => { setSearch(""); setStatusFilter(""); setPlanFilter(""); }}>{displayClubs => <div className="mt-5 max-h-[820px] space-y-3 overflow-y-auto pr-1">
               {loading && !clubs.length ? <div className="flex justify-center py-12"><LoaderCircle className="animate-spin text-emerald-600" /></div> : null}
               {!loading && !clubs.length ? <EmptyPanel title="No clubs found" message="Change the search or filter criteria and try again." /> : null}
-              {clubs.map((club) => <ClubRow key={club.id} club={club} active={selectedClubId === club.id} onSelect={selectClub} />)}
-            </div>
+              {displayClubs.map((club) => <ClubRow key={club.id} club={club} active={selectedClubId === club.id} onSelect={selectClub} />)}
+            </div>}</RecordCollection>
           </section>
 
           <section className="min-w-0 rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -700,7 +723,7 @@ export default function PlatformAdminPage({
       {tab === "cases" ? (
         <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
           <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-950">Support queue</h2><p className="mt-1 text-xs font-semibold text-slate-500">Internal case tracking for launch support.</p></div><button type="button" onClick={() => setNewCaseOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-white"><Plus size={18} /></button></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-950">Recent support queue (up to 200 cases)</h2><p className="mt-1 text-xs font-semibold text-slate-500">Internal case tracking for launch support.</p></div><button type="button" onClick={() => setNewCaseOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-white"><Plus size={18} /></button></div>
             <div className="mt-5 max-h-[820px] space-y-3 overflow-y-auto pr-1">
               {!cases.length ? <EmptyPanel title="No support cases" message="Create a case when a club needs help or an issue requires follow-up." /> : cases.map((item) => <CaseRow key={item.id} item={item} active={selectedCaseId === item.id} onSelect={selectCase} />)}
             </div>
@@ -740,7 +763,7 @@ export default function PlatformAdminPage({
 
       {tab === "activity" ? (
         <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="text-lg font-black text-slate-950">Platform activity</h2><p className="mt-1 text-xs font-semibold text-slate-500">Sensitive Daxora administration and support actions are recorded separately from club activity.</p>
+          <h2 className="text-lg font-black text-slate-950">Recent platform activity (up to 50 events)</h2><p className="text-xs text-slate-500">Latest 50 events; this is not the complete audit history.</p><p className="mt-1 text-xs font-semibold text-slate-500">Sensitive Daxora administration and support actions are recorded separately from club activity.</p>
           <div className="mt-5 space-y-3">{activity.length ? activity.map((event) => <div key={event.id} className="flex flex-col gap-3 rounded-[22px] border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-black text-slate-900">{event.action}</div><div className="mt-1 text-xs font-semibold text-slate-500">{event.actor_name || "Daxora operator"}{event.club_name ? ` · ${event.club_name}` : ""}</div></div><div className="text-xs font-bold text-slate-400">{formatDate(event.created_at)}</div></div>) : <EmptyPanel title="No platform activity yet" message="Plan changes, club status changes and support-case actions will appear here." />}</div>
         </section>
       ) : null}

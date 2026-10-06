@@ -1,3 +1,4 @@
+import RecordCollection from "../lists/RecordCollection.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -153,9 +154,11 @@ function SeasonGridView({ fixtures, workspace, operations, onSelect }) {
   );
 }
 
-function ListView({ fixtures, operations, onSelect }) {
-  const grouped = fixtures.reduce((map, fixture) => { const key = fixture.date || "unplaced"; const rows = map.get(key) || []; rows.push(fixture); map.set(key, rows); return map; }, new globalThis.Map());
+function ListView({ fixtures, operations, onSelect, contextKey }) {
+  return <RecordCollection label="League fixtures" rows={fixtures} contextKey={contextKey} columns={[{ key: "date", label: "Date", type: "date", value: row => row.date }, { key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "time", label: "Kick-off", type: "text", value: row => row.kickOff }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "type", label: "Competition type", value: row => row.competitionType }]}>{displayRows => {
+  const grouped = displayRows.reduce((map, fixture) => { const key = fixture.date || "unplaced"; const rows = map.get(key) || []; rows.push(fixture); map.set(key, rows); return map; }, new globalThis.Map());
   return <div className="space-y-4">{[...grouped.entries()].map(([date, rows]) => <Panel key={date} className="overflow-hidden"><div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3"><div className="text-sm font-black text-slate-900">{date === "unplaced" ? "Unplaced fixtures" : dateLabel(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><Pill tone={date === "unplaced" ? "rose" : "slate"}>{rows.length}</Pill></div><div className="divide-y divide-slate-100">{rows.map((fixture) => { const coverage = fixtureAssignmentSummary(fixture, operations); return <button type="button" key={`${fixture.targetType}-${fixture.targetId}`} onClick={() => onSelect(fixture)} className="grid w-full gap-2 px-4 py-3 text-left hover:bg-slate-50 sm:grid-cols-[90px_minmax(260px,1.5fr)_minmax(180px,1fr)_150px_120px] sm:items-center"><div className="text-xs font-black text-slate-700">{fixture.kickOff || "TBC"}</div><div><div className="text-sm font-black text-slate-950">{fixture.homeTeamName} <span className="text-slate-400">v</span> {fixture.awayTeamName}</div><div className="mt-0.5 text-[10px] font-bold text-slate-500">{fixture.competitionName}</div></div><div className="truncate text-xs font-bold text-slate-600">{fixture.venueName}</div><Pill tone={fixture.competitionType === "cup" ? "amber" : "blue"}>{fixture.competitionType}</Pill><Pill tone={coverage.complete ? "green" : "amber"}>{coverage.assigned}/{coverage.required} officials</Pill></button>; })}</div></Panel>)}</div>;
+}}</RecordCollection>;
 }
 
 function ExceptionsView({ fixtures, operations, onSelect }) {
@@ -227,7 +230,7 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
       {view === "calendar" ? <CalendarView fixtures={filtered} month={month} setMonth={setMonth} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "grid" ? <SeasonGridView fixtures={filtered} workspace={workspace} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "map" ? <LeagueVenueMap fixtures={filtered.map((fixture) => ({ ...fixture, __officialComplete: fixtureAssignmentSummary(fixture, operations).complete }))} workspace={workspace} operations={operations} canManage={canManage} onRefreshOperations={onRefreshOperations} onSelectFixture={setSelectedFixture} /> : null}
-      {view === "list" ? <ListView fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
+      {view === "list" ? <ListView contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "exceptions" ? <ExceptionsView fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {!filtered.length ? <Panel className="p-10 text-center"><AlertTriangle className="mx-auto text-slate-300" size={34} /><div className="mt-3 text-lg font-black text-slate-700">No fixtures match these filters</div></Panel> : null}
       <FixtureDrawer fixture={selectedFixture} operations={operations} onClose={() => setSelectedFixture(null)} />
