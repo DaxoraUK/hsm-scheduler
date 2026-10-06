@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Branch: `referee-flow-staging`
-Status: conversational design approved; written specification awaiting review
+Status: written specification approved by the user on 2026-10-06; implementation plan awaiting review
 Investigation baseline: `2013209` (product changes through `d6260c0`)
 
 ## Intent and scope
