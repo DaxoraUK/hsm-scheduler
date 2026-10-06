@@ -15,6 +15,7 @@ export default function ListToolbar({ label, columns, sort, onSortChange, result
       </label>
       <button type="button" className={buttonClass} aria-label={sort?.direction === 'desc' ? 'Sort ascending' : 'Sort descending'} onClick={() => onSortChange({ ...sort, direction: sort?.direction === 'desc' ? 'asc' : 'desc' })}><Direction size={15} aria-hidden="true" /></button>
       {children ? <button type="button" className={buttonClass} aria-expanded={Boolean(filtersOpen)} aria-controls={panelId} onClick={() => onFiltersOpenChange(!filtersOpen)}><Filter size={14} aria-hidden="true" />Filter{activeFilterCount ? <span className="rounded-full bg-emerald-100 px-1.5 text-emerald-800">{activeFilterCount}</span> : null}</button> : null}
+      {!children && activeFilterCount > 0 ? <span className="text-xs font-semibold text-emerald-700">{activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}</span> : null}
       {activeFilterCount > 0 || resultCount === 0 ? <button type="button" onClick={onClearFilters} className={buttonClass}>Clear filters</button> : null}
       <button type="button" onClick={onResetView} className={buttonClass}><RotateCcw size={13} aria-hidden="true" />Reset view</button>
       <span className="ml-auto text-xs font-semibold text-slate-500" role="status">{resultCount} of {totalCount}{resultScopeLabel ? ` · ${resultScopeLabel}` : ''}</span>

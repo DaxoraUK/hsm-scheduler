@@ -154,14 +154,14 @@ function SeasonGridView({ fixtures, workspace, operations, onSelect }) {
   );
 }
 
-function ListView({ fixtures, operations, onSelect, contextKey }) {
-  return <RecordCollection label="League fixtures" rows={fixtures} contextKey={contextKey} columns={[{ key: "date", label: "Date", type: "date", value: row => row.date }, { key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "time", label: "Kick-off", type: "text", value: row => row.kickOff }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "type", label: "Competition type", value: row => row.competitionType }]}>{displayRows => {
+function ListView({ fixtures, operations, onSelect, contextKey, presentationFilters, totalCount }) {
+  return <RecordCollection label="League fixtures" rows={fixtures} contextKey={contextKey} totalCount={totalCount} {...presentationFilters} columns={[{ key: "date", label: "Date", type: "date", value: row => row.date }, { key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "time", label: "Kick-off", type: "text", value: row => row.kickOff }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "type", label: "Competition type", value: row => row.competitionType }]}>{displayRows => {
   const grouped = displayRows.reduce((map, fixture) => { const key = fixture.date || "unplaced"; const rows = map.get(key) || []; rows.push(fixture); map.set(key, rows); return map; }, new globalThis.Map());
   return <div className="space-y-4">{[...grouped.entries()].map(([date, rows]) => <Panel key={date} className="overflow-hidden"><div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3"><div className="text-sm font-black text-slate-900">{date === "unplaced" ? "Unplaced fixtures" : dateLabel(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div><Pill tone={date === "unplaced" ? "rose" : "slate"}>{rows.length}</Pill></div><div className="divide-y divide-slate-100">{rows.map((fixture) => { const coverage = fixtureAssignmentSummary(fixture, operations); return <button type="button" key={`${fixture.targetType}-${fixture.targetId}`} onClick={() => onSelect(fixture)} className="grid w-full gap-2 px-4 py-3 text-left hover:bg-slate-50 sm:grid-cols-[90px_minmax(260px,1.5fr)_minmax(180px,1fr)_150px_120px] sm:items-center"><div className="text-xs font-black text-slate-700">{fixture.kickOff || "TBC"}</div><div><div className="text-sm font-black text-slate-950">{fixture.homeTeamName} <span className="text-slate-400">v</span> {fixture.awayTeamName}</div><div className="mt-0.5 text-[10px] font-bold text-slate-500">{fixture.competitionName}</div></div><div className="truncate text-xs font-bold text-slate-600">{fixture.venueName}</div><Pill tone={fixture.competitionType === "cup" ? "amber" : "blue"}>{fixture.competitionType}</Pill><Pill tone={coverage.complete ? "green" : "amber"}>{coverage.assigned}/{coverage.required} officials</Pill></button>; })}</div></Panel>)}</div>;
 }}</RecordCollection>;
 }
 
-function ExceptionsView({ fixtures, operations, onSelect, contextKey }) {
+function ExceptionsView({ fixtures, operations, onSelect, contextKey, presentationFilters }) {
   const categories = [
     { id: "unplaced", label: "Unplaced fixtures", tone: "rose", rows: fixtures.filter((row) => !row.date), detail: "No valid playing date has been allocated." },
     { id: "venue", label: "Missing venues", tone: "rose", rows: fixtures.filter((row) => row.date && !row.venueId), detail: "Placed fixtures without a confirmed ground." },
@@ -169,7 +169,7 @@ function ExceptionsView({ fixtures, operations, onSelect, contextKey }) {
     { id: "postponed", label: "Postponed fixtures", tone: "amber", rows: fixtures.filter((row) => row.status === "postponed"), detail: "Fixtures awaiting a rearrangement or closure." },
     { id: "replacement", label: "Replacement required", tone: "rose", rows: fixtures.filter((fixture) => operations.assignments.some((row) => row.targetType === fixture.targetType && row.targetId === fixture.targetId && row.status === "replacement_required")), detail: "An appointed official has withdrawn or declined." },
   ];
-  return <div className="grid gap-5 xl:grid-cols-2">{categories.map((category) => <Panel key={category.id} className="overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-base font-black text-slate-950">{category.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">{category.detail}</div></div><Pill tone={category.tone}>{category.rows.length}</Pill></div><div className="max-h-[420px] space-y-2 overflow-y-auto p-3"><RecordCollection label={category.label} rows={category.rows} contextKey={contextKey} columns={[{ key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "date", label: "Date", type: "date", value: row => row.date }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "type", label: "Competition", value: row => row.competitionType }]}>{displayRows => <>{category.rows.length ? displayRows.map((fixture) => <FixtureLine key={`${fixture.targetType}-${fixture.targetId}`} fixture={fixture} operations={operations} onSelect={onSelect} />) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-400">No exceptions in this category.</div>}</>}</RecordCollection></div></Panel>)}</div>;
+  return <div className="grid gap-5 xl:grid-cols-2">{categories.map((category) => <Panel key={category.id} className="overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-base font-black text-slate-950">{category.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">{category.detail}</div></div><Pill tone={category.tone}>{category.rows.length}</Pill></div><div className="max-h-[420px] space-y-2 overflow-y-auto p-3"><RecordCollection label={category.label} rows={category.rows} contextKey={contextKey} {...presentationFilters} columns={[{ key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "date", label: "Date", type: "date", value: row => row.date }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "type", label: "Competition", value: row => row.competitionType }]}>{displayRows => <>{category.rows.length ? displayRows.map((fixture) => <FixtureLine key={`${fixture.targetType}-${fixture.targetId}`} fixture={fixture} operations={operations} onSelect={onSelect} />) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-400">No exceptions in this category.</div>}</>}</RecordCollection></div></Panel>)}</div>;
 }
 
 export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, operations, canManage = false, onRefreshOperations, initialView = "calendar", focusToken = 0 }) {
@@ -214,6 +214,12 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
     if (query && !`${fixture.homeTeamName} ${fixture.awayTeamName} ${fixture.venueName} ${fixture.competitionName}`.toLowerCase().includes(query)) return false;
     return true;
   }), [fixtures, filters]);
+  const clearPresentationFilters = () => setFilters({ competition: "all", division: "all", venue: "all", query: "" });
+  const presentationFilters = {
+    externalActiveFilterCount: Object.entries(filters).filter(([key, value]) => key === "query" ? Boolean(String(value || "").trim()) : value !== "all").length,
+    onClearExternal: clearPresentationFilters,
+    onResetExternal: clearPresentationFilters,
+  };
   const coverage = useMemo(() => getLeagueOfficialCoverage(filtered, operations.requirements, operations.assignments), [filtered, operations.requirements, operations.assignments]);
   const postponed = filtered.filter((row) => row.status === "postponed").length;
   const unplaced = filtered.filter((row) => !row.date).length;
@@ -230,8 +236,8 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
       {view === "calendar" ? <CalendarView fixtures={filtered} month={month} setMonth={setMonth} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "grid" ? <SeasonGridView fixtures={filtered} workspace={workspace} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "map" ? <LeagueVenueMap fixtures={filtered.map((fixture) => ({ ...fixture, __officialComplete: fixtureAssignmentSummary(fixture, operations).complete }))} workspace={workspace} operations={operations} canManage={canManage} onRefreshOperations={onRefreshOperations} onSelectFixture={setSelectedFixture} /> : null}
-      {view === "list" ? <ListView contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
-      {view === "exceptions" ? <ExceptionsView contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
+      {view === "list" ? <ListView presentationFilters={presentationFilters} totalCount={fixtures.length} contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
+      {view === "exceptions" ? <ExceptionsView presentationFilters={presentationFilters} contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {!filtered.length ? <Panel className="p-10 text-center"><AlertTriangle className="mx-auto text-slate-300" size={34} /><div className="mt-3 text-lg font-black text-slate-700">No fixtures match these filters</div></Panel> : null}
       <FixtureDrawer fixture={selectedFixture} operations={operations} onClose={() => setSelectedFixture(null)} />
     </div>
