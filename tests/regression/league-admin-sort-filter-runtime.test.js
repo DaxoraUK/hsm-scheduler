@@ -163,3 +163,13 @@ test('league command action queues support display sorting with priority retaine
   await act(async () => root.render(React.createElement(LeagueCommand, { leagueId: 'l', workspace, operations, readiness: {} })));
   expect(host.querySelector('[aria-label="League command actions sort and filter"]')).not.toBeNull();
 });
+test('club eligibility request history has full collection controls', async () => {
+  await act(async () => root.render(React.createElement(ClubRegistrations, { leagueId: 'l' })));
+  await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent.includes('Eligibility requests')).click());
+  expect(host.querySelector('[aria-label="Club eligibility requests sort and filter"]')).not.toBeNull();
+});
+test.each(['Unplaced fixtures', 'Missing venues', 'Missing officials', 'Postponed fixtures', 'Replacement required'])('fixture exception queue %s exposes collection controls', async label => {
+  const operations = { officials: [], assignments: [], requirements: [], availability: [], postponements: [] };
+  await act(async () => root.render(React.createElement(LeagueFixtureCommand, { leagueId: 'l', workspace, operations, initialView: 'exceptions' })));
+  expect(host.querySelector(`[aria-label="${label} sort and filter"]`)).not.toBeNull();
+});

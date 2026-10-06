@@ -161,7 +161,7 @@ function ListView({ fixtures, operations, onSelect, contextKey }) {
 }}</RecordCollection>;
 }
 
-function ExceptionsView({ fixtures, operations, onSelect }) {
+function ExceptionsView({ fixtures, operations, onSelect, contextKey }) {
   const categories = [
     { id: "unplaced", label: "Unplaced fixtures", tone: "rose", rows: fixtures.filter((row) => !row.date), detail: "No valid playing date has been allocated." },
     { id: "venue", label: "Missing venues", tone: "rose", rows: fixtures.filter((row) => row.date && !row.venueId), detail: "Placed fixtures without a confirmed ground." },
@@ -169,7 +169,7 @@ function ExceptionsView({ fixtures, operations, onSelect }) {
     { id: "postponed", label: "Postponed fixtures", tone: "amber", rows: fixtures.filter((row) => row.status === "postponed"), detail: "Fixtures awaiting a rearrangement or closure." },
     { id: "replacement", label: "Replacement required", tone: "rose", rows: fixtures.filter((fixture) => operations.assignments.some((row) => row.targetType === fixture.targetType && row.targetId === fixture.targetId && row.status === "replacement_required")), detail: "An appointed official has withdrawn or declined." },
   ];
-  return <div className="grid gap-5 xl:grid-cols-2">{categories.map((category) => <Panel key={category.id} className="overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-base font-black text-slate-950">{category.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">{category.detail}</div></div><Pill tone={category.tone}>{category.rows.length}</Pill></div><div className="max-h-[420px] space-y-2 overflow-y-auto p-3">{category.rows.length ? category.rows.map((fixture) => <FixtureLine key={`${fixture.targetType}-${fixture.targetId}`} fixture={fixture} operations={operations} onSelect={onSelect} />) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-400">No exceptions in this category.</div>}</div></Panel>)}</div>;
+  return <div className="grid gap-5 xl:grid-cols-2">{categories.map((category) => <Panel key={category.id} className="overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4"><div><div className="text-base font-black text-slate-950">{category.label}</div><div className="mt-1 text-xs font-semibold text-slate-500">{category.detail}</div></div><Pill tone={category.tone}>{category.rows.length}</Pill></div><div className="max-h-[420px] space-y-2 overflow-y-auto p-3"><RecordCollection label={category.label} rows={category.rows} contextKey={contextKey} columns={[{ key: "team", label: "Team", type: "team", value: row => ({ name: row.homeTeamName }) }, { key: "date", label: "Date", type: "date", value: row => row.date }, { key: "venue", label: "Venue", type: "text", value: row => row.venueName }]} filterFields={[{ key: "type", label: "Competition", value: row => row.competitionType }]}>{displayRows => <>{category.rows.length ? displayRows.map((fixture) => <FixtureLine key={`${fixture.targetType}-${fixture.targetId}`} fixture={fixture} operations={operations} onSelect={onSelect} />) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-400">No exceptions in this category.</div>}</>}</RecordCollection></div></Panel>)}</div>;
 }
 
 export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, operations, canManage = false, onRefreshOperations, initialView = "calendar", focusToken = 0 }) {
@@ -231,7 +231,7 @@ export default function LeagueFixtureCommandWorkspace({ leagueId, workspace, ope
       {view === "grid" ? <SeasonGridView fixtures={filtered} workspace={workspace} operations={operations} onSelect={setSelectedFixture} /> : null}
       {view === "map" ? <LeagueVenueMap fixtures={filtered.map((fixture) => ({ ...fixture, __officialComplete: fixtureAssignmentSummary(fixture, operations).complete }))} workspace={workspace} operations={operations} canManage={canManage} onRefreshOperations={onRefreshOperations} onSelectFixture={setSelectedFixture} /> : null}
       {view === "list" ? <ListView contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
-      {view === "exceptions" ? <ExceptionsView fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
+      {view === "exceptions" ? <ExceptionsView contextKey={leagueId} fixtures={filtered} operations={operations} onSelect={setSelectedFixture} /> : null}
       {!filtered.length ? <Panel className="p-10 text-center"><AlertTriangle className="mx-auto text-slate-300" size={34} /><div className="mt-3 text-lg font-black text-slate-700">No fixtures match these filters</div></Panel> : null}
       <FixtureDrawer fixture={selectedFixture} operations={operations} onClose={() => setSelectedFixture(null)} />
     </div>

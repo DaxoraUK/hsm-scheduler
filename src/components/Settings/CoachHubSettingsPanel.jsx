@@ -13,7 +13,7 @@ import {
   UsersRound,
   ExternalLink,
 } from "lucide-react";
-import { compareTeamsByAgeGroup } from "../../lib/teams/teamOrdering.js";
+import { compareTeamsByAgeGroup, getRecordTeamDisplay } from "../../lib/teams/teamOrdering.js";
 import RecordCollection from "../lists/RecordCollection.jsx";
 import { toast } from "sonner";
 import { useDaxoraConfirm } from "../../contexts/DaxoraInteractionContext.jsx";
@@ -476,7 +476,7 @@ export default function CoachHubSettingsPanel({
           icon={CalendarCheck2}
         />
         <div className="mt-4 space-y-2">
-          <RecordCollection label="Coach requests" rows={pendingRequests} contextKey={clubId} columns={[{ key: "date", label: "Date", type: "date", value: row => row.preferredDate }, { key: "team", label: "Team / age group", type: "team", value: row => ({ name: row.teamName }) }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "team", label: "Team", value: row => row.teamName }]}>
+          <RecordCollection label="Coach requests" rows={pendingRequests} contextKey={clubId} columns={[{ key: "date", label: "Date", type: "date", value: row => row.preferredDate }, { key: "team", label: "Team / age group", type: "team", value: row => getRecordTeamDisplay(row, teamCfg) }]} filterFields={[{ key: "status", label: "Status", value: row => row.status }, { key: "team", label: "Team", value: row => row.teamName }]}>
           {displayRequests => displayRequests.map((request) => (
             <div key={request.id} className="flex w-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
               <button type="button" onClick={() => setReview(request)} className="min-w-0 flex-1 text-left">

@@ -1,3 +1,4 @@
+import { getRecordTeamDisplay } from "../lib/teams/teamOrdering.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RecordCollection from "../components/lists/RecordCollection.jsx";
 import { createPortal } from "react-dom";
@@ -853,7 +854,7 @@ export default function CommunicationsPage(props) {
         </div>
 
         <div className="mb-4 text-xs font-bold text-slate-500">Showing {rows.length} of {audienceRows.length} Home fixture updates · {readyRows.length} ready in this view</div>
-        <RecordCollection label="Coach messages" rows={rows} contextKey={props.activeClubId} search={false} totalCount={audienceRows.length} externalActiveFilterCount={Number(Boolean(search)) + Number(day !== "all") + Number(filter !== "all") + Number(updateType !== "all")} onClearExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} onResetExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} columns={[{ key: "team", label: "Team / age group", type: "team", value: row => ({ name: row.teamName }) }, { key: "name", label: "Team name", type: "text", value: row => row.teamName }, { key: "date", label: "Date", type: "date", value: row => row.date }]}>
+        <RecordCollection label="Coach messages" rows={rows} contextKey={props.activeClubId} search={false} totalCount={audienceRows.length} externalActiveFilterCount={Number(Boolean(search)) + Number(day !== "all") + Number(filter !== "all") + Number(updateType !== "all")} onClearExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} onResetExternal={() => { setSearch(""); setDay("all"); setFilter("all"); setUpdateType("all"); }} columns={[{ key: "team", label: "Team / age group", type: "team", value: row => getRecordTeamDisplay(row, props.teamCfg) }, { key: "name", label: "Team name", type: "text", value: row => row.teamName }, { key: "date", label: "Date", type: "date", value: row => row.raw?.dateISO || row.raw?.date || approvalByDay[row.day]?.matchdayDate }]}>
         {displayRows => <>
         {!model.rows.length ? (
           <EmptyState title="No Home fixture updates" description="Build a Saturday, Sunday or Midweek schedule. Away fixtures do not need club matchday communications." />

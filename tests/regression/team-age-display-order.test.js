@@ -24,3 +24,13 @@ test('configured adult metadata wins over a legacy youth label for display order
   expect(ordering.getTeamDisplayAge(adult)).toBeNull();
   expect(ordering.sortTeamsByAgeGroup([adult, { name: 'U18 youth' }]).map(row => row.name)).toEqual(['U18 youth', 'U17 historic label']);
 });
+test('record adapters retain configured metadata by stable key or unique name without mutating rows', () => {
+  const teams = [{ id: 'Sharks ID', name: 'Sharks', ageGroup: 'U7' }, { key: 'adult', name: 'U17 legacy', ageGroup: 'Adult' }];
+  const row = { teamKey: 'sharks-id', teamName: 'Old Sharks' };
+  expect(ordering.getRecordTeamDisplay(row, teams)).toBe(teams[0]);
+  expect(ordering.getRecordTeamDisplay({ team_name: 'U17 legacy' }, teams)).toBe(teams[1]);
+  expect(ordering.getRecordTeamDisplay({ raw: { cfg: teams[0] } }, [])).toBe(teams[0]);
+  expect(row).toEqual({ teamKey: 'sharks-id', teamName: 'Old Sharks' });
+  expect(ordering.getRecordTeamDisplay({ teamKey: 'unknown', teamName: 'Sharks' }, teams).ageGroup).toBeUndefined();
+  expect(ordering.getRecordTeamDisplay({ teamName: 'Sharks' }, [...teams, { name: 'Sharks', ageGroup: 'U18' }]).ageGroup).toBeUndefined();
+});

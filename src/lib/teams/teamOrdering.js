@@ -54,3 +54,22 @@ export function sortTeamsByAgeGroup(teams) {
 export function sortTeamEntriesByAgeGroup(entries) {
   return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => compareTeamsByAgeGroup(left?.team, right?.team));
 }
+// Presentation only: retain configured ages without changing record identity.
+export function getRecordTeamDisplay(record = {}, teams = []) {
+  const embedded = record.cfg || record.raw?.cfg;
+  if (embedded) return embedded;
+  const row = record.raw || record;
+  const name = String(record.teamName || record.team_name || row.teamName || row.homeTeam || row.team_name || '').trim();
+  const key = String(record.teamKey || record.team_key || row.teamKey || row.team_key || '').trim();
+  const normalise = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const configured = Array.isArray(teams) ? teams : [];
+  if (key) {
+    const exact = configured.filter(team => [team.id, team.teamId, team.key, team.teamKey].filter(Boolean).some(value => String(value) === key));
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1) return { name };
+    const aliases = configured.filter(team => normalise(team.key || team.id || team.teamKey || team.name) === key);
+    return aliases.length === 1 ? aliases[0] : { name };
+  }
+  const matches = name ? configured.filter(team => normalise(getTeamDisplayName(team)) === normalise(name)) : [];
+  return matches.length === 1 ? matches[0] : { name };
+}

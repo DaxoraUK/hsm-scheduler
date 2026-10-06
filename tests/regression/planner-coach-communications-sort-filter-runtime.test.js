@@ -83,3 +83,33 @@ test('Planner closure action and matchday closure records can be filtered withou
   await act(async () => [...host.querySelectorAll('button')].find(row => row.textContent === 'Review and resolve').click());
   expect(onResolve).toHaveBeenCalledWith(impact);
 });
+test('communications date sorting orders actual Midweek Saturday Sunday dates in both directions without changing IDs', async () => {
+  const fixture = (id, name) => ({ id, homeTeam: name, awayTeam: 'Visitors', status: 'active', koTime: '10:00', pitchId: 'P1' });
+  const props = { activeClubId: 'c', workspaceAccess: { canCommunicate: true }, teamCfg: [{ name: 'U7 Saturday' }, { name: 'U10 Sunday' }, { name: 'U17 Midweek' }], satHasRun: true, sunHasRun: true, midweekHasRun: true, satDate: '2026-10-10', sunDate: '2026-10-11', midweekDate: '2026-10-07', satDateLabel: 'Saturday, 10 October 2026', sunDateLabel: 'Sunday, 11 October 2026', midweekDateLabel: 'Wednesday, 7 October 2026', satFinal: [fixture('b', 'U7 Saturday')], sunFinal: [fixture('a', 'U10 Sunday')], midweekFinal: [fixture('c', 'U17 Midweek')] };
+  await act(async () => root.render(React.createElement(CommunicationsPage, props)));
+  const ids = [...host.querySelectorAll('article[data-communication-fixture]')].map(row => row.getAttribute('data-communication-fixture')).sort();
+  const names = () => [...host.querySelectorAll('article[data-communication-fixture] h3')].map(row => row.textContent);
+  await act(async () => { const select = host.querySelector('[aria-label="Coach messages sort and filter"] select[aria-label="Sort by"]'); select.value = 'date'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(names()).toEqual(['U17 Midweek', 'U7 Saturday', 'U10 Sunday']);
+  await act(async () => host.querySelector('[aria-label="Coach messages sort and filter"] button[aria-label="Sort descending"]').click());
+  expect(names()).toEqual(['U10 Sunday', 'U7 Saturday', 'U17 Midweek']);
+  expect([...host.querySelectorAll('article[data-communication-fixture]')].map(row => row.getAttribute('data-communication-fixture')).sort()).toEqual(ids);
+});
+test('communications age sorting honours original configured youth and Adult metadata', async () => {
+  const configs = [{ name: 'U17 Historic', ageGroup: 'Adult' }, { name: 'U17 Lisbon', ageGroup: 'U17' }, { name: 'Sharks', ageGroup: 'U7' }];
+  const fixtures = configs.map((cfg, index) => ({ id: String(index), homeTeam: cfg.name, cfg, awayTeam: 'Visitors', status: 'active', koTime: '10:00', pitchId: 'P1' }));
+  await act(async () => root.render(React.createElement(CommunicationsPage, { activeClubId: 'c', workspaceAccess: { canCommunicate: true }, teamCfg: configs, satHasRun: true, satFinal: fixtures })));
+  expect([...host.querySelectorAll('article[data-communication-fixture] h3')].map(row => row.textContent)).toEqual(['Sharks', 'U17 Lisbon', 'U17 Historic']);
+});
+test('closure action age sort retains configured age metadata and action IDs', async () => {
+  const teams = [{ id: 'adult', name: 'U17 Historic', ageGroup: 'Adult' }, { id: 'youth', name: 'Sharks', ageGroup: 'U7' }];
+  const impacts = teams.map((team, index) => ({ id: 'impact-' + index, team_key: team.id, team_name: team.name, booking_title: 'Action ' + index, booking_start_at: '2026-10-10T10:00:00Z', status: 'action_required' }));
+  const selectImpact = vi.fn();
+  await act(async () => root.render(React.createElement(AvailabilityWorkspace, { teams, settings: {}, blackouts: [], pitchCfg: [], closureImpacts: impacts, canOperate: true, onResolveImpact: selectImpact })));
+  const select = host.querySelector('[aria-label="Closure actions sort and filter"] select[aria-label="Sort by"]');
+  await act(async () => { select.value = 'team'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const actions = [...host.querySelectorAll('button')].filter(button => button.textContent === 'Review and resolve');
+  expect(actions[0].parentElement.textContent).toContain('Action 1');
+  await act(async () => actions[0].click());
+  expect(selectImpact).toHaveBeenCalledWith(impacts[1]);
+});

@@ -14,9 +14,9 @@ Default: named records A–Z; teams youngest age then name; histories chronologi
 | Analytics | Facility usage and numeric headings, non-pitch references, source records; funding documents/snapshots/tasks/monitoring; grant opportunities and requirement matrix | analytics-report-sort-filter-runtime |
 | Reports | A–Z report choices; print documents use original full scope, no controls | analytics-report-sort-filter-runtime; existing print regressions |
 | League registries | Seasons, divisions, clubs, teams, venues, fixture windows, play dates and blackouts on actual routed RegistryWorkspace | league-admin-sort-filter-runtime |
-| League schedules/fixtures | Actual fixture ListView, preflight headings and allocation board headings; sort before existing Show more; original schedule objects | league-admin-sort-filter-runtime |
+| League schedules/fixtures | Actual fixture ListView and all five exception queues, preflight headings and allocation board headings; sort before existing Show more; original schedule objects | league-admin-sort-filter-runtime |
 | League results | Verification/missing queues, verified result table, standings with rank default, points adjustments | league-admin-sort-filter-runtime |
-| League registrations | Players, applications, transfers, rules, dispensations; club applications | league-admin-sort-filter-runtime |
+| League registrations | Players, applications, transfers, rules, dispensations; club applications and eligibility request history | league-admin-sort-filter-runtime |
 | League discipline | Case register, sanctions, compliance, hearings/appeals; club case register | league-admin-sort-filter-runtime |
 | League finance | Invoice/charge/expense/payment/credit registers, billing templates; club invoice list | league-admin-sort-filter-runtime |
 | League officials | Pool, requirement table headings, appointment board headings, availability/conflicts, postponements and workload | league-admin-sort-filter-runtime |
@@ -28,7 +28,7 @@ Default: named records A–Z; teams youngest age then name; histories chronologi
 | Daxora Admin | All authorised club pages loaded atomically through existing offset/total interface; selected-club member metadata; pilot club register | league-admin-sort-filter-runtime; sort-filter-coverage-runtime |
 | Organisation | Sites, ranked action queue, funding projects and deadlines | sort-filter-coverage-runtime |
 
-Team dropdowns in Coach request/calendar/preferences, League registration/results/schedule/officials/discipline, Settings access/Coach and Planner use the shared age comparator. Explicit configured Adult metadata overrides legacy U-names for display only; scheduler classification is untouched.
+Team dropdowns in Coach request/calendar/preferences, League registration/results/schedule/officials/discipline, Settings access/Coach and Planner use the shared age comparator. Explicit configured Adult metadata overrides legacy U-names for display only; scheduler classification is untouched. Record adapters retain configured team metadata by original embedded configuration, unambiguous stable key or unique name; unknown/ambiguous keys do not silently borrow another team's age. Communications Date sort uses actual fixture dates or the authoritative selected matchday date.
 
 ## Backend-limit blockers (not complete collection filtering)
 
@@ -63,4 +63,4 @@ These are remaining work, not exemptions. They prevent claiming every historical
 
 ## Verification status
 
-Targeted runtime tests cover shared state, natural/numeric/date ordering, age buckets, missing values/ties, nonmutation, original edit indices/contact alignment, context resets, stale filters, complete Admin pagination/failure retention and print separation. A final whole-branch review and fresh full-suite/build/browser release checks are required; results are recorded in the release completion update. Authenticated UI access and backend-limit blockers must be reported separately from build/HTTP success.
+Targeted runtime tests cover shared state, natural/numeric/date ordering, age buckets, missing values/ties, nonmutation, original edit indices/contact alignment, context resets, stale filters, complete Admin pagination/failure retention and print separation. Independent whole-branch review returned confirmed findings, but the reviewer hit the account usage limit before its final report. Confirmed findings have reproduction tests and are corrected; the final review gate and deployment are still pending. Fresh test/build results are recorded in the verification handoff. No live deployment is claimed. Authenticated UI access and backend-limit blockers must be reported separately from build/HTTP success.
