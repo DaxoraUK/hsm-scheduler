@@ -161,6 +161,7 @@ function plannerRows(payload = {}, { pitchCfg = [], teamCfg = [] } = {}) {
       usageLabel: usageLabel(usageType),
       status,
       statusLabel: statusLabel(status),
+      fixtureVenueRole: text(booking.fixtureVenueRole).toLowerCase(),
       season: booking.seasonPhase || "regular",
       siteId: booking.venueId || booking.siteInventoryId || pitch.siteId || "primary",
       siteName: booking.venueName || pitch.siteName || "Main site",
@@ -186,7 +187,8 @@ function fixtureRows(history = [], { club = {}, pitchCfg = [], teamCfg = [] } = 
   const evidence = buildOperationalEvidence({ entries, scope: "all", club, pitchCfg, teamCfg });
   const teamByName = new Map(teamCfg.map((team) => [text(team.name).toLowerCase(), team]));
   return evidence.rows.map((row) => {
-    const team = teamByName.get(text(row.homeTeam).toLowerCase()) || {};
+    const teamName = row.clubTeamName || row.homeTeam;
+    const team = teamByName.get(text(teamName).toLowerCase()) || {};
     const start = row.date ? new Date(`${dateKey(row.date)}T${row.koTime === "TBC" ? "12:00" : row.koTime}:00`) : null;
     return {
       id: `fixture:${row.id}`,
@@ -204,6 +206,7 @@ function fixtureRows(history = [], { club = {}, pitchCfg = [], teamCfg = [] } = 
       usageLabel: usageLabel("fixture"),
       status: row.status === "delivered" ? "scheduled" : row.status,
       statusLabel: row.status === "delivered" ? "Scheduled" : row.statusLabel,
+      fixtureVenueRole: row.isAwayFixture ? "away" : "home",
       season: "regular",
       siteId: row.siteId || "primary",
       siteName: siteRows(club).find((site) => text(site.id) === text(row.siteId))?.name || "Main site",
@@ -211,10 +214,10 @@ function fixtureRows(history = [], { club = {}, pitchCfg = [], teamCfg = [] } = 
       pitchName: row.pitchLabel || "Unallocated",
       pitchAreaId: "",
       pitchAreaName: "Full pitch",
-      teamKey: text(team.key || team.id || row.homeTeam),
-      teamName: row.homeTeam,
-      ageGroup: ageGroup(row.homeTeam, team),
-      teamType: teamType(team || { name: row.homeTeam }),
+      teamKey: text(team.key || team.id || teamName),
+      teamName,
+      ageGroup: ageGroup(teamName, team),
+      teamType: teamType(team || { name: teamName }),
       participantCount: 0,
       title: row.fixtureLabel,
       costPence: 0,
@@ -277,7 +280,17 @@ function rangeDays(startDate, endDate) {
   return rows;
 }
 
-function configuredWindowForDay(day, policy, club = {}) {
+function mergeIntervals(intervals) {
+  const merged = [];
+  intervals.filter(([start, end]) => end > start).sort((a, b) => a[0] - b[0]).forEach(([start, end]) => {
+    const previous = merged.at(-1);
+    if (previous && start <= previous[1]) previous[1] = Math.max(previous[1], end);
+    else merged.push([start, end]);
+  });
+  return merged;
+}
+
+function configuredWindowsForDay(day, policy, club = {}) {
   const dayOfWeek = day.getDay();
   const allowedDays = list(policy?.allowed_days || policy?.allowedDays).map(Number);
   const trainingAllowed = allowedDays.includes(dayOfWeek);
@@ -290,16 +303,19 @@ function configuredWindowForDay(day, policy, club = {}) {
   const windows = [];
   if (trainingAllowed) windows.push([trainingStart, trainingEnd]);
   if (weekend) windows.push([matchdayStart, matchdayEnd]);
-  if (!windows.length) return 0;
-  const start = Math.min(...windows.map((row) => row[0]));
-  const end = Math.max(...windows.map((row) => row[1]));
-  return Math.max(0, end - start) / 60;
+  return mergeIntervals(windows).map(([start, end]) => {
+    const startAt = new Date(day);
+    const endAt = new Date(day);
+    startAt.setHours(0, start, 0, 0);
+    endAt.setHours(0, end, 0, 0);
+    return [startAt.getTime(), endAt.getTime()];
+  });
 }
 
-function closureBreakdown(payload = {}, filters = {}, pitchId = "", siteId = "") {
+function closureBreakdown(payload = {}, openingWindows = [], pitchId = "", siteId = "") {
   const totals = { total: 0, weather: 0, maintenance: 0, other: 0 };
+  const overlaps = [];
   list(payload.blackouts).map(normaliseAnnualBlackout).filter((row) => {
-    if (!inRange({ date: row.startDate }, filters.startDate, filters.endDate)) return false;
     if (row.pitchId && pitchId && text(row.pitchId) !== text(pitchId)) return false;
     if (row.venueId && siteId && text(row.venueId) !== text(siteId)) return false;
     return true;
@@ -307,56 +323,71 @@ function closureBreakdown(payload = {}, filters = {}, pitchId = "", siteId = "")
     const start = new Date(row.startAt || `${row.startDate}T00:00:00`);
     const end = new Date(row.endAt || `${row.endDate || row.startDate}T23:59:00`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
-    const hours = Math.max(0, end - start) / 3600000;
     const descriptor = `${row.closureType} ${row.title} ${row.reason}`.toLowerCase();
     const category = /(weather|waterlog|flood|snow|ice|storm|rain|heat)/.test(descriptor)
       ? "weather"
       : /(maint|repair|drain|surface|work|inspection)/.test(descriptor)
         ? "maintenance"
         : "other";
+    openingWindows.forEach(([openStart, openEnd]) => {
+      const overlapStart = Math.max(openStart, start.getTime());
+      const overlapEnd = Math.min(openEnd, end.getTime());
+      if (overlapEnd > overlapStart) overlaps.push({ start: overlapStart, end: overlapEnd, category });
+    });
+  });
+  // Count each unavailable interval once. Weather takes precedence where causes overlap.
+  const boundaries = [...new Set(overlaps.flatMap((row) => [row.start, row.end]))].sort((a, b) => a - b);
+  for (let index = 1; index < boundaries.length; index += 1) {
+    const start = boundaries[index - 1];
+    const end = boundaries[index];
+    const causes = overlaps.filter((row) => row.start <= start && row.end >= end);
+    if (!causes.length) continue;
+    const category = ["weather", "maintenance", "other"].find((candidate) => causes.some((row) => row.category === candidate));
+    const hours = (end - start) / 3600000;
     totals.total += hours;
     totals[category] += hours;
-  });
+  }
   return totals;
 }
 
-function buildCapacity({ payload = {}, club = {}, pitchCfg = [], filters = {}, rows = [] }) {
+function buildCapacity({ payload = {}, club = {}, pitchCfg = [], filters = {} }) {
   const policy = defaultPolicy(payload);
   const days = rangeDays(filters.startDate, filters.endDate);
-  const pitchRows = pitchCfg.length ? pitchCfg : [{ id: "unallocated", label: "Unallocated", trainingCapacity: 1 }];
+  const pitchRows = pitchCfg.filter((pitch) => {
+    const id = text(pitch.id || pitch.pitchId || pitch.name);
+    const siteId = text(pitch.siteId || pitch.site_id || pitch.venueId || pitch.venue_id || "primary");
+    return (!filters.pitch || filters.pitch === "all" || filters.pitch === id)
+      && (!filters.site || filters.site === "all" || filters.site === siteId);
+  });
+  const openingWindows = days.flatMap((day) => configuredWindowsForDay(day, policy, club));
   const byPitch = new Map();
   pitchRows.forEach((pitch) => {
     const id = text(pitch.id || pitch.pitchId || pitch.name);
-    const configured = days.reduce((sum, day) => sum + configuredWindowForDay(day, policy, club), 0);
+    const configured = openingWindows.reduce((sum, [start, end]) => sum + (end - start) / 3600000, 0);
     const siteId = text(pitch.siteId || pitch.site_id || pitch.venueId || pitch.venue_id || "primary");
-    const closures = closureBreakdown(payload, filters, id, siteId);
-    const closureHours = Math.min(configured, closures.total);
-    const closureScale = closures.total > 0 ? closureHours / closures.total : 0;
+    const closures = closureBreakdown(payload, openingWindows, id, siteId);
+    const closureHours = closures.total;
     byPitch.set(id, {
       configuredFacilityHours: configured,
       closureHours,
-      weatherClosureHours: closures.weather * closureScale,
-      maintenanceClosureHours: closures.maintenance * closureScale,
-      otherClosureHours: closures.other * closureScale,
+      weatherClosureHours: closures.weather,
+      maintenanceClosureHours: closures.maintenance,
+      otherClosureHours: closures.other,
       usableFacilityHours: Math.max(0, configured - closureHours),
       availableTeamHours: Math.max(0, configured - closureHours) * pitchCapacity(pitch),
     });
   });
-  const externalRows = rows.filter((row) => row.usageType === "winter" && !byPitch.has(text(row.pitchId)));
-  const externalByPitch = new Map();
-  externalRows.forEach((row) => {
-    const id = text(row.pitchId || "external");
-    externalByPitch.set(id, number(externalByPitch.get(id)) + row.facilityEquivalentHours);
-  });
-  externalByPitch.forEach((used, id) => {
-    byPitch.set(id, { configuredFacilityHours: used, closureHours: 0, weatherClosureHours: 0, maintenanceClosureHours: 0, otherClosureHours: 0, usableFacilityHours: used, availableTeamHours: used });
-  });
   return byPitch;
 }
 
-function aggregateFacilityRows(rows, capacityByPitch) {
+function aggregateFacilityRows(rows, capacityByPitch, pitchMap, club) {
   const map = new Map();
-  rows.forEach((row) => {
+  const seeds = [...capacityByPitch.keys()].map((id) => {
+    const pitch = pitchMap.get(id);
+    const siteId = text(pitch.siteId || pitch.site_id || pitch.venueId || pitch.venue_id || "primary");
+    return { pitchId: id, pitchName: pitch.label || pitch.name || id, siteId, siteName: siteRows(club).find((site) => text(site.id) === siteId)?.name || pitch.siteName || "Main site", capacityOnly: true };
+  });
+  [...seeds, ...rows].forEach((row) => {
     const key = text(row.pitchId || "unallocated");
     const current = map.get(key) || {
       id: key,
@@ -377,18 +408,22 @@ function aggregateFacilityRows(rows, capacityByPitch) {
       otherHours: 0,
       participants: 0,
     };
+    if (row.capacityOnly) { map.set(key, current); return; }
     current.bookings += 1;
-    current.teamHours += row.teamHours;
-    if (!["cancelled", "postponed"].includes(row.status)) current.facilityHours += row.facilityEquivalentHours;
+    const active = !["cancelled", "postponed"].includes(row.status);
+    if (active) {
+      current.teamHours += row.teamHours;
+      current.facilityHours += row.facilityEquivalentHours;
+      current[`${row.usageType}Hours`] = number(current[`${row.usageType}Hours`]) + row.teamHours;
+    }
     if (row.status === "delivered") current.deliveredHours += row.teamHours;
     if (row.status === "cancelled") current.cancelledHours += row.teamHours;
-    current[`${row.usageType}Hours`] = number(current[`${row.usageType}Hours`]) + row.teamHours;
     current.participants += number(row.participantCount);
     map.set(key, current);
   });
   return [...map.values()].map((row) => {
     const capacity = capacityByPitch.get(row.id) || { configuredFacilityHours: 0, closureHours: 0, weatherClosureHours: 0, maintenanceClosureHours: 0, otherClosureHours: 0, usableFacilityHours: 0, availableTeamHours: 0 };
-    const utilisationPct = capacity.usableFacilityHours > 0 ? Math.round((row.facilityHours / capacity.usableFacilityHours) * 100) : row.facilityHours > 0 ? 100 : 0;
+    const utilisationPct = capacity.usableFacilityHours > 0 ? Math.round((row.facilityHours / capacity.usableFacilityHours) * 100) : null;
     return {
       ...row,
       ...capacity,
@@ -470,12 +505,21 @@ export function buildUnifiedFacilityAnalyticsModel({
   const allRows = dedupeRows([
     ...fixtureRows(history, { club, pitchCfg, teamCfg }),
     ...plannerRows(plannerData, { pitchCfg, teamCfg }),
-  ]).map((row) => ({
-    ...row,
-    facilityEquivalentHours: row.facilityHours * pitchEquivalentWeight(row, pitchMap),
-  }));
+  ]).map((row) => {
+    const pitch = pitchMap.get(text(row.pitchId));
+    const facilityScope = row.fixtureVenueRole === "away" || row.status === "away" ? "away"
+      : pitch ? "club" : row.usageType === "winter" ? "external" : "unallocated";
+    return {
+      ...row,
+      facilityScope,
+      pitchName: facilityScope === "club" ? pitch.label || pitch.name || pitch.id : row.pitchName,
+      facilityEquivalentHours: facilityScope === "club" && !["cancelled", "postponed"].includes(row.status) ? row.facilityHours * pitchEquivalentWeight(row, pitchMap) : 0,
+    };
+  });
   const rows = allRows.filter((row) => matchesFilter(row, resolvedFilters));
-  const activeRows = rows.filter((row) => !["cancelled", "postponed"].includes(row.status));
+  const facilityRows = rows.filter((row) => row.facilityScope === "club");
+  const nonFacilityRows = rows.filter((row) => row.facilityScope !== "club").map((row) => ({ ...row, utilisationPct: null }));
+  const activeRows = facilityRows.filter((row) => !["cancelled", "postponed"].includes(row.status));
   const selectedDays = inclusiveDayCount(resolvedFilters.startDate, resolvedFilters.endDate);
   const previousFilters = {
     ...resolvedFilters,
@@ -483,20 +527,20 @@ export function buildUnifiedFacilityAnalyticsModel({
     endDate: shiftDate(resolvedFilters.startDate, -1),
   };
   const previousRows = selectedDays > 0
-    ? allRows.filter((row) => matchesFilter(row, previousFilters) && !["cancelled", "postponed"].includes(row.status))
+    ? allRows.filter((row) => row.facilityScope === "club" && matchesFilter(row, previousFilters) && !["cancelled", "postponed"].includes(row.status))
     : [];
-  const capacityByPitch = buildCapacity({ payload: plannerData, club, pitchCfg, filters: resolvedFilters, rows: activeRows });
-  const facilities = aggregateFacilityRows(rows, capacityByPitch);
+  const capacityByPitch = buildCapacity({ payload: plannerData, club, pitchCfg, filters: resolvedFilters });
+  const facilities = aggregateFacilityRows(facilityRows, capacityByPitch, pitchMap, club);
   const sum = (selector, source = rows) => source.reduce((total, row) => total + number(selector(row)), 0);
   const teamHours = sum((row) => row.teamHours, activeRows);
   const facilityHours = sum((row) => row.facilityEquivalentHours, activeRows);
-  const deliveredHours = sum((row) => row.status === "delivered" ? row.teamHours : 0);
+  const deliveredHours = sum((row) => row.status === "delivered" ? row.teamHours : 0, facilityRows);
   const cancelledHours = sum((row) => row.status === "cancelled" ? row.teamHours : 0);
   const postponedHours = sum((row) => row.status === "postponed" ? row.teamHours : 0);
   const configuredFacilityHours = facilities.reduce((total, row) => total + row.configuredFacilityHours, 0);
   const closureHoursTotal = facilities.reduce((total, row) => total + row.closureHours, 0);
   const usableFacilityHours = facilities.reduce((total, row) => total + row.usableFacilityHours, 0);
-  const utilisationPct = usableFacilityHours > 0 ? Math.round((facilityHours / usableFacilityHours) * 100) : facilityHours > 0 ? 100 : 0;
+  const utilisationPct = usableFacilityHours > 0 ? Math.round((facilityHours / usableFacilityHours) * 100) : null;
   const weatherClosureHours = facilities.reduce((total, row) => total + number(row.weatherClosureHours), 0);
   const maintenanceClosureHours = facilities.reduce((total, row) => total + number(row.maintenanceClosureHours), 0);
   const previousTeamHours = previousRows.reduce((total, row) => total + number(row.teamHours), 0);
@@ -523,12 +567,17 @@ export function buildUnifiedFacilityAnalyticsModel({
   const busiest = facilities[0];
   if (busiest?.facilityHours > 0) grantNarratives.push(`${busiest.pitchName} carried the highest recorded load at ${busiest.facilityHours} pitch-equivalent hours.`);
   if (!grantNarratives.length) grantNarratives.push("Record matchdays and Annual Planner bookings to build a combined facility-use evidence baseline.");
+  const configuredOptions = [...pitchMap.entries()].map(([id, pitch]) => {
+    const siteId = text(pitch.siteId || pitch.site_id || pitch.venueId || pitch.venue_id || "primary");
+    return { pitchId: id, pitchName: pitch.label || pitch.name || id, siteId, siteName: siteRows(club).find((site) => text(site.id) === siteId)?.name || pitch.siteName || "Main site" };
+  });
 
   return Object.freeze({
     filters: resolvedFilters,
-    hasData: rows.length > 0 || closureHoursTotal > 0,
+    hasData: rows.length > 0 || facilities.length > 0,
     rows: rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.startTime).localeCompare(String(b.startTime))),
     facilities,
+    nonFacilityRows,
     usage,
     metrics: Object.freeze({
       records: rows.length,
@@ -558,8 +607,8 @@ export function buildUnifiedFacilityAnalyticsModel({
       waitingTeams: unresolvedDemand,
     }),
     options: Object.freeze({
-      sites: optionRows(allRows, "siteId", "siteName"),
-      pitches: optionRows(allRows, "pitchId", "pitchName"),
+      sites: optionRows([...allRows, ...configuredOptions], "siteId", "siteName"),
+      pitches: optionRows([...allRows, ...configuredOptions], "pitchId", "pitchName"),
       areas: optionRows(allRows.map((row) => ({ ...row, pitchAreaId: row.pitchAreaId || "full", pitchAreaName: row.pitchAreaId ? row.pitchAreaName : "Full pitch" })), "pitchAreaId", "pitchAreaName"),
       teams: optionRows(allRows.map((row) => ({ ...row, teamKey: row.teamKey || row.teamName })), "teamKey", "teamName"),
       ageGroups: optionRows(allRows, "ageGroup", "ageGroup"),
@@ -567,7 +616,7 @@ export function buildUnifiedFacilityAnalyticsModel({
       statuses: optionRows(allRows, "status", "statusLabel"),
     }),
     grantNarratives,
-    methodology: "Fixture records use saved matchday evidence. Training, friendly, winter and other booking records use Annual Planner data. Split-pitch bookings are converted to pitch-equivalent hours so two half-pitch sessions do not count as two full pitches. Available hours use the club's saved matchday timing and Annual Planner master scheduling window; closures are removed from usable capacity. Cost measures use booking costs visible to the current user. Trend measures compare the selected period with the immediately preceding period of equal length.",
+    methodology: "Club-pitch totals include only bookings allocated to configured pitches; away, external and unallocated activity is listed separately and does not occupy club capacity. Postponed and cancelled bookings do not count as occupied hours. Split-pitch bookings are converted to pitch-equivalent hours. Capacity covers all selected configured pitches over the selected date range, using the union of saved matchday and Annual Planner opening windows. Closures subtract only overlapping opening hours, counted once (weather takes precedence over maintenance where causes overlap). N/A means no usable configured capacity is available to calculate a percentage. Cost measures use visible booking costs. Trends compare the preceding period of equal length.",
   });
 }
 
@@ -584,7 +633,7 @@ export function buildUnifiedFacilityCsv(model = {}) {
     ["To", model.filters?.endDate || ""],
     ["Pitch-equivalent hours", metrics.facilityHours || 0],
     ["Team-hours", metrics.teamHours || 0],
-    ["Utilisation %", metrics.utilisationPct || 0],
+    ["Utilisation %", metrics.utilisationPct ?? "N/A"],
     ["Closure / downtime hours", metrics.closureHours || 0],
     ["Weather closure hours", metrics.weatherClosureHours || 0],
     ["Maintenance closure hours", metrics.maintenanceClosureHours || 0],
@@ -594,7 +643,11 @@ export function buildUnifiedFacilityCsv(model = {}) {
     ["Cost per delivered team-hour", metrics.costPerDeliveredTeamHour || 0],
     [],
     ["Facility", "Site", "Bookings", "Pitch-equivalent hours", "Team-hours", "Fixtures", "Training", "Friendlies", "Events", "Winter/external", "Closure hours", "Unused hours", "Utilisation %"],
-    ...list(model.facilities).map((row) => [row.pitchName, row.siteName, row.bookings, row.facilityHours, row.teamHours, row.fixtureHours, row.trainingHours, row.friendlyHours, row.eventHours, row.winterHours, row.closureHours, row.unusedHours, row.utilisationPct]),
+    ...list(model.facilities).map((row) => [row.pitchName, row.siteName, row.bookings, row.facilityHours, row.teamHours, row.fixtureHours, row.trainingHours, row.friendlyHours, row.eventHours, row.winterHours, row.closureHours, row.unusedHours, row.utilisationPct ?? "N/A"]),
+    [],
+    ["Away / external / unallocated activity", "Not included in club pitch usage"],
+    ["Date", "Team", "Venue", "Scope", "Status", "Recorded hours", "Utilisation %"],
+    ...list(model.nonFacilityRows).map((row) => [row.date, row.teamName, row.pitchName, row.facilityScope, row.statusLabel, row.durationHours, "N/A"]),
     [],
     ["Date", "Start", "End", "Usage", "Status", "Team", "Age group", "Site", "Pitch", "Area", "Team-hours", "Pitch-equivalent hours", "Source"],
     ...list(model.rows).map((row) => [row.date, row.startTime, row.endTime, row.usageLabel, row.statusLabel, row.teamName, row.ageGroup, row.siteName, row.pitchName, row.pitchAreaName, round(row.teamHours), round(row.facilityEquivalentHours), row.source]),

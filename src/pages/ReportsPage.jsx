@@ -536,7 +536,7 @@ export default function ReportsPage({
       {reportType === "facilities" ? (
         <>
           <section className="np grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <SummaryMetric label="Total use" value={`${facilityModel.metrics.utilisationPct}%`} detail={`${facilityModel.metrics.facilityHours}h pitch-equivalent`} tone={facilityModel.metrics.utilisationPct >= 85 ? "danger" : facilityModel.metrics.utilisationPct >= 65 ? "warning" : "success"} />
+            <SummaryMetric label="Total use" value={facilityModel.metrics.utilisationPct == null ? "N/A" : `${facilityModel.metrics.utilisationPct}%`} detail={`${facilityModel.metrics.facilityHours}h pitch-equivalent`} tone={facilityModel.metrics.utilisationPct >= 85 ? "danger" : facilityModel.metrics.utilisationPct >= 65 ? "warning" : "success"} />
             <SummaryMetric label="Team-hours" value={`${facilityModel.metrics.teamHours}h`} detail={`${facilityModel.metrics.records} combined records`} />
             <SummaryMetric label="Delivered" value={`${facilityModel.metrics.deliveredHours}h`} detail={`${facilityModel.metrics.scheduledHours}h scheduled`} tone="success" />
             <SummaryMetric label="Downtime" value={`${facilityModel.metrics.closureHours}h`} detail="Weather, closure and maintenance" tone={facilityModel.metrics.closureHours ? "danger" : "success"} />
