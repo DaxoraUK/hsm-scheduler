@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -7,18 +7,16 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "../../../lib/notifications/daxoraNotifications.js";
-import ConfirmDialog from "../../../ui/ConfirmDialog.jsx";
+import { getFixtureFlowIdentity } from "../../../lib/domain/fixtureVenueFlow.js";
+import { validateFixtureMove } from "../../../lib/scheduling/fixtureMove.js";
 import { cleanName, resolveFixtureTeam } from "../../../lib/scheduler.js";
 import { sortPitches } from "../../../lib/pitches.js";
 import {
   getPitchDisplayFormat,
-  getPitchSuitabilityReason,
   isPitchSuitableForFixture,
 } from "../../../lib/intelligence/pitch/pitchService.js";
 import {
-  getKickOffRuleFailure,
   getSuggestionWindowForFixture,
-  isKickOffAllowedForFixture,
 } from "../../../lib/intelligence/scheduling/kickOffRules.js";
 
 function timeToMinutes(time) {
@@ -34,30 +32,6 @@ function minutesToTime(totalMins) {
   const minutes = totalMins % 60;
 
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-
-function getDuration(cfg = {}) {
-  const format = cfg.format || "";
-  const gameMins = cfg.gameMins || 70;
-  const bufferMins = String(format).includes("11") ? 30 : 15;
-
-  return gameMins + bufferMins;
-}
-
-function getBlockedPitchIds(pitchId, pitchCfg = []) {
-  const pitch = pitchCfg.find((item) => item.id === pitchId);
-  const parentId = pitch?.innerOf || null;
-  const childIds = pitchCfg
-    .filter((item) => item.innerOf === pitchId)
-    .map((item) => item.id);
-
-  return [pitchId, parentId, ...childIds].filter(Boolean);
-}
-
-function isActiveFixture(fixture = {}) {
-  const status = String(fixture.status || "active").toLowerCase();
-
-  return status !== "postponed" && status !== "cancelled";
 }
 
 function getSuitablePitches({ fixture = {}, cfg = {}, pitchCfg = [], closedPitches = [] } = {}) {
@@ -84,131 +58,24 @@ function getSuitablePitches({ fixture = {}, cfg = {}, pitchCfg = [], closedPitch
     });
 }
 
-function findPitchClash({
-  scheduled = [],
-  pitchCfg = [],
-  pitchId,
-  koMins,
-  endMins,
-} = {}) {
-  const blockedPitchIds = getBlockedPitchIds(pitchId, pitchCfg);
-
-  return (
-    scheduled.find((game) => {
-      if (!isActiveFixture(game)) return false;
-      if (!blockedPitchIds.includes(game.pitchId)) return false;
-
-      const gameKo =
-        game.koMins != null ? game.koMins : timeToMinutes(game.koTime);
-      const gameEnd = game.endMins != null ? game.endMins : gameKo;
-
-      if (gameKo == null || gameEnd == null) return false;
-
-      return koMins < gameEnd && gameKo < endMins;
-    }) || null
-  );
-}
-
-function getConcurrentCount({
-  scheduled = [],
-  koMins,
-  endMins,
-} = {}) {
-  return scheduled.filter((game) => {
-    if (!isActiveFixture(game)) return false;
-
-    const gameKo =
-      game.koMins != null ? game.koMins : timeToMinutes(game.koTime);
-    const gameEnd = game.endMins != null ? game.endMins : gameKo;
-
-    if (gameKo == null || gameEnd == null) return false;
-
-    return koMins < gameEnd && gameKo < endMins;
-  }).length;
-}
-
-function buildResolutionSuggestions({
-  fixture = {},
-  club = {},
-  teamCfg = [],
-  pitchCfg = [],
-  closedPitches = [],
-  scheduled = [],
-  limit = 3,
-} = {}) {
-  const cfg = resolveFixtureTeam(fixture, teamCfg);
-  const duration = getDuration(cfg);
-  const suitablePitches = getSuitablePitches({ fixture, cfg, pitchCfg, closedPitches });
-  const maxConcurrent = Number(club.maxConcurrent || 3);
-  const fixtureWithCfg = { ...fixture, cfg };
-  const window = getSuggestionWindowForFixture({ fixture: fixtureWithCfg, club });
-  const startMins = timeToMinutes(window.start) ?? 8 * 60 + 30;
-  const endMins = timeToMinutes(window.end) ?? 11 * 60 + 30;
-  const suggestions = [];
-
-  suitablePitches.forEach((pitch) => {
-    for (let koMins = startMins; koMins <= endMins; koMins += 15) {
-      const koTime = minutesToTime(koMins);
-
-      if (!isKickOffAllowedForFixture({ fixture: fixtureWithCfg, koTime, club })) continue;
-
-      const fixtureEndMins = koMins + duration;
-
-      const pitchClash = findPitchClash({
-        scheduled,
-        pitchCfg,
-        pitchId: pitch.id,
-        koMins,
-        endMins: fixtureEndMins,
-      });
-
-      if (pitchClash) continue;
-
-      const concurrentCount = getConcurrentCount({
-        scheduled,
-        koMins,
-        endMins: fixtureEndMins,
-      });
-
-      if (concurrentCount >= maxConcurrent) continue;
-
-      const isDefault = pitch.id === cfg?.defaultPitch;
-      const isAlt = pitch.id === cfg?.altPitch;
-
-      const score =
-        (isDefault ? 100 : 0) +
-        (isAlt ? 80 : 0) -
-        Math.abs(koMins - startMins) / 15 -
-        concurrentCount * 4;
-
-      suggestions.push({
-        pitchId: pitch.id,
-        pitchLabel: pitch.label || pitch.id,
-        pitchDesc: pitch.desc || getPitchDisplayFormat(pitch),
-        koTime,
-        koMins,
-        endMins: fixtureEndMins,
-        cfg,
-        score,
-        confidence: Math.max(72, Math.min(98, Math.round(92 + score / 20))),
-        reasons: [
-          `${getPitchDisplayFormat(pitch)} pitch matches ${cfg?.format || fixture.manualFormat || fixture.format || "the fixture format"}`,
-          "Pitch is open",
-          "Pitch is available",
-          "Parking concurrency remains within limit",
-          isDefault
-            ? "Uses preferred pitch"
-            : isAlt
-            ? "Uses alternative configured pitch"
-            : "Uses compatible pitch",
-        ],
-      });
+function buildResolutionSuggestions({fixture={},club={},teamCfg=[],pitchCfg=[],closedPitches=[],scheduled=[],matchDate,resourceContext,limit=3}={}) {
+  const cfg=fixture.cfg||resolveFixtureTeam(fixture,teamCfg);
+  const candidate={...fixture,cfg,koMins:undefined,endMins:undefined};
+  const window=getSuggestionWindowForFixture({fixture:candidate,club});
+  const suggestions=[];
+  const pitches=getSuitablePitches({fixture,cfg,pitchCfg,closedPitches});
+  const startMins=timeToMinutes(window.start),endMins=timeToMinutes(window.end);
+  for(let koMins=startMins;Number.isFinite(koMins)&&koMins<=endMins;koMins+=15) {
+    for(const pitch of pitches) {
+      const result=validateFixtureMove({fixtures:[...scheduled,candidate],fixtureIdentity:getFixtureFlowIdentity(fixture),
+        patch:{pitchId:pitch.id,koMins},pitchCfg,club,closedPitches,matchDate,resourceContext});
+      if(!result.ok) continue;
+      suggestions.push({...result.patch,cfg,pitchDesc:pitch.desc||getPitchDisplayFormat(pitch),confidence:98,
+        reasons:['Pitch and playing area are available','Full fixture and turnaround fit','Configured scheduling rules are satisfied']});
+      if(suggestions.length===limit) return suggestions;
     }
-  });
-
-  return suggestions
-    .sort((a, b) => b.score - a.score || a.koMins - b.koMins)
-    .slice(0, limit);
+  }
+  return suggestions;
 }
 
 export default function MatchdayUnresolvedCard({
@@ -217,135 +84,33 @@ export default function MatchdayUnresolvedCard({
   pitchCfg,
   closedPitches = [],
   unresolved = [],
-  overrides = {},
-  onOverride,
   scheduled = [],
-  setScheduled,
-  setUnresolved,
+  matchDate,
+  resourceContext,
+  onAllocationChange,
   readOnly = false,
 }) {
-  const [pendingOverride, setPendingOverride] = useState(null);
-
-  if (unresolved.length === 0) return null;
-
-  const resolveFixture = ({ fixture, index, patch, cfg, overridden = false }) => {
-    if (readOnly) return;
-    const koMins =
-      patch.koMins != null ? patch.koMins : timeToMinutes(patch.koTime);
-    const duration = getDuration(cfg);
-    const endMins =
-      patch.endMins != null ? patch.endMins : koMins != null ? koMins + duration : null;
-
-    const resolved = {
-      ...fixture,
-      ...patch,
-      koMins,
-      endMins,
-      cfg,
-      manual: true,
-      overridden,
-    };
-
-    setScheduled((previous) =>
-      [...previous, resolved].sort((a, b) => (a.koMins || 0) - (b.koMins || 0))
-    );
-
-    setUnresolved((previous) => previous.filter((_, fixtureIndex) => fixtureIndex !== index));
+  const [inputs,setInputs]=useState({});
+  const [busy,setBusy]=useState(false);
+  const busyRef=useRef(false);
+  if(unresolved.length===0) return null;
+  const resolveFixture=async({fixture,patch})=>{
+    if(readOnly||busyRef.current) return;
+    busyRef.current=true;setBusy(true);
+    try {
+      if(typeof onAllocationChange!=='function') throw new Error('Schedule assignment is unavailable. Refresh the workspace.');
+      const result=await onAllocationChange({fixtureIdentity:getFixtureFlowIdentity(fixture),patch,resolveUnresolved:true});
+      if(!result?.ok) {toast.error('Fixture was not assigned',{description:result?.reason||'Review the current settings and try another slot.'});return;}
+      toast.success('Fixture assigned',{description:'The validated allocation has been saved to the local schedule draft.'});
+    } catch(error){toast.error('Fixture was not assigned',{description:error.message});}
+    finally{busyRef.current=false;setBusy(false);}
   };
-
-  const completeManualAssignment = ({ fixture, index, ov, cfg, koMins, endMins, clash = null }) => {
-    const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
-
-    resolveFixture({
-      fixture,
-      index,
-      cfg,
-      overridden: Boolean(clash),
-      patch: {
-        ...ov,
-        pitchLabel: selectedPitch?.label || ov.pitchId,
-        koMins,
-        endMins,
-      },
-    });
-
-    setPendingOverride(null);
-
-    if (clash) {
-      toast.success("Fixture assigned with override", {
-        description: "The pitch conflict remains recorded for operational review.",
-      });
-    }
+  const confirmManualAssignment=({fixture})=>{
+    const patch=inputs[getFixtureFlowIdentity(fixture)]||{};
+    if(!patch.pitchId||!patch.koTime) {toast.error('Select a pitch and kick-off time',{description:'The unresolved fixture has not been assigned.'});return;}
+    return resolveFixture({fixture,patch});
   };
-
-  const confirmManualAssignment = ({ fixture, index }) => {
-    if (readOnly) return;
-    const ov = overrides[9000 + index] || {};
-
-    if (!ov.pitchId) {
-      toast.error("Select a pitch first", {
-        description: "Choose a suitable open pitch before confirming the fixture.",
-      });
-      return;
-    }
-
-    if (!ov.koTime) {
-      toast.error("Set a kick-off time", {
-        description: "Choose an allowed kick-off time before confirming the fixture.",
-      });
-      return;
-    }
-
-    if (closedPitches.includes(ov.pitchId)) {
-      const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
-      toast.error(`${selectedPitch?.label || ov.pitchId} is closed`, {
-        description: "Choose another pitch or reopen it from the Resources workspace.",
-      });
-      return;
-    }
-
-    const koMins = timeToMinutes(ov.koTime);
-    const cfg = resolveFixtureTeam(fixture, teamCfg);
-    const selectedPitch = pitchCfg.find((pitch) => pitch.id === ov.pitchId);
-
-    if (!isPitchSuitableForFixture(selectedPitch, { ...fixture, cfg })) {
-      toast.error("Pitch format does not match", {
-        description: getPitchSuitabilityReason(selectedPitch, { ...fixture, cfg }),
-      });
-      return;
-    }
-
-    const koRuleFailure = getKickOffRuleFailure({
-      fixture: { ...fixture, cfg },
-      koTime: ov.koTime,
-      club,
-    });
-
-    if (koRuleFailure) {
-      toast.error(koRuleFailure.title, {
-        description: koRuleFailure.detail,
-      });
-      return;
-    }
-
-    const duration = getDuration(cfg);
-    const endMins = koMins + duration;
-
-    const clash = findPitchClash({
-      scheduled,
-      pitchCfg,
-      pitchId: ov.pitchId,
-      koMins,
-      endMins,
-    });
-
-    if (clash) {
-      setPendingOverride({ fixture, index, ov, cfg, koMins, endMins, clash });
-      return;
-    }
-
-    completeManualAssignment({ fixture, index, ov, cfg, koMins, endMins });
-  };
+  const setInput=(fixture,field,value)=>setInputs(current=>({...current,[getFixtureFlowIdentity(fixture)]:{...current[getFixtureFlowIdentity(fixture)],[field]:value}}));
 
   return (
     <section className="rounded-3xl border border-red-200 bg-white shadow-sm">
@@ -394,12 +159,14 @@ export default function MatchdayUnresolvedCard({
             pitchCfg,
             closedPitches,
             scheduled,
+            matchDate,
+            resourceContext,
             limit: 3,
           });
 
           return (
             <article
-              key={`${fixture.homeTeam}-${fixture.awayTeam}-${index}`}
+              key={getFixtureFlowIdentity(fixture)}
               className="rounded-3xl border border-red-200 bg-red-50/60 p-5"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -436,7 +203,7 @@ export default function MatchdayUnresolvedCard({
                       <button
                         type="button"
                         key={`${suggestion.pitchId}-${suggestion.koTime}`}
-                        disabled={readOnly}
+                        disabled={readOnly || busy}
                         onClick={() =>
                           resolveFixture({
                             fixture,
@@ -502,7 +269,7 @@ export default function MatchdayUnresolvedCard({
                 </div>
               ) : (
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-800">
-                  No automatic fix was found. Review pitch closures, parking concurrency, or manually assign below.
+                  No valid allocation was found. Review availability windows, closures, pitch areas or concurrency limits, or try a different time below.
                 </div>
               )}
 
@@ -519,9 +286,10 @@ export default function MatchdayUnresolvedCard({
                     </label>
 
                     <select
-                      disabled={readOnly}
+                      disabled={readOnly || busy}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      onChange={(event) => onOverride(9000 + index, "pitchId", event.target.value)}
+                      value={inputs[getFixtureFlowIdentity(fixture)]?.pitchId || ""}
+                      onChange={(event) => setInput(fixture, "pitchId", event.target.value)}
                     >
                       <option value="">Select pitch...</option>
                       {suitablePitches.map((pitch) => (
@@ -539,20 +307,21 @@ export default function MatchdayUnresolvedCard({
 
                     <input
                       type="time"
-                      disabled={readOnly}
+                      disabled={readOnly || busy}
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      onChange={(event) => onOverride(9000 + index, "koTime", event.target.value)}
+                      value={inputs[getFixtureFlowIdentity(fixture)]?.koTime || ""}
+                      onChange={(event) => setInput(fixture, "koTime", event.target.value)}
                     />
                   </div>
 
                   <button
                     type="button"
-                    disabled={readOnly}
+                    disabled={readOnly || busy}
                     onClick={() => confirmManualAssignment({ fixture, index })}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <MapPin size={16} />
-                    Confirm Assignment
+                    {busy ? "Saving…" : "Confirm Assignment"}
                   </button>
                 </div>
               </div>
@@ -561,31 +330,6 @@ export default function MatchdayUnresolvedCard({
         })}
       </div>
 
-      <ConfirmDialog
-        open={Boolean(pendingOverride)}
-        eyebrow="Manual override"
-        title="Assign despite pitch conflict?"
-        description="This fixture overlaps another booking on the selected pitch or one of its linked playing areas. The override will remain visible for operational review."
-        confirmLabel="Assign with override"
-        cancelLabel="Choose another slot"
-        tone="danger"
-        initialFocus="cancel"
-        onCancel={() => setPendingOverride(null)}
-        onConfirm={() => pendingOverride && completeManualAssignment(pendingOverride)}
-      >
-        <div className="grid gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <span className="font-bold text-rose-700">Existing fixture</span>
-            <span className="text-right font-black text-rose-950">
-              {pendingOverride ? cleanName(pendingOverride.clash?.homeTeam, club.name) : ""}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-4 border-t border-rose-200 pt-2">
-            <span className="font-bold text-rose-700">Current kick-off</span>
-            <span className="font-black text-rose-950">{pendingOverride?.clash?.koTime || "TBC"}</span>
-          </div>
-        </div>
-      </ConfirmDialog>
     </section>
   );
 }

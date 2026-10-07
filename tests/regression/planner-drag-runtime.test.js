@@ -78,3 +78,14 @@ test('picker pitch-only change retains an exact off-grid kick-off',async()=>{
   await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent.includes('Apply move')).click());
   expect(moves[0]?.patch).toMatchObject({pitchId:'AST-2',koMins:607,endMins:667});
 });
+test('picker preserves an exact newly typed kick-off rather than snapping it',async()=>{
+  await act(async()=>host.querySelector('[data-fixture-card]').click());
+  const input=host.querySelector('input[type="time"]');
+  await act(async()=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'10:07');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent.includes('Validate move')).click());
+  await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent.includes('Apply move')).click());
+  expect(moves[0]?.patch).toMatchObject({pitchId:'AST-1',koMins:607,koTime:'10:07',endMins:667});
+});

@@ -17,8 +17,15 @@ export function getFixtureFlowIdentity(fixture = {}) {
 const ALLOCATION_FIELDS = ["pitchId", "pitchLabel", "koMins", "koTime", "endMins"];
 
 export function isAwayFixture(fixture = {}) {
-  return Boolean(fixture.isAwayFixture || fixture.venueRole === "away"
+  const venue=String(fixture.venueRole||fixture.homeAway||fixture.venueType||'').trim().toLowerCase();
+  return Boolean(fixture.isAwayFixture || venue === "away"
     || fixture.requiresScheduling === false || fixture.status === "away");
+}
+
+export function ensureManualFixtureIdentity(fixture = {}) {
+  if (!fixture.manual || fixture.sourceFixtureUrl || fixture.sourceFixtureKey || fixture.fixtureId || fixture.fullTimeId || fixture.id) return fixture;
+  const token = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  return { ...fixture, sourceFixtureKey: `manual:${token}` };
 }
 
 function inactiveStatus(fixture = {}) {
@@ -63,7 +70,8 @@ export function applyFixtureOverrides(fixtures = [], overrides = {}, { preserveV
     }
     return {
       ...fixture, ...patch,
-      ...(Object.keys(patch).length ? { manualOverrideApplied: true } : {}),
+      // Metadata edits must not turn an automatic allocation into a fixed one.
+      ...(Object.keys(allocationOverrideInput).length ? { manualOverrideApplied: true } : {}),
       ...(Object.keys(allocationOverrideInput).length ? { allocationOverrideInput } : {}),
     };
   });

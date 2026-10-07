@@ -15,6 +15,7 @@ import {classifyFixtureTeam,getFixtureOccupancyMinutes} from "./scheduling/fixtu
 import {getScheduleResourceFailure} from "./scheduling/scheduleConstraints.js";
 import {validatePitchSchedulingConfig,getPitchFootprint} from "./scheduling/pitchResourceModel.js";
 import {withScheduleReservations} from "./scheduling/scheduleResourceContext.js";
+import {withDayTiming} from "./intelligence/scheduling/kickOffRules.js";
 
 export const t2s = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(
@@ -201,11 +202,9 @@ function scheduleFixtureDayCore(
   if (!configCheck.ok) throw new Error(configCheck.errors.map(error => error.pitchId + ": " + error.reason).join(" "));
   const first = Number.isFinite(startMins) ? startMins : 510;
   const latest = Number.isFinite(endMins) ? endMins : 690;
-  const club = {...options.club, useAstro, maxConcurrent,
+  const club = withDayTiming({...options.club, useAstro, maxConcurrent,
     startHour:Math.floor(first/60),startMin:first%60,endHour:Math.floor(latest/60),endMin:latest%60,
-    bufferYouth:options.bufferYouth??options.club?.bufferYouth,bufferAdult:options.bufferAdult??options.club?.bufferAdult};
-  // The supplied day's operational bounds take precedence over cached timing settings.
-  club.timingSettings = {...club.timingSettings, earliestKickOff:t2s(first),latestYouthKickOff:t2s(latest)};
+    bufferYouth:options.bufferYouth??options.club?.bufferYouth,bufferAdult:options.bufferAdult??options.club?.bufferAdult},{startMins:first,endMins:latest});
   const context = withScheduleReservations(options.resourceContext, pitchCfg);
   const active = fixtures.filter(isFixtureSchedulingDemand).map(fixture => {
     const cfg = resolveTeamConfig(fixture,cfgList) || fixture.cfg;

@@ -65,6 +65,7 @@ import { getFixtureFlowIdentity } from "../lib/domain/fixtureVenueFlow.js";
 import { createRebuildAction } from "../lib/domain/rebuildAction.js";
 import {isFixtureSchedulingDemand} from '../lib/domain/fixtureLifecycle.js';
 import {loadScheduleResourceContext,withScheduleReservations} from '../lib/scheduling/scheduleResourceContext.js';
+import {withDayTiming} from '../lib/intelligence/scheduling/kickOffRules.js';
 
 const WORKSPACES = [
   {
@@ -272,7 +273,7 @@ export default function MatchdayPage({
   navigationTarget = null,
   clearNavigationTarget,
 }) {
-  const [selectedFixtureIndex, setSelectedFixtureIndex] = useState(null);
+  const [selectedFixtureIdentity, setSelectedFixtureIdentity] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("fixtures");
   const [sectionQuery, setSectionQuery] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -377,7 +378,7 @@ export default function MatchdayPage({
   }, [day, matchdayDate]);
 
   const clubWithTiming = useMemo(
-    () => ({
+    () => withDayTiming({
       ...(props.club || {}),
       fixtureDayKey: fixtureDay?.key || day.toLowerCase(),
       fixtureDayRules: fixtureDay?.rules || {},
@@ -390,6 +391,9 @@ export default function MatchdayPage({
       bufferYouth: props.bufferYouth,
       bufferAdult: props.bufferAdult,
       useAstro: props.useAstro??props.club?.useAstro,
+    }, {
+      startMins: Number.isFinite(props.startHour) ? props.startHour * 60 + (props.startMin ?? 0) : undefined,
+      endMins: Number.isFinite(props.endHour) ? props.endHour * 60 + (props.endMin ?? 0) : undefined,
     }),
     [
       day,
@@ -950,6 +954,9 @@ export default function MatchdayPage({
     setShowManual,
     overrides,
     onOverride: editableOverride,
+    onAllocationChange: request=>applyAllocationRequest(request,{recordHistory:!request.resolveUnresolved}),
+    matchDate: matchdayDate,
+    resourceContext,
     readOnly: isLocked,
     dateLabel,
     games: final,
@@ -959,8 +966,10 @@ export default function MatchdayPage({
     onFixtureClick: openFixture,
   };
 
+  const selectedMatches=final.map((fixture,index)=>getFixtureFlowIdentity(fixture)===selectedFixtureIdentity?index:-1).filter(index=>index>=0);
+  const selectedFixtureIndex=selectedMatches.length===1?selectedMatches[0]:-1;
   const selectedFixture =
-    typeof selectedFixtureIndex === "number" && final[selectedFixtureIndex]
+    selectedFixtureIndex >= 0
       ? {
           ...final[selectedFixtureIndex],
           __index: selectedFixtureIndex,
@@ -973,17 +982,8 @@ export default function MatchdayPage({
     const identityIndex = identity
       ? final.findIndex((item) => getFixtureFlowIdentity(item) === identity)
       : -1;
-    const referenceIndex = final.findIndex((item) => item === fixture);
-    const fixtureIndex = identityIndex >= 0
-      ? identityIndex
-      : referenceIndex >= 0
-        ? referenceIndex
-        : typeof index === "number"
-          ? index
-          : -1;
-
-    if (fixtureIndex >= 0) {
-      setSelectedFixtureIndex(fixtureIndex);
+    if (identityIndex >= 0 && final.filter(item=>getFixtureFlowIdentity(item)===identity).length===1) {
+      setSelectedFixtureIdentity(identity);
     }
   }
 
@@ -1687,7 +1687,7 @@ export default function MatchdayPage({
         resourceContext={resourceContext}
         operatorIdentity={props.operatorIdentity}
         readOnly={isLocked}
-        onClose={() => setSelectedFixtureIndex(null)}
+        onClose={() => setSelectedFixtureIdentity(null)}
       />
 
       <ConfirmDialog

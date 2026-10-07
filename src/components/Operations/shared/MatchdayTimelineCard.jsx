@@ -334,7 +334,7 @@ export default function MatchdayTimelineCard({
 
   function previewSlotForSelected(pitchId, koMins) {
     if (!selectedFixture || selectedFixtureIndex < 0 || !canEdit) return;
-    const next = buildCandidate({ fixtureIdentity:getFixtureFlowIdentity(selectedFixture), pitchId, koMins,snapTime:koMins!==selectedFixture.koMins });
+    const next = buildCandidate({ fixtureIdentity:getFixtureFlowIdentity(selectedFixture), pitchId, koMins,snapTime:false });
     setProposal(next);
     setCandidate(next);
   }

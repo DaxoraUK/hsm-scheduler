@@ -52,11 +52,20 @@ export async function applyFixtureMoveTransaction({getCurrent,request,loadResour
     const resourceContext=await loadResources();
     if(!isCurrent()) return failure('stale_scope','The club, date or settings changed. Retry the move.');
     const snapshot=getCurrent();
-    const result=validateFixtureMoveBatch({...snapshot,resourceContext,moves:request.moves||[request]});
+    let fixtures=snapshot.fixtures;
+    let unresolved=snapshot.unresolved;
+    if(request.resolveUnresolved) {
+      const target=resolveFixtureMoveTarget(unresolved||[],request.fixtureIdentity);
+      if(!target.ok||fixtures.some(f=>getFixtureFlowIdentity(f)===request.fixtureIdentity)) return failure('stale_fixture','This unresolved fixture is missing or ambiguous. Refresh the schedule.');
+      const candidate={...target.fixture,koMins:undefined,endMins:undefined};
+      fixtures=[...fixtures,candidate];
+      unresolved=unresolved.filter(f=>getFixtureFlowIdentity(f)!==request.fixtureIdentity);
+    }
+    const result=validateFixtureMoveBatch({...snapshot,fixtures,resourceContext,moves:request.moves||[request]});
     if(!result.ok) return result;
     let overrides=snapshot.overrides||{};
     result.moves.forEach(move=>{overrides=updateFixtureOverridePatch(overrides,move.fixtureIdentity,move.patch);});
-    const committed={...result,overrides};
+    const committed={...result,overrides,...(request.resolveUnresolved?{unresolved}:{})};
     if(writeDraft(committed)!==true) return failure('draft_save','The local schedule draft could not be saved. The move was not applied.');
     commitState(committed);
     return committed;

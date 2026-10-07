@@ -1,4 +1,5 @@
 import { getFixtureFlowIdentity, isAwayFixture } from "../domain/fixtureVenueFlow.js";
+import { getFixtureLifecycleStatus,isFixtureInactive } from '../domain/fixtureLifecycle.js';
 import { pitchesShareSpace } from "../scheduling/pitchResourceModel.js";
 
 const ACTIVE_BOOKING_STATUSES = new Set(["requested", "provisional", "confirmed", "completed"]);
@@ -489,8 +490,8 @@ export function matchdayFixtureToAnnualBooking(fixture = {}, { date = "", pitchC
   const dateKey = normaliseDateKey(date || fixture.date || fixture.fixtureDate);
   if (!dateKey) return null;
   const away = isAwayFixture(fixture);
-  const rawStatus = clean(fixture.status).toLowerCase();
-  const inactive = ["postponed", "cancelled", "canceled", "abandoned"].includes(rawStatus);
+  const rawStatus = getFixtureLifecycleStatus(fixture);
+  const inactive = isFixtureInactive(fixture);
   const time = clean(fixture.koTime || fixture.ko || fixture.kickOff);
   const numericTime = fixture.koMins != null && fixture.koMins !== "" && Number.isFinite(Number(fixture.koMins));
   const timeKnown = numericTime || /^\d{1,2}:\d{2}$/.test(time);

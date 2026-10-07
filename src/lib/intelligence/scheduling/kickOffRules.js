@@ -71,6 +71,24 @@ export function getTimingSettings(club = {}) {
   };
 }
 
+// A selected operating day owns its timing, including the nested saved fields
+// consumed by validators. Keep all other club rules and buffer settings intact.
+export function withDayTiming(club = {}, { startMins, endMins } = {}) {
+  const timing = { ...(club.timingSettings || club.timing || {}) };
+  const result = { ...club, timingSettings: timing };
+  for (const [value, hour, minute, clock] of [
+    [startMins, 'startHour', 'startMin', 'earliestKickOff'],
+    [endMins, 'endHour', 'endMin', 'latestYouthKickOff'],
+  ]) {
+    if (!Number.isFinite(value)) continue;
+    result[hour] = timing[hour] = Math.floor(value / 60);
+    result[minute] = timing[minute] = value % 60;
+    timing[clock] = minutesToTime(value);
+  }
+  const effective = getTimingSettings(result);
+  return { ...result, startTime: effective.earliestKickOff, endTime: effective.latestYouthKickOff };
+}
+
 export function getSuggestionWindowForFixture({ fixture = {}, club = {} } = {}) {
   const timing = getTimingSettings(club);
   const start = timing.earliestKickOff || "08:30";

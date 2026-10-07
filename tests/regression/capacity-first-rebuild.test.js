@@ -9,6 +9,11 @@ it('free_0900_beats_later_grouping',()=>{
   const fixtures=[make('a',{manualOverrideApplied:true,pitchId:'AST-1',koMins:600,koTime:'10:00'}),make('b',{manualOverrideApplied:true,pitchId:'AST-2',koMins:600,koTime:'10:00'}),make('free')];
   expect(build(fixtures).scheduled.find(f=>f.id==='free').koTime).toBe('09:00');
 });
+it('referee-only edits do not pin an automatic allocation to its previous kick-off',()=>{
+  const fixture=make('ref-edited',{pitchId:'AST-1',koMins:660,koTime:'11:00',endMins:720});
+  const fixtures=applyFixtureOverrides([fixture],{'fixture:ref-edited':{fixtureIdentity:'ref-edited',referee:'Pat',refereeStatus:'confirmed'}});
+  expect(build(fixtures).scheduled[0]).toMatchObject({koTime:'09:00',referee:'Pat',manualAllocationApplied:false});
+});
 it('earlier_alternative_beats_later_preference',()=>{
   const a=make('a',{manualOverrideApplied:true,pitchId:'AST-1'}),b=make('b');
   const result=build([a,b]);

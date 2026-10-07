@@ -1,3 +1,5 @@
+import {isFixtureSchedulingDemand} from '../domain/fixtureLifecycle.js';
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -22,11 +24,7 @@ function titleCase(value = "") {
 }
 
 export function requiresLocalOfficial(fixture = {}) {
-  const status = clean(fixture.status || fixture.fixtureStatus || fixture.outcome);
-  return !["away", "postponed", "cancelled", "canceled", "abandoned"].includes(status)
-    && !fixture.isAwayFixture
-    && clean(fixture.venueRole) !== "away"
-    && fixture.requiresScheduling !== false;
+  return isFixtureSchedulingDemand(fixture);
 }
 
 function isUnavailableRef(ref = {}) {

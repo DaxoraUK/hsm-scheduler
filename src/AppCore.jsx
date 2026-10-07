@@ -75,7 +75,7 @@ import { isSupaConfigured, Auth, DB } from "./lib/supabase.js";
 import { migratePitches } from "./lib/pitches.js";
 import { S, thC } from "./lib/styles.js";
 import { REPORT_PRINT_STYLES } from "./lib/reports/printLayout.js";
-import { applyFixtureOverrides, deduplicateFixtureSet, mergeFixtureScheduleResults, partitionFixturesForScheduling, shouldApplyFixtureImport, updateFixtureOverride } from "./lib/domain/fixtureVenueFlow.js";
+import { applyFixtureOverrides, deduplicateFixtureSet, mergeFixtureScheduleResults, partitionFixturesForScheduling, shouldApplyFixtureImport, updateFixtureOverride,ensureManualFixtureIdentity,getFixtureFlowIdentity } from "./lib/domain/fixtureVenueFlow.js";
 import { isMidweekEnabled } from "./lib/settings/workspaceSettings.js";
 import { generateTestFixtures } from "./lib/testData/testFixtureGenerator.js";
 import {
@@ -131,6 +131,7 @@ import { prepareScopedScheduleDraft } from "./lib/scheduling/prepareScopedSchedu
 import { readMatchdayScheduleDraft,writeMatchdayScheduleDraft } from "./lib/storage/matchdayScheduleDraft.js";
 import {applyFixtureMoveTransaction} from './lib/scheduling/fixtureMove.js';
 import {readMatchdayLock} from './lib/operations/matchdayLock.js';
+import {withDayTiming} from './lib/intelligence/scheduling/kickOffRules.js';
 import {
   alignTeamContacts,
   extractLegacyTeamContacts,
@@ -1774,27 +1775,32 @@ function App() {
       && scheduleScopeRef.current.clubId===captured.clubId && scheduleScopeRef.current.userId===captured.userId
       && scheduleScopeRef.current.canOperate && scheduleScopeRef.current[dayKey]===matchDate && scheduleScopeRef.current.settings===captured.settings
       && context.clubId===captured.clubId && context.userId===captured.userId;
-    const result = await prepareScopedScheduleDraft({context,dayKey,matchDate,all,away,overrides,schedule,isCurrent,
+    const result = await prepareScopedScheduleDraft({context,dayKey,matchDate,all,away,overrides,schedule,isCurrent,manualFixtures:allocationStateRef.current[dayKey].manualFixtures,
       loadResources:()=>loadScheduleResourceContext({clubId:activeClubId,matchDate,
         plannerEnabled:hasEntitlement(subscription,ENTITLEMENTS.ANNUAL_PLANNER),
         loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent})});
     if(!result.ok) toast.error("Schedule was not rebuilt",{description:result.reason});
     return result;
   };
-  const draftHydrationRef = useRef("");
+  const draftHydrationRef = useRef({});
   useLayoutEffect(() => {
     if(!workspaceHydrated || !workspaceAccess.canOperate || !activeClubId || !authSession?.user?.id) return;
     const context = getTenantStorageContext();
-    const key = JSON.stringify([context,satDate,sunDate,midweekDate]);
-    if(draftHydrationRef.current===key) return;
-    draftHydrationRef.current=key;
-    for(const [dayKey,matchDate,setScheduled,setUnresolved,setOverrides,setHasRun] of [
-      ["saturday",satDate,setSatScheduled,setSatUnresolved,setSatOverrides,setSatHasRun],
-      ["sunday",sunDate,setSunScheduled,setSunUnresolved,setSunOverrides,setSunHasRun],
-      ["midweek",midweekDate,setMidweekScheduled,setMidweekUnresolved,setMidweekOverrides,setMidweekHasRun],
+    for(const [dayKey,matchDate,setScheduled,setUnresolved,setOverrides,setHasRun,setManual] of [
+      ["saturday",satDate,setSatScheduled,setSatUnresolved,setSatOverrides,setSatHasRun,setSatManual],
+      ["sunday",sunDate,setSunScheduled,setSunUnresolved,setSunOverrides,setSunHasRun,setSunManual],
+      ["midweek",midweekDate,setMidweekScheduled,setMidweekUnresolved,setMidweekOverrides,setMidweekHasRun,setMidweekManual],
     ]) {
-      const draft=readMatchdayScheduleDraft({context,dayKey,matchDate});
-      if(draft) {setScheduled(draft.scheduled);setUnresolved(draft.unresolved);setOverrides(draft.overrides);setHasRun(true);}
+      const key=JSON.stringify([context,dayKey,matchDate]);
+      if(draftHydrationRef.current[dayKey]===key) continue;
+      draftHydrationRef.current[dayKey]=key;
+      try {
+        const draft=readMatchdayScheduleDraft({context,dayKey,matchDate});
+        if(draft) {setScheduled(draft.scheduled);setUnresolved(draft.unresolved);setOverrides(draft.overrides);setManual(draft.manualFixtures);setHasRun(true);}
+      } catch(error) {
+        draftHydrationRef.current[dayKey]='invalid';
+        toast.error('Saved draft needs review',{description:error.message});
+      }
     }
   },[workspaceHydrated,workspaceAccess.canOperate,activeClubId,authSession?.user?.id,satDate,sunDate,midweekDate]);
 
@@ -2128,10 +2134,21 @@ function App() {
   const allocationStateRef=useRef({});
   const allocationBusyRef=useRef(new Set());
   allocationStateRef.current={
-    saturday:{fixtures:satFinal,overrides:satOverrides,unresolved:satUnresolved,closedPitches:satClosedPitches,setScheduled:setSatScheduled,setOverrides:setSatOverrides},
-    sunday:{fixtures:sunFinal,overrides:sunOverrides,unresolved:sunUnresolved,closedPitches:sunClosedPitches,setScheduled:setSunScheduled,setOverrides:setSunOverrides},
-    midweek:{fixtures:midweekFinal,overrides:midweekOverrides,unresolved:midweekUnresolved,closedPitches:midweekClosedPitches,setScheduled:setMidweekScheduled,setOverrides:setMidweekOverrides},
+    saturday:{fixtures:satFinal,overrides:satOverrides,unresolved:satUnresolved,manualFixtures:satManual,closedPitches:satClosedPitches,setScheduled:setSatScheduled,setOverrides:setSatOverrides,setUnresolved:setSatUnresolved},
+    sunday:{fixtures:sunFinal,overrides:sunOverrides,unresolved:sunUnresolved,manualFixtures:sunManual,closedPitches:sunClosedPitches,setScheduled:setSunScheduled,setOverrides:setSunOverrides,setUnresolved:setSunUnresolved},
+    midweek:{fixtures:midweekFinal,overrides:midweekOverrides,unresolved:midweekUnresolved,manualFixtures:midweekManual,closedPitches:midweekClosedPitches,setScheduled:setMidweekScheduled,setOverrides:setMidweekOverrides,setUnresolved:setMidweekUnresolved},
   };
+  useEffect(()=>{
+    if(!workspaceHydrated||!workspaceAccess.canOperate) return;
+    const context=getTenantStorageContext();
+    for(const [dayKey,matchDate,hasRun] of [['saturday',satDate,satHasRun],['sunday',sunDate,sunHasRun],['midweek',midweekDate,midweekHasRun]]) {
+      if(!hasRun||draftHydrationRef.current[dayKey]!==JSON.stringify([context,dayKey,matchDate])) continue;
+      const state=allocationStateRef.current[dayKey];
+      if(!writeMatchdayScheduleDraft({context,dayKey,matchDate,scheduled:state.fixtures,unresolved:state.unresolved,overrides:state.overrides,manualFixtures:state.manualFixtures})) {
+        toast.error('Local schedule changes could not be saved',{id:'schedule-draft-save-failed',description:'Keep this workspace open and retry before reloading.'});
+      }
+    }
+  },[workspaceHydrated,workspaceAccess.canOperate,satDate,sunDate,midweekDate,satHasRun,sunHasRun,midweekHasRun,satFinal,sunFinal,midweekFinal,satOverrides,sunOverrides,midweekOverrides,satManual,sunManual,midweekManual,satUnresolved,sunUnresolved,midweekUnresolved]);
   const applyDayAllocation=async(dayKey,request)=>{
     if(allocationBusyRef.current.has(dayKey)) return {ok:false,reason:'Another move is being applied. Try again shortly.'};
     const captured=scheduleScopeRef.current;
@@ -2154,16 +2171,17 @@ function App() {
             plannerEnabled:hasEntitlement(subscription,ENTITLEMENTS.ANNUAL_PLANNER),loadWorkspace:DB.listAnnualPlannerWorkspace,isCurrent}),pitchCfg);
         },
         getCurrent:()=>({...allocationStateRef.current[dayKey],pitchCfg,matchDate,
-          club:{...club,useAstro,bufferYouth,bufferAdult,startHour:dayKey==='midweek'?Math.floor(midweekStartMins/60):startHour,
-            startMin:dayKey==='midweek'?midweekStartMins%60:startMin,endHour:dayKey==='midweek'?Math.floor(midweekEndMins/60):endHour,
-            endMin:dayKey==='midweek'?midweekEndMins%60:endMin},
+          club:withDayTiming({...club,useAstro,bufferYouth,bufferAdult},{
+            startMins:dayKey==='midweek'?midweekStartMins:startHour*60+startMin,
+            endMins:dayKey==='midweek'?midweekEndMins:endHour*60+endMin}),
           readOnly:sharedLocked||!workspaceAccess.canOperate||readMatchdayLock({clubId:club.id||club.name,day:dayKey,date:matchDate})}),
         writeDraft:result=>writeMatchdayScheduleDraft({context,dayKey,matchDate,scheduled:result.fixtures,
-          unresolved:allocationStateRef.current[dayKey].unresolved,overrides:result.overrides}),
+          unresolved:result.unresolved??allocationStateRef.current[dayKey].unresolved,overrides:result.overrides,manualFixtures:allocationStateRef.current[dayKey].manualFixtures}),
         commitState:result=>{
           const dayState=allocationStateRef.current[dayKey];
           allocationStateRef.current[dayKey]={...dayState,fixtures:result.fixtures,overrides:result.overrides};
           dayState.setOverrides(result.overrides);dayState.setScheduled(result.fixtures);
+          if(result.unresolved) {allocationStateRef.current[dayKey].unresolved=result.unresolved;dayState.setUnresolved(result.unresolved);}
         }});
     } finally {allocationBusyRef.current.delete(dayKey);}
   };
@@ -2229,9 +2247,34 @@ function App() {
   const handleLoadHistory = useCallback(
     (week) => {
       const restored = buildHistoryRestoreState(week);
-      const saturday = restored.saturday;
-      const sunday = restored.sunday;
-      const midweek = restored.midweek;
+      const saturday = {...restored.saturday};
+      const sunday = {...restored.sunday};
+      const midweek = {...restored.midweek};
+
+      const restoredWeekend=saturday.date&&sunday.date?{saturday:saturday.date,sunday:sunday.date}
+        :saturday.date?getWeekendFromSaturday(saturday.date)
+        :sunday.date?getWeekendFromSunday(sunday.date):null;
+
+      // An explicit history load is authoritative for its dates, not a request
+      // to hydrate an older local draft after React applies the date change.
+      const context=getTenantStorageContext();
+      for(const day of [saturday,sunday,midweek]) {
+        const matchDate=day.date||restoredWeekend?.[day.key]||scheduleScopeRef.current[day.key];
+        day.restoredFixtures=deduplicateFixtureSet(day.fixtures.map(ensureManualFixtureIdentity));
+        day.restoredManual=day.restoredFixtures.filter(f=>f.manual&&(f.league==='Manual'||f.date==='Manual'));
+        day.restoredOverrides=Object.fromEntries(day.restoredFixtures.filter(f=>f.manualAllocationApplied||f.allocationOverrideInput||f.venueReversal).map(f=>{
+          const identity=getFixtureFlowIdentity(f);
+          const allocation=f.manualAllocationApplied||f.allocationOverrideInput
+            ?{...f.allocationOverrideInput,pitchId:f.pitchId,koMins:f.koMins,koTime:f.koTime}:{};
+          const reversal=f.venueReversal?Object.fromEntries(['venueReversal','venueRole','isAwayFixture','requiresScheduling','homeTeam','awayTeam','status'].map(field=>[field,f[field]])):{};
+          return ['fixture:'+identity,{...allocation,...reversal,fixtureIdentity:identity}];
+        }));
+        if(!writeMatchdayScheduleDraft({context,dayKey:day.key,matchDate,scheduled:day.restoredFixtures,unresolved:[],overrides:day.restoredOverrides,manualFixtures:day.restoredManual})) {
+          toast.error('Saved matchweek was not loaded',{description:'The local draft could not be saved. Your current schedule is unchanged.'});
+          return false;
+        }
+        draftHydrationRef.current[day.key]=JSON.stringify([context,day.key,matchDate]);
+      }
 
       if (saturday.date && sunday.date) {
         setMatchWeekend({ saturday: saturday.date, sunday: sunday.date });
@@ -2242,23 +2285,23 @@ function App() {
       }
       if (midweek.date) setMidweekDateState(midweek.date);
 
-      setSatScheduled(deduplicateFixtureSet(saturday.fixtures));
+      setSatScheduled(saturday.restoredFixtures);
       setSatUnresolved([]);
-      setSatOverrides({});
-      setSatManual([]);
+      setSatOverrides(saturday.restoredOverrides);
+      setSatManual(saturday.restoredManual);
       setSatFetchStatus([]);
       setSatHasRun(saturday.hasRun);
 
-      setSunScheduled(deduplicateFixtureSet(sunday.fixtures));
+      setSunScheduled(sunday.restoredFixtures);
       setSunUnresolved([]);
-      setSunOverrides({});
-      setSunManual([]);
+      setSunOverrides(sunday.restoredOverrides);
+      setSunManual(sunday.restoredManual);
       setSunHasRun(sunday.hasRun);
 
-      setMidweekScheduled(deduplicateFixtureSet(midweek.fixtures));
+      setMidweekScheduled(midweek.restoredFixtures);
       setMidweekUnresolved([]);
-      setMidweekOverrides({});
-      setMidweekManual([]);
+      setMidweekOverrides(midweek.restoredOverrides);
+      setMidweekManual(midweek.restoredManual);
       setMidweekFetchStatus([]);
       setMidweekHasRun(midweek.hasRun);
 

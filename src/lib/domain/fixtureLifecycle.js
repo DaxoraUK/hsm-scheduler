@@ -1,7 +1,13 @@
+export function getFixtureLifecycleStatus(fixture = {}) {
+  return String(fixture.lifecycleStatus || fixture.status || fixture.fixtureStatus || fixture.outcome || 'active').trim().toLowerCase();
+}
+export function isFixtureInactive(fixture = {}) {
+  return ['postponed','cancelled','canceled','abandoned','void','withdrawn'].includes(getFixtureLifecycleStatus(fixture));
+}
 export function isFixtureSchedulingDemand(fixture = {}) {
-  const status = String(fixture.lifecycleStatus || fixture.status || "active").trim().toLowerCase();
+  const status = getFixtureLifecycleStatus(fixture);
   const venue = String(fixture.venueRole || fixture.homeAway || fixture.venueType || "").trim().toLowerCase();
-  return !["postponed","cancelled","canceled","abandoned","void","withdrawn","away"].includes(status)
+  return !isFixtureInactive(fixture) && status !== 'away'
     && venue !== "away" && fixture.isAwayFixture !== true && fixture.requiresScheduling !== false;
 }
 

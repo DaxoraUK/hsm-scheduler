@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { DEFAULT_CLUB, MINI_KW, PITCHES } from "../lib/constants.js";
+import {ensureManualFixtureIdentity} from '../lib/domain/fixtureVenueFlow.js';
 
 function ManualForm({ onAdd, cfgList, club = DEFAULT_CLUB }) {
   const [f, setF] = useState({
@@ -27,7 +28,7 @@ function ManualForm({ onAdd, cfgList, club = DEFAULT_CLUB }) {
 
     const selectedCfg = cfgList.find((team) => team.name === f.homeTeam);
 
-    onAdd({
+    onAdd(ensureManualFixtureIdentity({
       homeTeam: club.name + " " + f.homeTeam,
       awayTeam: f.awayTeam.trim(),
       referee: f.referee.trim(),
@@ -41,7 +42,7 @@ function ManualForm({ onAdd, cfgList, club = DEFAULT_CLUB }) {
       manualFormat: selectedCfg ? selectedCfg.format : null,
       manualPitch: selectedCfg ? selectedCfg.defaultPitch : null,
       manualMins: selectedCfg ? selectedCfg.gameMins : 60,
-    });
+    }));
 
     setF({
       homeTeam: "",
