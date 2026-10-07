@@ -28,6 +28,37 @@ it('three_areas_fill_0900_to_1300',()=>{
 it('zero_buffer_next_grid',()=>{
   expect(build([make('a'),make('b')],{pitchCfg:[pitches[0]],maxConcurrent:1,club:{bufferYouth:0}}).scheduled.map(f=>f.koTime)).toEqual(['09:00','09:45']);
 });
+it('starts the next game at the exact finish plus configured turnaround',()=>{
+  const fixtures=['a','b','c'].map(id=>make(id,{cfg:modelTeam({id,name:'U10 '+id,gameMins:70})}));
+  const result=build(fixtures,{pitchCfg:[pitches[0]],maxConcurrent:1,endMins:780,club:{bufferYouth:7}});
+  expect(result.scheduled.map(f=>[f.koTime,f.endTime])).toEqual([['09:00','10:17'],['10:17','11:34'],['11:34','12:51']]);
+  expect(result.unresolved).toEqual([]);
+});
+it('keeps the simultaneous limit and starts on its exact release boundary',()=>{
+  const a=make('a',{cfg:modelTeam({id:'a',name:'U10 a',gameMins:47})});
+  const b=make('b',{cfg:modelTeam({id:'b',name:'U10 b',gameMins:47})});
+  expect(build([a,b],{maxConcurrent:1,club:{bufferYouth:5}}).scheduled.map(f=>f.koTime)).toEqual(['09:00','09:52']);
+  expect(build([a,b],{maxConcurrent:2,club:{bufferYouth:5}}).scheduled.map(f=>f.koTime)).toEqual(['09:00','09:00']);
+});
+it('uses the exact opening boundary of a configured pitch window',()=>{
+  const configured=modelPitches({availabilityByDay:{saturday:[{from:'09:07',to:'13:00'}]}});
+  expect(build([make('a')],{pitchCfg:configured}).scheduled[0].koTime).toBe('09:07');
+});
+it('uses the fixture date for pitch availability when the caller omits matchDate',()=>{
+  const configured=modelPitches({availabilityByDay:{saturday:[{from:'09:07',to:'13:00'}]}});
+  const result=build([make('a')],{pitchCfg:configured,matchDate:undefined});
+  expect(result.unresolved).toEqual([]);
+  expect(result.scheduled[0].koTime).toBe('09:07');
+});
+it('uses the exact release of a protected booking without overlap',()=>{
+  const resourceContext={status:'ready',matchDate:'2026-10-10',bookings:[{pitchId:'AST',status:'confirmed',startDate:'2026-10-10',startTime:'09:00',endTime:'09:34'}],blackouts:[]};
+  expect(build([make('a')],{resourceContext}).scheduled[0].koTime).toBe('09:34');
+});
+it('does not push an older youth fixture later when the simultaneous limit has spare capacity',()=>{
+  const mini=make('mini');
+  const youth=make('youth',{homeTeam:'U16 Cheetahs',cfg:modelTeam({id:'youth',name:'U16 Cheetahs',ageOrder:16,format:'11v11',defaultPitch:'P1',gameMins:90})});
+  expect(build([mini,youth],{pitchCfg:[...pitches,{id:'P1',format:'11v11'}],maxConcurrent:3}).scheduled.find(f=>f.id==='youth').koTime).toBe('09:00');
+});
 it('non_grid_start_0910',()=>expect(build([make('a'),make('b')],{pitchCfg:[pitches[0]],maxConcurrent:1,startMins:550,club:{bufferYouth:0}}).scheduled.map(f=>f.koTime)).toEqual(['09:10','09:55']));
 it('reserve_manual_and_fixed_adult_before_flexible',()=>{
   const pitchCfg=[{id:'P1',format:'11v11'},{id:'P2',format:'11v11'}];

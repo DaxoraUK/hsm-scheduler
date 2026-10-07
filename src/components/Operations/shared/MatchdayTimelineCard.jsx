@@ -70,6 +70,7 @@ export default function MatchdayTimelineCard({
   dirty = false,
   saving = false,
   changeHistory = [],
+  pendingChangeCount = changeHistory.length,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -393,7 +394,7 @@ export default function MatchdayTimelineCard({
       action={
         <div className="flex flex-wrap items-center justify-end gap-2">
           <StatusChip variant={dirty ? "warning" : "neutral"}>
-            {dirty ? `${changeHistory.length || 1} unpublished change${changeHistory.length === 1 ? "" : "s"}` : `${timeline.fixtureCount} fixtures`}
+            {dirty && pendingChangeCount ? `${pendingChangeCount} unpublished change${pendingChangeCount === 1 ? "" : "s"}` : `${timeline.fixtureCount} fixtures`}
           </StatusChip>
         </div>
       }
@@ -487,9 +488,9 @@ export default function MatchdayTimelineCard({
 
           <PlannerLegend activeOverlays={activeOverlays} />
 
-          {dirty ? (
+          {dirty || canRedo ? (
             <DraftActionBar
-              count={changeHistory.length || 1}
+              count={pendingChangeCount}
               saving={saving}
               canUndo={canUndo}
               canRedo={canRedo}
@@ -991,14 +992,14 @@ function DraftActionBar({ count, saving, canUndo, canRedo, onUndo, onRedo, onRev
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><History size={19} /></div>
-          <div><div className="text-sm font-black text-slate-950">{count} unpublished schedule change{count === 1 ? "" : "s"}</div><div className="mt-0.5 text-xs font-bold text-slate-500">Review the batch before saving the matchday plan.</div></div>
+          <div><div className="text-sm font-black text-slate-950">{count ? `${count} unpublished schedule change${count === 1 ? "" : "s"}` : "No pending schedule changes"}</div><div className="mt-0.5 text-xs font-bold text-slate-500">{count ? "Review the batch before saving the matchday plan." : "All planner moves have been undone. Redo is available."}</div></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={onUndo} disabled={!canUndo} className="planner-action-button"><Undo2 size={15} /> Undo</button>
           <button type="button" onClick={onRedo} disabled={!canRedo} className="planner-action-button"><Redo2 size={15} /> Redo</button>
-          <button type="button" onClick={onReview} className="planner-action-button"><ListRestart size={15} /> Review changes</button>
-          <button type="button" onClick={onDiscard} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-700 transition hover:bg-rose-100"><RotateCcw size={15} /> Discard</button>
-          {typeof onSave === "function" ? <button type="button" onClick={onSave} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"><Save size={15} /> {saving ? "Saving…" : "Save schedule"}</button> : null}
+          <button type="button" onClick={onReview} disabled={!canUndo} className="planner-action-button"><ListRestart size={15} /> Review changes</button>
+          <button type="button" onClick={onDiscard} disabled={!canUndo} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"><RotateCcw size={15} /> Discard</button>
+          {typeof onSave === "function" ? <button type="button" onClick={onSave} disabled={saving || !count} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"><Save size={15} /> {saving ? "Saving…" : "Save schedule"}</button> : null}
         </div>
       </div>
     </div>

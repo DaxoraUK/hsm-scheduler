@@ -13,7 +13,7 @@ import {getFixtureFlowIdentity} from "./domain/fixtureVenueFlow.js";
 import {isFixtureSchedulingDemand} from "./domain/fixtureLifecycle.js";
 import {classifyFixtureTeam,getFixtureOccupancyMinutes} from "./scheduling/fixtureTiming.js";
 import {getScheduleResourceFailure} from "./scheduling/scheduleConstraints.js";
-import {validatePitchSchedulingConfig,getPitchFootprint} from "./scheduling/pitchResourceModel.js";
+import {validatePitchSchedulingConfig,getPitchFootprint,getPitchAvailability} from "./scheduling/pitchResourceModel.js";
 import {withScheduleReservations} from "./scheduling/scheduleResourceContext.js";
 import {withDayTiming} from "./intelligence/scheduling/kickOffRules.js";
 
@@ -238,7 +238,14 @@ function scheduleFixtureDayCore(
     });
     const pitchIds=manual?[fixture.pitchId]:candidates.map(p=>p.id);
     const times = manual?[importedTime(fixture)]:adult?[importedTime(fixture)??fixedAdult]:[];
-    if(!manual&&!adult) for(let time=first;time<=latest;time+=15) times.push(time);
+    if(!manual&&!adult) {
+      // Capacity changes only at opening/release boundaries. Do not round a
+      // game's finish plus turnaround up to a display/drag grid interval.
+      const boundaries=[first,...scheduled.map(game=>game.endMins),
+        ...(context?.reservations??[]).map(booking=>booking.endMins),
+        ...candidates.flatMap(pitch=>getPitchAvailability({pitchId:pitch.id,pitches:pitchCfg,matchDate:options.matchDate||fixture.date||fixture.fixtureDate}).map(window=>window.startMins))];
+      times.push(...[...new Set(boundaries)].filter(time=>Number.isFinite(time)&&time>=first&&time<=latest).sort((a,b)=>a-b));
+    }
     const failures=new Map();
     for(const time of times) for(const pitchId of pitchIds) {
       const {next,failure}=failuresFor(fixture,pitchId,time);

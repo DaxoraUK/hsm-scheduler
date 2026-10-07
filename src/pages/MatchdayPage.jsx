@@ -306,6 +306,9 @@ export default function MatchdayPage({
   const [timelineDirty, setTimelineDirty] = useState(false);
   const [timelineSaving, setTimelineSaving] = useState(false);
   const [timelineHistory, setTimelineHistory] = useState([]);
+  // Unresolved assignments have no reversible prior pitch/time, but must
+  // remain visibly unpublished and saveable independently of undo history.
+  const [timelineUntrackedChanges, setTimelineUntrackedChanges] = useState(0);
   const [timelineRedoHistory, setTimelineRedoHistory] = useState([]);
   const allocationBusyRef=useRef(false);
   const [resourceContext,setResourceContext]=useState({status:'loading',bookings:[],blackouts:[]});
@@ -372,7 +375,9 @@ export default function MatchdayPage({
   }, [day, lockIdentity, props.activeClubId, props.club?.id]);
 
   useEffect(() => {
-    setTimelineDirty(Boolean(hasRun));
+    // Loading/viewing a schedule is not an operator edit.
+    setTimelineDirty(false);
+    setTimelineUntrackedChanges(0);
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
   }, [day, matchdayDate]);
@@ -681,7 +686,9 @@ export default function MatchdayPage({
     try {
       const result=await onAllocationChange(request);
       if(!result?.ok) {toast.error('Move was not applied',{description:result?.reason||'Review the current schedule and retry.'});return result||{ok:false};}
+      if (!result.moves?.length) return result;
       setTimelineDirty(true);
+      if (request.resolveUnresolved) setTimelineUntrackedChanges(current => current + result.moves.length);
       if(recordHistory) {
         const records=(result.moves||[]).map(buildPlannerChangeRecord).filter(Boolean);
         setTimelineHistory(current=>[...current,...records]);setTimelineRedoHistory([]);
@@ -743,11 +750,11 @@ export default function MatchdayPage({
     if(!result?.ok) return;
     setTimelineHistory((current) => current.slice(0, -1));
     setTimelineRedoHistory((current) => [...current, record]);
-    setTimelineDirty(true);
+    setTimelineDirty(timelineHistory.length > 1 || timelineUntrackedChanges > 0);
     toast.info("Planner change undone", {
       description: record.summary || "The fixture returned to its previous pitch and kick-off time.",
     });
-  }, [applyAllocationRequest, isLocked, timelineHistory]);
+  }, [applyAllocationRequest, isLocked, timelineHistory, timelineUntrackedChanges]);
 
   const redoTimelineMove = useCallback(async () => {
     const record = timelineRedoHistory.at(-1);
@@ -768,11 +775,11 @@ export default function MatchdayPage({
     if(!result?.ok) return;
     setTimelineHistory([]);
     setTimelineRedoHistory([]);
-    setTimelineDirty(true);
+    setTimelineDirty(timelineUntrackedChanges > 0);
     toast.info("Planner changes discarded", {
       description: "The reviewed moves were undone. Save Week to publish the resulting draft.",
     });
-  }, [applyAllocationRequest, isLocked, timelineHistory]);
+  }, [applyAllocationRequest, isLocked, timelineHistory, timelineUntrackedChanges]);
 
   const requestDiscardTimelineChanges = useCallback(() => {
     if (!timelineHistory.length || isLocked) return;
@@ -820,6 +827,7 @@ export default function MatchdayPage({
       const saved = await props.saveWeek();
       if (saved === true) {
         setTimelineDirty(false);
+        setTimelineUntrackedChanges(0);
         setTimelineHistory([]);
         setTimelineRedoHistory([]);
       }
@@ -1071,6 +1079,7 @@ export default function MatchdayPage({
             dirty={timelineDirty}
             saving={timelineSaving}
             changeHistory={timelineHistory}
+            pendingChangeCount={timelineHistory.length + timelineUntrackedChanges}
             canUndo={timelineHistory.length > 0}
             canRedo={timelineRedoHistory.length > 0}
             onUndo={undoTimelineMove}
@@ -1339,6 +1348,7 @@ export default function MatchdayPage({
     requestTimelineMove,
     saveTimelineChanges,
     timelineDirty,
+    timelineUntrackedChanges,
     timelineHistory,
     timelineRedoHistory.length,
     timelineSaving,
